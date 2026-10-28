@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>次像素二值化</title>
+  <link rel="icon" href="/static/magpie.ico">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #14171c;
+      color: #d5deea;
+      font: 13px/1.4 "Segoe UI", "Microsoft JhengHei", sans-serif;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid #2a3140;
+    }
+    header strong { font-size: 14px; }
+    header span { color: #8b98ab; font-size: 12px; }
+    .stage { flex: 1; min-height: 0; position: relative; background: #101216; }
+    canvas { width: 100%; height: 100%; display: block; }
+    footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      border-top: 1px solid #2a3140;
+    }
+    input[type="range"] { flex: 1; min-width: 120px; }
+    input[type="number"] {
+      width: 64px;
+      height: 26px;
+      background: #101216;
+      color: inherit;
+      border: 1px solid #2a3140;
+      padding: 0 4px;
+    }
+    button {
+      height: 28px;
+      padding: 0 12px;
+      border: 1px solid #3d8bff;
+      background: #1d3d66;
+      color: #fff;
+      cursor: pointer;
+    }
+    #note { color: #8b98ab; font-size: 12px; }
+    #errDialog[hidden] { display: none !important; }
+    #errDialog { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.48); }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>次像素二值化</strong>
+    <span>這個視窗不擋住主視窗</span>
+  </header>
+  <div class="stage"><canvas id="view"></canvas></div>
+  <div id="errDialog" hidden>
+    <div style="width:min(420px,calc(100vw - 32px));background:#1c2028;border:1px solid #ff5d4a;padding:16px">
+      <strong style="color:#ffb0a6">錯誤</strong>
+      <p id="errText" style="white-space:pre-wrap"></p>
+      <div style="text-align:right"><button id="errOk" type="button">確定</button></div>
+    </div>
+  </div>
+  <footer>
+    <label>門檻 <input id="level" type="number" min="0" max="255" step="1" value="128"></label>
+    <input id="slider" type="range" min="0" max="255" value="128">
+    <button id="apply" type="button">套用到程式</button>
+    <span id="note">拖曳門檻看輪廓，套用後主視窗會重跑。</span>
+  </footer>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get("id") || "";
+    const colors = ["#ff3b30","#00e05a","#3d8bff","#ffe14a","#2ce6e6","#f04ad4","#ff8a1e","#c6ff4a","#7aa2ff","#ff6a9a","#46f0c8","#e6c14a","#b388ff","#ff7a3c","#9be7ff","#ffffff"];
+    const canvas = document.getElementById("view");
+    const ctx = canvas.getContext("2d");
+    const levelInput = document.getElementById("level");
+    const slider = document.getElementById("slider");
+    const note = document.getElementById("note");
+    let photo = null;
+    let contours = [];
+    let size = { width: 1, height: 1 };
+    let token = 0;
+    const channel = new BroadcastChannel("visdev-bin");
+
+    function setLevel(value, fromSlider) {
+      const next = Math.max(0, Math.min(255, Math.round(Number(value) || 0)));
+      levelInput.value = String(next);
+      slider.value = String(next);
+      if (!fromSlider) slider.value = String(next);
+      refresh(false);
+    }
+
+    function fit() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.round(rect.width * dpr));
+      canvas.height = Math.max(1, Math.round(rect.height * dpr));
+      draw();
+    }
+
+    function draw() {
+      const width = canvas.width;
+      const height = canvas.height;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = "#101216";
+      ctx.fillRect(0, 0, width, height);
+      const scale = Math.min(width / size.width, height / size.height);
+      const ox = (width - size.width * scale) / 2;
+      const oy = (height - size.height * scale) / 2;
+      ctx.setTransform(scale, 0, 0, scale, ox, oy);
+      if (photo) ctx.drawImage(photo, 0, 0, size.width, size.height);
+      ctx.lineWidth = 1.5 / scale;
+      contours.forEach((line, index) => {
+        if (!line || line.length < 2) return;
+        ctx.beginPath();
+        ctx.strokeStyle = colors[index % colors.length];
+        ctx.moveTo(line[0][0], line[0][1]);
+        for (let i = 1; i < line.length; i += 1) ctx.lineTo(line[i][0], line[i][1]);
+        ctx.stroke();
+      });
+    }
+
+    async function refresh(withImage, attempt) {
+      if (!sessionId) {
+        note.textContent = "請先在主視窗執行一次程式。";
+        return;
+      }
+      const mine = ++token;
+      const res = await fetch("/api/subpix-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: sessionId, threshold: Number(levelInput.value), image: withImage }),
+      });
+      const data = await res.json();
+      if (mine !== token) return;
+      if (!res.ok) {
+        const detail = typeof data.detail === "string" ? data.detail : "讀取失敗";
+        if (detail.includes("還沒有影像") && (attempt || 0) < 20) {
+          note.textContent = "主視窗還在執行，稍候就會顯示影像。";
+          setTimeout(() => refresh(withImage, (attempt || 0) + 1), 300);
+          return;
+        }
+        note.textContent = detail;
+        document.getElementById("errText").textContent = detail;
+        document.getElementById("errDialog").hidden = false;
+        return;
+      }
+      size = { width: data.width, height: data.height };
+      contours = data.contours || [];
+      note.textContent = `${contours.length} 條次像素輪廓 · 門檻 ${data.threshold}`;
+      if (data.image) {
+        photo = new Image();
+        photo.onload = draw;
+        photo.src = data.image;
+      } else {
+        draw();
+      }
+    }
+
+    function apply() {
+      const threshold = Number(levelInput.value);
+      const message = { type: "apply", threshold };
+      channel.postMessage(message);
+      localStorage.setItem("visdev.subpixApply", JSON.stringify({ ...message, at: Date.now() }));
+      note.textContent = "已套用到主視窗。這個視窗可以留著繼續調。";
+    }
+
+    slider.addEventListener("input", () => setLevel(slider.value, true));
+    levelInput.addEventListener("change", () => setLevel(levelInput.value, false));
+    document.getElementById("errOk").onclick = () => { document.getElementById("errDialog").hidden = true; };
+    document.getElementById("apply").addEventListener("click", apply);
+    window.addEventListener("resize", fit);
+    const initial = Number(params.get("level"));
+    if (Number.isFinite(initial)) setLevel(initial, false);
+    fit();
+    refresh(true);
+  </script>
+</body>
+</html>

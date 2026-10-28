@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>區域特徵</title>
+  <link rel="icon" href="/static/magpie.ico">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #14171c;
+      color: #d5deea;
+      font: 13px/1.4 "Segoe UI", "Microsoft JhengHei", sans-serif;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: baseline;
+      padding: 8px 12px;
+      border-bottom: 1px solid #2a3140;
+    }
+    header strong { font-size: 14px; }
+    header span { color: #8b98ab; font-size: 12px; }
+    #title {
+      padding: 8px 12px;
+      color: #ffe14a;
+      border-bottom: 1px solid #2a3140;
+    }
+    #list { flex: 1; overflow: auto; padding: 8px 12px 16px; }
+    #errDialog[hidden] { display: none !important; }
+    #errDialog { display: flex; align-items: center; justify-content: center; }
+    table {
+      border-collapse: collapse;
+      width: max-content;
+      max-width: 100%;
+    }
+    th, td {
+      padding: 3px 8px;
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    th {
+      color: #9eb0c8;
+      font-weight: 600;
+      font-size: 12px;
+      border-bottom: 1px solid #2a3140;
+    }
+    tr.group td {
+      padding-top: 12px;
+      color: #9eb0c8;
+      font-size: 12px;
+    }
+    tr.item:hover td { background: #1c2430; }
+    .name { font: 13px/1.3 Consolas, "Cascadia Mono", monospace; }
+    .hint { color: #8b98ab; margin-left: 8px; font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; }
+    td.value {
+      font: 13px/1.3 Consolas, "Cascadia Mono", monospace;
+      color: #f4f7fb;
+      padding-left: 18px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>區域特徵</strong>
+    <span>這個視窗不擋住主視窗。點選區域後，勾選的項目才顯示數值。</span>
+  </header>
+  <div id="title">請在主視窗點選一個區域。</div>
+  <div id="errDialog" hidden style="position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.48)">
+    <div style="width:min(420px,calc(100vw - 32px));background:#1c2028;border:1px solid #ff5d4a;padding:16px">
+      <strong style="color:#ffb0a6">錯誤</strong>
+      <p id="errText" style="white-space:pre-wrap"></p>
+      <div style="text-align:right"><button id="errOk" type="button">確定</button></div>
+    </div>
+  </div>
+  <div id="list"></div>
+  <script>
+    const GRAY_LABELS = {
+      gray_min: "最小輝度",
+      gray_max: "最大輝度",
+      gray_mean: "平均輝度",
+      gray_deviation: "輝度標準差",
+      gray_median: "輝度中位數",
+    };
+    const DEFAULT_KEYS = [
+      "region:area", "region:row", "region:column", "region:circularity", "region:contlength",
+      "gray:gray_mean", "gray:gray_deviation",
+      "xld:contlength", "subpixel",
+    ];
+    const params = new URLSearchParams(location.search);
+    let sessionId = params.get("id") || "";
+    let pick = null;
+    let catalog = { region: [], xld: [], gray: Object.keys(GRAY_LABELS) };
+    const list = document.getElementById("list");
+    const title = document.getElementById("title");
+
+    function savedKeys() {
+      try {
+        const saved = JSON.parse(localStorage.getItem("visdev.features") || "null");
+        if (Array.isArray(saved)) return new Set(saved);
+      } catch (_err) { /* 用預設 */ }
+      return new Set(DEFAULT_KEYS);
+    }
+
+    function checkedKeys() {
+      return [...list.querySelectorAll("input:checked")].map((input) => input.dataset.feature);
+    }
+
+    function splitKeys(keys) {
+      const region = [];
+      const xld = [];
+      const gray = [];
+      keys.forEach((key) => {
+        const cut = key.indexOf(":");
+        if (cut < 0) return;
+        const kind = key.slice(0, cut);
+        const name = key.slice(cut + 1);
+        if (kind === "region") region.push(name);
+        if (kind === "xld") xld.push(name);
+        if (kind === "gray") gray.push(name);
+      });
+      return { region, xld, gray };
+    }
+
+    function build() {
+      const chosen = savedKeys();
+      const groups = [
+        ["區域", catalog.region.map((name) => [`region:${name}`, name, ""])],
+        ["輝度", catalog.gray.map((name) => [`gray:${name}`, name, GRAY_LABELS[name] || ""])],
+        ["XLD", catalog.xld.map((name) => [`xld:${name}`, name, ""])],
+        ["輪廓", [["subpixel", "次像素 contour", "畫在主視窗"]]],
+      ];
+      list.innerHTML = "";
+      const table = document.createElement("table");
+      const head = document.createElement("tr");
+      ["", "feature", "值"].forEach((text) => {
+        const cell = document.createElement("th");
+        cell.textContent = text;
+        head.appendChild(cell);
+      });
+      table.appendChild(head);
+      groups.forEach(([heading, rows]) => {
+        const group = document.createElement("tr");
+        group.className = "group";
+        const titleCell = document.createElement("td");
+        titleCell.colSpan = 3;
+        titleCell.textContent = heading;
+        group.appendChild(titleCell);
+        table.appendChild(group);
+        rows.forEach(([key, name, hint]) => {
+          const row = document.createElement("tr");
+          row.className = "item";
+          const check = document.createElement("td");
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.dataset.feature = key;
+          input.checked = chosen.has(key);
+          check.appendChild(input);
+          const label = document.createElement("td");
+          label.className = "name";
+          label.textContent = name;
+          if (hint) {
+            const note = document.createElement("span");
+            note.className = "hint";
+            note.textContent = hint;
+            label.appendChild(note);
+          }
+          const value = document.createElement("td");
+          value.className = "value";
+          value.dataset.value = key;
+          row.append(check, label, value);
+          table.appendChild(row);
+        });
+      });
+      list.appendChild(table);
+    }
+
+    function clearValues() {
+      list.querySelectorAll(".value").forEach((node) => { node.textContent = ""; });
+    }
+
+    function showValues(data) {
+      const map = {};
+      Object.entries(data.region || {}).forEach(([name, value]) => { map[`region:${name}`] = value; });
+      Object.entries(data.xld || {}).forEach(([name, value]) => { map[`xld:${name}`] = value; });
+      Object.entries(data.gray || {}).forEach(([name, value]) => { map[`gray:${name}`] = value; });
+      list.querySelectorAll(".value").forEach((node) => {
+        const input = node.parentElement.querySelector("input");
+        if (!input.checked || input.dataset.feature === "subpixel") {
+          node.textContent = "";
+          return;
+        }
+        if (!data.grayReady && input.dataset.feature.startsWith("gray:")) {
+          node.textContent = "無影像";
+          return;
+        }
+        const value = map[input.dataset.feature];
+        node.textContent = value == null ? "" : String(value);
+      });
+    }
+
+    async function refresh() {
+      if (!pick || pick.kind !== "region") {
+        title.textContent = pick ? "請點選區域。輪廓本身沒有區域輝度。" : "請在主視窗點選一個區域。";
+        clearValues();
+        return;
+      }
+      sessionId = pick.id || sessionId;
+      title.textContent = `${pick.name}  #${pick.index + 1}`;
+      const keys = checkedKeys();
+      const choice = splitKeys(keys);
+      if (!sessionId || (!choice.region.length && !choice.xld.length && !choice.gray.length)) {
+        clearValues();
+        return;
+      }
+      const res = await fetch("/api/features", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: sessionId,
+          name: pick.name,
+          index: pick.index,
+          kind: "region",
+          region: choice.region,
+          xld: choice.xld,
+          gray: choice.gray,
+          subpixel: false,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const detail = typeof data.detail === "string" ? data.detail : "讀取特徵失敗";
+        title.textContent = detail;
+        clearValues();
+        document.getElementById("errText").textContent = detail;
+        document.getElementById("errDialog").hidden = false;
+        return;
+      }
+      showValues(data);
+    }
+
+    function publish() {
+      localStorage.setItem("visdev.features", JSON.stringify(checkedKeys()));
+      channel.postMessage({ type: "features" });
+      refresh();
+    }
+
+    function takePick(data) {
+      if (!data || data.type !== "pick") return;
+      pick = data;
+      refresh();
+    }
+
+    document.getElementById("errOk").onclick = () => { document.getElementById("errDialog").hidden = true; };
+    list.addEventListener("change", publish);
+    const channel = new BroadcastChannel("visdev-features");
+    channel.onmessage = (event) => takePick(event.data);
+    window.addEventListener("storage", (event) => {
+      if (event.key !== "visdev.featurePick" || !event.newValue) return;
+      try { takePick(JSON.parse(event.newValue)); } catch (_err) { /* 忽略 */ }
+    });
+
+    try {
+      const stored = JSON.parse(localStorage.getItem("visdev.featurePick") || "null");
+      if (stored && stored.type === "pick") pick = stored;
+    } catch (_err) { /* 尚未點選 */ }
+
+    fetch("/api/features").then((res) => res.json()).then((data) => {
+      if (data.region) catalog = data;
+      build();
+      refresh();
+    }).catch(() => {
+      build();
+      refresh();
+    });
+  </script>
+</body>
+</html>

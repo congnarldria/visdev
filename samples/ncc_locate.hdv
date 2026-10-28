@@ -1,0 +1,12 @@
+* 教導同一支箭頭，再用 NCC 定位。只畫中心、方向箭頭和角度
+read_image (Scene, 'samples/shapes_scene.png')
+read_image (Template, 'samples/shape_template.png')
+teach_ncc_model (Template, 15, 15, 164, 164, 0, rad(-180), rad(360), 0, 'use_polarity', ModelID)
+find_ncc_model (Scene, ModelID, rad(-180), rad(360), 0.75, 0, 0.4, 'interpolation', 0, Row, Column, Angle, Score)
+dev_display (Scene)
+dev_set_line_width (2)
+dev_display_ncc_matching_results (ModelID, Row, Column, Angle)
+Count := |Row|
+Label := 'ncc ' + Count
+dev_set_color ('white')
+dev_disp_text (Label, 24, 12)

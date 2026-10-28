@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VisDev 視覺開發環境</title>
+  <link rel="icon" href="/static/magpie.ico">
+  <link rel="stylesheet" href="/static/app.css?v=14">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div>
+        <strong>VisDev</strong>
+        <em>視覺開發環境</em>
+      </div>
+    </div>
+    <label class="namebox">
+      <span>程式</span>
+      <input id="progName" value="blob_inspect.hdv" spellcheck="false">
+    </label>
+    <div class="pop">
+      <button id="btnSamples" type="button">範例</button>
+      <div id="sampleMenu" class="menu" hidden></div>
+    </div>
+    <button id="btnOpen" type="button">開啟</button>
+    <button id="btnSave" type="button">儲存</button>
+    <div class="spacer"></div>
+    <label class="check"><input id="trace" type="checkbox">追蹤</label>
+    <button id="btnReset" type="button">重設 <kbd>F7</kbd></button>
+    <button id="btnStep" type="button">單步 <kbd>F6</kbd></button>
+    <button id="btnRun" class="primary" type="button">執行 <kbd>F5</kbd></button>
+    <button id="btnStop" type="button">停止</button>
+    <input id="fileOpen" type="file" accept=".hdv,.txt" hidden>
+  </header>
+
+  <main id="dock" class="workspace">
+    <section class="pane program" data-dock="program">
+      <div class="pane-bar"><span>程式</span><span class="hint">* 註解　:= 指定　Tab 補寫法　拖綠色箭頭改下一行</span></div>
+      <div class="editor-wrap">
+        <div id="gutter" class="gutter"></div>
+        <div class="editor-stage">
+          <div id="errBar" class="err-bar"></div>
+          <div id="currentBar" class="current-bar"></div>
+          <pre id="hl" class="hl"></pre>
+          <textarea id="code" wrap="off" spellcheck="false" autocomplete="off" autocorrect="off"></textarea>
+        </div>
+      </div>
+    </section>
+    <section class="pane gfx" data-dock="gfx">
+      <div class="pane-bar">
+        <span>圖形視窗</span>
+        <span id="gfxTitle" class="hint"></span>
+        <div class="spacer"></div>
+        <button id="btnFit" type="button" title="符合視窗">符合</button>
+        <button id="btnOne" type="button" title="原始像素">1:1</button>
+        <button id="btnZoomOut" type="button" title="縮小">−</button>
+        <button id="btnZoomIn" type="button" title="放大">+</button>
+        <button id="btnUpload" type="button">載入影像</button>
+        <button id="btnThreshold" type="button" title="開啟二值化視窗，不擋住主視窗">二值化</button>
+        <button id="btnFeatures" type="button" title="開啟特徵視窗，不擋住主視窗。先點選區域，再勾選要看的數值">特徵</button>
+        <button id="btnConnection" type="button" title="依連通距離和面積下限做 connection，每個物件一種顏色">connection</button>
+        <label class="conn-min">距離 <input id="connDist" type="number" min="1" step="1" value="1" title="1 是八連通。調大就把最近像素距離在這個值以內的物件併成一個"></label>
+        <label class="conn-min">下限 <input id="connMin" type="number" min="0" step="1" value="1" title="連通物件的最小面積"></label>
+        <input id="fileImage" type="file" accept="image/*" hidden>
+      </div>
+      <div id="gfxStage" class="gfx-stage">
+        <canvas id="canvas"></canvas>
+        <div id="gfxEmpty" class="gfx-empty">執行程式後，影像、區域和輪廓會畫在這裡。<br>也可以把圖檔拖進來。</div>
+        <div id="gfxBanner" class="gfx-banner" hidden></div>
+      </div>
+    </section>
+    <section class="pane vars" data-dock="vars">
+      <div class="pane-bar"><span>變數</span><span class="hint">點圖像變數可預覽</span></div>
+      <div class="var-scroll">
+        <h3>圖像 <span id="iconicCount"></span></h3>
+        <div id="iconicList" class="var-list"></div>
+        <h3>控制</h3>
+        <div id="controlList" class="var-list"></div>
+        <div id="varDetail" class="var-detail">選一個變數查看完整內容。</div>
+      </div>
+    </section>
+    <section class="pane bottom" data-dock="bottom">
+      <div class="tabs">
+        <button class="tab on" type="button" data-tab="ops">算子</button>
+        <button class="tab" type="button" data-tab="syntax">語法</button>
+        <button class="tab" type="button" data-tab="log">輸出</button>
+        <input id="opSearch" placeholder="搜尋算子，例如 threshold" spellcheck="false">
+      </div>
+      <div class="tabpage on" data-page="ops">
+        <div id="opList" class="op-list"></div>
+        <div id="opHelp" class="op-help">
+          <p class="lead">參數順序與 HDevelop 相同：圖像輸入、圖像輸出、控制輸入、控制輸出。</p>
+          <p>雙擊算子會把範本插進程式。新算子加在 <code>app/engine/operators.py</code>。</p>
+        </div>
+      </div>
+      <div class="tabpage" data-page="syntax">
+        <div class="syntax">
+          <p>程式一行一個敘述。算子名稱不分大小寫，變數名稱則要完全一致。tuple 索引從 1 開始。</p>
+          <pre>* 這是註解
+read_image (Image, 'samples/parts.png')
+MinGray := 80
+threshold (Image, Region, MinGray, 255)
+Area := [10, 20, 30]
+First := Area[1]
+Length := |Area|
+Label := 'n=' + Length
+for Index := 1 to Length by 1
+  if (Area[Index] > 15)
+    stop ()
+  endif
+endfor</pre>
+          <p>行尾的 <code>\</code> 表示這一行還沒結束。路徑請寫 <code>C:/data/a.png</code>，不要用結尾的反斜線。</p>
+          <p><code>if</code> 的條件若是 tuple，必須每一個元素都成立才會進去。<code>=</code> 是比較，<code>:=</code> 才是指定。<code>#</code> 和 <code>&lt;&gt;</code> 都是不等於。</p>
+        </div>
+      </div>
+      <div class="tabpage" data-page="log">
+        <pre id="logBox" class="log"></pre>
+      </div>
+    </section>
+  </main>
+
+  <div id="errDialog" class="modal" hidden>
+    <div class="dialog" role="alertdialog" aria-labelledby="errTitle">
+      <h2 id="errTitle">錯誤</h2>
+      <p id="errText"></p>
+      <p id="errWhere" class="hint"></p>
+      <div class="actions"><button id="errOk" type="button">確定</button></div>
+    </div>
+  </div>
+
+  <footer class="status">
+    <span id="stState">就緒</span>
+    <span id="stLine"></span>
+    <span id="stZoom"></span>
+    <span id="stPix">Row — &nbsp; Column —</span>
+    <button id="btnLayout" type="button" title="把程式、圖形、變數、算子放回預設位置">回復版面</button>
+    <div class="spacer"></div>
+    <span class="hint">取代 HALCON 的第一版。常用流程先用這套語法寫，缺的算子再補。</span>
+  </footer>
+  <script src="/static/dock.js?v=2"></script>
+  <script src="/static/app.js?v=20"></script>
+</body>
+</html>

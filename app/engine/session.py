@@ -1,0 +1,513 @@
+from __future__ import annotations
+
+import math
+import re
+import threading
+import uuid
+from pathlib import Path
+
+import numpy as np
+
+from .evalexpr import ExprError, eval_expr, truthy
+from .objects import Image, Region, StopSignal, XLD
+from .operators import REGISTRY
+from .parser import Assign, Call, Comment, Blank, ElseStmt, EndForStmt, EndIfStmt, EndWhileStmt, ForStmt, IfStmt, ParseError, WhileStmt, parse_program
+from .render import apply_domain_dim, compose_display, jpeg_thumb, region_thumb, xld_thumb
+from .ncc_model import NccModel
+from .shape_model import MATCH_COLORS, ShapeModel
+
+
+class Display:
+    def __init__(self):
+        self.color = "#00e05a"
+        self.draw = "margin"
+        self.line_width = 2
+        self.colored = 0
+        self.base: Image | None = None
+        self.base_provisional = False
+        self.overlays: list = []
+
+    def clear(self):
+        self.base = None
+        self.base_provisional = False
+        self.overlays = []
+
+    def drop_provisional(self):
+        self.overlays = [item for item in self.overlays if not item.get("provisional")]
+
+
+def pythonize(value):
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, list):
+        return [pythonize(item) for item in value]
+    if isinstance(value, tuple):
+        return [pythonize(item) for item in value]
+    return value
+
+
+def tidy_number(value: float):
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)) and math.isfinite(float(value)) and abs(float(value) - round(float(value))) < 1e-8:
+        return int(round(float(value)))
+    return value
+
+
+def fmt_num(value) -> str:
+    value = pythonize(value)
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, float):
+        if math.isfinite(value) and abs(value - round(value)) < 1e-6:
+            return str(int(round(value)))
+        text = f"{value:.5f}".rstrip("0").rstrip(".")
+        return text or "0"
+    if isinstance(value, str):
+        return "'" + value.replace("'", "\\'") + "'"
+    return str(value)
+
+
+def fmt_value(value) -> str:
+    value = pythonize(value)
+    if isinstance(value, list):
+        shown = [fmt_num(item) for item in value[:12]]
+        body = ", ".join(shown)
+        if len(value) > 12:
+            return f"[{body}, …]  ({len(value)})"
+        return f"[{body}]"
+    return fmt_num(value)
+
+
+def full_value(value) -> str:
+    value = pythonize(value)
+    if isinstance(value, list):
+        body = ", ".join(fmt_num(item) for item in value[:400])
+        if len(value) > 400:
+            body += ", …"
+        return f"[{body}]"
+    return fmt_num(value)
+
+
+class Session:
+    def __init__(self, source: str, root: Path):
+        self.id = uuid.uuid4().hex[:12]
+        self.source = source
+        self.root = root
+        program = parse_program(source)
+        self.stmts = program.stmts
+        self.if_false = program.if_false
+        self.else_jump = program.else_jump
+        self.for_end = program.for_end
+        self.end_for = program.end_for
+        self.while_end = program.while_end
+        self.end_while = program.end_while
+        self.lock = threading.Lock()
+        self.breakpoints: set[int] = set()
+        self.trace = False
+        self.ref_shape: tuple[int, int] | None = None
+        self.region_color = "#ff3b30"
+        self.threshold_mask = None
+        self.reset()
+
+    def reset(self):
+        self.pc = 0
+        self.vars: dict = {}
+        self.done = False
+        self.error = None
+        self.error_line = None
+        self.paused = None
+        self.log: list[str] = []
+        self.display = Display()
+        self.loops: dict = {}
+        self.cancel = False
+        self.break_skip = None
+        self.step_count = 0
+        self.ref_shape = None
+        self.histogram = None
+        self.threshold_gray = None
+        self.threshold_domain = None
+        self.threshold_mask = None
+        self.prepare()
+
+    def prepare(self):
+        while self.pc < len(self.stmts) and isinstance(self.stmts[self.pc], (Blank, Comment)):
+            self.pc += 1
+        if self.pc >= len(self.stmts):
+            self.done = True
+
+    def current_line(self):
+        if self.done or self.pc >= len(self.stmts):
+            return None
+        return self.stmts[self.pc].line
+
+    def set_line(self, line: int):
+        """Move the program arrow. Variables stay; the next step starts at this line."""
+        target = None
+        for index, stmt in enumerate(self.stmts):
+            if isinstance(stmt, (Blank, Comment)):
+                continue
+            if stmt.line >= int(line):
+                target = index
+                break
+        self.error = None
+        self.error_line = None
+        self.paused = None
+        self.break_skip = None
+        if target is None:
+            self.pc = len(self.stmts)
+            self.done = True
+            return
+        self.pc = target
+        self.done = False
+
+    def resolve_read_path(self, filename: str) -> Path:
+        path = Path(filename).expanduser()
+        candidates = [path] if path.is_absolute() else [self.root / path, self.root / "samples" / path, self.root / "workspace" / path]
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        raise FileNotFoundError(f"找不到影像 {filename}")
+
+    def resolve_write_path(self, filename: str) -> Path:
+        path = Path(filename).expanduser()
+        if not path.is_absolute():
+            path = self.root / path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def canvas_size(self) -> tuple[int, int]:
+        if self.ref_shape:
+            return self.ref_shape
+        if self.display.base is not None:
+            return self.display.base.height, self.display.base.width
+        return 480, 640
+
+    def display_obj(self, obj, provisional: bool = False, name: str | None = None):
+        source = name if name is not None else getattr(self, "pending_display_name", None)
+        if isinstance(obj, Image):
+            self.display.base = obj
+            self.display.base_provisional = provisional
+            self.display.overlays = []
+            self.ref_shape = (obj.height, obj.width)
+            return
+        self.display.drop_provisional()
+        if isinstance(obj, Region):
+            self.ref_shape = self.ref_shape or (obj.height, obj.width)
+            colors = self.region_palette(obj)
+            color = self.region_color if not obj.multi_color else self.display.color
+            self.display.overlays.append(
+                {
+                    "kind": "region",
+                    "region": obj,
+                    "color": color,
+                    "colors": colors,
+                    "draw": self.display.draw,
+                    "width": self.display.line_width,
+                    "provisional": provisional,
+                    "source": source,
+                }
+            )
+            return
+        if isinstance(obj, XLD):
+            self.ref_shape = self.ref_shape or (obj.height, obj.width)
+            colors = None
+            if getattr(obj, "multi_color", False) and len(obj.contours) > 1:
+                colors = [MATCH_COLORS[index % 16] for index in range(len(obj.contours))]
+            elif self.display.colored > 1 and len(obj.contours) > 1:
+                colors = [MATCH_COLORS[index % self.display.colored] for index in range(len(obj.contours))]
+            self.display.overlays.append(
+                {
+                    "kind": "xld",
+                    "xld": obj,
+                    "color": self.display.color,
+                    "colors": colors,
+                    "width": self.display.line_width,
+                    "provisional": provisional,
+                    "source": source,
+                }
+            )
+            return
+        raise TypeError("dev_display 只能顯示影像、區域或輪廓")
+
+    def region_palette(self, region: Region):
+        count = region.count()
+        if count <= 1:
+            return None
+        if region.multi_color:
+            limit = 16
+        elif self.display.colored > 1:
+            limit = self.display.colored
+        else:
+            return None
+        return [MATCH_COLORS[index % limit] for index in range(count)]
+
+    def trace_line(self, stmt, message: str):
+        if self.trace:
+            self.log.append(f"{stmt.line:>4}  {message}")
+
+    def _on_breakpoint(self) -> bool:
+        stmt = self.stmts[self.pc]
+        return any(line in self.breakpoints for line in stmt.lines)
+
+    def step(self):
+        if self.error:
+            return
+        self.paused = None
+        self.break_skip = None
+        self.prepare()
+        if self.done:
+            return
+        self._execute_current()
+        if not self.error:
+            self.step_count += 1
+        self.prepare()
+
+    def run(self, max_steps: int = 100000):
+        if self.done or self.error:
+            self.reset()
+        self.paused = None
+        self.cancel = False
+        taken = 0
+        while taken < max_steps:
+            self.prepare()
+            if self.done:
+                self.log.append(f"執行完成（{self.step_count} 步）")
+                return
+            if self.cancel:
+                self.paused = "stopped"
+                self.log.append("已停止")
+                return
+            if self._on_breakpoint() and self.pc != self.break_skip:
+                self.break_skip = self.pc
+                self.paused = "breakpoint"
+                self.log.append(f"中斷點 第 {self.stmts[self.pc].line} 行")
+                return
+            self.break_skip = None
+            self._execute_current()
+            if self.error:
+                return
+            self.step_count += 1
+            taken += 1
+            if self.paused == "stop":
+                return
+        self.error = "超過最大步數，可能有無窮迴圈"
+        self.log.append(self.error)
+
+    def _execute_current(self):
+        index = self.pc
+        stmt = self.stmts[index]
+        try:
+            self._execute(stmt, index)
+        except StopSignal:
+            self.paused = "stop"
+            self.log.append(f"stop() 於第 {stmt.line} 行")
+        except (ExprError, ParseError, Exception) as exc:
+            self.error = str(exc)
+            self.error_line = stmt.line
+            self.log.append(f"錯誤 第 {stmt.line} 行：{exc}")
+
+    def _execute(self, stmt, index: int):
+        if isinstance(stmt, Assign):
+            self.vars[stmt.name] = pythonize(eval_expr(stmt.expr, self.vars))
+            self.pc = index + 1
+            self.trace_line(stmt, f"{stmt.name} := {fmt_value(self.vars[stmt.name])}")
+            return
+        if isinstance(stmt, Call):
+            if stmt.name == "stop":
+                self.pc = index + 1
+                raise StopSignal()
+            self._call(stmt)
+            self.pc = index + 1
+            return
+        if isinstance(stmt, IfStmt):
+            cond = eval_expr(stmt.expr, self.vars)
+            self.trace_line(stmt, f"if ({stmt.expr}) → {1 if truthy(cond) else 0}")
+            self.pc = index + 1 if truthy(cond) else self.if_false[index]
+            return
+        if isinstance(stmt, ElseStmt):
+            self.pc = self.else_jump[index]
+            return
+        if isinstance(stmt, EndIfStmt):
+            self.pc = index + 1
+            return
+        if isinstance(stmt, ForStmt):
+            self._enter_for(stmt, index)
+            return
+        if isinstance(stmt, EndForStmt):
+            self._leave_for(index)
+            return
+        if isinstance(stmt, WhileStmt):
+            cond = eval_expr(stmt.expr, self.vars)
+            self.pc = index + 1 if truthy(cond) else self.while_end[index] + 1
+            return
+        if isinstance(stmt, EndWhileStmt):
+            self.pc = self.end_while[index]
+            return
+        self.pc = index + 1
+
+    def _enter_for(self, stmt: ForStmt, index: int):
+        start = float(eval_expr(stmt.start, self.vars))
+        end = float(eval_expr(stmt.end, self.vars))
+        step = float(eval_expr(stmt.step, self.vars))
+        if step == 0:
+            raise RuntimeError("for 的 step 不能為 0")
+        self.vars[stmt.var] = tidy_number(start)
+        self.loops[index] = {"end": end, "step": step, "var": stmt.var}
+        self.trace_line(stmt, f"for {stmt.var} := {fmt_num(start)} to {fmt_num(end)} by {fmt_num(step)}")
+        if _in_range(start, end, step):
+            self.pc = index + 1
+        else:
+            self.loops.pop(index, None)
+            self.pc = self.for_end[index] + 1
+
+    def _leave_for(self, index: int):
+        for_index = self.end_for[index]
+        frame = self.loops.get(for_index)
+        if frame is None:
+            self.pc = index + 1
+            return
+        current = float(self.vars[frame["var"]]) + frame["step"]
+        self.vars[frame["var"]] = tidy_number(current)
+        if _in_range(current, frame["end"], frame["step"]):
+            self.pc = for_index + 1
+        else:
+            self.loops.pop(for_index, None)
+            self.pc = index + 1
+
+    def _call(self, stmt: Call):
+        op = REGISTRY[stmt.name]
+        iconic = []
+        for name in stmt.iconic_in:
+            if name not in self.vars:
+                raise RuntimeError(f"變數 {name} 還沒有值")
+            iconic.append(self.vars[name])
+        controls = [pythonize(eval_expr(expr, self.vars)) for expr in stmt.control_in]
+        self.pending_display_name = stmt.iconic_in[0] if stmt.name == "dev_display" and stmt.iconic_in else None
+        result = op.fn(*iconic, *controls, ctx=self)
+        if len(result.iconic) != len(stmt.iconic_out) or len(result.control) != len(stmt.control_out):
+            raise RuntimeError(f"{stmt.name} 的輸出數量和呼叫不一致")
+        for name, value in zip(stmt.iconic_out, result.iconic):
+            self.vars[name] = value
+            if isinstance(value, Image):
+                self.ref_shape = (value.height, value.width)
+        for name, value in zip(stmt.control_out, result.control):
+            self.vars[name] = pythonize(value)
+        if stmt.iconic_out and not stmt.name.startswith("dev_"):
+            self.display_obj(self.vars[stmt.iconic_out[-1]], provisional=True, name=stmt.iconic_out[-1])
+        if stmt.name in ("threshold", "binary_threshold", "opencv_threshold", "threshold_sub_pix") and self.histogram is not None:
+            self.histogram["line"] = stmt.line
+            if stmt.name == "threshold":
+                numeric = len(stmt.control_in) >= 2 and all(_num_literal(item) for item in stmt.control_in[:2])
+                self.histogram["literal"] = numeric and len(stmt.lines) == 1
+            elif stmt.name == "opencv_threshold":
+                numeric = len(stmt.control_in) >= 1 and _num_literal(stmt.control_in[0])
+                self.histogram["literal"] = numeric and len(stmt.lines) == 1
+            elif stmt.name == "threshold_sub_pix":
+                numeric = len(stmt.control_in) >= 1 and _num_literal(stmt.control_in[0])
+                self.histogram["literal"] = numeric and len(stmt.lines) == 1
+        outputs = stmt.iconic_out + stmt.control_out
+        message = stmt.name if not outputs else stmt.name + " → " + ", ".join(outputs)
+        self.trace_line(stmt, message)
+
+    def public_state(self) -> dict:
+        iconic = []
+        control = []
+        for name, value in self.vars.items():
+            if isinstance(value, (Image, Region, XLD)):
+                kind, info, thumb = describe_iconic(value)
+                iconic.append({"name": name, "kind": kind, "info": info, "thumb": thumb})
+            elif isinstance(value, ShapeModel):
+                control.append({"name": name, "type": "shape_model", "text": value.summary(), "full": value.summary()})
+            elif isinstance(value, NccModel):
+                control.append({"name": name, "type": "ncc_model", "text": value.summary(), "full": value.summary()})
+            else:
+                kind = "tuple" if isinstance(value, list) else "string" if isinstance(value, str) else "real" if isinstance(value, float) else "integer"
+                control.append({"name": name, "type": kind, "text": fmt_value(value), "full": full_value(value)})
+        histogram = None
+        if self.histogram is not None:
+            histogram = dict(self.histogram)
+            histogram["color"] = self.region_color
+        overlays = list(self.display.overlays)
+        mask = self.threshold_mask
+        if mask is not None and int(np.count_nonzero(mask)):
+            binary = Region(int(mask.shape[1]), int(mask.shape[0]), [mask])
+            overlays.insert(
+                0,
+                {
+                    "kind": "region",
+                    "region": binary,
+                    "color": self.region_color,
+                    "colors": None,
+                    "draw": "fill",
+                    "width": 1,
+                    "alpha": 120,
+                },
+            )
+        return {
+            "id": self.id,
+            "line": self.current_line(),
+            "done": self.done,
+            "error": self.error,
+            "errorLine": self.error_line,
+            "paused": self.paused,
+            "log": self.log[-300:],
+            "iconic": iconic,
+            "control": control,
+            "display": compose_display(self.display.base, overlays),
+            "histogram": histogram,
+            "steps": self.step_count,
+        }
+
+    def view_object(self, name: str) -> dict:
+        value = self.vars[name]
+        if isinstance(value, Image):
+            display = compose_display(value, [])
+            kind = "image"
+        elif isinstance(value, Region):
+            colors = None
+            if value.multi_color and value.count() > 1:
+                colors = [MATCH_COLORS[index % 16] for index in range(value.count())]
+            display = compose_display(
+                None,
+                [{"kind": "region", "region": value, "color": "#ff3b30", "colors": colors, "draw": "margin", "width": 2}],
+            )
+            kind = "region"
+        elif isinstance(value, XLD):
+            display = compose_display(None, [{"kind": "xld", "xld": value, "color": "#ffe14a", "width": 2}])
+            kind = "xld"
+        else:
+            raise TypeError("這不是圖像變數")
+        return {"name": name, "kind": kind, "display": display}
+
+
+def _num_literal(text: str) -> bool:
+    return bool(re.fullmatch(r"-?\d+(?:\.\d+)?", str(text).strip()))
+
+
+def _in_range(current: float, end: float, step: float) -> bool:
+    if step > 0:
+        return current <= end + 1e-9
+    return current >= end - 1e-9
+
+
+def describe_iconic(value):
+    if isinstance(value, Image):
+        channels = "byte" if value.channels == 1 else f"{value.channels} 通道"
+        thumb = jpeg_thumb(apply_domain_dim(value))
+        return "image", f"{value.width}×{value.height}  {channels}", thumb
+    if isinstance(value, Region):
+        info = f"{value.count()} 個物件  {value.width}×{value.height}"
+        if value.links:
+            outers = holes = 0
+            for item in value.links:
+                for parent in item.get("parent") or []:
+                    if parent < 0:
+                        outers += 1
+                    else:
+                        holes += 1
+            info += f"  link 外{outers} 孔{holes}"
+        return "region", info, jpeg_thumb(region_thumb(value))
+    return "xld", f"{len(value.contours)} 條輪廓", jpeg_thumb(xld_thumb(value))

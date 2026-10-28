@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>二值化</title>
+  <link rel="icon" href="/static/magpie.ico">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #14171c;
+      color: #d5deea;
+      font: 13px/1.4 "Segoe UI", "Microsoft JhengHei", sans-serif;
+    }
+    header, footer, .tools {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      background: #1a1e25;
+    }
+    header { border-bottom: 1px solid #2c3340; }
+    header span, #note { color: #8b98ab; }
+    .tools { border-bottom: 1px solid #2c3340; padding: 6px 10px; }
+    button, input, label { font: inherit; color: inherit; }
+    button {
+      height: 26px;
+      padding: 0 8px;
+      border: 1px solid #3a4250;
+      background: #232831;
+      color: #d5deea;
+      cursor: pointer;
+    }
+    button.on { background: #1d3d66; border-color: #3d8bff; color: #fff; }
+    label { display: flex; align-items: center; gap: 4px; color: #8b98ab; }
+    input[type="number"] {
+      width: 72px;
+      height: 26px;
+      padding: 0 6px;
+      background: #101216;
+      border: 1px solid #3a4250;
+      color: #d5deea;
+    }
+    input[type="color"] { width: 32px; height: 26px; padding: 0; background: transparent; border: 1px solid #3a4250; }
+    .viewbar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      background: #161a20;
+      border-bottom: 1px solid #2c3340;
+    }
+    .viewbar span { margin-left: 8px; color: #8b98ab; }
+    .stage { position: relative; flex: 1; min-height: 180px; background: #101216; }
+    canvas#view { width: 100%; height: 100%; display: block; cursor: grab; }
+    canvas#view.panning { cursor: grabbing; }
+    .histo { padding: 8px 12px 4px; background: #161a20; border-top: 1px solid #2c3340; }
+    #bars { width: 100%; height: 72px; display: block; cursor: ew-resize; background: #101216; border-radius: 4px; }
+    footer { border-top: 1px solid #2c3340; }
+    #errDialog[hidden] { display: none !important; }
+    #errDialog { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.48); }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>二值化</strong>
+    <span>這個視窗不擋住主視窗。拖統計圖時，區域畫在這裡，放開後主視窗才重跑。</span>
+  </header>
+  <div class="tools">
+    <button type="button" data-bin="halcon" title="HALCON 區間門檻，含兩端">HALCON</button>
+    <button type="button" data-bin="opencv" title="OpenCV，大於門檻">OpenCV</button>
+    <button type="button" data-bin="inv" title="OpenCV 反相，小於等於門檻">反相</button>
+    <button type="button" data-bin="otsu" title="Otsu，留下亮處">Otsu</button>
+    <button type="button" data-bin="dark" title="Otsu，留下暗處">暗部</button>
+    <button type="button" data-bin="smooth" title="平滑直方圖後取谷值">平滑</button>
+    <button type="button" data-bin="triangle" title="三角形法">三角</button>
+    <button type="button" data-bin="local" title="局部平均">局部</button>
+    <button type="button" data-bin="lgauss" title="局部高斯">高斯</button>
+    <button type="button" id="subpix" title="另開次像素二值化">次像素</button>
+    <button type="button" id="features" title="另開區域特徵">特徵</button>
+    <button type="button" id="connect" title="依連通距離和面積下限做 connection">connection</button>
+    <label>顏色 <input id="color" type="color" value="#ff3b30" title="二值化區域顏色"></label>
+    <label>距離 <input id="dist" type="number" min="1" step="1" value="1" title="1 是八連通"></label>
+    <label>下限 <input id="minArea" type="number" min="0" step="1" value="1" title="連通物件的最小面積"></label>
+  </div>
+  <div class="viewbar">
+    <button id="btnFit" type="button" title="符合視窗">符合</button>
+    <button id="btnOne" type="button" title="原始像素">1:1</button>
+    <button id="btnOut" type="button" title="縮小">−</button>
+    <button id="btnIn" type="button" title="放大">+</button>
+    <span id="zoom"></span>
+    <span>滾輪縮放，拖曳平移。視窗邊緣也可以拉大拉小。</span>
+  </div>
+  <div class="stage"><canvas id="view"></canvas></div>
+  <div class="histo"><canvas id="bars"></canvas></div>
+  <footer><span id="note">請先在主視窗執行程式，或按上面的二值化。</span></footer>
+  <div id="errDialog" hidden>
+    <div style="width:min(420px,calc(100vw - 32px));background:#1c2028;border:1px solid #ff5d4a;padding:16px">
+      <strong style="color:#ffb0a6">錯誤</strong>
+      <p id="errText" style="white-space:pre-wrap"></p>
+      <div style="text-align:right"><button id="errOk" type="button">確定</button></div>
+    </div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    let sessionId = params.get("id") || "";
+    let histo = null;
+    let photo = null;
+    let overlay = null;
+    let drag = null;
+    let dragStart = null;
+    let token = 0;
+    const cam = { x: 0, y: 0, scale: 1, user: false };
+    let panning = null;
+    let shownSize = "";
+    const view = document.getElementById("view");
+    const bars = document.getElementById("bars");
+    const note = document.getElementById("note");
+    const colorInput = document.getElementById("color");
+    const channel = new BroadcastChannel("visdev-threshold");
+
+    function showError(text) {
+      document.getElementById("errText").textContent = text;
+      document.getElementById("errDialog").hidden = false;
+    }
+
+    function send(payload) {
+      const message = { ...payload, at: Date.now() };
+      localStorage.setItem("visdev.thresholdCmd", JSON.stringify(message));
+      channel.postMessage(message);
+    }
+
+    function sumBins(bins, minGray, maxGray) {
+      let total = 0;
+      for (let i = Math.max(0, minGray); i <= Math.min(255, maxGray); i += 1) total += bins[i] || 0;
+      return total;
+    }
+
+    function statsText(data) {
+      if (!data) return "還沒有統計圖。";
+      const area = data.kind === "range" ? sumBins(data.bins, data.min, data.max) : data.area;
+      const pct = data.total ? (100 * area) / data.total : 0;
+      const share = `${area} px · ${pct.toFixed(1)}%`;
+      if (data.kind === "otsu" || data.kind === "auto") {
+        const label = data.method && data.method !== "max_separability" && data.method !== "otsu" ? data.method : "Otsu";
+        return `${label} ${data.lightDark} · 門檻 ${data.threshold} · 區域 ${share}`;
+      }
+      if (data.kind === "local") return `局部 ${data.method} ${data.lightDark} · 區域 ${share}`;
+      if (data.kind === "opencv") {
+        const hint = data.literal ? "拖曳門檻，放開後主視窗重跑" : "門檻是算式，只顯示統計";
+        const rule = data.lightDark === "binary_inv" ? "小於等於" : "大於";
+        return `OpenCV ${rule} ${data.threshold} · 區域 ${share} · ${hint}`;
+      }
+      if (data.kind === "subpix") {
+        const hint = data.literal ? "拖曳門檻，放開後主視窗重跑" : "門檻是算式，只顯示統計";
+        return `次像素 ≥ ${data.threshold} · 區域 ${share} · ${hint}`;
+      }
+      const hint = data.literal ? "拖曳兩端，放開後主視窗重跑" : "門檻是算式，只顯示統計";
+      return `灰階 ${data.min}–${data.max} · 區域 ${share} · ${hint}`;
+    }
+
+    function markTools() {
+      document.querySelectorAll("button[data-bin]").forEach((button) => {
+        const key = button.dataset.bin;
+        const data = histo;
+        let on = false;
+        if (data) {
+          if (key === "halcon") on = data.kind === "range";
+          if (key === "opencv") on = data.kind === "opencv" && data.lightDark !== "binary_inv";
+          if (key === "inv") on = data.kind === "opencv" && data.lightDark === "binary_inv";
+          if (key === "otsu") on = data.kind === "otsu" && data.lightDark !== "dark";
+          if (key === "dark") on = data.kind === "otsu" && data.lightDark === "dark";
+          if (key === "smooth") on = data.method === "smooth_histo";
+          if (key === "triangle") on = data.method === "triangle";
+          if (key === "local") on = data.method === "local_mean";
+          if (key === "lgauss") on = data.method === "local_gauss";
+        }
+        button.classList.toggle("on", on);
+      });
+      document.getElementById("subpix").classList.toggle("on", Boolean(histo && histo.kind === "subpix"));
+    }
+
+    function strokeX(pen, x, height, color) {
+      pen.strokeStyle = color;
+      pen.lineWidth = 2;
+      pen.beginPath();
+      pen.moveTo(x, 0);
+      pen.lineTo(x, height);
+      pen.stroke();
+    }
+
+    function paintHisto() {
+      const width = bars.clientWidth || 300;
+      const height = 72;
+      const dpr = window.devicePixelRatio || 1;
+      bars.width = Math.round(width * dpr);
+      bars.height = Math.round(height * dpr);
+      const pen = bars.getContext("2d");
+      pen.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pen.clearRect(0, 0, width, height);
+      note.textContent = statsText(histo);
+      if (!histo || !histo.bins) return;
+      let peak = 1;
+      for (const value of histo.bins) peak = Math.max(peak, value);
+      const slot = width / 256;
+      for (let i = 0; i < 256; i += 1) {
+        pen.fillStyle = i >= histo.min && i <= histo.max ? "#3d8bff" : "#3a4250";
+        const bar = (histo.bins[i] / peak) * (height - 6);
+        pen.fillRect(i * slot, height - bar, Math.max(slot, 1), bar);
+      }
+      if (histo.kind === "range" && histo.literal) {
+        strokeX(pen, (histo.min / 256) * width, height, "#ffe14a");
+        strokeX(pen, ((histo.max + 1) / 256) * width, height, "#ffe14a");
+      } else if ((histo.kind === "opencv" || histo.kind === "subpix") && histo.literal) {
+        strokeX(pen, ((histo.threshold + 0.5) / 256) * width, height, "#ffe14a");
+      } else if (histo.threshold != null) {
+        strokeX(pen, ((histo.threshold + 0.5) / 256) * width, height, "#ff8a1e");
+      }
+    }
+
+    function pictureSize() {
+      const picture = photo || overlay;
+      return picture ? { width: picture.width, height: picture.height } : null;
+    }
+
+    function resizeView() {
+      const rect = view.parentElement.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      view.width = Math.max(1, Math.round(rect.width * dpr));
+      view.height = Math.max(1, Math.round(rect.height * dpr));
+      return rect;
+    }
+
+    function paintView() {
+      const rect = resizeView();
+      const ctx = view.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = "#101216";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+      const picture = photo || overlay;
+      document.getElementById("zoom").textContent = picture ? `${Math.round(cam.scale * 100)}%` : "";
+      if (!picture) return;
+      ctx.save();
+      ctx.translate(cam.x, cam.y);
+      ctx.scale(cam.scale, cam.scale);
+      ctx.imageSmoothingEnabled = cam.scale < 3;
+      if (photo) ctx.drawImage(photo, 0, 0);
+      if (overlay) ctx.drawImage(overlay, 0, 0);
+      ctx.restore();
+    }
+
+    function fitView(markUser) {
+      const rect = view.parentElement.getBoundingClientRect();
+      const size = pictureSize();
+      shownSize = size ? `${size.width}x${size.height}` : "";
+      if (!size) {
+        cam.user = false;
+        paintView();
+        return;
+      }
+      const pad = 12;
+      cam.scale = Math.max(0.05, Math.min((rect.width - pad * 2) / size.width, (rect.height - pad * 2) / size.height));
+      cam.x = (rect.width - size.width * cam.scale) / 2;
+      cam.y = (rect.height - size.height * cam.scale) / 2;
+      cam.user = Boolean(markUser);
+      paintView();
+    }
+
+    function showPicture() {
+      const size = pictureSize();
+      const key = size ? `${size.width}x${size.height}` : "";
+      if (!cam.user || key !== shownSize) fitView(false);
+      else paintView();
+    }
+
+    function zoomAt(factor, cx, cy) {
+      const next = Math.min(48, Math.max(0.05, cam.scale * factor));
+      const k = next / (cam.scale || 1);
+      cam.x = cx - (cx - cam.x) * k;
+      cam.y = cy - (cy - cam.y) * k;
+      cam.scale = next;
+      cam.user = true;
+      paintView();
+    }
+
+    function loadImg(src) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("影像解碼失敗"));
+        image.src = src;
+      });
+    }
+
+    async function refresh(withGray) {
+      if (!sessionId || !histo) return;
+      const mine = ++token;
+      const res = await fetch("/api/threshold-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: sessionId,
+          kind: histo.kind,
+          min: histo.min,
+          max: histo.max,
+          threshold: histo.threshold ?? histo.min,
+          lightDark: histo.lightDark || "binary",
+          color: colorInput.value,
+          image: withGray || !photo,
+        }),
+      });
+      const data = await res.json();
+      if (mine !== token) return;
+      if (!res.ok) {
+        const detail = typeof data.detail === "string" ? data.detail : "讀取失敗";
+        note.textContent = detail;
+        if (!detail.includes("請先執行")) showError(detail);
+        return;
+      }
+      if (data.gray) photo = await loadImg(data.gray);
+      overlay = data.image ? await loadImg(data.image) : null;
+      if (histo.kind === "range") histo.area = sumBins(histo.bins, histo.min, histo.max);
+      else if (Number.isFinite(data.area)) histo.area = data.area;
+      paintHisto();
+      showPicture();
+    }
+
+    function applyState(data) {
+      if (!data || data.type !== "state") return;
+      if (data.id) sessionId = data.id;
+      if (drag) return;
+      histo = data.histogram || null;
+      if (data.color && document.activeElement !== colorInput) colorInput.value = data.color;
+      if (data.connMin != null && document.activeElement !== document.getElementById("minArea")) {
+        document.getElementById("minArea").value = data.connMin;
+      }
+      if (data.connDist != null && document.activeElement !== document.getElementById("dist")) {
+        document.getElementById("dist").value = data.connDist;
+      }
+      markTools();
+      paintHisto();
+      refresh(true);
+    }
+
+    function valueAt(event) {
+      const rect = bars.getBoundingClientRect();
+      const x = Math.min(Math.max(event.clientX - rect.left, 0), rect.width || 1);
+      return Math.min(255, Math.max(0, Math.floor((x / (rect.width || 1)) * 256)));
+    }
+
+    bars.addEventListener("mousedown", (event) => {
+      if (!histo || !histo.literal || (histo.kind !== "range" && histo.kind !== "opencv" && histo.kind !== "subpix")) return;
+      const rect = bars.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      if (histo.kind === "opencv" || histo.kind === "subpix") drag = "level";
+      else {
+        const minX = (histo.min / 256) * rect.width;
+        const maxX = ((histo.max + 1) / 256) * rect.width;
+        drag = Math.abs(x - minX) <= Math.abs(x - maxX) ? "min" : "max";
+      }
+      dragStart = { min: histo.min, max: histo.max, threshold: histo.threshold };
+      event.preventDefault();
+    });
+    window.addEventListener("mousemove", (event) => {
+      if (!drag || !histo) return;
+      const value = valueAt(event);
+      if (drag === "level") {
+        histo.threshold = value;
+        if (histo.kind === "subpix") {
+          histo.min = value;
+          histo.max = 255;
+        } else if (histo.lightDark === "binary_inv") {
+          histo.min = 0;
+          histo.max = value;
+        } else {
+          histo.min = Math.min(255, value + 1);
+          histo.max = 255;
+        }
+      } else if (drag === "min") histo.min = Math.min(value, histo.max);
+      else histo.max = Math.max(value, histo.min);
+      paintHisto();
+      refresh(false);
+    });
+    window.addEventListener("mouseup", () => {
+      if (!drag || !dragStart) return;
+      const mode = drag;
+      const changed = mode === "level"
+        ? histo.threshold !== dragStart.threshold
+        : histo.min !== dragStart.min || histo.max !== dragStart.max;
+      drag = null;
+      if (!changed) return;
+      send({ type: "commit", mode, min: histo.min, max: histo.max, threshold: histo.threshold });
+    });
+
+    document.querySelector(".tools").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-bin]");
+      if (!button || drag) return;
+      send({ type: "tool", name: button.dataset.bin });
+    });
+    document.getElementById("connect").onclick = () => {
+      send({
+        type: "connection",
+        min: Number(document.getElementById("minArea").value),
+        dist: Number(document.getElementById("dist").value),
+      });
+      note.textContent = "已寫入 connection。主視窗會重跑，每個物件一種顏色。";
+    };
+    document.getElementById("subpix").onclick = () => send({ type: "open-subpix" });
+    document.getElementById("features").onclick = () => send({ type: "open-features" });
+    colorInput.addEventListener("change", () => {
+      localStorage.setItem("visdev.regionColor", colorInput.value);
+      send({ type: "color", color: colorInput.value });
+      refresh(false);
+    });
+    document.getElementById("errOk").onclick = () => { document.getElementById("errDialog").hidden = true; };
+    channel.onmessage = (event) => applyState(event.data);
+    window.addEventListener("storage", (event) => {
+      if (event.key !== "visdev.threshold" || !event.newValue) return;
+      try { applyState(JSON.parse(event.newValue)); } catch (_err) { /* 忽略壞掉的暫存 */ }
+    });
+    view.addEventListener("wheel", (event) => {
+      if (!pictureSize()) return;
+      event.preventDefault();
+      const rect = view.getBoundingClientRect();
+      zoomAt(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - rect.left, event.clientY - rect.top);
+    }, { passive: false });
+    view.addEventListener("mousedown", (event) => {
+      if (event.button !== 0 || !pictureSize()) return;
+      panning = { x: event.clientX, y: event.clientY, camX: cam.x, camY: cam.y };
+      view.classList.add("panning");
+    });
+    window.addEventListener("mousemove", (event) => {
+      if (!panning) return;
+      cam.x = panning.camX + event.clientX - panning.x;
+      cam.y = panning.camY + event.clientY - panning.y;
+      cam.user = true;
+      paintView();
+    });
+    window.addEventListener("mouseup", () => {
+      if (!panning) return;
+      panning = null;
+      view.classList.remove("panning");
+    });
+    document.getElementById("btnFit").onclick = () => fitView(false);
+    document.getElementById("btnOne").onclick = () => {
+      const rect = view.parentElement.getBoundingClientRect();
+      const size = pictureSize();
+      if (!size) return;
+      cam.scale = 1;
+      cam.x = (rect.width - size.width) / 2;
+      cam.y = (rect.height - size.height) / 2;
+      cam.user = true;
+      shownSize = `${size.width}x${size.height}`;
+      paintView();
+    };
+    document.getElementById("btnOut").onclick = () => {
+      const rect = view.getBoundingClientRect();
+      zoomAt(0.8, rect.width / 2, rect.height / 2);
+    };
+    document.getElementById("btnIn").onclick = () => {
+      const rect = view.getBoundingClientRect();
+      zoomAt(1.25, rect.width / 2, rect.height / 2);
+    };
+    window.addEventListener("resize", () => {
+      paintHisto();
+      if (cam.user) paintView();
+      else fitView(false);
+    });
+    const saved = localStorage.getItem("visdev.regionColor");
+    if (saved && /^#[0-9a-fA-F]{6}$/.test(saved)) colorInput.value = saved;
+    try {
+      const stored = JSON.parse(localStorage.getItem("visdev.threshold") || "null");
+      if (stored) applyState(stored);
+    } catch (_err) { /* 還沒有狀態 */ }
+    send({ type: "hello" });
+  </script>
+</body>
+</html>
