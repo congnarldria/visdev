@@ -180,6 +180,28 @@ def compose_display(base: Image | None, overlays: list) -> dict | None:
                         ),
                     }
                 )
+                for index, mask in enumerate(region.objects):
+                    if drawn >= 1500:
+                        truncated = True
+                        break
+                    color = colors[index] if colors and index < len(colors) else item["color"]
+                    for points in contours_of(mask):
+                        if len(points) < 2:
+                            continue
+                        shapes.append(
+                            {
+                                "type": "polyline",
+                                "color": color,
+                                "width": item["width"],
+                                "closed": True,
+                                "points": points,
+                                "object": index,
+                                "source": item.get("source"),
+                                "kind": "region",
+                                "hit": True,
+                            }
+                        )
+                    drawn += 1
                 continue
             for index, mask in enumerate(region.objects):
                 if drawn >= 1500:
@@ -208,13 +230,16 @@ def compose_display(base: Image | None, overlays: list) -> dict | None:
             width = width or xld.width
             height = height or xld.height
             palette = item.get("colors")
+            groups = getattr(xld, "groups", None) or []
+            grouped = len(groups) == len(xld.contours) and len(xld.contours) > 0
             for index, points in enumerate(xld.contours):
                 if len(points) < 2:
                     continue
                 if drawn >= 4000:
                     truncated = True
                     break
-                color = palette[index] if palette and index < len(palette) else item["color"]
+                object_index = groups[index] if grouped else index
+                color = palette[object_index] if palette and object_index < len(palette) else item["color"]
                 shapes.append(
                     {
                         "type": "polyline",
@@ -223,6 +248,7 @@ def compose_display(base: Image | None, overlays: list) -> dict | None:
                         "closed": False,
                         "points": [[round(float(p[0]), 2), round(float(p[1]), 2)] for p in points],
                         "object": index,
+                        "group": object_index if grouped else None,
                         "source": item.get("source"),
                         "kind": "xld",
                     }

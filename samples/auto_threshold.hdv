@@ -1,0 +1,14 @@
+* 自動二值化，再拆成連通物件
+read_image (Image, 'samples/parts.png')
+rgb1_to_gray (Image, Gray)
+binary_threshold (Gray, Region, 'max_separability', 'light', Used)
+opencv_threshold (Gray, CvRegion, 80, 'binary')
+connection (Region, Parts, 1)
+count_obj (Parts, Count)
+dev_display (Gray)
+dev_set_colored (16)
+dev_set_draw ('fill')
+dev_display (Parts)
+Label := 'Otsu ' + Used + '  count ' + Count
+dev_set_color ('white')
+dev_disp_text (Label, 24, 12)

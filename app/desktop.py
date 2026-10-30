@@ -96,6 +96,10 @@ class DesktopApi:
         for window in list(webview.windows):
             if window.title == title:
                 window.show()
+                try:
+                    window.resize(width, height)
+                except Exception:
+                    pass
                 window.load_url(url)
                 return True
         created = webview.create_window(
@@ -112,10 +116,10 @@ class DesktopApi:
         return True
 
     def open_bin_window(self, url: str) -> bool:
-        return self._open_tool("次像素二值化", url, 460, 720, (380, 520))
+        return self._open_tool("次像素二值化", url, 920, 720, (640, 520))
 
     def open_feature_window(self, url: str) -> bool:
-        return self._open_tool("區域特徵", url, 460, 720, (360, 480))
+        return self._open_tool("區域特徵", url, 880, 720, (640, 480))
 
     def open_threshold_window(self, url: str) -> bool:
         return self._open_tool("二值化", url, 920, 720, (640, 520))

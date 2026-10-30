@@ -28,12 +28,23 @@ class NccModel:
     num_levels: int
     angle_step: float
     metric: str
+    angle_start: float = -math.pi
+    angle_extent: float = math.tau
+    native: object = None
 
     def summary(self) -> str:
         return f"NCC 模型  已教導  {self.width}×{self.height}  {self.num_levels} 層"
 
 
-def create_ncc_model(image, num_levels: int, angle_step, metric: str) -> NccModel:
+def _match_backend():
+    try:
+        from . import visdev_match
+    except ImportError:
+        return None
+    return visdev_match
+
+
+def create_ncc_model(image, num_levels: int, angle_step, metric: str, angle_start=-math.pi, angle_extent=math.tau) -> NccModel:
     gray = image.gray()
     if image.domain is not None and int(cv2.countNonZero(image.domain)):
         mask = np.where(image.domain > 0, 255, 0).astype(np.uint8)
@@ -55,14 +66,14 @@ def create_ncc_model(image, num_levels: int, angle_step, metric: str) -> NccMode
     if not num_levels:
         num_levels = 1
         probe_h, probe_w = height, width
-        while min(probe_h, probe_w) >= 48 and num_levels < 4:
+        while min(probe_h, probe_w) >= 28 and num_levels < 5:
             probe_h //= 2
             probe_w //= 2
             num_levels += 1
     num_levels = max(1, min(int(num_levels), 4))
     if angle_step is None or angle_step == 0:
         angle_step = max(np.deg2rad(0.5), 0.9 / radius)
-    return NccModel(
+    model = NccModel(
         gray=gray.astype(np.float32),
         mask=mask,
         origin_row=origin_row,
@@ -73,7 +84,21 @@ def create_ncc_model(image, num_levels: int, angle_step, metric: str) -> NccMode
         num_levels=num_levels,
         angle_step=float(angle_step),
         metric=metric,
+        angle_start=float(angle_start),
+        angle_extent=float(angle_extent),
     )
+    backend = _match_backend()
+    if backend is not None:
+        model.native = backend.ncc_create(
+            np.ascontiguousarray(model.gray, dtype=np.float32),
+            np.ascontiguousarray(model.mask),
+            int(model.num_levels),
+            float(angle_start),
+            float(angle_extent),
+            float(model.angle_step),
+            1 if metric == "ignore_global_polarity" else 0,
+        )
+    return model
 
 
 def _pyramid(gray: np.ndarray, levels: int):
@@ -247,6 +272,20 @@ def find_ncc_model(
     subpixel: bool,
     num_levels: int,
 ):
+    backend = _match_backend()
+    if backend is not None and getattr(model, "native", None) is not None:
+        gray = np.ascontiguousarray(image.gray())
+        return backend.ncc_find(
+            model.native,
+            gray,
+            float(angle_start),
+            float(angle_extent),
+            float(min_score),
+            int(num_matches),
+            float(max_overlap),
+            1 if subpixel else 0,
+            int(num_levels),
+        )
     gray = image.gray().astype(np.float32)
     levels_used = model.num_levels if not num_levels else max(1, min(int(num_levels), model.num_levels))
     pyramid = _pyramid(gray, levels_used)

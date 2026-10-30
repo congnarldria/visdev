@@ -62,6 +62,7 @@ class XLD:
     height: int
     contours: list = field(default_factory=list)
     multi_color: bool = False
+    groups: list | None = None
 
 
 @dataclass

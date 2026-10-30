@@ -1,6 +1,7 @@
 const code = document.getElementById("code");
 const hl = document.getElementById("hl");
 const gutter = document.getElementById("gutter");
+const lineTimes = document.getElementById("lineTimes");
 const currentBar = document.getElementById("currentBar");
 const errBar = document.getElementById("errBar");
 const canvas = document.getElementById("canvas");
@@ -27,7 +28,7 @@ const PAD = 8;
 let operators = [];
 let operatorNames = new Set();
 let sessionId = null;
-let server = { line: null, done: false, error: null, errorLine: null, iconic: [], control: [], display: null, log: [], paused: null };
+let server = { line: null, done: false, error: null, errorLine: null, iconic: [], control: [], display: null, log: [], paused: null, lineTimes: [] };
 let breakpoints = new Set();
 let selectedVar = null;
 let inflight = false;
@@ -99,9 +100,48 @@ function placeBars() {
   }
 }
 
+function formatLineTime(item) {
+  const ms = Number(item.ms) || 0;
+  let text;
+  if (ms < 0.001) text = "<0.001 ms";
+  else if (ms < 1) text = `${ms.toFixed(3)} ms`;
+  else if (ms < 100) text = `${ms.toFixed(2)} ms`;
+  else if (ms < 1000) text = `${ms.toFixed(1)} ms`;
+  else text = `${(ms / 1000).toFixed(2)} s`;
+  if (item.count > 1) text += ` ×${item.count}`;
+  return text;
+}
+
+function renderTimes() {
+  const count = Math.max(1, code.value.split("\n").length);
+  const times = new Map((server.lineTimes || []).map((item) => [item.line, item]));
+  let html = "";
+  for (let line = 1; line <= count; line += 1) {
+    const item = times.get(line);
+    html += `<div class="${server.line === line ? "on" : ""}">${item ? formatLineTime(item) : ""}</div>`;
+  }
+  lineTimes.innerHTML = html;
+}
+
+function revealLine(line) {
+  if (!line) return;
+  const top = PAD + (line - 1) * LINE;
+  const bottom = top + LINE;
+  const viewTop = code.scrollTop;
+  const viewBottom = viewTop + code.clientHeight;
+  if (top >= viewTop && bottom <= viewBottom) return;
+  code.scrollTop = Math.max(0, top - Math.max(LINE, (code.clientHeight - LINE) / 2));
+  hl.scrollTop = code.scrollTop;
+  hl.scrollLeft = code.scrollLeft;
+  gutter.scrollTop = code.scrollTop;
+  lineTimes.scrollTop = code.scrollTop;
+  placeBars();
+}
+
 function renderEditor() {
   renderHighlight();
   renderGutter();
+  renderTimes();
   placeBars();
 }
 
@@ -114,9 +154,8 @@ function renderVars() {
       <span class="vm">${esc(item.kind)} · ${esc(item.info)}</span>
     </button>`).join("") || `<div class="hint">還沒有圖像變數</div>`;
   controlList.innerHTML = server.control.map((item) => `
-    <button class="var ctrl ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="control">
-      <span class="vn">${esc(item.name)}</span>
-      <span class="vt">${esc(item.type)}</span>
+    <button class="var ctrl ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="control" title="${esc(item.full || item.text)}">
+      <span class="vn">${esc(item.name)}<small>${esc(item.type)}</small></span>
       <span class="vm">${esc(item.text)}</span>
     </button>`).join("") || `<div class="hint">還沒有控制變數</div>`;
 }
@@ -152,10 +191,18 @@ function setStatus() {
   } else {
     stState.textContent = "就緒";
   }
-  stLine.textContent = server.line ? `下一行 ${server.line}` : (server.done ? "程式結束" : "");
+  if (server.line && server.paused === "breakpoint") stLine.textContent = `中斷於第 ${server.line} 行`;
+  else if (server.line && server.done) stLine.textContent = `結束於第 ${server.line} 行`;
+  else if (server.line) stLine.textContent = `下一行 ${server.line}`;
+  else stLine.textContent = server.done ? "程式結束" : "";
 }
 
+let imageStamp = null;
+
 function applyState(data) {
+  const nextStamp = data.imageStamp;
+  const imageChanged = imageStamp != null && nextStamp != null && nextStamp !== imageStamp;
+  if (nextStamp != null) imageStamp = nextStamp;
   previewImg = null;
   previewToken += 1;
   featureLines = [];
@@ -163,16 +210,35 @@ function applyState(data) {
   server = data;
   gfxBanner.hidden = true;
   renderEditor();
+  revealLine(data.line);
   renderVars();
   renderLog();
   setStatus();
   if (data.display) loadDisplay(data.display);
   else clearGraphics();
+  if (localStorage.getItem("visdev.contourWidth") == null && data.display) {
+    const xld = (data.display.shapes || []).find((shape) => shape.kind === "xld" && shape.width);
+    const box = document.getElementById("contourWidth");
+    if (xld && box && document.activeElement !== box) box.value = String(contourWidth(xld.width));
+  }
   renderHisto(data.histogram || null);
+  if (imageChanged) clearPick();
   if (data.error) {
     showTab("log");
     showErrorDialog(data.error, data.errorLine);
   }
+  publishCustomVars();
+}
+
+function publishCustomVars() {
+  const payload = {
+    type: "vars",
+    iconic: (server.iconic || []).map((item) => ({ name: item.name, text: `${item.kind} · ${item.info}` })),
+    control: (server.control || []).map((item) => ({ name: item.name, type: item.type, text: item.text })),
+    at: Date.now(),
+  };
+  try { localStorage.setItem("visdev.customVars", JSON.stringify(payload)); } catch (_err) { /* 視窗還沒準備 */ }
+  try { featureChannel.postMessage(payload); } catch (_err) { /* 頻道稍後才建立 */ }
 }
 
 function errorText(message) {
@@ -270,7 +336,7 @@ function showOp(name) {
   opHelp.innerHTML = `
     <h2>${esc(op.name)}</h2>
     <p class="lead">${esc(op.short)}</p>
-    <p>${esc(op.detail)}</p>
+    <p class="prose">${esc(op.detail)}</p>
     <div class="hint">原型</div>
     <pre>${esc(op.prototype)}</pre>
     <div class="hint">程式呼叫</div>
@@ -288,6 +354,234 @@ function insertAtCursor(text) {
   code.selectionStart = code.selectionEnd = caret;
   renderEditor();
   code.focus();
+}
+
+function splitCall(text) {
+  const parts = [];
+  let buf = "";
+  let quote = "";
+  let depth = 0;
+  for (const ch of text) {
+    if (quote) {
+      buf += ch;
+      if (ch === quote) quote = "";
+      continue;
+    }
+    if (ch === "'" || ch === "\"") {
+      quote = ch;
+      buf += ch;
+      continue;
+    }
+    if (ch === "[" || ch === "(") {
+      depth += 1;
+      buf += ch;
+      continue;
+    }
+    if (ch === "]" || ch === ")") {
+      depth -= 1;
+      buf += ch;
+      continue;
+    }
+    if (ch === "," && depth === 0) {
+      parts.push(buf.trim());
+      buf = "";
+      continue;
+    }
+    buf += ch;
+  }
+  if (buf.trim()) parts.push(buf.trim());
+  return parts;
+}
+
+function exampleTokens(op) {
+  const open = op.example.indexOf("(");
+  const close = op.example.lastIndexOf(")");
+  if (open < 0 || close < open) return [];
+  return splitCall(op.example.slice(open + 1, close));
+}
+
+function callValues(op, tokens) {
+  const source = tokens === undefined ? exampleTokens(op) : tokens;
+  const controlIn = op.params.filter((param) => param.role === "控制輸入");
+  const controlOut = op.params.filter((param) => param.role === "控制輸出");
+  const leading = op.params.length - controlIn.length - controlOut.length;
+  const outTokens = controlOut.length ? source.slice(-controlOut.length) : [];
+  const head = controlOut.length ? source.slice(0, -controlOut.length) : source.slice();
+  const inTokens = head.slice(leading);
+  const headTokens = head.slice(0, leading);
+  let inIndex = 0;
+  let outIndex = 0;
+  let headIndex = 0;
+  return op.params.map((param) => {
+    if (param.role === "控制輸入") {
+      const value = inTokens[inIndex];
+      inIndex += 1;
+      return value ? value : (param.default || "");
+    }
+    if (param.role === "控制輸出") {
+      const value = outTokens[outIndex];
+      outIndex += 1;
+      return value || param.name;
+    }
+    const value = headTokens[headIndex];
+    headIndex += 1;
+    return value || param.name;
+  });
+}
+
+let activeOperator = null;
+let editingLine = null;
+
+function buildOperatorMenu() {
+  const drop = document.getElementById("opMenuDrop");
+  if (!drop) return;
+  const groups = [];
+  for (const op of operators) {
+    if (!groups.includes(op.group)) groups.push(op.group);
+  }
+  drop.innerHTML = groups.map((group) => {
+    const items = operators.filter((op) => op.group === group).map((op) =>
+      `<button type="button" data-op="${esc(op.name)}"><b>${esc(op.name)}</b><span>${esc(op.short)}</span></button>`
+    ).join("");
+    return `<div class="menu-sub"><button type="button" data-submenu="1">${esc(group)}<span class="menu-arrow">▸</span></button><div class="menu-fly" hidden>${items}</div></div>`;
+  }).join("") || `<div class="hint" style="padding:8px">沒有算子</div>`;
+}
+
+function formFields() {
+  return [...document.querySelectorAll("#opForm input, #opForm select")];
+}
+
+function refreshOpPreview() {
+  const preview = document.getElementById("opPreview");
+  if (!preview || !activeOperator) return;
+  const values = formFields().map((node) => node.value.trim());
+  preview.textContent = `${activeOperator.name} (${values.join(", ")})`;
+}
+
+function parseOperatorLine(text) {
+  const src = text.trim();
+  if (!src || src.startsWith("*")) return null;
+  const match = src.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+  if (!match) return null;
+  let quote = "";
+  let depth = 1;
+  let body = "";
+  for (let i = match[0].length; i < src.length; i += 1) {
+    const ch = src[i];
+    if (quote) {
+      body += ch;
+      if (ch === quote) quote = "";
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      body += ch;
+      continue;
+    }
+    if (ch === "(") {
+      depth += 1;
+      body += ch;
+      continue;
+    }
+    if (ch === ")") {
+      depth -= 1;
+      if (depth === 0) return { name: match[1], args: splitCall(body) };
+      body += ch;
+      continue;
+    }
+    body += ch;
+  }
+  return null;
+}
+
+function openOperatorAtLine(lineIndex) {
+  const parsed = parseOperatorLine(code.value.split("\n")[lineIndex] || "");
+  if (!parsed) return;
+  const op = operators.find((item) => item.name.toLowerCase() === parsed.name.toLowerCase());
+  if (!op) return;
+  openOperatorForm(op.name, callValues(op, parsed.args), lineIndex);
+}
+
+function openOperatorForm(name, preset, lineIndex) {
+  const op = operators.find((item) => item.name === name);
+  if (!op) return;
+  activeOperator = op;
+  editingLine = Number.isInteger(lineIndex) ? lineIndex : null;
+  showOp(name);
+  const values = preset || callValues(op);
+  const ok = document.getElementById("opDialogOk");
+  if (ok) ok.textContent = editingLine == null ? "插入" : "更新";
+  document.getElementById("opDialogTitle").textContent = op.name;
+  document.getElementById("opDialogLead").textContent = op.short;
+  let role = "";
+  let html = "";
+  op.params.forEach((param, index) => {
+    if (param.role !== role) {
+      role = param.role;
+      html += `<h3>${esc(role)}</h3>`;
+    }
+    const choices = param.choices || [];
+    const current = values[index];
+    let control = `<input data-index="${index}" value="${esc(current)}" spellcheck="false">`;
+    if (param.role === "控制輸入" && choices.length) {
+      const known = choices.includes(current);
+      const extras = !known && current !== undefined && current !== "" ? [current] : [];
+      const picked = known ? current : extras[0] || choices[0];
+      const options = extras.concat(choices).map((choice) => {
+        const label = String(choice).replace(/^'(.*)'$/, "$1");
+        return `<option value="${esc(choice)}"${choice === picked ? " selected" : ""}>${esc(label)}</option>`;
+      }).join("");
+      control = `<select data-index="${index}">${options}</select>`;
+    }
+    html += `<label class="op-field"><span>${esc(param.name)}</span>${control}<em>${esc(param.desc)}</em></label>`;
+  });
+  document.getElementById("opForm").innerHTML = html || `<p class="hint">這個算子沒有參數。</p>`;
+  document.getElementById("opDialog").hidden = false;
+  const hint = document.getElementById("opDrawHint");
+  if (hint) hint.hidden = geometryTools(geometryInputs()).length === 0;
+  refreshOpPreview();
+  document.querySelector("#opForm input, #opForm select")?.focus();
+}
+
+function closeOperatorDialog() {
+  document.getElementById("opDialog").hidden = true;
+  editingLine = null;
+  const ok = document.getElementById("opDialogOk");
+  if (ok) ok.textContent = "插入";
+  cancelShapeDraw();
+}
+
+function insertOperatorCall() {
+  if (!activeOperator) return;
+  const inputs = formFields();
+  for (const input of inputs) {
+    const param = activeOperator.params[Number(input.dataset.index)];
+    const value = input.value.trim();
+    if (!value) {
+      showErrorDialog(`${param.name} 還沒有填`);
+      input.focus();
+      return;
+    }
+    if (param.role !== "控制輸入" && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+      showErrorDialog(`${param.name} 必須是變數名稱`);
+      input.focus();
+      return;
+    }
+  }
+  const values = inputs.map((node) => node.value.trim());
+  const call = `${activeOperator.name} (${values.join(", ")})`;
+  if (editingLine != null) {
+    const lines = code.value.split("\n");
+    const indent = (lines[editingLine].match(/^\s*/) || [""])[0];
+    lines[editingLine] = `${indent}${call}`;
+    code.value = lines.join("\n");
+    const caret = lines.slice(0, editingLine + 1).join("\n").length;
+    code.selectionStart = code.selectionEnd = caret;
+    renderEditor();
+  } else {
+    insertAtCursor(call);
+  }
+  closeOperatorDialog();
 }
 
 const SENSE_KEYS = [
@@ -779,6 +1073,44 @@ function resizeCanvas() {
   draw();
 }
 
+function strokePicked(ctx) {
+  if (!pickedObject || !disp) return;
+  const rings = (disp.shapes || []).filter((shape) => {
+    if (shape.type !== "polyline" || shape.points?.length < 2) return false;
+    if (shape.source !== pickedObject.name) return false;
+    if ((shape.kind || "region") !== pickedObject.kind) return false;
+    if (pickedObject.group != null && shape.group != null) return shape.group === pickedObject.group;
+    return shape.object === pickedObject.index;
+  });
+  if (!rings.length) return;
+  const drawRings = () => {
+    rings.forEach((shape) => {
+      ctx.beginPath();
+      ctx.moveTo(shape.points[0][0], shape.points[0][1]);
+      for (let i = 1; i < shape.points.length; i += 1) ctx.lineTo(shape.points[i][0], shape.points[i][1]);
+      if (shape.closed !== false) ctx.closePath();
+      ctx.stroke();
+    });
+  };
+  ctx.save();
+  ctx.setLineDash([7 / cam.scale, 5 / cam.scale]);
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.85)";
+  ctx.lineWidth = 4 / cam.scale;
+  drawRings();
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 2 / cam.scale;
+  drawRings();
+  ctx.restore();
+}
+
+function contourWidth(fallback) {
+  const stored = localStorage.getItem("visdev.contourWidth");
+  const raw = stored == null || stored === "" ? Number(fallback) : Number(stored);
+  const value = Number.isFinite(raw) ? raw : 2;
+  return Math.min(10, Math.max(1, Math.round(value)));
+}
+
 function draw() {
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
@@ -788,6 +1120,13 @@ function draw() {
   ctx.fillRect(0, 0, width, height);
   if (!disp) {
     stZoom.textContent = "";
+    if (shapeDraw && shapeDraw.a && shapeDraw.b) {
+      ctx.save();
+      ctx.translate(cam.x, cam.y);
+      ctx.scale(cam.scale, cam.scale);
+      strokeDraft(ctx);
+      ctx.restore();
+    }
     return;
   }
   ctx.save();
@@ -809,13 +1148,14 @@ function draw() {
     if (shape.type === "fill" && shape._img) ctx.drawImage(shape._img, 0, 0);
   }
   for (const shape of disp.shapes || []) {
-    if (shape.type === "polyline" && shape.points?.length) {
+    if (shape.type === "polyline" && shape.points?.length && !shape.hit) {
       ctx.beginPath();
       ctx.moveTo(shape.points[0][0], shape.points[0][1]);
       for (let i = 1; i < shape.points.length; i += 1) ctx.lineTo(shape.points[i][0], shape.points[i][1]);
       if (shape.closed) ctx.closePath();
       ctx.strokeStyle = shape.color || "#00e05a";
-      ctx.lineWidth = (shape.width || 2) / cam.scale;
+      const width = shape.kind === "xld" ? contourWidth(shape.width || 2) : (shape.width || 2);
+      ctx.lineWidth = width / cam.scale;
       ctx.stroke();
     } else if (shape.type === "text") {
       const size = 14 / cam.scale;
@@ -829,7 +1169,7 @@ function draw() {
   }
   if (featureLines.length) {
     ctx.strokeStyle = "#ffe14a";
-    ctx.lineWidth = 1.5 / cam.scale;
+    ctx.lineWidth = contourWidth(2) / cam.scale;
     for (const line of featureLines) {
       if (!line || line.length < 2) continue;
       ctx.beginPath();
@@ -838,6 +1178,8 @@ function draw() {
       ctx.stroke();
     }
   }
+  strokePicked(ctx);
+  strokeDraft(ctx);
   ctx.restore();
   if (mouse) {
     ctx.strokeStyle = "rgba(255,255,255,0.35)";
@@ -848,6 +1190,17 @@ function draw() {
     ctx.moveTo(0, mouse.y + 0.5);
     ctx.lineTo(width, mouse.y + 0.5);
     ctx.stroke();
+  }
+  if (zoomBox) {
+    const x = Math.min(zoomBox.x, zoomBox.x2);
+    const y = Math.min(zoomBox.y, zoomBox.y2);
+    const w = Math.abs(zoomBox.x2 - zoomBox.x);
+    const h = Math.abs(zoomBox.y2 - zoomBox.y);
+    ctx.fillStyle = "rgba(255, 225, 74, 0.12)";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#ffe14a";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w, h);
   }
   stZoom.textContent = `${Math.round(cam.scale * 100)}%`;
 }
@@ -864,28 +1217,61 @@ function imagePoint(event) {
   };
 }
 
+const probeBox = document.getElementById("probe");
+
+function showProbe(point, lines) {
+  probeBox.innerHTML = lines.map((line) => esc(line)).join("<br>");
+  probeBox.hidden = false;
+  let left = point.x + 16;
+  let top = point.y + 18;
+  const boxW = probeBox.offsetWidth;
+  const boxH = probeBox.offsetHeight;
+  if (left + boxW + 8 > canvas.clientWidth) left = point.x - boxW - 16;
+  if (top + boxH + 8 > canvas.clientHeight) top = point.y - boxH - 16;
+  probeBox.style.left = `${Math.max(4, left)}px`;
+  probeBox.style.top = `${Math.max(4, top)}px`;
+}
+
+function hideProbe() {
+  probeBox.hidden = true;
+}
+
 function updateProbe(event) {
   if (!disp) {
-    stPix.textContent = "Row —   Column —";
+    stPix.textContent = "Row —   Column —   R —  G —  B —";
     mouse = null;
+    hideProbe();
     return;
   }
   const point = imagePoint(event);
   mouse = point;
   const col = Math.floor(point.col);
   const row = Math.floor(point.row);
-  if (col < 0 || row < 0 || col >= disp.width || row >= disp.height || !baseImage) {
-    stPix.textContent = `Row ${point.row.toFixed(1)}   Column ${point.col.toFixed(1)}`;
-    draw();
+  const where = `Row ${point.row.toFixed(1)}   Column ${point.col.toFixed(1)}`;
+  let color = "R —  G —  B —";
+  if (col >= 0 && row >= 0 && col < disp.width && row < disp.height && baseImage) {
+    const pixel = probeCtx.getImageData(col, row, 1, 1).data;
+    color = `R ${pixel[0]}  G ${pixel[1]}  B ${pixel[2]}`;
+  }
+  stPix.textContent = `${where}   ${color}`;
+  showProbe(point, [where, color]);
+  draw();
+}
+
+function useNewImage(path) {
+  const lines = code.value.replace(/\r\n/g, "\n").split("\n");
+  const cursorLine = code.value.slice(0, code.selectionStart).split("\n").length - 1;
+  let index = /^\s*read_image\s*\(/i.test(lines[cursorLine] || "") ? cursorLine : lines.findIndex((line) => /^\s*read_image\s*\(/i.test(line));
+  if (index >= 0) {
+    const match = lines[index].match(/^(\s*)read_image\s*\(\s*([^,\s]+)\s*,/i);
+    const indent = match ? match[1] : "";
+    const name = match ? match[2] : "Image";
+    lines[index] = `${indent}read_image (${name}, '${path}')`;
+    code.value = lines.join("\n");
+    renderEditor();
     return;
   }
-  const pixel = probeCtx.getImageData(col, row, 1, 1).data;
-  const gray = Math.round(0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]);
-  const color = pixel[0] === pixel[1] && pixel[1] === pixel[2]
-    ? `Gray ${pixel[0]}`
-    : `R ${pixel[0]}  G ${pixel[1]}  B ${pixel[2]}  Gray ${gray}`;
-  stPix.textContent = `Row ${row}   Column ${col}   ${color}`;
-  draw();
+  insertAtCursor(`read_image (Image, '${path}')`);
 }
 
 async function uploadFile(file) {
@@ -897,7 +1283,8 @@ async function uploadFile(file) {
     showDetail(data);
     return;
   }
-  insertAtCursor(`read_image (Image, '${data.path}')`);
+  useNewImage(data.path);
+  await exec("run");
 }
 
 window.addEventListener("visdev-layout", () => resizeCanvas());
@@ -910,6 +1297,7 @@ code.addEventListener("scroll", () => {
   hl.scrollTop = code.scrollTop;
   hl.scrollLeft = code.scrollLeft;
   gutter.scrollTop = code.scrollTop;
+  lineTimes.scrollTop = code.scrollTop;
   placeBars();
   placeSense();
 });
@@ -945,6 +1333,20 @@ code.addEventListener("keyup", (event) => {
   }
 });
 code.addEventListener("click", () => updateSense());
+code.addEventListener("dblclick", (event) => {
+  const lines = code.value.split("\n");
+  const style = getComputedStyle(code);
+  const lineHeight = parseFloat(style.lineHeight) || 20;
+  const pad = parseFloat(style.paddingTop) || 0;
+  const fromY = Math.floor((event.offsetY + code.scrollTop - pad) / lineHeight);
+  const fromCaret = code.value.slice(0, code.selectionStart).split("\n").length - 1;
+  for (const line of [fromY, fromCaret]) {
+    if (line >= 0 && line < lines.length && parseOperatorLine(lines[line])) {
+      openOperatorAtLine(line);
+      return;
+    }
+  }
+});
 code.addEventListener("compositionstart", () => {
   composing = true;
   closeSense();
@@ -959,6 +1361,7 @@ code.addEventListener("blur", () => {
   }, 150);
 });
 let arrowDrag = null;
+let skipGutterClick = false;
 
 function lineFromPointer(clientY) {
   const rect = gutter.getBoundingClientRect();
@@ -992,12 +1395,17 @@ window.addEventListener("mouseup", () => {
   const target = arrowDrag.hover;
   const from = arrowDrag.from;
   arrowDrag = null;
+  skipGutterClick = true;
+  setTimeout(() => { skipGutterClick = false; }, 0);
   document.body.classList.remove("arrow-drag");
   gutter.querySelectorAll(".gl.aim").forEach((node) => node.classList.remove("aim"));
   if (target && target !== from) exec("goto", target);
 });
 gutter.addEventListener("click", (event) => {
-  if (event.target.closest(".pc")) return;
+  if (skipGutterClick) {
+    skipGutterClick = false;
+    return;
+  }
   const lineNode = event.target.closest(".gl");
   if (!lineNode) return;
   const line = Number(lineNode.dataset.line);
@@ -1010,9 +1418,23 @@ document.getElementById("errDialog").addEventListener("mousedown", (event) => {
   if (event.target.id === "errDialog") closeErrorDialog();
 });
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !document.getElementById("errDialog").hidden) {
+  if (event.key !== "Escape") return;
+  if (!document.getElementById("errDialog").hidden) {
     event.preventDefault();
     closeErrorDialog();
+  }
+  if (!document.getElementById("aboutDialog").hidden) {
+    event.preventDefault();
+    document.getElementById("aboutDialog").hidden = true;
+  }
+  if (shapeDraw) {
+    event.preventDefault();
+    cancelShapeDraw();
+    return;
+  }
+  if (!document.getElementById("opDialog").hidden) {
+    event.preventDefault();
+    closeOperatorDialog();
   }
 });
 
@@ -1033,6 +1455,20 @@ document.getElementById("btnOne").onclick = () => {
   draw();
 };
 document.getElementById("btnZoomIn").onclick = () => zoomBy(1.25);
+const contourWidthInput = document.getElementById("contourWidth");
+contourWidthInput.value = String(contourWidth());
+contourWidthInput.addEventListener("change", () => {
+  const value = Math.min(10, Math.max(1, Math.round(Number(contourWidthInput.value) || 1)));
+  contourWidthInput.value = String(value);
+  localStorage.setItem("visdev.contourWidth", String(value));
+  draw();
+});
+window.addEventListener("storage", (event) => {
+  if (event.key !== "visdev.contourWidth") return;
+  if (document.activeElement === contourWidthInput) return;
+  contourWidthInput.value = String(contourWidth());
+  draw();
+});
 document.getElementById("btnZoomOut").onclick = () => zoomBy(0.8);
 document.getElementById("btnUpload").onclick = () => document.getElementById("fileImage").click();
 document.getElementById("fileImage").onchange = () => {
@@ -1067,22 +1503,130 @@ document.getElementById("btnSave").onclick = async () => {
   stState.className = "ok";
   loadFiles();
 };
+function placeSampleMenu(anchor) {
+  sampleMenu.hidden = false;
+  if (!anchor) {
+    sampleMenu.style.position = "";
+    sampleMenu.style.left = "";
+    sampleMenu.style.top = "";
+    sampleMenu.style.zIndex = "";
+    return;
+  }
+  const rect = anchor.getBoundingClientRect();
+  sampleMenu.style.position = "fixed";
+  sampleMenu.style.zIndex = "80";
+  sampleMenu.style.left = `${rect.right - 4}px`;
+  sampleMenu.style.top = `${rect.top}px`;
+  const box = sampleMenu.getBoundingClientRect();
+  if (rect.right + box.width > window.innerWidth - 8) {
+    sampleMenu.style.left = `${Math.max(8, rect.left - box.width)}px`;
+  }
+  if (rect.top + box.height > window.innerHeight - 8) {
+    sampleMenu.style.top = `${Math.max(8, window.innerHeight - box.height - 8)}px`;
+  }
+}
+
 document.getElementById("btnSamples").onclick = (event) => {
   event.stopPropagation();
-  sampleMenu.hidden = !sampleMenu.hidden;
+  if (!sampleMenu.hidden) {
+    sampleMenu.hidden = true;
+    return;
+  }
+  placeSampleMenu(null);
 };
 document.addEventListener("click", (event) => {
-  if (!event.target.closest(".pop")) sampleMenu.hidden = true;
+  if (event.target.closest(".pop") || event.target.closest(".menu") || event.target.closest("[data-cmd='samples']")) return;
+  sampleMenu.hidden = true;
 });
+
+function editCode(command) {
+  code.focus();
+  document.execCommand(command);
+  renderEditor();
+}
+
+function syncViewMenu() {
+  document.querySelectorAll(".menu-drop button[data-pane]").forEach((button) => {
+    const hidden = window.VisDevDock && VisDevDock.isAutoHide(button.dataset.pane);
+    button.setAttribute("aria-checked", hidden ? "false" : "true");
+  });
+  const trace = document.getElementById("menuTrace");
+  if (trace) trace.setAttribute("aria-checked", document.getElementById("trace").checked ? "true" : "false");
+}
+
+window.VisDevCommands = {
+  new() {
+    code.value = "* 新程式\n";
+    document.getElementById("progName").value = "untitled.hdv";
+    sessionId = null;
+    breakpoints = new Set();
+    renderEditor();
+    exec("reset");
+  },
+  open() { document.getElementById("fileOpen").click(); },
+  save() { document.getElementById("btnSave").click(); },
+  saveAs() {
+    const current = document.getElementById("progName").value.trim() || "program.hdv";
+    const name = window.prompt("另存新檔的檔名", current);
+    if (!name || !name.trim()) return;
+    const file = name.trim().toLowerCase().endsWith(".hdv") ? name.trim() : `${name.trim()}.hdv`;
+    document.getElementById("progName").value = file;
+    document.getElementById("btnSave").click();
+  },
+  loadImage() { document.getElementById("fileImage").click(); },
+  samples(anchor) { placeSampleMenu(anchor); },
+  openSample(name) { openProgram("samples", name); },
+  undo() { editCode("undo"); },
+  redo() { editCode("redo"); },
+  cut() { editCode("cut"); },
+  copy() { editCode("copy"); },
+  paste() { editCode("paste"); },
+  selectAll() {
+    code.focus();
+    code.setSelectionRange(0, code.value.length);
+  },
+  fit() { document.getElementById("btnFit").click(); },
+  one() { document.getElementById("btnOne").click(); },
+  zoomIn() { document.getElementById("btnZoomIn").click(); },
+  zoomOut() { document.getElementById("btnZoomOut").click(); },
+  trace() {
+    const box = document.getElementById("trace");
+    box.checked = !box.checked;
+    syncViewMenu();
+  },
+  run() { exec("run"); },
+  step() { exec("step"); },
+  stop() { document.getElementById("btnStop").click(); },
+  reset() { exec("reset"); },
+  threshold() { openThresholdWindow(); },
+  subpix() { openBinWindow(); },
+  features() { openFeatureWindow(); },
+  ocr() { applyOcr(); },
+  connection() {
+    applyConnection(document.getElementById("connMin").value, document.getElementById("connDist").value);
+  },
+  layout() { if (window.VisDevDock) VisDevDock.reset(); },
+  about() { document.getElementById("aboutDialog").hidden = false; },
+  openOperator(name) { openOperatorForm(name); },
+};
+
+window.addEventListener("visdev-layout", syncViewMenu);
+syncViewMenu();
+document.getElementById("aboutOk").onclick = () => { document.getElementById("aboutDialog").hidden = true; };
+document.getElementById("opDialogCancel").onclick = () => closeOperatorDialog();
+document.getElementById("opDialogOk").onclick = () => insertOperatorCall();
+document.getElementById("opForm").addEventListener("input", refreshOpPreview);
+document.getElementById("opForm").addEventListener("change", refreshOpPreview);
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "F5") { event.preventDefault(); exec("run"); }
   if (event.key === "F6") { event.preventDefault(); exec("step"); }
   if (event.key === "F7") { event.preventDefault(); exec("reset"); }
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-    event.preventDefault();
-    document.getElementById("btnSave").click();
-  }
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+  const key = event.key.toLowerCase();
+  if (key === "s") { event.preventDefault(); VisDevCommands.save(); }
+  if (key === "o") { event.preventDefault(); VisDevCommands.open(); }
+  if (key === "n") { event.preventDefault(); VisDevCommands.new(); }
 });
 
 document.querySelectorAll(".tab").forEach((tab) => {
@@ -1137,33 +1681,290 @@ canvas.addEventListener("wheel", (event) => {
   draw();
 }, { passive: false });
 
+const mouseModes = ["select", "pan", "zoom"];
+let mouseMode = "pan";
 let dragging = null;
+let zoomBox = null;
+
+function applyMouseMode(mode) {
+  if (!mouseModes.includes(mode)) mode = "pan";
+  mouseMode = mode;
+  canvas.classList.remove("mode-select", "mode-pan", "mode-zoom", "dragging");
+  canvas.classList.add(`mode-${mode}`);
+}
+
+function zoomAtScreen(sx, sy, factor) {
+  const next = Math.min(48, Math.max(0.05, cam.scale * factor));
+  const k = next / cam.scale;
+  cam.x = sx - (sx - cam.x) * k;
+  cam.y = sy - (sy - cam.y) * k;
+  cam.scale = next;
+  cam.user = true;
+}
+
+function zoomToRect(col0, row0, col1, row1) {
+  const left = Math.min(col0, col1);
+  const top = Math.min(row0, row1);
+  const width = Math.max(1, Math.abs(col1 - col0));
+  const height = Math.max(1, Math.abs(row1 - row0));
+  const rect = canvas.getBoundingClientRect();
+  const pad = 8;
+  cam.scale = Math.min(48, Math.max(0.05, Math.min((rect.width - pad * 2) / width, (rect.height - pad * 2) / height)));
+  cam.x = (rect.width - width * cam.scale) / 2 - left * cam.scale;
+  cam.y = (rect.height - height * cam.scale) / 2 - top * cam.scale;
+  cam.user = true;
+}
+
+applyMouseMode("pan");
+
+const drawMenu = document.getElementById("drawMenu");
+const shapeConfirm = document.getElementById("shapeConfirm");
+const shapeConfirmText = document.getElementById("shapeConfirmText");
+let shapeDraw = null;
+
+function fmtGeom(value) {
+  const rounded = Math.round(Number(value) * 100) / 100;
+  return String(rounded);
+}
+
+function geometryInputs() {
+  if (!activeOperator || document.getElementById("opDialog").hidden) return {};
+  const names = new Set(["Row", "Column", "Row1", "Column1", "Row2", "Column2", "Radius", "Radius1", "Radius2", "Phi", "Length1", "Length2"]);
+  const map = {};
+  formFields().forEach((node) => {
+    const param = activeOperator.params[Number(node.dataset.index)];
+    if (!param || param.role !== "控制輸入" || !names.has(param.name) || node.tagName === "SELECT") return;
+    map[param.name] = node;
+  });
+  return map;
+}
+
+function geometryTools(map) {
+  const tools = [];
+  if (map.Row1 && map.Column1 && map.Row2 && map.Column2) tools.push("rect");
+  if (map.Row && map.Column && map.Length1 && map.Length2 && !tools.includes("rect")) tools.push("rect");
+  if (map.Row && map.Column && map.Radius) tools.push("circle");
+  if (map.Row && map.Column && map.Radius1 && map.Radius2) tools.push("ellipse");
+  return tools;
+}
+
+function hideDrawMenu() {
+  if (drawMenu) drawMenu.hidden = true;
+}
+
+function cancelShapeDraw() {
+  shapeDraw = null;
+  hideDrawMenu();
+  if (shapeConfirm) shapeConfirm.hidden = true;
+  draw();
+}
+
+function draftBox(draw) {
+  const col1 = Math.min(draw.a.col, draw.b.col);
+  const col2 = Math.max(draw.a.col, draw.b.col);
+  const row1 = Math.min(draw.a.row, draw.b.row);
+  const row2 = Math.max(draw.a.row, draw.b.row);
+  return { col1, col2, row1, row2, width: col2 - col1, height: row2 - row1 };
+}
+
+function strokeDraft(pen) {
+  if (!shapeDraw || !shapeDraw.a || !shapeDraw.b) return;
+  const draw = shapeDraw;
+  pen.save();
+  pen.strokeStyle = "#ffe14a";
+  pen.lineWidth = 2 / cam.scale;
+  pen.setLineDash([6 / cam.scale, 4 / cam.scale]);
+  if (draw.tool === "circle") {
+    pen.beginPath();
+    pen.arc(draw.a.col, draw.a.row, Math.hypot(draw.b.col - draw.a.col, draw.b.row - draw.a.row), 0, Math.PI * 2);
+    pen.stroke();
+  } else if (draw.tool === "ellipse") {
+    const box = draftBox(draw);
+    pen.beginPath();
+    pen.ellipse(box.col1 + box.width / 2, box.row1 + box.height / 2, Math.max(box.width / 2, 0.5), Math.max(box.height / 2, 0.5), 0, 0, Math.PI * 2);
+    pen.stroke();
+  } else {
+    const box = draftBox(draw);
+    pen.strokeRect(box.col1, box.row1, box.width, box.height);
+  }
+  pen.restore();
+}
+
+function showShapeConfirm() {
+  const map = geometryInputs();
+  const box = draftBox(shapeDraw);
+  let text = "";
+  if (shapeDraw.tool === "circle") {
+    const radius = Math.hypot(shapeDraw.b.col - shapeDraw.a.col, shapeDraw.b.row - shapeDraw.a.row);
+    text = `圓  列 ${fmtGeom(shapeDraw.a.row)}  行 ${fmtGeom(shapeDraw.a.col)}  半徑 ${fmtGeom(radius)}`;
+  } else if (shapeDraw.tool === "ellipse") {
+    text = `橢圓  列 ${fmtGeom((box.row1 + box.row2) / 2)}  行 ${fmtGeom((box.col1 + box.col2) / 2)}  半徑 ${fmtGeom(box.width / 2)} × ${fmtGeom(box.height / 2)}`;
+  } else if (map.Row1) {
+    text = `矩形  列 ${fmtGeom(box.row1)}–${fmtGeom(box.row2)}  行 ${fmtGeom(box.col1)}–${fmtGeom(box.col2)}`;
+  } else {
+    text = `矩形  列 ${fmtGeom((box.row1 + box.row2) / 2)}  行 ${fmtGeom((box.col1 + box.col2) / 2)}  半長 ${fmtGeom(box.width / 2)} × ${fmtGeom(box.height / 2)}`;
+  }
+  shapeConfirmText.textContent = text;
+  shapeConfirm.hidden = false;
+}
+
+function writeGeom(map, name, value) {
+  if (!map[name]) return;
+  map[name].value = fmtGeom(value);
+}
+
+function clearUnusedGeom(map, keep) {
+  Object.keys(map).forEach((name) => {
+    if (keep.has(name)) return;
+    const param = activeOperator.params.find((item) => item.role === "控制輸入" && item.name === name);
+    if (!param || (param.default !== "''" && param.default !== "")) return;
+    map[name].value = "''";
+  });
+}
+
+function applyShapeDraw() {
+  if (!shapeDraw || !shapeDraw.a || !shapeDraw.b) return;
+  const map = geometryInputs();
+  const box = draftBox(shapeDraw);
+  let keep;
+  if (shapeDraw.tool === "rect" && map.Row1) {
+    writeGeom(map, "Row1", box.row1);
+    writeGeom(map, "Column1", box.col1);
+    writeGeom(map, "Row2", box.row2);
+    writeGeom(map, "Column2", box.col2);
+    keep = new Set(["Row1", "Column1", "Row2", "Column2"]);
+  } else if (shapeDraw.tool === "rect") {
+    writeGeom(map, "Row", (box.row1 + box.row2) / 2);
+    writeGeom(map, "Column", (box.col1 + box.col2) / 2);
+    writeGeom(map, "Phi", 0);
+    writeGeom(map, "Length1", box.width / 2);
+    writeGeom(map, "Length2", box.height / 2);
+    keep = new Set(["Row", "Column", "Phi", "Length1", "Length2"]);
+  } else if (shapeDraw.tool === "circle") {
+    writeGeom(map, "Row", shapeDraw.a.row);
+    writeGeom(map, "Column", shapeDraw.a.col);
+    writeGeom(map, "Radius", Math.hypot(shapeDraw.b.col - shapeDraw.a.col, shapeDraw.b.row - shapeDraw.a.row));
+    keep = new Set(["Row", "Column", "Radius"]);
+  } else {
+    const along = box.width / 2;
+    const across = box.height / 2;
+    const inner = map.Radius1 && (activeOperator.params.find((param) => param.name === "Radius1")?.desc || "").includes("內");
+    writeGeom(map, "Row", (box.row1 + box.row2) / 2);
+    writeGeom(map, "Column", (box.col1 + box.col2) / 2);
+    writeGeom(map, "Phi", 0);
+    writeGeom(map, "Radius1", inner ? Math.min(along, across) : along);
+    writeGeom(map, "Radius2", inner ? Math.max(along, across) : across);
+    keep = new Set(["Row", "Column", "Phi", "Radius1", "Radius2"]);
+  }
+  clearUnusedGeom(map, keep);
+  refreshOpPreview();
+  cancelShapeDraw();
+}
+
+function showDrawMenu(x, y) {
+  const map = geometryInputs();
+  const tools = geometryTools(map);
+  if (!tools.length) {
+    hideDrawMenu();
+    return;
+  }
+  const labels = { rect: "矩形", circle: "圓", ellipse: "橢圓" };
+  drawMenu.innerHTML = tools.map((tool) => `<button type="button" data-draw="${tool}">${labels[tool]}</button>`).join("");
+  drawMenu.hidden = false;
+  const width = 120;
+  const height = tools.length * 28 + 4;
+  drawMenu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - width - 8))}px`;
+  drawMenu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - height - 8))}px`;
+}
+
+drawMenu.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-draw]");
+  if (!button) return;
+  shapeDraw = { tool: button.dataset.draw, a: null, b: null, pending: false };
+  shapeConfirm.hidden = true;
+  hideDrawMenu();
+  draw();
+});
+document.getElementById("shapeOk").onclick = () => applyShapeDraw();
+document.getElementById("shapeCancel").onclick = () => cancelShapeDraw();
+document.addEventListener("mousedown", (event) => {
+  if (drawMenu.hidden) return;
+  if (event.target.closest("#drawMenu")) return;
+  hideDrawMenu();
+});
+
+canvas.addEventListener("contextmenu", (event) => {
+  const map = geometryInputs();
+  if (!geometryTools(map).length) return;
+  event.preventDefault();
+  showDrawMenu(event.clientX, event.clientY);
+});
+
 canvas.addEventListener("mousedown", (event) => {
-  if (event.button !== 0) return;
+  if (shapeDraw && event.button === 0) {
+    const point = imagePoint(event);
+    shapeDraw.a = { col: point.col, row: point.row };
+    shapeDraw.b = { col: point.col, row: point.row };
+    shapeDraw.pending = false;
+    shapeConfirm.hidden = true;
+    hideDrawMenu();
+    draw();
+    return;
+  }
+  if (event.button !== 0 || !disp) return;
   const point = imagePoint(event);
-  dragging = { x: point.x, y: point.y, camX: cam.x, camY: cam.y, col: point.col, row: point.row };
-  canvas.classList.add("dragging");
+  dragging = { x: point.x, y: point.y, camX: cam.x, camY: cam.y, col: point.col, row: point.row, mode: mouseMode };
+  if (mouseMode === "pan") canvas.classList.add("dragging");
 });
 window.addEventListener("mouseup", (event) => {
+  if (shapeDraw && shapeDraw.a && event.button === 0) {
+    const point = imagePoint(event);
+    shapeDraw.b = { col: point.col, row: point.row };
+    const size = Math.hypot(shapeDraw.b.col - shapeDraw.a.col, shapeDraw.b.row - shapeDraw.a.row);
+    shapeDraw.pending = size >= 2;
+    if (shapeDraw.pending) showShapeConfirm();
+    else shapeConfirm.hidden = true;
+    draw();
+    return;
+  }
   const start = dragging;
   dragging = null;
+  zoomBox = null;
   canvas.classList.remove("dragging");
   if (!start || !disp) return;
   const point = imagePoint(event);
-  if (Math.hypot(point.x - start.x, point.y - start.y) > 4) return;
-  pickObject(start.col, start.row);
+  const moved = Math.hypot(point.x - start.x, point.y - start.y) > 4;
+  if (start.mode !== "zoom" && !moved) {
+    if (!pickObject(start.col, start.row)) clearPick();
+  }
+  if (start.mode === "select") return;
+  if (start.mode === "zoom") {
+    if (moved) zoomToRect(start.col, start.row, point.col, point.row);
+    else zoomAtScreen(point.x, point.y, 1.4);
+    draw();
+  }
 });
 canvas.addEventListener("mousemove", (event) => {
-  if (dragging) {
+  if (shapeDraw && shapeDraw.a && !shapeDraw.pending && event.buttons === 1) {
+    const point = imagePoint(event);
+    shapeDraw.b = { col: point.col, row: point.row };
+    draw();
+  }
+  if (dragging && dragging.mode === "pan") {
     const point = imagePoint(event);
     cam.x = dragging.camX + point.x - dragging.x;
     cam.y = dragging.camY + point.y - dragging.y;
     cam.user = true;
+  } else if (dragging && dragging.mode === "zoom") {
+    const point = imagePoint(event);
+    zoomBox = { x: dragging.x, y: dragging.y, x2: point.x, y2: point.y };
   }
   updateProbe(event);
 });
 canvas.addEventListener("mouseleave", () => {
   mouse = null;
+  hideProbe();
+  stPix.textContent = "Row —   Column —   R —  G —  B —";
   draw();
 });
 const stage = document.getElementById("gfxStage");
@@ -1328,6 +2129,7 @@ function applyConnection(minArea, dist) {
   const outputPattern = output.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const shapePattern = new RegExp(`^\\s*select_shape\\s*\\(\\s*${outputPattern}\\s*,`, "i");
   const shapeIndex = lines.findIndex((line, index) => index > connIndex && shapePattern.test(line) && /area/i.test(line));
+  let shown = output;
   if (shapeIndex >= 0) {
     const match = lines[shapeIndex].match(/^(\s*)select_shape\s*\((.*)\)\s*$/i);
     const args = splitArgs(match[2]);
@@ -1335,8 +2137,22 @@ function applyConnection(minArea, dist) {
       args[4] = ` ${area}`;
       lines[shapeIndex] = `${match[1]}select_shape (${args.map((item) => item.trim()).join(", ")})`;
     }
+    if (args[1]) shown = args[1].trim();
   } else {
+    shown = "Selected";
     lines.splice(connIndex + 1, 0, `select_shape (${output}, Selected, 'area', 'and', ${area}, 99999999)`);
+  }
+  const shownPattern = shown.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const alreadyShown = lines.some((line) => new RegExp(`^\\s*dev_display\\s*\\(\\s*${shownPattern}\\s*\\)`, "i").test(line));
+  if (!alreadyShown) {
+    const regionDisplay = new RegExp(`^(\\s*)dev_display\\s*\\(\\s*${regionPattern}\\s*\\)\\s*$`, "i");
+    const displayIndex = lines.findIndex((line) => regionDisplay.test(line));
+    if (displayIndex >= 0) {
+      lines[displayIndex] = `${lines[displayIndex].match(/^\s*/)[0]}dev_display (${shown})`;
+    } else {
+      lines.push("dev_set_draw ('fill')");
+      lines.push(`dev_display (${shown})`);
+    }
   }
   code.value = lines.join("\n");
   renderEditor();
@@ -1366,6 +2182,16 @@ function applySubpix(level) {
   const value = Math.max(0, Math.min(255, Math.round(Number(level) || 0)));
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
   const image = guessImageName(lines);
+  let regionName = "Region";
+  const bin = lines.findIndex((line) => /^\s*(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
+  if (bin >= 0) {
+    const inner = lines[bin].match(/\((.*)\)/);
+    const args = inner ? splitArgs(inner[1]).map((item) => item.trim()) : [];
+    if (args[1]) regionName = args[1];
+  } else {
+    const at = lines.findIndex((line) => /^\s*dev_display\s*\(/i.test(line));
+    lines.splice(at >= 0 ? at : lines.length, 0, `threshold (${image}, ${regionName}, ${value}, 255)`);
+  }
   let output = "Border";
   const index = lines.findIndex((line) => /^\s*threshold_sub_pix\s*\(/i.test(line));
   if (index >= 0) {
@@ -1374,12 +2200,28 @@ function applySubpix(level) {
     output = args[1] || output;
     lines[index] = `${match[1]}threshold_sub_pix (${args[0] || image}, ${output}, ${value})`;
   } else {
-    lines.push(`threshold_sub_pix (${image}, ${output}, ${value})`);
-    lines.push(`dev_display (${output})`);
+    const at = lines.findIndex((line) => /^\s*dev_display\s*\(/i.test(line));
+    lines.splice(at >= 0 ? at : lines.length, 0, `threshold_sub_pix (${image}, ${output}, ${value})`);
   }
+  const shown = (name) => lines.some((line) => new RegExp(`^\\s*dev_display\\s*\\(\\s*${name}\\s*\\)`, "i").test(line));
+  if (!shown(regionName)) lines.push(`dev_display (${regionName})`);
+  if (!shown(output)) lines.push(`dev_display (${output})`);
   code.value = lines.join("\n");
   renderEditor();
   exec("run");
+}
+
+function subpixNames() {
+  const lines = code.value.replace(/\r\n/g, "\n").split("\n");
+  let region = "Region";
+  let contour = "Border";
+  for (const line of lines) {
+    const binary = line.match(/^\s*(?:threshold|opencv_threshold|binary_threshold)\s*\(\s*[^,]+,\s*([^,)]+)/i);
+    if (binary) region = binary[1].trim();
+    const sub = line.match(/^\s*threshold_sub_pix\s*\(\s*[^,]+,\s*([^,)]+)/i);
+    if (sub) contour = sub[1].trim();
+  }
+  return { region, contour };
 }
 
 async function openBinWindow() {
@@ -1391,7 +2233,8 @@ async function openBinWindow() {
     : histo && Number.isFinite(Number(histo.min))
       ? histo.min
       : 128;
-  const url = `${location.origin}/bin?id=${encodeURIComponent(sessionId || "")}&level=${encodeURIComponent(level)}`;
+  const names = subpixNames();
+  const url = `${location.origin}/bin?id=${encodeURIComponent(sessionId || "")}&level=${encodeURIComponent(level)}&region=${encodeURIComponent(names.region)}&contour=${encodeURIComponent(names.contour)}`;
   try {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.open_bin_window) {
       await window.pywebview.api.open_bin_window(url);
@@ -1400,7 +2243,7 @@ async function openBinWindow() {
   } catch (_err) {
     /* 沒有桌面視窗介面時改開瀏覽器視窗 */
   }
-  const popup = window.open(url, "visdev-subpix", "popup=yes,width=480,height=720,left=80,top=60");
+  const popup = window.open(url, "visdev-subpix", "popup=yes,width=920,height=720,left=80,top=40");
   if (!popup) applySubpix(level);
 }
 
@@ -1460,6 +2303,7 @@ function publishThreshold() {
     type: "state",
     id: sessionId,
     histogram: histo,
+    imageStamp,
     color: regionColorValue(),
     connMin: minMatch ? Number(minMatch[1]) : null,
     connDist: (opencv || halcon) ? Number((opencv || halcon)[1]) : null,
@@ -1536,8 +2380,22 @@ window.addEventListener("storage", (event) => {
     }
   }
 });
+function applyOcr() {
+  const method = document.getElementById("ocrMethod").value || "auto";
+  const lines = code.value.replace(/\r\n/g, "\n").split("\n");
+  const image = guessImageName(lines);
+  const call = `ocr_find (${image}, Words, '${method}', Text, Row, Column, Score)`;
+  const index = lines.findIndex((line) => /^\s*ocr_find\s*\(/i.test(line));
+  if (index >= 0) lines[index] = call;
+  else lines.push(call);
+  code.value = lines.join("\n");
+  renderEditor();
+  exec("run");
+}
+
 document.getElementById("btnThreshold").addEventListener("click", () => openThresholdWindow());
 document.getElementById("btnFeatures").addEventListener("click", () => openFeatureWindow());
+document.getElementById("btnOcr").addEventListener("click", () => applyOcr());
 document.getElementById("btnConnection").addEventListener("click", () => {
   applyConnection(document.getElementById("connMin").value, document.getElementById("connDist").value);
 });
@@ -1547,21 +2405,15 @@ setInterval(() => {
   try { handleThresholdCmd(JSON.parse(raw)); } catch (_err) { /* 忽略壞掉的暫存 */ }
 }, 300);
 
-async function loadFiles() {
-  const files = await fetch("/api/files").then((res) => res.json());
-  const block = (title, items) => {
-    if (!items.length) return "";
-    return `<div class="grouplab">${esc(title)}</div>` + items.map((item) =>
-      `<button type="button" data-kind="${esc(item.kind)}" data-name="${esc(item.name)}">${esc(item.name)}</button>`
-    ).join("");
-  };
-  sampleMenu.innerHTML = block("範例", files.samples || []) + block("已儲存", files.workspace || []);
+function sampleButtons(items) {
+  return (items || []).map((item) => {
+    const title = item.title || item.name;
+    return `<button type="button" data-sample="${esc(item.name)}" data-kind="${esc(item.kind)}" data-name="${esc(item.name)}"><b>${esc(title)}</b><span>${esc(item.name)}</span></button>`;
+  }).join("");
 }
 
-sampleMenu.addEventListener("click", async (event) => {
-  const node = event.target.closest("button");
-  if (!node) return;
-  const res = await fetch(`/api/files/${node.dataset.kind}/${encodeURIComponent(node.dataset.name)}`);
+async function openProgram(kind, name) {
+  const res = await fetch(`/api/files/${kind}/${encodeURIComponent(name)}`);
   const data = await res.json();
   if (!res.ok) {
     showDetail(data);
@@ -1574,6 +2426,23 @@ sampleMenu.addEventListener("click", async (event) => {
   sampleMenu.hidden = true;
   renderEditor();
   await exec("reset");
+}
+
+async function loadFiles() {
+  const files = await fetch("/api/files").then((res) => res.json());
+  const block = (title, items) => {
+    if (!items.length) return "";
+    return `<div class="grouplab">${esc(title)}</div>` + sampleButtons(items);
+  };
+  sampleMenu.innerHTML = block("範例", files.samples || []) + block("已儲存", files.workspace || []);
+  const fly = document.getElementById("sampleFly");
+  if (fly) fly.innerHTML = sampleButtons(files.samples || []) || `<div class="hint" style="padding:8px">沒有範例</div>`;
+}
+
+sampleMenu.addEventListener("click", (event) => {
+  const node = event.target.closest("button");
+  if (!node || !node.dataset.name) return;
+  openProgram(node.dataset.kind || "samples", node.dataset.name);
 });
 
 const DEFAULT_FEATURES = [
@@ -1626,7 +2495,7 @@ async function openFeatureWindow() {
   } catch (_err) {
     /* 沒有桌面視窗介面時改開瀏覽器視窗 */
   }
-  window.open(url, "visdev-features", "popup=yes,width=460,height=720,left=560,top=60");
+  window.open(url, "visdev-features", "popup=yes,width=880,height=720,left=420,top=60");
 }
 
 function publishFeaturePick() {
@@ -1641,6 +2510,16 @@ function publishFeaturePick() {
   };
   localStorage.setItem("visdev.featurePick", JSON.stringify(payload));
   featureChannel.postMessage(payload);
+}
+
+function clearPick() {
+  pickedObject = null;
+  featureLines = [];
+  gfxBanner.hidden = true;
+  const payload = { type: "pick", clear: true, at: Date.now() };
+  localStorage.setItem("visdev.featurePick", JSON.stringify(payload));
+  featureChannel.postMessage(payload);
+  draw();
 }
 
 function pointInPoly(x, y, points) {
@@ -1678,7 +2557,9 @@ function pickObject(col, row) {
   let regionHit = null;
   let xldHit = null;
   let xldDist = Infinity;
-  const limit = 6 / cam.scale;
+  const limit = 12 / cam.scale;
+  let xldInside = null;
+  let xldInsideArea = Infinity;
   for (let i = shapes.length - 1; i >= 0; i -= 1) {
     const shape = shapes[i];
     if (shape.type !== "polyline" || shape.object == null || !shape.source) continue;
@@ -1688,15 +2569,40 @@ function pickObject(col, row) {
         xldDist = dist;
         xldHit = shape;
       }
+      const points = shape.points;
+      const ends = points.length >= 3 ? Math.hypot(points[0][0] - points.at(-1)[0], points[0][1] - points.at(-1)[1]) : Infinity;
+      if (ends < 1.5 && pointInPoly(col, row, points)) {
+        let area = 0;
+        for (let p = 0, q = points.length - 1; p < points.length; q = p, p += 1) {
+          area += points[q][0] * points[p][1] - points[p][0] * points[q][1];
+        }
+        area = Math.abs(area);
+        if (area < xldInsideArea) {
+          xldInsideArea = area;
+          xldInside = shape;
+        }
+      }
     } else if (!regionHit && pointInPoly(col, row, shape.points)) {
       regionHit = shape;
     }
   }
-  const shape = regionHit || xldHit;
-  if (!shape) return;
-  pickedObject = { name: shape.source, index: shape.object, kind: shape.kind || "region" };
+  const shape = xldHit || xldInside || regionHit;
+  if (!shape) return false;
+  const grouped = shape.kind === "xld" && shape.group != null;
+  pickedObject = {
+    name: shape.source,
+    index: grouped ? shape.group : shape.object,
+    kind: shape.kind || "region",
+    group: grouped ? shape.group : null,
+  };
+  const label = pickedObject.kind === "xld" ? "輪廓" : "區域";
+  const shown = pickedObject.name === "__preview__" ? "次像素" : (pickedObject.name || "");
+  gfxBanner.hidden = false;
+  gfxBanner.textContent = `已點選${label} ${shown} #${pickedObject.index + 1}。白色虛線是這一個，特徵只顯示它。`;
+  draw();
   publishFeaturePick();
   loadFeatures();
+  return true;
 }
 
 async function loadFeatures() {
@@ -1727,15 +2633,47 @@ async function loadFeatures() {
 
 const featureChannel = new BroadcastChannel("visdev-features");
 featureChannel.onmessage = (event) => {
-  if (event.data && event.data.type === "features" && pickedObject) loadFeatures();
+  const data = event.data;
+  if (!data) return;
+  if (data.type === "features" && pickedObject) loadFeatures();
+  if (data.type === "pick" && (data.clear || data.name === "__preview__")) {
+    pickedObject = null;
+    featureLines = [];
+    gfxBanner.hidden = true;
+    draw();
+  }
 };
 window.addEventListener("storage", (event) => {
   if (event.key === "visdev.features" && pickedObject) loadFeatures();
 });
 
+function fillOcrMethods(engines) {
+  const select = document.getElementById("ocrMethod");
+  if (!select || !engines) return;
+  const current = select.value || "auto";
+  const groups = [];
+  engines.forEach((item) => {
+    if (!groups.includes(item.group)) groups.push(item.group);
+  });
+  select.innerHTML = groups.map((group) => {
+    const options = engines.filter((item) => item.group === group).map((item) => {
+      const mark = item.key === "auto" || item.installed ? "" : "（未安裝）";
+      return `<option value="${esc(item.key)}" title="${esc(item.purpose)}">${esc(item.title)}${mark}</option>`;
+    }).join("");
+    return `<optgroup label="${esc(group)}">${options}</optgroup>`;
+  }).join("");
+  if ([...select.options].some((option) => option.value === current)) select.value = current;
+}
+
 async function boot() {
   operators = await fetch("/api/operators").then((res) => res.json());
+  try {
+    fillOcrMethods(await fetch("/api/ocr").then((res) => res.json()));
+  } catch (_err) {
+    /* 目錄讀不到時，下拉仍保留自動 */
+  }
   operatorNames = new Set(operators.map((op) => op.name.toLowerCase()));
+  buildOperatorMenu();
   renderOps();
   if (operators[0]) showOp(operators[0].name);
   await loadFiles();

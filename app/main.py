@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import cv2
+import numpy as np
 
 from app.engine.objects import Image, Region, XLD
 from app.engine.operators import (
@@ -19,18 +20,22 @@ from app.engine.operators import (
     REGION_FEATURES,
     XLD_FEATURES,
     gray_measures,
+    halcon_components,
     list_operators,
+    merge_within_distance,
+    opencv_components,
     preview_mask,
     refine_polyline,
     region_measures,
-    subpix_contours,
+    subpix_parts,
     subpixel_boundary,
     xld_measures,
 )
 from app.engine.parser import ParseError
-from app.engine.render import fill_overlay, normalize_color, png_data_url, read_cv_image
+from app.engine.render import contours_of, fill_overlay, normalize_color, png_data_url, read_cv_image
 from app.engine.samples_gen import ensure_samples
 from app.engine.session import Session
+from app.engine.shape_model import MATCH_COLORS
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = Path(__file__).resolve().parent / "static"
@@ -81,6 +86,9 @@ class PreviewIn(BaseModel):
     lightDark: str = "binary"
     color: str = "#ff3b30"
     image: bool = False
+    connect: bool = False
+    distance: float = 1
+    minArea: int = 1
 
 
 class RegionColorIn(BaseModel):
@@ -92,6 +100,7 @@ class SubpixIn(BaseModel):
     id: str
     threshold: float = 128
     image: bool = False
+    color: str = "#ff3b30"
 
 
 def trim_sessions():
@@ -143,15 +152,52 @@ def operators():
     return list_operators()
 
 
+@app.get("/api/ocr")
+def ocr_engines():
+    from app.engine.ocr import catalog
+
+    return [
+        {
+            "key": item.key,
+            "title": item.title,
+            "group": item.group,
+            "purpose": item.purpose,
+            "installed": item.installed,
+            "note": item.note,
+        }
+        for item in catalog().engines
+    ]
+
+
+def _program_title(path: Path) -> str:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return path.stem
+    for line in lines:
+        text = line.strip()
+        if text.startswith("*"):
+            title = text.lstrip("*").strip()
+            return title or path.stem
+        if text and not text.startswith("//"):
+            break
+    return path.stem
+
+
 @app.get("/api/files")
 def list_files():
-    def collect(folder: Path, kind: str):
+    from app.engine.samples_gen import SAMPLE_ORDER
+
+    def collect(folder: Path, kind: str, order: tuple[str, ...] = ()):
         if not folder.exists():
             return []
-        return [{"name": path.name, "kind": kind} for path in sorted(folder.glob("*.hdv"))]
+        files = {path.name: path for path in folder.glob("*.hdv")}
+        names = [name for name in order if name in files]
+        names.extend(sorted(name for name in files if name not in order))
+        return [{"name": name, "kind": kind, "title": _program_title(files[name])} for name in names]
 
     return {
-        "samples": collect(ROOT / "samples", "samples"),
+        "samples": collect(ROOT / "samples", "samples", SAMPLE_ORDER),
         "workspace": collect(ROOT / "workspace", "workspace"),
     }
 
@@ -218,20 +264,43 @@ def object_features(body: FeatureIn):
     if current is None:
         raise HTTPException(404, "請先執行程式")
     with current.lock:
-        if body.name not in current.vars:
+        if body.name == "__preview__":
+            value = current.preview_region
+            if value is None:
+                raise HTTPException(404, "請先在二值化視窗點一個區域")
+        elif body.name not in current.vars:
             raise HTTPException(404, "沒有這個物件")
-        value = current.vars[body.name]
+        else:
+            value = current.vars[body.name]
         index = int(body.index)
         gray = current.threshold_gray
         level = _level_from_histogram(current.histogram)
         if body.kind == "xld":
-            if not isinstance(value, XLD) or index < 0 or index >= len(value.contours):
+            if not isinstance(value, XLD):
                 raise HTTPException(400, "這不是可查的輪廓")
-            chain = value.contours[index]
+            groups = value.groups if value.groups and len(value.groups) == len(value.contours) else None
+            if groups is not None:
+                chosen = [chain for chain, group in zip(value.contours, groups) if group == index]
+                if not chosen:
+                    raise HTTPException(400, "這不是可查的輪廓")
+                chain = max(chosen, key=len)
+            elif index < 0 or index >= len(value.contours):
+                raise HTTPException(400, "這不是可查的輪廓")
+            else:
+                chain = value.contours[index]
             contour = refine_polyline(chain, gray, level) if body.subpixel else [[float(p[0]), float(p[1])] for p in chain]
             measures = xld_measures(contour)
-            picked = {name: round(float(measures[name]), 4) for name in body.xld if name in measures}
-            return {"kind": "xld", "name": body.name, "index": index, "region": {}, "xld": picked, "contour": [contour]}
+            rounded = {name: round(float(value), 4) for name, value in measures.items()}
+            return {
+                "kind": "xld",
+                "name": body.name,
+                "index": index,
+                "region": {name: rounded[name] for name in body.region if name in rounded},
+                "xld": {name: rounded[name] for name in body.xld if name in rounded},
+                "gray": {},
+                "grayReady": False,
+                "contour": [contour],
+            }
         if not isinstance(value, Region) or index < 0 or index >= value.count():
             raise HTTPException(400, "這不是可查的連通物件")
         mask = value.objects[index]
@@ -272,9 +341,29 @@ def threshold_preview(body: PreviewIn):
         except ValueError:
             color = "#ff3b30"
         objects = [mask] if int(cv2.countNonZero(mask)) else []
-        region = Region(int(gray.shape[1]), int(gray.shape[0]), objects)
-        overlay = fill_overlay(region, color, alpha=140)
-        payload = {"image": png_data_url(overlay), "area": int(cv2.countNonZero(mask)), "width": int(gray.shape[1]), "height": int(gray.shape[0])}
+        count = 1 if objects else 0
+        colors = None
+        if body.connect and objects:
+            pieces = opencv_components(mask, 8) if body.kind == "opencv" else halcon_components(mask)
+            pieces = merge_within_distance(pieces, max(0.0, float(body.distance)))
+            min_area = max(0, int(body.minArea))
+            objects = [item for item in pieces if int(cv2.countNonZero(item)) >= min_area]
+            count = len(objects)
+            colors = [MATCH_COLORS[index % 16] for index in range(count)]
+        region = Region(int(gray.shape[1]), int(gray.shape[0]), objects, multi_color=bool(colors))
+        current.preview_region = region
+        overlay = fill_overlay(region, color, alpha=160, colors=colors)
+        rings = []
+        for item in objects:
+            rings.append([chain for chain in contours_of(item) if len(chain) >= 3])
+        payload = {
+            "image": png_data_url(overlay),
+            "area": int(cv2.countNonZero(mask)),
+            "count": count,
+            "width": int(gray.shape[1]),
+            "height": int(gray.shape[0]),
+            "objects": rings,
+        }
         if body.image:
             ok, buf = cv2.imencode(".jpg", gray, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
             if not ok:
@@ -304,11 +393,42 @@ def subpix_preview(body: SubpixIn):
         if gray is None:
             raise HTTPException(404, "還沒有影像")
         level = min(255.0, max(0.0, float(body.threshold)))
-        lines = subpix_contours(gray, level, domain)
-        if len(lines) > 400:
-            lines = sorted(lines, key=len, reverse=True)[:400]
-        contours = [[[round(float(point[0]), 3), round(float(point[1]), 3)] for point in line] for line in lines]
-        payload = {"width": int(gray.shape[1]), "height": int(gray.shape[0]), "threshold": level, "contours": contours}
+        mask, parts = subpix_parts(gray, level, domain)
+        if len(parts) > 400:
+            parts = parts[:400]
+        contours = []
+        groups = []
+        for index, (_component, part_lines) in enumerate(parts):
+            for line in part_lines:
+                contours.append([[round(float(point[0]), 3), round(float(point[1]), 3)] for point in line])
+                groups.append(index)
+        counted = gray[domain > 0] if domain is not None else gray.ravel()
+        bins = np.bincount(counted.astype(np.uint8).ravel(), minlength=256)[:256]
+        try:
+            color = normalize_color(body.color)
+        except ValueError:
+            color = "#ff3b30"
+        objects = [component for component, _part_lines in parts]
+        colors = [MATCH_COLORS[index % 16] for index in range(len(objects))] if len(objects) > 1 else None
+        region = Region(int(gray.shape[1]), int(gray.shape[0]), objects, multi_color=len(objects) > 1)
+        current.preview_region = region
+        overlay = fill_overlay(region, color, alpha=110, colors=colors)
+        region_objects = []
+        for component in objects:
+            region_objects.append([chain for chain in contours_of(component) if len(chain) >= 3])
+        payload = {
+            "width": int(gray.shape[1]),
+            "height": int(gray.shape[0]),
+            "threshold": level,
+            "contours": contours,
+            "groups": groups,
+            "count": len(objects),
+            "region": png_data_url(overlay),
+            "regionObjects": region_objects,
+            "bins": [int(value) for value in bins],
+            "total": int(bins.sum()),
+            "area": int(cv2.countNonZero(mask)),
+        }
         if body.image:
             ok, buf = cv2.imencode(".jpg", gray, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
             if not ok:

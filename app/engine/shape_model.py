@@ -58,6 +58,9 @@ class ShapeModel:
     min_contrast: float
     angle_step: float
     num_points: int = 0
+    angle_start: float = -math.pi
+    angle_extent: float = math.tau
+    native: object = None
 
     def summary(self) -> str:
         return f"形狀模型  已教導  {self.num_points} 點  {len(self.contours)} 條輪廓  {self.num_levels} 層"
@@ -225,7 +228,17 @@ def _rotate(cols, rows, gx, gy, angle: float):
     return next_cols, next_rows, next_gx, next_gy
 
 
-def create_shape_model(image, num_levels, angle_step, metric: str, contrast, min_contrast) -> ShapeModel:
+def _match_backend():
+    try:
+        from . import visdev_match
+    except ImportError:
+        return None
+    return visdev_match
+
+
+def create_shape_model(
+    image, num_levels, angle_step, metric: str, contrast, min_contrast, angle_start=-math.pi, angle_extent=math.tau
+) -> ShapeModel:
     gray = _gray(image)
     domain = image.domain
     gx, gy, mag = _gradients(gray)
@@ -287,7 +300,7 @@ def create_shape_model(image, num_levels, angle_step, metric: str, contrast, min
     total_points = int(len(base_row))
     if angle_step is None or angle_step == 0:
         angle_step = max(np.deg2rad(0.6), 1.15 / max(radius, 1.0))
-    return ShapeModel(
+    model = ShapeModel(
         levels=levels,
         contours=contours,
         origin_row=origin_row,
@@ -301,7 +314,30 @@ def create_shape_model(image, num_levels, angle_step, metric: str, contrast, min
         min_contrast=float(min_contrast),
         angle_step=float(angle_step),
         num_points=total_points,
+        angle_start=float(angle_start),
+        angle_extent=float(angle_extent),
     )
+    backend = _match_backend()
+    if backend is not None:
+        packed = [
+            (
+                np.ascontiguousarray(level.rows, dtype=np.float32),
+                np.ascontiguousarray(level.cols, dtype=np.float32),
+                np.ascontiguousarray(level.gx, dtype=np.float32),
+                np.ascontiguousarray(level.gy, dtype=np.float32),
+            )
+            for level in model.levels
+        ]
+        model.native = backend.shape_create(
+            packed,
+            float(angle_start),
+            float(angle_extent),
+            float(model.angle_step),
+            float(model.min_contrast),
+            1 if metric == "ignore_local_polarity" else 0,
+            float(model.radius),
+        )
+    return model
 
 
 def _shift_to_origin(source: np.ndarray, row_offset: int, col_offset: int) -> np.ndarray:
@@ -443,6 +479,24 @@ def find_shape_model(
     num_levels: int,
     greediness: float,
 ):
+    backend = _match_backend()
+    if backend is not None and getattr(model, "native", None) is not None:
+        levels_used = model.num_levels if not num_levels else max(1, min(int(num_levels), model.num_levels))
+        gray = np.ascontiguousarray(_gray(image), dtype=np.float32)
+        pyramid = [gray]
+        for _ in range(1, levels_used):
+            pyramid.append(np.ascontiguousarray(cv2.pyrDown(pyramid[-1])))
+        return backend.shape_find(
+            model.native,
+            pyramid,
+            float(angle_start),
+            float(angle_extent),
+            float(min_score),
+            int(num_matches),
+            float(max_overlap),
+            1 if subpixel else 0,
+            float(greediness),
+        )
     gray = _gray(image)
     levels_used = model.num_levels if not num_levels else max(1, min(int(num_levels), model.num_levels))
     pyramid = [gray]
@@ -570,3 +624,192 @@ def transform_contours(model: ShapeModel, row: float, col: float, angle: float) 
 
 def color_for_match(index: int) -> str:
     return MATCH_COLORS[index % len(MATCH_COLORS)]
+
+
+def _flat(value) -> list[float]:
+    if value is None:
+        return []
+    if isinstance(value, np.ndarray):
+        return [float(item) for item in value.reshape(-1).tolist()]
+    if isinstance(value, (list, tuple)):
+        return [float(item) for item in value]
+    return [float(value)]
+
+
+def _scale_values(scale_min: float, scale_max: float, scale_step: float) -> tuple[list[float], float]:
+    low = float(scale_min)
+    high = float(scale_max)
+    if high + 1e-9 < low:
+        raise ValueError("ScaleMax 不能小於 ScaleMin")
+    if high - low < 1e-9:
+        return [low], 0.0
+    step = float(scale_step)
+    if step <= 0:
+        step = max((high - low) / 6.0, 0.02)
+    count = int(math.floor((high - low) / step + 1e-6)) + 1
+    if count > 8:
+        step = (high - low) / 7.0
+        count = 8
+    values = [low + step * index for index in range(count)]
+    if values[-1] > high:
+        values[-1] = high
+    return values, step
+
+
+def _resize_image(image, scale: float):
+    from .objects import Image as Picture
+
+    height, width = image.gray().shape
+    resized_w = int(round(width * scale))
+    resized_h = int(round(height * scale))
+    if resized_w < 8 or resized_h < 8:
+        raise ValueError("縮放後小於 8×8")
+    interpolation = cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR
+    data = cv2.resize(image.data, (resized_w, resized_h), interpolation=interpolation)
+    domain = None
+    if image.domain is not None and int(cv2.countNonZero(image.domain)):
+        domain = cv2.resize(image.domain, (resized_w, resized_h), interpolation=cv2.INTER_NEAREST)
+        domain = np.where(domain > 127, 255, 0).astype(np.uint8)
+    return Picture(data, domain)
+
+
+@dataclass
+class ScaledShapeModel:
+    scales: list
+    origin_row: float
+    origin_col: float
+    angle_start: float
+    angle_extent: float
+    angle_step: float
+    scale_min: float
+    scale_max: float
+    scale_step: float
+    metric: str
+    optimization: str
+    num_levels: int
+
+    def summary(self) -> str:
+        return (
+            f"縮放形狀模型  {len(self.scales)} 個尺度  "
+            f"{self.scale_min:.3f}–{self.scale_max:.3f}"
+        )
+
+
+def create_scaled_shape_model(
+    image,
+    num_levels,
+    angle_step,
+    scale_min,
+    scale_max,
+    scale_step,
+    optimization: str,
+    metric: str,
+    contrast,
+    min_contrast,
+    angle_start: float,
+    angle_extent: float,
+) -> ScaledShapeModel:
+    values, used_step = _scale_values(scale_min, scale_max, scale_step)
+    built = []
+    for scale in values:
+        try:
+            resized = _resize_image(image, scale)
+            model = create_shape_model(
+                resized,
+                num_levels,
+                angle_step,
+                metric,
+                contrast,
+                min_contrast,
+                angle_start,
+                angle_extent,
+            )
+        except ValueError:
+            continue
+        built.append((float(scale), model))
+    if not built:
+        raise ValueError("這些尺度都做不出形狀模型。請加大模板，或放寬 Contrast。")
+    first = built[0][1]
+    if image.domain is not None and int(cv2.countNonZero(image.domain)):
+        ys, xs = np.where(image.domain > 0)
+        origin_row = float(ys.mean())
+        origin_col = float(xs.mean())
+    else:
+        origin_row = (image.gray().shape[0] - 1) / 2.0
+        origin_col = (image.gray().shape[1] - 1) / 2.0
+    return ScaledShapeModel(
+        scales=built,
+        origin_row=origin_row,
+        origin_col=origin_col,
+        angle_start=float(angle_start),
+        angle_extent=float(angle_extent),
+        angle_step=float(first.angle_step),
+        scale_min=float(values[0]),
+        scale_max=float(values[-1]),
+        scale_step=float(used_step),
+        metric=metric,
+        optimization=optimization,
+        num_levels=int(first.num_levels),
+    )
+
+
+def find_scaled_shape_model(
+    image,
+    model: ScaledShapeModel,
+    angle_start: float,
+    angle_extent: float,
+    scale_min: float,
+    scale_max: float,
+    min_score: float,
+    num_matches: int,
+    max_overlap: float,
+    subpixel: bool,
+    num_levels: int,
+    greediness: float,
+):
+    if getattr(model, "cleared", False):
+        raise RuntimeError("模型已經 clear，不能再搜尋")
+    pool = []
+    wanted = int(num_matches) if num_matches else 8
+    for scale, child in model.scales:
+        if scale < float(scale_min) - 1e-6 or scale > float(scale_max) + 1e-6:
+            continue
+        rows, cols, angles, scores = find_shape_model(
+            image,
+            child,
+            angle_start,
+            angle_extent,
+            min_score,
+            wanted,
+            max_overlap,
+            subpixel,
+            num_levels,
+            greediness,
+        )
+        for row, col, angle, score in zip(_flat(rows), _flat(cols), _flat(angles), _flat(scores)):
+            pool.append((score, row, col, angle, scale, float(child.radius)))
+    pool.sort(key=lambda item: item[0], reverse=True)
+    chosen = []
+    limit = max(0.0, min(1.0, float(max_overlap)))
+    for item in pool:
+        _score, row, col, _angle, _scale, radius = item
+        blocked = False
+        for other in chosen:
+            gap = math.hypot(row - other[1], col - other[2])
+            if gap < max(8.0, (1.0 - limit) * max(radius, other[5])):
+                blocked = True
+                break
+        if blocked:
+            continue
+        chosen.append(item)
+        if num_matches and len(chosen) >= int(num_matches):
+            break
+    if not chosen:
+        return [], [], [], [], []
+    return (
+        [item[1] for item in chosen],
+        [item[2] for item in chosen],
+        [item[3] for item in chosen],
+        [item[4] for item in chosen],
+        [item[0] for item in chosen],
+    )

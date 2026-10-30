@@ -57,8 +57,23 @@
     }
     .viewbar span { margin-left: 8px; color: #8b98ab; }
     .stage { position: relative; flex: 1; min-height: 180px; background: #101216; }
-    canvas#view { width: 100%; height: 100%; display: block; cursor: grab; }
-    canvas#view.panning { cursor: grabbing; }
+    .mouse-mode { display: flex; flex: none; position: relative; z-index: 2; }
+    .mouse-mode button {
+      width: 36px;
+      height: 32px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+    .mouse-mode button + button { margin-left: -1px; }
+    .mouse-mode button svg { display: block; width: 16px; height: 16px; pointer-events: none; }
+    .mouse-mode button.on { background: #1d4e86; border-color: #3d8bff; color: #fff; }
+    canvas#view { width: 100%; height: 100%; display: block; }
+    canvas#view.mode-select { cursor: default; }
+    canvas#view.mode-pan { cursor: grab; }
+    canvas#view.mode-pan.panning { cursor: grabbing; }
+    canvas#view.mode-zoom { cursor: zoom-in; }
     .histo { padding: 8px 12px 4px; background: #161a20; border-top: 1px solid #2c3340; }
     #bars { width: 100%; height: 72px; display: block; cursor: ew-resize; background: #101216; border-radius: 4px; }
     footer { border-top: 1px solid #2c3340; }
@@ -89,12 +104,17 @@
     <label>下限 <input id="minArea" type="number" min="0" step="1" value="1" title="連通物件的最小面積"></label>
   </div>
   <div class="viewbar">
+    <div class="mouse-mode" role="group" aria-label="滑鼠型態">
+      <button type="button" data-mode="select" title="箭頭點選" aria-label="點選"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M2.2 1.2 4 13.2l2.6-2.7 2.5 4.1 1.7-1.1-2.5-4.1h4.2L2.2 1.2z"/></svg></button>
+      <button type="button" data-mode="pan" title="手抓移動畫面" aria-label="手抓移動"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6 7.1V3.2a.8.8 0 0 1 1.6 0v3.3h.3V2.1a.8.8 0 0 1 1.6 0v4.4h.3V3.4a.8.8 0 0 1 1.6 0v3.3h.3V5a.8.8 0 0 1 1.6 0v5.1c0 2-1.5 3.4-3.6 3.4H7.8c-1.4 0-2.4-.6-3-1.6L2.8 9.4a.85.85 0 0 1 1.4-.9l1.2 1.5V7.1H6z"/></svg></button>
+      <button type="button" data-mode="zoom" title="拉一個範圍放大。點一下也會放大" aria-label="放大"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path stroke="currentColor" stroke-width="1.5" d="M9.8 9.8 13.5 13.5M6.8 4.8v4M4.8 6.8h4"/></svg></button>
+    </div>
     <button id="btnFit" type="button" title="符合視窗">符合</button>
     <button id="btnOne" type="button" title="原始像素">1:1</button>
     <button id="btnOut" type="button" title="縮小">−</button>
     <button id="btnIn" type="button" title="放大">+</button>
     <span id="zoom"></span>
-    <span>滾輪縮放，拖曳平移。視窗邊緣也可以拉大拉小。</span>
+    <span>箭頭點一個區域。白色虛線包住它，特徵只顯示這一個。</span>
   </div>
   <div class="stage"><canvas id="view"></canvas></div>
   <div class="histo"><canvas id="bars"></canvas></div>
@@ -117,7 +137,14 @@
     let token = 0;
     const cam = { x: 0, y: 0, scale: 1, user: false };
     let panning = null;
+    let zoomBox = null;
+    let mouseMode = localStorage.getItem("visdev.thresholdMouse");
+    if (mouseMode !== "select" && mouseMode !== "pan" && mouseMode !== "zoom") mouseMode = "select";
+    let objectRings = [];
+    let selectedIndex = null;
+    const featureChannel = new BroadcastChannel("visdev-features");
     let shownSize = "";
+    let showConnection = false;
     const view = document.getElementById("view");
     const bars = document.getElementById("bars");
     const note = document.getElementById("note");
@@ -252,7 +279,13 @@
       ctx.imageSmoothingEnabled = cam.scale < 3;
       if (photo) ctx.drawImage(photo, 0, 0);
       if (overlay) ctx.drawImage(overlay, 0, 0);
+      strokeSelected(ctx);
       ctx.restore();
+      if (zoomBox) {
+        ctx.strokeStyle = "#ffe14a";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(Math.min(zoomBox.x, zoomBox.x2), Math.min(zoomBox.y, zoomBox.y2), Math.abs(zoomBox.x2 - zoomBox.x), Math.abs(zoomBox.y2 - zoomBox.y));
+      }
     }
 
     function fitView(markUser) {
@@ -313,6 +346,9 @@
           lightDark: histo.lightDark || "binary",
           color: colorInput.value,
           image: withGray || !photo,
+          connect: showConnection,
+          distance: Number(document.getElementById("dist").value),
+          minArea: Number(document.getElementById("minArea").value),
         }),
       });
       const data = await res.json();
@@ -325,17 +361,46 @@
       }
       if (data.gray) photo = await loadImg(data.gray);
       overlay = data.image ? await loadImg(data.image) : null;
+      objectRings = Array.isArray(data.objects) ? data.objects : [];
+      if (selectedIndex != null && selectedIndex >= objectRings.length) {
+        selectedIndex = null;
+        publishFeatureClear();
+      }
       if (histo.kind === "range") histo.area = sumBins(histo.bins, histo.min, histo.max);
       else if (Number.isFinite(data.area)) histo.area = data.area;
       paintHisto();
       showPicture();
+      if (showConnection && Number.isFinite(data.count)) {
+        note.textContent = `connection：${data.count} 個物件，每個一種顏色。主視窗也會顯示。`;
+      }
     }
 
+    let seenStamp = null;
+    let seenStateAt = 0;
     function applyState(data) {
       if (!data || data.type !== "state") return;
+      if (data.at) seenStateAt = data.at;
+      const stamp = data.imageStamp;
+      const imageChanged = seenStamp != null && stamp != null && stamp !== seenStamp;
+      if (stamp != null) seenStamp = stamp;
       if (data.id) sessionId = data.id;
+      if (imageChanged) {
+        selectedIndex = null;
+        objectRings = [];
+        photo = null;
+        cam.user = false;
+      }
       if (drag) return;
       histo = data.histogram || null;
+      if (!histo) {
+        overlay = null;
+        objectRings = [];
+        selectedIndex = null;
+        paintHisto();
+        paintView();
+        if (imageChanged) note.textContent = "已讀新圖。區域會在二值化之後重算。";
+        return;
+      }
       if (data.color && document.activeElement !== colorInput) colorInput.value = data.color;
       if (data.connMin != null && document.activeElement !== document.getElementById("minArea")) {
         document.getElementById("minArea").value = data.connMin;
@@ -345,7 +410,7 @@
       }
       markTools();
       paintHisto();
-      refresh(true);
+      refresh(imageChanged || !photo);
     }
 
     function valueAt(event) {
@@ -404,12 +469,14 @@
       send({ type: "tool", name: button.dataset.bin });
     });
     document.getElementById("connect").onclick = () => {
+      showConnection = true;
       send({
         type: "connection",
         min: Number(document.getElementById("minArea").value),
         dist: Number(document.getElementById("dist").value),
       });
-      note.textContent = "已寫入 connection。主視窗會重跑，每個物件一種顏色。";
+      note.textContent = "正在做 connection…";
+      refresh(false);
     };
     document.getElementById("subpix").onclick = () => send({ type: "open-subpix" });
     document.getElementById("features").onclick = () => send({ type: "open-features" });
@@ -430,22 +497,163 @@
       const rect = view.getBoundingClientRect();
       zoomAt(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - rect.left, event.clientY - rect.top);
     }, { passive: false });
+    function setMode(mode) {
+      mouseMode = mode === "select" || mode === "zoom" ? mode : "pan";
+      try { localStorage.setItem("visdev.thresholdMouse", mouseMode); } catch (_err) { /* 視窗不共享儲存時仍可切換 */ }
+      view.classList.remove("mode-select", "mode-pan", "mode-zoom", "panning");
+      view.classList.add(`mode-${mouseMode}`);
+      document.querySelectorAll(".mouse-mode button[data-mode]").forEach((button) => {
+        button.classList.toggle("on", button.dataset.mode === mouseMode);
+      });
+    }
+    document.querySelectorAll(".mouse-mode button[data-mode]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setMode(button.dataset.mode);
+      });
+    });
+    setMode(mouseMode);
+    function screenPoint(event) {
+      const rect = view.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      return { x, y, col: (x - cam.x) / cam.scale, row: (y - cam.y) / cam.scale };
+    }
+    function pointInPoly(x, y, points) {
+      let inside = false;
+      for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
+        const xi = points[i][0];
+        const yi = points[i][1];
+        const xj = points[j][0];
+        const yj = points[j][1];
+        const cross = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-9) + xi);
+        if (cross) inside = !inside;
+      }
+      return inside;
+    }
+    function publishFeaturePick(index) {
+      const payload = {
+        type: "pick",
+        id: sessionId,
+        name: "__preview__",
+        index,
+        kind: "region",
+        at: Date.now(),
+      };
+      try { localStorage.setItem("visdev.featurePick", JSON.stringify(payload)); } catch (_err) { /* 視窗仍可收廣播 */ }
+      featureChannel.postMessage(payload);
+    }
+    function publishFeatureClear() {
+      const payload = { type: "pick", clear: true, at: Date.now() };
+      try { localStorage.setItem("visdev.featurePick", JSON.stringify(payload)); } catch (_err) { /* 視窗仍可收廣播 */ }
+      featureChannel.postMessage(payload);
+    }
+    function pickPreview(col, row) {
+      let best = null;
+      let bestArea = Infinity;
+      objectRings.forEach((rings, index) => {
+        if (!rings.some((ring) => ring.length >= 3 && pointInPoly(col, row, ring))) return;
+        let area = 0;
+        const ring = rings[0];
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+          area += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+        }
+        area = Math.abs(area);
+        if (area < bestArea) {
+          bestArea = area;
+          best = index;
+        }
+      });
+      if (best == null) {
+        if (selectedIndex != null) publishFeatureClear();
+        selectedIndex = null;
+        note.textContent = "沒有點到區域。點一個色塊，白色虛線會包住它，特徵只顯示這一個。";
+        return;
+      }
+      selectedIndex = best;
+      note.textContent = `已點選區域 #${best + 1}。白色虛線是這一個，特徵視窗只顯示它。`;
+      publishFeaturePick(best);
+    }
+    function strokeSelected(ctx) {
+      if (selectedIndex == null) return;
+      const rings = objectRings[selectedIndex] || [];
+      const draw = () => {
+        rings.forEach((ring) => {
+          if (!ring || ring.length < 2) return;
+          ctx.beginPath();
+          ctx.moveTo(ring[0][0], ring[0][1]);
+          for (let i = 1; i < ring.length; i += 1) ctx.lineTo(ring[i][0], ring[i][1]);
+          ctx.closePath();
+          ctx.stroke();
+        });
+      };
+      ctx.save();
+      ctx.setLineDash([7 / cam.scale, 5 / cam.scale]);
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(0,0,0,0.9)";
+      ctx.lineWidth = 4 / cam.scale;
+      draw();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2 / cam.scale;
+      draw();
+      ctx.restore();
+    }
+    featureChannel.onmessage = (event) => {
+      const data = event.data;
+      if (!data || data.type !== "pick") return;
+      if (data.clear || data.name !== "__preview__") {
+        selectedIndex = null;
+        paintView();
+      }
+    };
     view.addEventListener("mousedown", (event) => {
       if (event.button !== 0 || !pictureSize()) return;
-      panning = { x: event.clientX, y: event.clientY, camX: cam.x, camY: cam.y };
-      view.classList.add("panning");
+      const point = screenPoint(event);
+      panning = { x: point.x, y: point.y, camX: cam.x, camY: cam.y, col: point.col, row: point.row, mode: mouseMode };
+      if (mouseMode === "pan") view.classList.add("panning");
     });
     window.addEventListener("mousemove", (event) => {
       if (!panning) return;
-      cam.x = panning.camX + event.clientX - panning.x;
-      cam.y = panning.camY + event.clientY - panning.y;
-      cam.user = true;
-      paintView();
+      const point = screenPoint(event);
+      if (panning.mode === "pan") {
+        cam.x = panning.camX + point.x - panning.x;
+        cam.y = panning.camY + point.y - panning.y;
+        cam.user = true;
+        paintView();
+      } else if (panning.mode === "zoom") {
+        zoomBox = { x: panning.x, y: panning.y, x2: point.x, y2: point.y };
+        paintView();
+      }
     });
-    window.addEventListener("mouseup", () => {
-      if (!panning) return;
+    window.addEventListener("mouseup", (event) => {
+      const start = panning;
       panning = null;
+      zoomBox = null;
       view.classList.remove("panning");
+      if (!start || !pictureSize()) return;
+      const point = screenPoint(event);
+      const moved = Math.hypot(point.x - start.x, point.y - start.y) > 4;
+      if (start.mode !== "zoom" && !moved) {
+        pickPreview(start.col, start.row);
+        paintView();
+        return;
+      }
+      if (start.mode !== "zoom") return;
+      if (moved) {
+        const left = Math.min(start.col, point.col);
+        const top = Math.min(start.row, point.row);
+        const width = Math.max(1, Math.abs(point.col - start.col));
+        const height = Math.max(1, Math.abs(point.row - start.row));
+        const rect = view.getBoundingClientRect();
+        cam.scale = Math.min(48, Math.max(0.05, Math.min((rect.width - 16) / width, (rect.height - 16) / height)));
+        cam.x = (rect.width - width * cam.scale) / 2 - left * cam.scale;
+        cam.y = (rect.height - height * cam.scale) / 2 - top * cam.scale;
+        cam.user = true;
+      } else {
+        zoomAt(1.4, point.x, point.y);
+      }
+      paintView();
     });
     document.getElementById("btnFit").onclick = () => fitView(false);
     document.getElementById("btnOne").onclick = () => {
@@ -478,6 +686,15 @@
       const stored = JSON.parse(localStorage.getItem("visdev.threshold") || "null");
       if (stored) applyState(stored);
     } catch (_err) { /* 還沒有狀態 */ }
+    setInterval(() => {
+      const raw = localStorage.getItem("visdev.threshold");
+      if (!raw) return;
+      try {
+        const data = JSON.parse(raw);
+        if (!data || data.at === seenStateAt) return;
+        applyState(data);
+      } catch (_err) { /* 忽略壞掉的暫存 */ }
+    }, 400);
     send({ type: "hello" });
   </script>
 </body>

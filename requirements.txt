@@ -4,3 +4,19 @@ numpy==2.2.6
 opencv-python-headless==5.0.0.93
 python-multipart==0.0.32
 pywebview==6.1
+rapidocr-onnxruntime==1.4.4
+# paddlex checks for opencv-contrib-python. Install that metadata, then reinstall opencv-python-headless so cv2 stays 5.0.
+paddlepaddle==3.3.1
+paddleocr==3.7.0
+paddlex==3.7.2
+httpx==0.28.1
+opt-einsum==3.3.0
+winocr==0.0.15
+onnxruntime==1.23.2
+Pillow==12.3.0
+pyclipper==1.4.0
+shapely==2.1.2
+PyYAML==6.0.3
+# 其他 OCR 在 app/engine/ocr.py 已接上，選到才需要安裝。不要一次裝，也不要裝 opencv-contrib-python。
+# 本機可選：python-doctr、surya-ocr、cnocr、easyocr、manga-ocr、keras-ocr、mmocr、transformers、ddddocr
+# 雲端用環境變數，不把金鑰寫進這個檔。

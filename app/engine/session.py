@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -110,6 +111,8 @@ class Session:
         self.ref_shape: tuple[int, int] | None = None
         self.region_color = "#ff3b30"
         self.threshold_mask = None
+        self.threshold_region = None
+        self.image_stamp = 0
         self.reset()
 
     def reset(self):
@@ -124,12 +127,16 @@ class Session:
         self.loops: dict = {}
         self.cancel = False
         self.break_skip = None
+        self.arrow_line = None
+        self.line_times: dict[int, dict] = {}
         self.step_count = 0
         self.ref_shape = None
         self.histogram = None
         self.threshold_gray = None
         self.threshold_domain = None
         self.threshold_mask = None
+        self.threshold_region = None
+        self.preview_region = None
         self.prepare()
 
     def prepare(self):
@@ -139,9 +146,9 @@ class Session:
             self.done = True
 
     def current_line(self):
-        if self.done or self.pc >= len(self.stmts):
-            return None
-        return self.stmts[self.pc].line
+        if not self.done and self.pc < len(self.stmts):
+            return self.stmts[self.pc].line
+        return self.arrow_line
 
     def set_line(self, line: int):
         """Move the program arrow. Variables stay; the next step starts at this line."""
@@ -159,6 +166,7 @@ class Session:
         if target is None:
             self.pc = len(self.stmts)
             self.done = True
+            self.arrow_line = None
             return
         self.pc = target
         self.done = False
@@ -213,11 +221,14 @@ class Session:
             return
         if isinstance(obj, XLD):
             self.ref_shape = self.ref_shape or (obj.height, obj.width)
+            groups = getattr(obj, "groups", None) or []
+            grouped = len(groups) == len(obj.contours) and len(obj.contours) > 0
+            color_count = (max(groups) + 1) if grouped else len(obj.contours)
             colors = None
-            if getattr(obj, "multi_color", False) and len(obj.contours) > 1:
-                colors = [MATCH_COLORS[index % 16] for index in range(len(obj.contours))]
-            elif self.display.colored > 1 and len(obj.contours) > 1:
-                colors = [MATCH_COLORS[index % self.display.colored] for index in range(len(obj.contours))]
+            if getattr(obj, "multi_color", False) and color_count > 1:
+                colors = [MATCH_COLORS[index % 16] for index in range(color_count)]
+            elif self.display.colored > 1 and color_count > 1:
+                colors = [MATCH_COLORS[index % self.display.colored] for index in range(color_count)]
             self.display.overlays.append(
                 {
                     "kind": "xld",
@@ -249,8 +260,28 @@ class Session:
             self.log.append(f"{stmt.line:>4}  {message}")
 
     def _on_breakpoint(self) -> bool:
+        if self.pc >= len(self.stmts) or not self.breakpoints:
+            return False
         stmt = self.stmts[self.pc]
-        return any(line in self.breakpoints for line in stmt.lines)
+        covered = set(stmt.lines or ())
+        covered.add(stmt.line)
+        if covered & self.breakpoints:
+            return True
+        start = stmt.line
+        prev_end = 0
+        for earlier in range(self.pc - 1, -1, -1):
+            other = self.stmts[earlier]
+            if isinstance(other, (Blank, Comment)):
+                continue
+            prev_end = max(other.lines) if other.lines else other.line
+            break
+        return any(prev_end < line < start for line in self.breakpoints)
+
+    def _note_time(self, stmt, seconds: float):
+        line = max(stmt.lines) if stmt.lines else stmt.line
+        slot = self.line_times.setdefault(line, {"total": 0.0, "count": 0})
+        slot["total"] += seconds
+        slot["count"] += 1
 
     def step(self):
         if self.error:
@@ -299,6 +330,8 @@ class Session:
     def _execute_current(self):
         index = self.pc
         stmt = self.stmts[index]
+        self.arrow_line = stmt.line
+        started = time.perf_counter()
         try:
             self._execute(stmt, index)
         except StopSignal:
@@ -308,6 +341,8 @@ class Session:
             self.error = str(exc)
             self.error_line = stmt.line
             self.log.append(f"錯誤 第 {stmt.line} 行：{exc}")
+        finally:
+            self._note_time(stmt, time.perf_counter() - started)
 
     def _execute(self, stmt, index: int):
         if isinstance(stmt, Assign):
@@ -423,6 +458,9 @@ class Session:
                 control.append({"name": name, "type": "shape_model", "text": value.summary(), "full": value.summary()})
             elif isinstance(value, NccModel):
                 control.append({"name": name, "type": "ncc_model", "text": value.summary(), "full": value.summary()})
+            elif callable(getattr(value, "summary", None)):
+                text = value.summary()
+                control.append({"name": name, "type": "model", "text": text, "full": text})
             else:
                 kind = "tuple" if isinstance(value, list) else "string" if isinstance(value, str) else "real" if isinstance(value, float) else "integer"
                 control.append({"name": name, "type": kind, "text": fmt_value(value), "full": full_value(value)})
@@ -432,7 +470,38 @@ class Session:
             histogram["color"] = self.region_color
         overlays = list(self.display.overlays)
         mask = self.threshold_mask
-        if mask is not None and int(np.count_nonzero(mask)):
+        base = self.display.base
+        if mask is not None and base is not None and mask.shape[:2] != (base.height, base.width):
+            mask = None
+        showing_parts = any(
+            item.get("kind") == "region"
+            and getattr(item.get("region"), "multi_color", False)
+            and item["region"].count() > 1
+            for item in overlays
+        )
+        parts = getattr(self, "threshold_region", None)
+        subpix_parts = (
+            self.histogram is not None
+            and self.histogram.get("kind") == "subpix"
+            and isinstance(parts, Region)
+            and parts.count() > 0
+        )
+        if subpix_parts:
+            colors = [MATCH_COLORS[index % 16] for index in range(parts.count())] if parts.count() > 1 else None
+            overlays.insert(
+                0,
+                {
+                    "kind": "region",
+                    "region": parts,
+                    "color": self.region_color,
+                    "colors": colors,
+                    "draw": "fill",
+                    "width": 1,
+                    "alpha": 120,
+                    "source": "__preview__",
+                },
+            )
+        elif mask is not None and not showing_parts and int(np.count_nonzero(mask)):
             binary = Region(int(mask.shape[1]), int(mask.shape[0]), [mask])
             overlays.insert(
                 0,
@@ -459,6 +528,11 @@ class Session:
             "display": compose_display(self.display.base, overlays),
             "histogram": histogram,
             "steps": self.step_count,
+            "imageStamp": int(getattr(self, "image_stamp", 0)),
+            "lineTimes": [
+                {"line": line, "ms": round(slot["total"] * 1000, 3), "count": slot["count"]}
+                for line, slot in sorted(self.line_times.items())
+            ],
         }
 
     def view_object(self, name: str) -> dict:

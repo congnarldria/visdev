@@ -31,7 +31,19 @@
       color: #ffe14a;
       border-bottom: 1px solid #2a3140;
     }
-    #list { flex: 1; overflow: auto; padding: 8px 12px 16px; }
+    #split { flex: 1; min-height: 0; display: flex; }
+    #list { flex: none; overflow: auto; padding: 8px 12px 16px; border-right: 1px solid #2a3140; }
+    #custom { flex: 1; min-width: 180px; overflow: auto; padding: 8px 12px 16px; }
+    #custom h2 { margin: 2px 0 8px; color: #9eb0c8; font-size: 12px; font-weight: 600; }
+    .crow { display: flex; gap: 16px; align-items: baseline; padding: 3px 0; }
+    .cn { font: 13px/1.3 Consolas, "Cascadia Mono", monospace; color: #d5fbe6; }
+    .cv {
+      margin-left: auto;
+      text-align: right;
+      font: 13px/1.3 Consolas, "Cascadia Mono", monospace;
+      color: #f4f7fb;
+    }
+    #custom .empty { color: #8b98ab; }
     #errDialog[hidden] { display: none !important; }
     #errDialog { display: flex; align-items: center; justify-content: center; }
     table {
@@ -69,9 +81,9 @@
 <body>
   <header>
     <strong>區域特徵</strong>
-    <span>這個視窗不擋住主視窗。點選區域後，勾選的項目才顯示數值。</span>
+    <span>一次只顯示點到的那一個。白色虛線是點到的地方。</span>
   </header>
-  <div id="title">請在主視窗點選一個區域。</div>
+  <div id="title">請點一個區域或輪廓。沒點到之前不顯示數值。</div>
   <div id="errDialog" hidden style="position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.48)">
     <div style="width:min(420px,calc(100vw - 32px));background:#1c2028;border:1px solid #ff5d4a;padding:16px">
       <strong style="color:#ffb0a6">錯誤</strong>
@@ -79,7 +91,13 @@
       <div style="text-align:right"><button id="errOk" type="button">確定</button></div>
     </div>
   </div>
-  <div id="list"></div>
+  <div id="split">
+    <div id="list"></div>
+    <aside id="custom">
+      <h2>自訂變數</h2>
+      <div id="customList" class="empty">執行程式後，數值會靠右顯示。</div>
+    </aside>
+  </div>
   <script>
     const GRAY_LABELS = {
       gray_min: "最小輝度",
@@ -196,6 +214,10 @@
           node.textContent = "";
           return;
         }
+        if (data.kind === "xld" && input.dataset.feature.startsWith("gray:")) {
+          node.textContent = "輪廓沒有輝度";
+          return;
+        }
         if (!data.grayReady && input.dataset.feature.startsWith("gray:")) {
           node.textContent = "無影像";
           return;
@@ -206,16 +228,18 @@
     }
 
     async function refresh() {
-      if (!pick || pick.kind !== "region") {
-        title.textContent = pick ? "請點選區域。輪廓本身沒有區域輝度。" : "請在主視窗點選一個區域。";
+      if (!pick || (pick.kind !== "region" && pick.kind !== "xld")) {
+        title.textContent = "請在主視窗點選一個區域或輪廓。";
         clearValues();
         return;
       }
+      const kind = pick.kind === "xld" ? "xld" : "region";
       sessionId = pick.id || sessionId;
-      title.textContent = `${pick.name}  #${pick.index + 1}`;
+      const where = pick.name === "__preview__" ? "預覽" : pick.name;
+      title.textContent = `${kind === "xld" ? "輪廓" : "區域"} ${where}  #${pick.index + 1}（只顯示這一個）`;
       const keys = checkedKeys();
       const choice = splitKeys(keys);
-      if (!sessionId || (!choice.region.length && !choice.xld.length && !choice.gray.length)) {
+      if (!sessionId || (!choice.region.length && !choice.xld.length && (kind === "xld" || !choice.gray.length))) {
         clearValues();
         return;
       }
@@ -226,10 +250,10 @@
           id: sessionId,
           name: pick.name,
           index: pick.index,
-          kind: "region",
+          kind,
           region: choice.region,
           xld: choice.xld,
-          gray: choice.gray,
+          gray: kind === "region" ? choice.gray : [],
           subpixel: false,
         }),
       });
@@ -251,8 +275,36 @@
       refresh();
     }
 
+    function esc(text) {
+      return String(text ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+    }
+
+    function renderCustom(data) {
+      const box = document.getElementById("customList");
+      const rows = [];
+      (data.iconic || []).forEach((item) => {
+        rows.push(`<div class="crow"><span class="cn">${esc(item.name)}</span><span class="cv">${esc(item.text)}</span></div>`);
+      });
+      (data.control || []).forEach((item) => {
+        rows.push(`<div class="crow"><span class="cn">${esc(item.name)}</span><span class="cv">${esc(item.text)}</span></div>`);
+      });
+      box.className = rows.length ? "" : "empty";
+      box.innerHTML = rows.join("") || "執行程式後，數值會靠右顯示。";
+    }
+
+    function takeVars(data) {
+      if (!data || data.type !== "vars") return;
+      renderCustom(data);
+    }
+
     function takePick(data) {
       if (!data || data.type !== "pick") return;
+      if (data.clear) {
+        pick = null;
+        title.textContent = "請點一個區域或輪廓。沒點到之前不顯示數值。";
+        clearValues();
+        return;
+      }
       pick = data;
       refresh();
     }
@@ -260,16 +312,44 @@
     document.getElementById("errOk").onclick = () => { document.getElementById("errDialog").hidden = true; };
     list.addEventListener("change", publish);
     const channel = new BroadcastChannel("visdev-features");
-    channel.onmessage = (event) => takePick(event.data);
+    channel.onmessage = (event) => {
+      takePick(event.data);
+      takeVars(event.data);
+    };
     window.addEventListener("storage", (event) => {
-      if (event.key !== "visdev.featurePick" || !event.newValue) return;
-      try { takePick(JSON.parse(event.newValue)); } catch (_err) { /* 忽略 */ }
+      if (event.key === "visdev.featurePick" && event.newValue) {
+        try { takePick(JSON.parse(event.newValue)); } catch (_err) { /* 忽略 */ }
+      }
+      if (event.key === "visdev.customVars" && event.newValue) {
+        try { takeVars(JSON.parse(event.newValue)); } catch (_err) { /* 忽略 */ }
+      }
     });
+    let seenPick = 0;
+    setInterval(() => {
+      const rawVars = localStorage.getItem("visdev.customVars");
+      if (rawVars) {
+        try { takeVars(JSON.parse(rawVars)); } catch (_err) { /* 忽略 */ }
+      }
+      const rawPick = localStorage.getItem("visdev.featurePick");
+      if (!rawPick) return;
+      try {
+        const data = JSON.parse(rawPick);
+        if (!data || data.at === seenPick) return;
+        seenPick = data.at || 0;
+        takePick(data);
+      } catch (_err) { /* 忽略 */ }
+    }, 300);
 
     try {
       const stored = JSON.parse(localStorage.getItem("visdev.featurePick") || "null");
-      if (stored && stored.type === "pick") pick = stored;
+      if (stored && stored.type === "pick" && !stored.clear) {
+        pick = stored;
+        seenPick = stored.at || 0;
+      }
     } catch (_err) { /* 尚未點選 */ }
+    try {
+      takeVars(JSON.parse(localStorage.getItem("visdev.customVars") || "null"));
+    } catch (_err) { /* 還沒有變數 */ }
 
     fetch("/api/features").then((res) => res.json()).then((data) => {
       if (data.region) catalog = data;

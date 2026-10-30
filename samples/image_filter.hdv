@@ -1,0 +1,11 @@
+* 影像濾波：高斯、中值、邊緣強化、直方圖等化、反相
+read_image (Image, 'samples/stripes.png')
+rgb1_to_gray (Image, Gray)
+gauss_image (Gray, Smooth, 5)
+median_image (Gray, Median, 2)
+mean_image (Gray, MeanImage, 5, 5)
+emphasize (Gray, Sharp, 7, 7, 1)
+scale_image (Sharp, Scaled, 1.2, 0)
+equ_histo_image (Gray, Equ)
+invert_image (Equ, Inverted)
+dev_display (Sharp)

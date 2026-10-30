@@ -12,6 +12,9 @@ const VisDevDock = (() => {
 
   let tree = null;
   let floats = [];
+  let autoHide = {};
+  let flyout = null;
+  let flySticky = false;
   let nodesByKey = new Map();
   let keySeq = 1;
   let suppressClick = false;
@@ -167,7 +170,9 @@ const VisDevDock = (() => {
     const ids = [];
     collect(state.tree, ids);
     (state.floats || []).forEach((item) => collect(item.node, ids));
-    return ORDER.every((id) => ids.filter((item) => item === id).length === 1) && ids.length === ORDER.length;
+    const hidden = Object.keys(state.autoHide || {}).filter((id) => ORDER.includes(id) && ["left", "right", "top", "bottom"].includes(state.autoHide[id]));
+    const all = ids.concat(hidden);
+    return ORDER.every((id) => all.filter((item) => item === id).length === 1) && all.length === ORDER.length;
   }
 
   function load() {
@@ -176,6 +181,7 @@ const VisDevDock = (() => {
       if (layoutOk(state)) {
         tree = state.tree;
         floats = state.floats || [];
+        autoHide = state.autoHide || {};
         return;
       }
     } catch (error) {
@@ -183,10 +189,11 @@ const VisDevDock = (() => {
     }
     tree = defaultTree();
     floats = [];
+    autoHide = {};
   }
 
   function save() {
-    localStorage.setItem(KEY, JSON.stringify({ tree, floats }));
+    localStorage.setItem(KEY, JSON.stringify({ tree, floats, autoHide }));
   }
 
   function ensureChrome(pane) {
@@ -203,13 +210,29 @@ const VisDevDock = (() => {
       beginDrag(pane.dataset.dock, event);
     });
     bar.prepend(grip);
+    const tools = document.createElement("span");
+    tools.className = "dock-tools";
+    const pin = document.createElement("button");
+    pin.type = "button";
+    pin.className = "dock-pin on";
+    pin.title = "自動隱藏";
+    pin.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M5.2 1.2h5.6v1.4H9.2v2.1l2.3 2.2v1.3H8.7v6.6H7.3V8.2H4.5V6.9l2.3-2.2V2.6H5.2V1.2z"/></svg>';
+    pin.addEventListener("mousedown", (event) => event.stopPropagation());
+    pin.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = pane.dataset.dock;
+      if (autoHide[id]) pinBack(id);
+      else unpin(id);
+    });
     const back = document.createElement("button");
     back.type = "button";
     back.className = "dock-back";
     back.textContent = "收回";
     back.hidden = true;
     back.addEventListener("click", () => dockBack(pane.dataset.dock));
-    bar.append(back);
+    tools.append(pin, back);
+    bar.append(tools);
   }
 
   function renderNode(node) {
@@ -313,10 +336,184 @@ const VisDevDock = (() => {
     if (tree) root.append(renderNode(tree));
     const hosted = [root, ...floats.filter((item) => item.node).map(renderFloat)];
     dock.replaceChildren(...hosted);
+    const edges = new Set(Object.values(autoHide));
+    root.style.paddingLeft = edges.has("left") ? "26px" : "";
+    root.style.paddingRight = edges.has("right") ? "26px" : "";
+    root.style.paddingTop = edges.has("top") ? "26px" : "";
+    root.style.paddingBottom = edges.has("bottom") ? "26px" : "";
     ORDER.forEach((id) => {
       const host = panes[id].closest(".dock-float");
       const back = panes[id].querySelector(".dock-back");
       if (back) back.hidden = !host || host.querySelectorAll("[data-dock]").length < 2;
+      const pin = panes[id].querySelector(".dock-pin");
+      if (pin) {
+        const hidden = Boolean(autoHide[id]);
+        pin.classList.toggle("on", !hidden);
+        pin.title = hidden ? "釘選" : "自動隱藏";
+      }
+    });
+    document.querySelectorAll("[data-pane]").forEach((item) => {
+      item.setAttribute("aria-checked", autoHide[item.dataset.pane] ? "false" : "true");
+    });
+    renderRails();
+    window.dispatchEvent(new Event("visdev-layout"));
+  }
+
+  function edgeOf(id) {
+    const rect = panes[id].getBoundingClientRect();
+    const host = dock.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return "right";
+    const cx = rect.left + rect.width / 2 - host.left;
+    const cy = rect.top + rect.height / 2 - host.top;
+    const dx = Math.min(cx, host.width - cx);
+    const dy = Math.min(cy, host.height - cy);
+    if (dx <= dy) return cx < host.width / 2 ? "left" : "right";
+    return cy < host.height / 2 ? "top" : "bottom";
+  }
+
+  function attachEdge(id, edge) {
+    const created = tabs(id);
+    if (!tree) {
+      tree = created;
+      return;
+    }
+    const horizontal = edge === "left" || edge === "right";
+    const before = edge === "left" || edge === "top";
+    tree = {
+      type: "split",
+      dir: horizontal ? "row" : "column",
+      ratio: before ? 0.3 : 0.7,
+      first: before ? created : tree,
+      second: before ? tree : created,
+    };
+  }
+
+  function unpin(id) {
+    if (autoHide[id]) return;
+    const edge = edgeOf(id);
+    detach(id);
+    autoHide[id] = edge;
+    flyout = id;
+    flySticky = true;
+    save();
+    render();
+  }
+
+  function pinBack(id, skipRender) {
+    if (!autoHide[id]) return;
+    const edge = autoHide[id];
+    delete autoHide[id];
+    if (flyout === id) {
+      flyout = null;
+      flySticky = false;
+    }
+    attachEdge(id, edge);
+    if (skipRender) return;
+    save();
+    render();
+  }
+
+  function pinAll() {
+    ORDER.forEach((id) => pinBack(id, true));
+    save();
+    render();
+  }
+
+  function renderRails() {
+    dock.querySelectorAll(".dock-rail, .dock-fly, .dock-park").forEach((node) => node.remove());
+    const park = document.createElement("div");
+    park.className = "dock-park";
+    park.hidden = true;
+    const groups = { left: [], right: [], top: [], bottom: [] };
+    ORDER.forEach((id) => {
+      const edge = autoHide[id];
+      if (!edge) return;
+      groups[edge].push(id);
+      if (id !== flyout) {
+        panes[id].hidden = true;
+        park.append(panes[id]);
+      }
+    });
+    dock.append(park);
+    ["left", "right", "top", "bottom"].forEach((edge) => {
+      if (!groups[edge].length) return;
+      const rail = document.createElement("div");
+      rail.className = `dock-rail ${edge}`;
+      groups[edge].forEach((id) => {
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.className = `rail-tab${flyout === id ? " on" : ""}`;
+        tab.dataset.pane = id;
+        tab.textContent = TITLES[id] || id;
+        tab.title = "顯示。圖釘可以把它釘回版面";
+        tab.addEventListener("mouseenter", () => {
+          window.clearTimeout(scheduleFlyClose.timer);
+          window.clearTimeout(openFly.timer);
+          openFly.timer = window.setTimeout(() => openFly(id, false), 250);
+        });
+        tab.addEventListener("mouseleave", () => {
+          window.clearTimeout(openFly.timer);
+          scheduleFlyClose();
+        });
+        tab.addEventListener("click", () => {
+          window.clearTimeout(openFly.timer);
+          if (flyout === id && flySticky) closeFly();
+          else openFly(id, true);
+        });
+        rail.append(tab);
+      });
+      dock.append(rail);
+    });
+    showFly();
+  }
+
+  function openFly(id, sticky) {
+    if (!autoHide[id]) return;
+    if (sticky) flySticky = true;
+    if (!sticky && flySticky && flyout && flyout !== id) return;
+    flyout = id;
+    showFly();
+  }
+
+  function closeFly() {
+    if (!flyout) return;
+    const id = flyout;
+    flyout = null;
+    flySticky = false;
+    const park = dock.querySelector(".dock-park");
+    if (park) {
+      panes[id].hidden = true;
+      park.append(panes[id]);
+    }
+    const fly = dock.querySelector(".dock-fly");
+    if (fly) fly.remove();
+    dock.querySelectorAll(".rail-tab.on").forEach((tab) => tab.classList.remove("on"));
+  }
+
+  function scheduleFlyClose() {
+    window.clearTimeout(scheduleFlyClose.timer);
+    scheduleFlyClose.timer = window.setTimeout(() => {
+      if (!flySticky) closeFly();
+    }, 400);
+  }
+
+  function showFly() {
+    const previous = dock.querySelector(".dock-fly");
+    if (!flyout || !autoHide[flyout]) {
+      if (previous) previous.remove();
+      return;
+    }
+    const fly = previous || document.createElement("div");
+    fly.className = `dock-fly ${autoHide[flyout]}`;
+    panes[flyout].hidden = false;
+    fly.append(panes[flyout]);
+    if (!previous) {
+      fly.addEventListener("mouseenter", () => window.clearTimeout(scheduleFlyClose.timer));
+      fly.addEventListener("mouseleave", scheduleFlyClose);
+      dock.append(fly);
+    }
+    dock.querySelectorAll(".rail-tab").forEach((tab) => {
+      tab.classList.toggle("on", tab.dataset.pane === flyout);
     });
     window.dispatchEvent(new Event("visdev-layout"));
   }
@@ -519,6 +716,9 @@ const VisDevDock = (() => {
     localStorage.removeItem(KEY);
     tree = defaultTree();
     floats = [];
+    autoHide = {};
+    flyout = null;
+    flySticky = false;
     save();
     render();
   }
@@ -529,7 +729,101 @@ const VisDevDock = (() => {
   const resetButton = document.getElementById("btnLayout");
   if (resetButton) resetButton.onclick = reset;
 
-  return { floatPane, dockBack, reset, movePane: (id, targetId, zone) => {
+  let menuOpen = null;
+  let openedByHover = false;
+  function closeMenus() {
+    document.querySelectorAll(".menu-item.open").forEach((item) => {
+      item.classList.remove("open");
+      const drop = item.querySelector(".menu-drop");
+      if (drop) drop.hidden = true;
+    });
+    document.querySelectorAll(".menu-fly").forEach((fly) => { fly.hidden = true; });
+    menuOpen = null;
+    openedByHover = false;
+  }
+  function openMenu(item) {
+    closeMenus();
+    item.classList.add("open");
+    const drop = item.querySelector(".menu-drop");
+    if (drop) drop.hidden = false;
+    menuOpen = item;
+  }
+  document.querySelectorAll(".menubar > .menu-item > button").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const item = button.parentElement;
+      if (item.classList.contains("open")) {
+        if (openedByHover) {
+          openedByHover = false;
+          return;
+        }
+        closeMenus();
+      } else {
+        openMenu(item);
+        openedByHover = false;
+      }
+    });
+    button.addEventListener("mouseenter", () => {
+      if (!menuOpen) return;
+      openMenu(button.parentElement);
+      openedByHover = true;
+    });
+  });
+  const menuBar = document.querySelector(".menubar");
+  if (menuBar) {
+    menuBar.addEventListener("mouseover", (event) => {
+      const sub = event.target.closest(".menu-sub");
+      if (!sub || !sub.parentElement) return;
+      sub.parentElement.querySelectorAll(".menu-sub").forEach((node) => {
+        const fly = node.querySelector(".menu-fly");
+        if (fly) fly.hidden = node !== sub;
+      });
+    });
+    menuBar.addEventListener("click", (event) => {
+      const item = event.target.closest(".menu-drop button");
+      if (!item) return;
+      if (item.dataset.submenu) {
+        const sub = item.parentElement;
+        sub.parentElement.querySelectorAll(".menu-fly").forEach((node) => { node.hidden = true; });
+        const fly = sub.querySelector(".menu-fly");
+        if (fly) fly.hidden = false;
+        return;
+      }
+      if (item.dataset.sample && window.VisDevCommands && window.VisDevCommands.openSample) {
+        window.VisDevCommands.openSample(item.dataset.sample);
+        closeMenus();
+        return;
+      }
+      if (item.dataset.op && window.VisDevCommands && window.VisDevCommands.openOperator) {
+        window.VisDevCommands.openOperator(item.dataset.op);
+        closeMenus();
+        return;
+      }
+      if (item.dataset.cmd && window.VisDevCommands && window.VisDevCommands[item.dataset.cmd]) {
+        window.VisDevCommands[item.dataset.cmd](item);
+      } else if (item.dataset.click) document.getElementById(item.dataset.click)?.click();
+      if (item.dataset.pane) {
+        const id = item.dataset.pane;
+        if (autoHide[id]) pinBack(id);
+        else unpin(id);
+      }
+      if (item.id === "menuPinAll") pinAll();
+      closeMenus();
+    });
+  }
+  document.addEventListener("mousedown", (event) => {
+    if (!event.target.closest(".menubar")) closeMenus();
+    if (!flyout || !flySticky) return;
+    if (event.target.closest(".dock-fly, .rail-tab, .dock-pin")) return;
+    closeFly();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    closeMenus();
+    closeFly();
+  });
+
+  return { floatPane, dockBack, reset, unpin, pinBack, pinAll, isAutoHide: (id) => Boolean(autoHide[id]), movePane: (id, targetId, zone) => {
     const target = findTabs(targetId);
     if (!target) return;
     detach(id);

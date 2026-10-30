@@ -1,6 +1,9 @@
 import sys
 from pathlib import Path
 
+import cv2
+import numpy as np
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -13,6 +16,192 @@ def run_source(source: str) -> Session:
     session = Session(source, ROOT)
     session.run()
     return session
+
+
+def test_hdevelop_batch1():
+    import math
+
+    import numpy as np
+
+    from app.engine.chapters.tuple_ops import EXISTING, HALCON_TUPLE, IMPLEMENTED, SKIPPED
+    from app.engine.objects import Image
+    from app.engine.operators import REGISTRY
+
+    registered = {name for name in REGISTRY if name.startswith("tuple_")}
+    assert HALCON_TUPLE - SKIPPED == registered
+    assert IMPLEMENTED.isdisjoint(EXISTING)
+    assert IMPLEMENTED.isdisjoint(SKIPPED)
+
+    source = """
+T := [10, 20, 30]
+A := T[1]
+tuple_select (T, 0, B)
+tuple_select (T, 1, C)
+tuple_gen_sequence (1, 5, 2, Seq)
+tuple_add (Seq, 10, Plus)
+tuple_sub (Plus, 1, Minus)
+tuple_less_elem (Seq, 4, Less)
+tuple_equal (Seq, [1, 3, 5], Same)
+tuple_find ([4, 8, 4], 4, Found)
+tuple_find ([1, 2], 9, Missing)
+tuple_sort ([3, 1, 2], Sorted)
+tuple_string (12.5, '.1f', Text)
+tuple_regexp_match ('ab12', '[0-9]+', Digits)
+tuple_substr ('HALCON', 0, 2, Head)
+tuple_gen_const (3, 7, Const)
+"""
+    session = run_source(source)
+    assert session.error is None, session.error
+    assert session.vars["A"] == 10
+    assert session.vars["B"] == 10
+    assert session.vars["C"] == 20
+    assert session.vars["Seq"] == [1, 3, 5]
+    assert session.vars["Plus"] == [11, 13, 15]
+    assert session.vars["Minus"] == [10, 12, 14]
+    assert session.vars["Less"] == [1, 1, 0]
+    assert session.vars["Same"] == 1
+    assert session.vars["Found"] == [0, 2]
+    assert session.vars["Missing"] == -1
+    assert session.vars["Sorted"] == [1, 2, 3]
+    assert session.vars["Text"] == "12.5"
+    assert session.vars["Digits"] == "12"
+    assert session.vars["Head"] == "HAL"
+    assert session.vars["Const"] == [7, 7, 7]
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "hdevelop_batch1.hdv").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["First"] == 11
+    gray = sample.vars["Gray"].gray()
+    summed = sample.vars["Sum"].gray()
+    assert np.array_equal(gray, summed)
+    moved = sample.vars["Moved"].gray()
+    assert moved[30, 50] == summed[18, 50]
+    assert sample.vars["Bright"].count() >= 1
+    assert abs(sample.vars["Mat"][2] - 12) < 1e-6
+
+    blank = np.zeros((32, 32), np.uint8)
+    blank[8:24, 8:24] = 180
+    picture = Image(blank)
+    basins, lines = REGISTRY["watersheds"].fn(picture, ctx=None).iconic
+    assert basins.count() >= 1
+    grown = REGISTRY["regiongrowing"].fn(picture, 16, 16, 5, 10, ctx=None).iconic[0]
+    assert grown.count() == 1
+    assert abs(REGISTRY["region_features"].fn(grown, "row1", ctx=None).control[0][0] - 8) <= 1
+
+    identity = REGISTRY["hom_mat2d_identity"].fn(ctx=None).control[0]
+    rotated = REGISTRY["hom_mat2d_rotate"].fn(identity, math.pi / 2, 0, 0, ctx=None).control[0]
+    row, col = REGISTRY["affine_trans_pixel"].fn(rotated, 0, 10, ctx=None).control
+    assert abs(row - (-10)) < 1e-6
+    assert abs(col - 0) < 1e-6
+
+    from app.engine.objects import Region, XLD
+
+    mask = np.zeros((20, 20), np.uint8)
+    mask[2:5, 3:6] = 255
+    moved_region = REGISTRY["move_region"].fn(Region(20, 20, [mask]), 4, 1, ctx=None).iconic[0]
+    assert moved_region.objects[0][6, 4] == 255
+    assert moved_region.objects[0][2, 3] == 0
+    bone = REGISTRY["skeleton"].fn(Region(20, 20, [mask]), ctx=None).iconic[0]
+    assert bone.count() == 1
+    contour = XLD(20, 20, [[[0, 0], [10, 0], [10, 30], [0, 30]]])
+    clipped = REGISTRY["clip_contours_xld"].fn(contour, 0, 0, 20, 20, ctx=None).iconic[0]
+    assert clipped.contours and all(point[1] <= 20 for line in clipped.contours for point in line)
+    rounded = run_source("tuple_round ([-1.5, 1.5], Round)\ntuple_split ('a,b', ',', Parts)\n")
+    assert rounded.error is None, rounded.error
+    assert rounded.vars["Round"] == [-2, 2]
+    assert rounded.vars["Parts"] == ["a", "b"]
+
+
+def _first(value):
+    if isinstance(value, list):
+        assert value, value
+        return value[0]
+    return value
+
+
+def test_hdevelop_batch2():
+    import math
+
+    from app.engine.objects import Image
+    from app.engine.operators import REGISTRY
+
+    assert "'area'" in REGISTRY["select_shape"].control_in[0].choices
+    assert "'contlength'" in REGISTRY["select_contours_xld"].control_in[0].choices
+    assert "'green'" in REGISTRY["dev_set_color"].control_in[0].choices
+    assert "'douglas'" in REGISTRY["gen_polygons_xld"].control_in[0].choices
+    assert "'all'" in REGISTRY["measure_pos"].control_in[3].choices
+    assert "'bilinear'" in REGISTRY["gen_measure_rectangle2"].control_in[7].choices
+    assert "'none'" in REGISTRY["create_scaled_shape_model"].control_in[7].choices
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "hdevelop_batch2.hdv").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    columns = [float(item) for item in sample.vars["ColEdge"]]
+    assert any(abs(item - 40) < 4 for item in columns), columns
+    assert any(abs(item - 100) < 4 for item in columns), columns
+    assert abs(float(_first(sample.vars["Intra"])) - 60) < 8
+    assert abs(float(_first(sample.vars["LineCol"])) - 40) < 5
+    circle = [float(item) for item in sample.vars["CircleParam"]]
+    assert abs(circle[0] - 70) < 6 and abs(circle[1] - 180) < 6 and abs(circle[2] - 28) < 6, circle
+    radii = sorted(float(item) for item in sample.vars["EllipseParam"][3:5])
+    assert abs(radii[0] - 22) < 8 and abs(radii[1] - 36) < 8, sample.vars["EllipseParam"]
+    assert len(sample.vars["Contour"].contours) == 3
+    assert abs(float(_first(sample.vars["FoundRow"])) - 70) < 12
+    assert abs(float(_first(sample.vars["FoundCol"])) - 180) < 12
+    assert 0.85 <= float(_first(sample.vars["FoundScale"])) <= 1.15
+    assert float(_first(sample.vars["FoundScore"])) > 0.4
+    assert sample.vars["Metric"] == "use_polarity"
+    assert float(sample.vars["ScaleMin"]) < 1 < float(sample.vars["ScaleMax"])
+
+    scene_data = np.full((120, 160), 40, np.uint8)
+    cv2.circle(scene_data, (80, 50), 18, 220, -1)
+    scene = Image(scene_data)
+    template = Image(scene_data[30:71, 60:101].copy())
+    model = REGISTRY["create_ncc_model"].fn(template, 1, 0.0, 0.3, 0.15, "use_polarity", ctx=None).control[0]
+    model.native = None
+    levels, start, extent, step, metric = REGISTRY["get_ncc_model_params"].fn(model, ctx=None).control
+    assert levels == 1 and metric == "use_polarity"
+    assert abs(start) < 1e-9 and abs(extent - 0.3) < 1e-9 and abs(step - 0.15) < 1e-6
+    origin_row, origin_col = REGISTRY["get_ncc_model_origin"].fn(model, ctx=None).control
+    rows, cols, _angles, _scores = REGISTRY["find_ncc_model"].fn(
+        scene, model, 0.0, 0.3, 0.5, 1, 0.5, "interpolation", 0, ctx=None
+    ).control
+    assert abs(_first(rows) - (30 + origin_row)) < 2, rows
+    assert abs(_first(cols) - (60 + origin_col)) < 2, cols
+    REGISTRY["set_ncc_model_origin"].fn(model, 0, 0, ctx=None)
+    shifted, _cols, _angles, _scores = REGISTRY["find_ncc_model"].fn(
+        scene, model, 0.0, 0.3, 0.5, 1, 0.5, "interpolation", 0, ctx=None
+    ).control
+    assert abs(_first(shifted) - (_first(rows) - origin_row)) < 1.5
+    REGISTRY["clear_ncc_model"].fn(model, ctx=None)
+    try:
+        REGISTRY["find_ncc_model"].fn(scene, model, 0.0, 0.3, 0.5, 1, 0.5, "none", 0, ctx=None)
+    except RuntimeError as exc:
+        assert "clear" in str(exc)
+    else:
+        raise AssertionError("clear 之後仍可搜尋")
+
+    handle = REGISTRY["gen_measure_rectangle2"].fn(50, 80, 0, 30, 2, 160, 120, "bilinear", ctx=None).control[0]
+    REGISTRY["close_measure"].fn(handle, ctx=None)
+    try:
+        REGISTRY["measure_pos"].fn(scene, handle, 1, 10, "all", "all", ctx=None)
+    except RuntimeError as exc:
+        assert "close_measure" in str(exc)
+    else:
+        raise AssertionError("關閉後仍能量測")
+    from app.engine.operators import _with_origin
+
+    class _Origin:
+        origin_row = 10.0
+        origin_col = 4.0
+        ref_row = 0.0
+        ref_col = 0.0
+        cleared = False
+
+    shifted_row, shifted_col = _with_origin([30.0], [40.0], _Origin(), [2.0])
+    assert shifted_row == [10.0] and shifted_col == [32.0]
+    assert math.isfinite(origin_col)
 
 
 def test_language():
@@ -61,12 +250,21 @@ def test_blob():
 
 
 def test_other_samples():
+    from app.engine.samples_gen import SAMPLE_ORDER
+
     ensure_samples(ROOT)
-    for name in ("roi_check.hdv", "edge_amp.hdv"):
+    titles = []
+    for name in SAMPLE_ORDER:
         source = (ROOT / "samples" / name).read_text(encoding="utf-8")
+        title = next((line.strip().lstrip("*").strip() for line in source.splitlines() if line.strip().startswith("*")), "")
+        assert title, name
+        titles.append(title)
         session = run_source(source)
-        print(name, session.error, "count", session.vars.get("Count"))
         assert session.error is None, (name, session.error)
+        if name == "ocr_read.hdv":
+            found = " ".join(str(item) for item in session.vars["Text"])
+            assert "VISDEV" in found and "168" in found, found
+    assert len(titles) == len(set(titles))
 
 
 def test_shape_match():
@@ -372,6 +570,18 @@ def test_threshold_sub_pix():
     assert any(abs(point[0] - round(point[0])) > 0.02 for point in flat)
     assert ctx.histogram["kind"] == "subpix"
     assert ctx.histogram["threshold"] == 20.5
+    blobs = np.zeros((40, 80), np.uint8)
+    blobs[5:16, 5:16] = 255
+    blobs[5:16, 50:66] = 255
+    split = threshold_sub_pix(Image(blobs), 128, ctx=ctx).iconic[0]
+    assert set(split.groups) == {0, 1}
+    assert ctx.threshold_region.count() == 2
+    hole = np.zeros((40, 40), np.uint8)
+    hole[4:36, 4:36] = 255
+    hole[14:26, 14:26] = 0
+    holed = threshold_sub_pix(Image(hole), 128, ctx=ctx).iconic[0]
+    assert set(holed.groups) == {0}
+    assert len(holed.contours) >= 2
 
 
 def test_binary_region_color():
@@ -507,6 +717,226 @@ def test_move_program_arrow():
     assert session.current_line() is None
 
 
+def test_xld_contour_tools():
+    session = run_source("""
+gen_contour_polygon_xld (Diag, [0, 20], [0, 20])
+fit_line_contour_xld (Diag, Line, Row1, Col1, Row2, Col2)
+gen_contour_polygon_xld (Box, [10, 10, 40, 40, 10], [10, 40, 40, 10, 10])
+gen_region_contour_xld (Box, Region, 'filled')
+area_center (Region, Area, CenterRow, CenterCol)
+segment_contours_xld (Box, Sides, 'lines', 1)
+count_obj (Sides, SideCount)
+select_obj (Sides, FirstSide, 1)
+get_contour_xld (FirstSide, SideRow, SideCol)
+select_contours_xld (Sides, LongSides, 'contlength', 20, 40)
+segment_contours_xld (Box, Corners, 'angle', 0.5)
+gen_contour_polygon_xld (Arc, [60, 100, 140, 100], [100, 140, 100, 60])
+fit_circle_contour_xld (Arc, Circle, CRow, CCol, Radius)
+fit_rectangle2_contour_xld (Box, Rect, RRow, RCol, Phi, Len1, Len2)
+close_contours_xld (Diag, Closed)
+smooth_contours_xld (Box, SmoothBox, 5)
+length_xld (Diag, DiagLength)
+""")
+    assert session.error is None, session.error
+    ends = {(round(session.vars["Row1"][0], 1), round(session.vars["Col1"][0], 1)), (round(session.vars["Row2"][0], 1), round(session.vars["Col2"][0], 1))}
+    assert ends == {(0.0, 0.0), (20.0, 20.0)}
+    assert abs(session.vars["DiagLength"][0] - (20 * 2 ** 0.5)) < 0.2
+    assert 800 < session.vars["Area"][0] < 1100
+    assert session.vars["SideCount"] == 4
+    assert len(session.vars["SideRow"]) == 2
+    assert len(session.vars["LongSides"].contours) == 4
+    assert len(session.vars["Corners"].contours) == 4
+    assert abs(session.vars["CRow"][0] - 100) < 1
+    assert abs(session.vars["CCol"][0] - 100) < 1
+    assert abs(session.vars["Radius"][0] - 40) < 1
+    assert abs(session.vars["Len1"][0] - 15) < 1.5
+    assert session.vars["Closed"].contours[0][0] == session.vars["Closed"].contours[0][-1]
+    assert len(session.vars["SmoothBox"].contours) == 1
+
+    from app.engine.objects import XLD
+    from app.engine.operators import union_adjacent_contours_xld, union_collinear_contours_xld
+
+    gap = XLD(80, 40, [[[0, 0], [10, 0]], [[14, 0], [24, 0]]])
+    joined = union_adjacent_contours_xld(gap, 8, 0.5, ctx=None).iconic[0]
+    assert len(joined.contours) == 1
+    assert abs(joined.contours[0][0][0] - 0) < 0.1
+    assert abs(joined.contours[0][-1][0] - 24) < 0.1
+    bent = XLD(40, 40, [[[0, 0], [10, 0]], [[12, 0], [12, 10]]])
+    stayed = union_collinear_contours_xld(bent, 8, 0.3, ctx=None).iconic[0]
+    assert len(stayed.contours) == 2
+
+
+def test_ocr_catalog():
+    from app.engine.objects import Image
+    from app.engine.ocr import catalog, method_choices, normalize_method, read_text
+
+    info = catalog()
+    keys = [item.key for item in info.engines]
+    assert keys[0] == "auto"
+    assert len(keys) == len(set(keys))
+    for name in (
+        "rapid", "paddle", "easyocr", "windows", "tesseract",
+        "doctr", "surya", "cnocr", "trocr", "got", "manga", "ddddocr", "kerasocr", "mmocr",
+        "azure", "google", "textract", "baidu", "tencent", "aliyun", "huawei", "xfyun", "youdao",
+        "mathpix", "ocrspace", "abbyy",
+    ):
+        assert name in keys, name
+    assert info.best() == "rapid"
+    assert all(item.purpose for item in info.engines)
+    assert normalize_method("PP-OCR") == "rapid"
+    assert normalize_method("iflytek") == "xfyun"
+    choices = method_choices()
+    assert choices[0] == "'auto'" and "'azure'" in choices and "'paddle'" in choices
+    image = Image(np.zeros((16, 16, 3), np.uint8))
+    try:
+        read_text(image, "azure")
+        raise AssertionError("沒有金鑰時不該連到雲端")
+    except RuntimeError as exc:
+        assert "還沒裝好" in str(exc)
+
+
+def test_ocr_page():
+    image = np.full((160, 640, 3), 255, np.uint8)
+    cv2.putText(image, "VISDEV OCR 168", (24, 96), cv2.FONT_HERSHEY_SIMPLEX, 1.6, (0, 0, 0), 3, cv2.LINE_AA)
+    path = ROOT / "workspace" / "_ocr_page.png"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(path), image)
+    session = run_source("read_image (Image, 'workspace/_ocr_page.png')\nocr_find (Image, Words, 'auto', Text, Row, Column, Score)\n")
+    assert session.error is None, session.error
+    found = " ".join(str(item) for item in session.vars["Text"])
+    assert "VISDEV" in found and "168" in found, found
+    assert len(session.vars["Words"].contours) == len(session.vars["Text"])
+    outside = run_source("read_image (Image, 'workspace/_ocr_page.png')\nocr_find (Image, Words, 'auto', 0, 0, 20, 20, Text, Row, Column, Score)\n")
+    path.unlink(missing_ok=True)
+    assert outside.error is None, outside.error
+    missed = " ".join(str(item) for item in outside.vars["Text"])
+    assert "VISDEV" not in missed and "168" not in missed, missed
+
+
+def test_gauge():
+    from app.engine.gauge import measure_point
+    from app.engine.objects import XLD
+    from app.engine.samples_gen import GAUGE_PROGRAM, write_gauge
+
+    gray = np.full((30, 180), 20, np.uint8)
+    gray[:, 100:] = 200
+    hits = measure_point(gray, None, 15, 40, 15, 160, 1, 8, "all", "best")
+    assert len(hits) == 1
+    assert abs(hits[0].column - 99.5) < 0.45, hits[0]
+    try:
+        measure_point(gray, None, 15, 40, 15, 160, 1, 8, "negative", "best")
+        raise AssertionError("由亮到暗不該出現在這段剖面上")
+    except ValueError as exc:
+        assert "找不到邊緣" in str(exc)
+
+    write_gauge(ROOT / "samples" / "gauge.png")
+    session = run_source(GAUGE_PROGRAM)
+    assert session.error is None, session.error
+    problems = []
+
+    def num(value):
+        if isinstance(value, (list, tuple)):
+            assert len(value) == 1, value
+            value = value[0]
+        return float(value)
+
+    def near(name, value, expected, tol):
+        actual = num(value)
+        if abs(actual - expected) > tol:
+            problems.append(f"{name}: {actual}，預期 {expected} ± {tol}")
+
+    near("點的行", session.vars["PCol"], 107.5, 0.6)
+    near("圓心列", session.vars["CRow"], 110, 0.8)
+    near("圓心行", session.vars["CCol"], 150, 0.8)
+    near("半徑", session.vars["CRad"], 42.25, 0.8)
+    near("直線列1", session.vars["LRow1"], 199.5, 0.6)
+    near("直線列2", session.vars["LRow2"], 199.5, 0.6)
+    near("直線角", session.vars["LAngle"], 0, 0.04)
+    near("矩形列", session.vars["RRow"], 244.5, 0.8)
+    near("矩形行", session.vars["RCol"], 429.5, 0.8)
+    near("矩形角", session.vars["RPhi"], 0, 0.04)
+    near("矩形半長", session.vars["RL1"], 70, 0.8)
+    near("矩形半寬", session.vars["RL2"], 45, 0.8)
+    near("扇形列", session.vars["WRow"], 340, 1.5)
+    near("扇形行", session.vars["WCol"], 170, 1.5)
+    near("內半徑", session.vars["WR1"], 24, 1.2)
+    near("外半徑", session.vars["WR2"], 58, 1.2)
+    near("扇形起角", session.vars["WStart"], 0.35, 0.08)
+    near("扇形張角", session.vars["WExtent"], 1.8, 0.1)
+    rows = [float(item) for item in session.vars["GRows"]]
+    cols = [float(item) for item in session.vars["GCols"]]
+    expect = [(199.5, 359.5), (199.5, 499.5), (289.5, 499.5), (289.5, 359.5)]
+    if len(rows) != 4 or len(cols) != 4:
+        problems.append(f"多邊形頂點數 {len(rows)}")
+    else:
+        for index, (er, ec) in enumerate(expect):
+            if abs(rows[index] - er) > 1.2 or abs(cols[index] - ec) > 1.2:
+                problems.append(f"頂點{index + 1}: ({rows[index]}, {cols[index]})，預期 ({er}, {ec})")
+    near("兩點距離", session.vars["Dist"], 5, 1e-6)
+    near("點線距離", session.vars["DistLine"], 10, 1e-6)
+    near("點圓距離", session.vars["DistCircle"], 0, 1e-6)
+    near("直角", session.vars["RightAngle"], np.pi / 2, 1e-6)
+    near("交點列", session.vars["IRow"], 20, 1e-6)
+    near("交點行", session.vars["ICol"], 10, 1e-6)
+    for name in ("Mark", "Line", "Circle", "Rect", "Wedge", "Poly"):
+        shape = session.vars[name]
+        if not isinstance(shape, XLD) or not shape.contours:
+            problems.append(f"{name} 沒有輪廓")
+    assert session.vars["CUsed"] >= 12
+    assert session.vars["LUsed"] >= 8
+    assert not problems, "；".join(problems)
+    short = run_source(
+        "read_image (Image, 'samples/gauge.png')\n"
+        "gauge_point (Image, Mark2, 110, 80, 110, 220, PRow2, PCol2, Amp2, Dist2)\n"
+    )
+    assert short.error is None, short.error
+    picked = float(short.vars["PCol2"][0] if isinstance(short.vars["PCol2"], list) else short.vars["PCol2"])
+    assert abs(picked - 107.5) < 0.6 or abs(picked - 192.5) < 0.6, picked
+    parallel = run_source("intersection_ll (0, 0, 0, 10, 2, 0, 2, 10, Row, Column)\n")
+    assert parallel.error and "平行" in parallel.error
+
+
+def test_breakpoint_stops_and_times_lines():
+    source = "a := 1\n* note\nb := 2\nc := a + b\n"
+    session = Session(source, ROOT)
+    session.breakpoints = {3}
+    session.run()
+    assert session.paused == "breakpoint"
+    assert session.current_line() == 3
+    assert session.vars["a"] == 1
+    assert "b" not in session.vars
+    first = {item["line"]: item for item in session.public_state()["lineTimes"]}
+    assert first[1]["count"] == 1
+    assert first[1]["ms"] >= 0
+    assert 3 not in first
+    session.run()
+    assert session.paused is None
+    assert session.done
+    assert session.vars["c"] == 3
+    assert session.current_line() == 4
+    timed = {item["line"]: item for item in session.public_state()["lineTimes"]}
+    assert timed[3]["count"] == 1
+    assert timed[4]["count"] == 1
+    assert 2 not in timed
+    commented = Session(source, ROOT)
+    commented.breakpoints = {2}
+    commented.run()
+    assert commented.paused == "breakpoint"
+    assert commented.current_line() == 3
+    assert "b" not in commented.vars
+    plain = Session("a := 1\nb := 2\n", ROOT)
+    plain.run()
+    assert plain.done
+    assert plain.current_line() == 2
+    loop = Session("for i := 1 to 4 by 1\nk := i\nendfor\n", ROOT)
+    loop.run()
+    counts = {item["line"]: item["count"] for item in loop.public_state()["lineTimes"]}
+    assert counts[2] == 4
+    plain.reset()
+    assert plain.public_state()["lineTimes"] == []
+    assert plain.current_line() == 1
+
+
 def test_parse_error():
     try:
         parse_program("not_an_operator (A, B)\n")
@@ -531,5 +961,9 @@ if __name__ == "__main__":
     test_connection_distance()
     test_connection_halcon_and_opencv()
     test_move_program_arrow()
+    test_xld_contour_tools()
+    test_ocr_page()
+    test_gauge()
+    test_breakpoint_stops_and_times_lines()
     test_parse_error()
     print("all passed")

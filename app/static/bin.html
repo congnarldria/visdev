@@ -16,43 +16,62 @@
       color: #d5deea;
       font: 13px/1.4 "Segoe UI", "Microsoft JhengHei", sans-serif;
     }
-    header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
-      border-bottom: 1px solid #2a3140;
-    }
-    header strong { font-size: 14px; }
-    header span { color: #8b98ab; font-size: 12px; }
-    .stage { flex: 1; min-height: 0; position: relative; background: #101216; }
-    canvas { width: 100%; height: 100%; display: block; }
-    footer {
+    header, footer, .viewbar {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
       align-items: center;
-      padding: 8px 10px;
-      border-top: 1px solid #2a3140;
+      gap: 6px;
+      padding: 8px 12px;
+      background: #1a1e25;
     }
-    input[type="range"] { flex: 1; min-width: 120px; }
-    input[type="number"] {
-      width: 64px;
-      height: 26px;
-      background: #101216;
-      color: inherit;
-      border: 1px solid #2a3140;
-      padding: 0 4px;
-    }
+    header { border-bottom: 1px solid #2c3340; }
+    header span, #note, .viewbar span { color: #8b98ab; }
+    .viewbar { padding: 4px 10px; background: #161a20; border-bottom: 1px solid #2c3340; }
+    button, input, label { font: inherit; color: inherit; }
     button {
-      height: 28px;
-      padding: 0 12px;
-      border: 1px solid #3d8bff;
-      background: #1d3d66;
-      color: #fff;
+      height: 26px;
+      padding: 0 8px;
+      border: 1px solid #3a4250;
+      background: #232831;
+      color: #d5deea;
       cursor: pointer;
     }
-    #note { color: #8b98ab; font-size: 12px; }
+    button.on { background: #1d3d66; border-color: #3d8bff; color: #fff; }
+    label { display: flex; align-items: center; gap: 4px; color: #8b98ab; }
+    input[type="number"] {
+      width: 72px;
+      height: 26px;
+      padding: 0 6px;
+      background: #101216;
+      border: 1px solid #3a4250;
+      color: #d5deea;
+    }
+    .stage { position: relative; flex: 1; min-height: 180px; background: #101216; }
+    canvas#view { width: 100%; height: 100%; display: block; }
+    .mouse-mode { display: flex; }
+    .mouse-mode button { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; }
+    .mouse-mode button + button { margin-left: -1px; }
+    .mouse-mode button svg { display: block; }
+    .mouse-mode button.on { background: #1d4e86; border-color: #3d8bff; color: #fff; }
+    canvas#view.mode-select { cursor: default; }
+    canvas#view.mode-pan { cursor: grab; }
+    canvas#view.mode-pan.panning { cursor: grabbing; }
+    canvas#view.mode-zoom { cursor: zoom-in; }
+    #probe {
+      position: absolute;
+      z-index: 3;
+      pointer-events: none;
+      padding: 4px 8px;
+      background: rgba(16, 18, 22, 0.9);
+      border: 1px solid #3d4a60;
+      color: #f4f7fb;
+      font: 12px/1.45 Consolas, "Cascadia Mono", monospace;
+      white-space: nowrap;
+    }
+    #probe[hidden] { display: none; }
+    .histo { padding: 8px 12px 4px; background: #161a20; border-top: 1px solid #2c3340; }
+    #bars { width: 100%; height: 72px; display: block; cursor: ew-resize; background: #101216; border-radius: 4px; }
+    footer { border-top: 1px solid #2c3340; }
     #errDialog[hidden] { display: none !important; }
     #errDialog { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.48); }
   </style>
@@ -60,9 +79,32 @@
 <body>
   <header>
     <strong>次像素二值化</strong>
-    <span>這個視窗不擋住主視窗</span>
+    <span>八連通自動拆成一個一個物件。點到的那一個才畫白色虛線。</span>
   </header>
-  <div class="stage"><canvas id="view"></canvas></div>
+  <div class="viewbar">
+    <div class="mouse-mode" role="group" aria-label="滑鼠型態">
+      <button type="button" data-mode="select" title="箭頭點選區域或輪廓" aria-label="點選"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M2.2 1.2 4 13.2l2.6-2.7 2.5 4.1 1.7-1.1-2.5-4.1h4.2L2.2 1.2z"/></svg></button>
+      <button type="button" data-mode="pan" title="手抓移動畫面" aria-label="手抓移動"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6 7.1V3.2a.8.8 0 0 1 1.6 0v3.3h.3V2.1a.8.8 0 0 1 1.6 0v4.4h.3V3.4a.8.8 0 0 1 1.6 0v3.3h.3V5a.8.8 0 0 1 1.6 0v5.1c0 2-1.5 3.4-3.6 3.4H7.8c-1.4 0-2.4-.6-3-1.6L2.8 9.4a.85.85 0 0 1 1.4-.9l1.2 1.5V7.1H6z"/></svg></button>
+      <button type="button" data-mode="zoom" title="拉一個範圍放大。點一下也會放大" aria-label="放大"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path stroke="currentColor" stroke-width="1.5" d="M9.8 9.8 13.5 13.5M6.8 4.8v4M4.8 6.8h4"/></svg></button>
+    </div>
+    <button id="btnFit" type="button" title="符合視窗">符合</button>
+    <button id="btnOne" type="button" title="原始像素">1:1</button>
+    <button id="btnOut" type="button" title="縮小">−</button>
+    <button id="btnIn" type="button" title="放大">+</button>
+    <label>線寬 <input id="contourWidth" type="number" min="1" max="10" step="1" value="2" title="輪廓線寬 1 到 10，單位是螢幕像素"></label>
+    <span id="zoom"></span>
+    <span>滾輪縮放。拖統計圖看結果，放開後主視窗重跑。</span>
+  </div>
+  <div class="stage">
+    <canvas id="view" class="mode-select"></canvas>
+    <div id="probe" hidden></div>
+  </div>
+  <div class="histo"><canvas id="bars"></canvas></div>
+  <footer>
+    <label>門檻 <input id="level" type="number" min="0" max="255" step="1" value="128"></label>
+    <button id="apply" type="button">套用到程式</button>
+    <span id="note">區域與輪廓會同時留在主視窗。</span>
+  </footer>
   <div id="errDialog" hidden>
     <div style="width:min(420px,calc(100vw - 32px));background:#1c2028;border:1px solid #ff5d4a;padding:16px">
       <strong style="color:#ffb0a6">錯誤</strong>
@@ -70,62 +112,169 @@
       <div style="text-align:right"><button id="errOk" type="button">確定</button></div>
     </div>
   </div>
-  <footer>
-    <label>門檻 <input id="level" type="number" min="0" max="255" step="1" value="128"></label>
-    <input id="slider" type="range" min="0" max="255" value="128">
-    <button id="apply" type="button">套用到程式</button>
-    <span id="note">拖曳門檻看輪廓，套用後主視窗會重跑。</span>
-  </footer>
   <script>
     const params = new URLSearchParams(location.search);
-    const sessionId = params.get("id") || "";
+    let sessionId = params.get("id") || "";
+    const regionName = params.get("region") || "Region";
+    const contourName = params.get("contour") || "Border";
     const colors = ["#ff3b30","#00e05a","#3d8bff","#ffe14a","#2ce6e6","#f04ad4","#ff8a1e","#c6ff4a","#7aa2ff","#ff6a9a","#46f0c8","#e6c14a","#b388ff","#ff7a3c","#9be7ff","#ffffff"];
-    const canvas = document.getElementById("view");
-    const ctx = canvas.getContext("2d");
+    const view = document.getElementById("view");
+    const ctx = view.getContext("2d");
+    const bars = document.getElementById("bars");
     const levelInput = document.getElementById("level");
-    const slider = document.getElementById("slider");
     const note = document.getElementById("note");
+    const probe = document.getElementById("probe");
+    const channel = new BroadcastChannel("visdev-bin");
+    const featureChannel = new BroadcastChannel("visdev-features");
+    const cam = { x: 0, y: 0, scale: 1, user: false };
     let photo = null;
+    let regionImg = null;
     let contours = [];
+    let contourGroups = [];
+    let regionObjects = [];
+    let bins = [];
+    let total = 0;
+    let area = 0;
     let size = { width: 1, height: 1 };
     let token = 0;
-    const channel = new BroadcastChannel("visdev-bin");
+    let panning = null;
+    let zoomBox = null;
+    let mouseMode = localStorage.getItem("visdev.mouseMode");
+    if (mouseMode !== "select" && mouseMode !== "pan" && mouseMode !== "zoom") mouseMode = "pan";
+    let histoDrag = false;
+    let pick = null;
+    let sampler = null;
+    let samplerPen = null;
+    const saved = localStorage.getItem("visdev.regionColor");
+    const regionColor = saved && /^#[0-9a-fA-F]{6}$/.test(saved) ? saved : "#ff3b30";
+    const startLevel = Number(params.get("level"));
+    if (Number.isFinite(startLevel)) levelInput.value = String(Math.max(0, Math.min(255, Math.round(startLevel))));
 
-    function setLevel(value, fromSlider) {
-      const next = Math.max(0, Math.min(255, Math.round(Number(value) || 0)));
-      levelInput.value = String(next);
-      slider.value = String(next);
-      if (!fromSlider) slider.value = String(next);
-      refresh(false);
+    function setMode(mode) {
+      mouseMode = mode === "select" || mode === "zoom" ? mode : "pan";
+      localStorage.setItem("visdev.mouseMode", mouseMode);
+      view.classList.remove("mode-select", "mode-pan", "mode-zoom", "panning");
+      view.classList.add(`mode-${mouseMode}`);
+      document.querySelectorAll("button[data-mode]").forEach((button) => {
+        button.classList.toggle("on", button.dataset.mode === mouseMode);
+      });
     }
 
-    function fit() {
-      const rect = canvas.getBoundingClientRect();
+    function pictureSize() {
+      return size.width > 1 ? size : null;
+    }
+
+    function resizeView() {
+      const rect = view.parentElement.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.max(1, Math.round(rect.width * dpr));
-      canvas.height = Math.max(1, Math.round(rect.height * dpr));
-      draw();
+      view.width = Math.max(1, Math.round(rect.width * dpr));
+      view.height = Math.max(1, Math.round(rect.height * dpr));
+      return rect;
     }
 
-    function draw() {
-      const width = canvas.width;
-      const height = canvas.height;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    function paintView() {
+      const rect = resizeView();
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = "#101216";
-      ctx.fillRect(0, 0, width, height);
-      const scale = Math.min(width / size.width, height / size.height);
-      const ox = (width - size.width * scale) / 2;
-      const oy = (height - size.height * scale) / 2;
-      ctx.setTransform(scale, 0, 0, scale, ox, oy);
-      if (photo) ctx.drawImage(photo, 0, 0, size.width, size.height);
-      ctx.lineWidth = 1.5 / scale;
+      ctx.fillRect(0, 0, rect.width, rect.height);
+      ctx.save();
+      ctx.translate(cam.x, cam.y);
+      ctx.scale(cam.scale, cam.scale);
+      ctx.imageSmoothingEnabled = cam.scale < 3;
+      if (photo) ctx.drawImage(photo, 0, 0);
+      if (regionImg) ctx.drawImage(regionImg, 0, 0);
       contours.forEach((line, index) => {
         if (!line || line.length < 2) return;
+        const objectIndex = contourGroups[index] ?? index;
         ctx.beginPath();
-        ctx.strokeStyle = colors[index % colors.length];
+        ctx.strokeStyle = colors[objectIndex % colors.length];
+        ctx.lineWidth = contourWidth() / cam.scale;
         ctx.moveTo(line[0][0], line[0][1]);
         for (let i = 1; i < line.length; i += 1) ctx.lineTo(line[i][0], line[i][1]);
         ctx.stroke();
+      });
+      if (pick && pick.kind === "xld") {
+        const lines = contours.filter((_, index) => (contourGroups[index] ?? index) === pick.index);
+        strokeDashed(lines, false);
+      } else if (pick && pick.kind === "region" && regionObjects[pick.index]) {
+        strokeDashed(regionObjects[pick.index], true);
+      }
+      ctx.restore();
+      if (zoomBox) {
+        ctx.strokeStyle = "#ffe14a";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(Math.min(zoomBox.x, zoomBox.x2), Math.min(zoomBox.y, zoomBox.y2), Math.abs(zoomBox.x2 - zoomBox.x), Math.abs(zoomBox.y2 - zoomBox.y));
+      }
+      document.getElementById("zoom").textContent = pictureSize() ? `${Math.round(cam.scale * 100)}%` : "";
+    }
+
+    function fitView(markUser) {
+      const rect = view.parentElement.getBoundingClientRect();
+      if (!pictureSize() || rect.width < 2) {
+        cam.user = false;
+        paintView();
+        return;
+      }
+      const pad = 12;
+      cam.scale = Math.max(0.05, Math.min((rect.width - pad * 2) / size.width, (rect.height - pad * 2) / size.height));
+      cam.x = (rect.width - size.width * cam.scale) / 2;
+      cam.y = (rect.height - size.height * cam.scale) / 2;
+      cam.user = Boolean(markUser);
+      paintView();
+    }
+
+    function zoomAt(factor, cx, cy) {
+      const next = Math.min(48, Math.max(0.05, cam.scale * factor));
+      const k = next / (cam.scale || 1);
+      cam.x = cx - (cx - cam.x) * k;
+      cam.y = cy - (cy - cam.y) * k;
+      cam.scale = next;
+      cam.user = true;
+      paintView();
+    }
+
+    function imagePoint(event) {
+      const rect = view.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      return { x, y, col: (x - cam.x) / cam.scale, row: (y - cam.y) / cam.scale };
+    }
+
+    function paintHisto() {
+      const width = bars.clientWidth || 300;
+      const height = 72;
+      const dpr = window.devicePixelRatio || 1;
+      bars.width = Math.round(width * dpr);
+      bars.height = Math.round(height * dpr);
+      const pen = bars.getContext("2d");
+      pen.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pen.clearRect(0, 0, width, height);
+      if (!bins.length) return;
+      let peak = 1;
+      bins.forEach((value) => { peak = Math.max(peak, value); });
+      const level = Number(levelInput.value);
+      const slot = width / 256;
+      for (let i = 0; i < 256; i += 1) {
+        pen.fillStyle = i >= level ? "#3d8bff" : "#3a4250";
+        const bar = (bins[i] / peak) * (height - 6);
+        pen.fillRect(i * slot, height - bar, Math.max(slot, 1), bar);
+      }
+      pen.strokeStyle = "#ffe14a";
+      pen.lineWidth = 2;
+      pen.beginPath();
+      const x = ((level + 0.5) / 256) * width;
+      pen.moveTo(x, 0);
+      pen.lineTo(x, height);
+      pen.stroke();
+    }
+
+    function loadImg(src) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("影像解碼失敗"));
+        image.src = src;
       });
     }
 
@@ -138,7 +287,12 @@
       const res = await fetch("/api/subpix-preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: sessionId, threshold: Number(levelInput.value), image: withImage }),
+        body: JSON.stringify({
+          id: sessionId,
+          threshold: Number(levelInput.value),
+          image: withImage || !photo,
+          color: regionColor,
+        }),
       });
       const data = await res.json();
       if (mine !== token) return;
@@ -154,34 +308,308 @@
         document.getElementById("errDialog").hidden = false;
         return;
       }
+      const previous = `${size.width}x${size.height}`;
       size = { width: data.width, height: data.height };
       contours = data.contours || [];
-      note.textContent = `${contours.length} 條次像素輪廓 · 門檻 ${data.threshold}`;
+      contourGroups = data.groups || [];
+      regionObjects = data.regionObjects || [];
+      bins = data.bins || [];
+      total = data.total || 0;
+      area = data.area || 0;
+      const pct = total ? (100 * area) / total : 0;
+      const count = data.count != null ? data.count : new Set(contourGroups).size;
+      note.textContent = `區域 ${area} px · ${pct.toFixed(1)}% · 物件 ${count} 個 · 輪廓 ${contours.length} 條 · 門檻 ${data.threshold}。八連通分開，點一個只框那一個。`;
       if (data.image) {
-        photo = new Image();
-        photo.onload = draw;
-        photo.src = data.image;
-      } else {
-        draw();
+        photo = await loadImg(data.image);
+        sampler = document.createElement("canvas");
+        sampler.width = photo.width;
+        sampler.height = photo.height;
+        samplerPen = sampler.getContext("2d", { willReadFrequently: true });
+        samplerPen.drawImage(photo, 0, 0);
       }
+      regionImg = data.region ? await loadImg(data.region) : null;
+      paintHisto();
+      if (!cam.user || previous !== `${size.width}x${size.height}`) fitView(false);
+      else paintView();
     }
 
     function apply() {
       const threshold = Number(levelInput.value);
-      const message = { type: "apply", threshold };
+      const message = { type: "apply", threshold, at: Date.now() };
       channel.postMessage(message);
-      localStorage.setItem("visdev.subpixApply", JSON.stringify({ ...message, at: Date.now() }));
-      note.textContent = "已套用到主視窗。這個視窗可以留著繼續調。";
+      localStorage.setItem("visdev.subpixApply", JSON.stringify(message));
+      note.textContent = "已套用。主視窗同時保留區域和輪廓。";
     }
 
-    slider.addEventListener("input", () => setLevel(slider.value, true));
-    levelInput.addEventListener("change", () => setLevel(levelInput.value, false));
+    function pointInPoly(x, y, points) {
+      let inside = false;
+      for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
+        const xi = points[i][0];
+        const yi = points[i][1];
+        const xj = points[j][0];
+        const yj = points[j][1];
+        const cross = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-9) + xi);
+        if (cross) inside = !inside;
+      }
+      return inside;
+    }
+
+    function lineDistance(x, y, points) {
+      let best = Infinity;
+      for (let i = 1; i < points.length; i += 1) {
+        const ax = points[i - 1][0];
+        const ay = points[i - 1][1];
+        const bx = points[i][0];
+        const by = points[i][1];
+        const dx = bx - ax;
+        const dy = by - ay;
+        const len2 = dx * dx + dy * dy || 1;
+        let t = ((x - ax) * dx + (y - ay) * dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+        best = Math.min(best, Math.hypot(x - (ax + t * dx), y - (ay + t * dy)));
+      }
+      return best;
+    }
+
+    function publishPick(kind, index) {
+      pick = { kind, index };
+      const payload = {
+        type: "pick",
+        id: sessionId,
+        name: kind === "xld" ? contourName : "__preview__",
+        index,
+        kind,
+        at: Date.now(),
+      };
+      localStorage.setItem("visdev.featurePick", JSON.stringify(payload));
+      featureChannel.postMessage(payload);
+      note.textContent = kind === "xld"
+        ? `已點選輪廓 ${contourName} #${index + 1}。白色虛線只框這一個物件。`
+        : `已點選區域 #${index + 1}。白色虛線只框這一個物件。`;
+      paintView();
+    }
+
+    function polygonArea(points) {
+      let areaSum = 0;
+      for (let p = 0, q = points.length - 1; p < points.length; q = p, p += 1) {
+        areaSum += points[q][0] * points[p][1] - points[p][0] * points[q][1];
+      }
+      return Math.abs(areaSum);
+    }
+
+    function pickAt(col, row) {
+      let xldHit = null;
+      let xldDist = Infinity;
+      const limit = 12 / cam.scale;
+      contours.forEach((line, index) => {
+        const dist = lineDistance(col, row, line);
+        if (dist <= limit && dist < xldDist) {
+          xldDist = dist;
+          xldHit = contourGroups[index] ?? index;
+        }
+      });
+      if (xldHit != null) {
+        publishPick("xld", xldHit);
+        return;
+      }
+      let regionHit = null;
+      let regionArea = Infinity;
+      regionObjects.forEach((polys, index) => {
+        (polys || []).forEach((line) => {
+          if (!pointInPoly(col, row, line)) return;
+          const areaSum = polygonArea(line);
+          if (areaSum < regionArea) {
+            regionArea = areaSum;
+            regionHit = index;
+          }
+        });
+      });
+      if (regionHit != null) {
+        publishPick("region", regionHit);
+        return;
+      }
+      pick = null;
+      note.textContent = "沒有點到。點一條輪廓或區域裡面，白色虛線只框那一個物件。";
+      paintView();
+    }
+
+    function strokeDashed(lines, closed) {
+      const draw = () => {
+        lines.forEach((line) => {
+          if (!line || line.length < 2) return;
+          ctx.beginPath();
+          ctx.moveTo(line[0][0], line[0][1]);
+          for (let i = 1; i < line.length; i += 1) ctx.lineTo(line[i][0], line[i][1]);
+          if (closed) ctx.closePath();
+          ctx.stroke();
+        });
+      };
+      ctx.save();
+      ctx.setLineDash([7 / cam.scale, 5 / cam.scale]);
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(0,0,0,0.9)";
+      ctx.lineWidth = 4 / cam.scale;
+      draw();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2 / cam.scale;
+      draw();
+      ctx.restore();
+    }
+
+    function showProbe(point) {
+      const col = Math.floor(point.col);
+      const row = Math.floor(point.row);
+      let color = "R —  G —  B —";
+      if (photo && samplerPen && col >= 0 && row >= 0 && col < photo.width && row < photo.height) {
+        const pixel = samplerPen.getImageData(col, row, 1, 1).data;
+        color = `R ${pixel[0]}  G ${pixel[1]}  B ${pixel[2]}`;
+      }
+      probe.innerHTML = `Row ${point.row.toFixed(1)} &nbsp; Column ${point.col.toFixed(1)}<br>${color}`;
+      probe.hidden = false;
+      let left = point.x + 16;
+      let top = point.y + 18;
+      if (left + probe.offsetWidth + 8 > view.clientWidth) left = point.x - probe.offsetWidth - 16;
+      if (top + probe.offsetHeight + 8 > view.clientHeight) top = point.y - probe.offsetHeight - 16;
+      probe.style.left = `${Math.max(4, left)}px`;
+      probe.style.top = `${Math.max(4, top)}px`;
+    }
+
+    function contourWidth() {
+      const raw = Number(localStorage.getItem("visdev.contourWidth"));
+      const value = Number.isFinite(raw) ? raw : 2;
+      return Math.min(10, Math.max(1, Math.round(value)));
+    }
+
+    const contourWidthInput = document.getElementById("contourWidth");
+    contourWidthInput.value = String(contourWidth());
+    contourWidthInput.addEventListener("change", () => {
+      const value = Math.min(10, Math.max(1, Math.round(Number(contourWidthInput.value) || 1)));
+      contourWidthInput.value = String(value);
+      localStorage.setItem("visdev.contourWidth", String(value));
+      paintView();
+    });
+    window.addEventListener("storage", (event) => {
+      if (event.key !== "visdev.contourWidth" || document.activeElement === contourWidthInput) return;
+      contourWidthInput.value = String(contourWidth());
+      paintView();
+    });
+    levelInput.addEventListener("change", () => {
+      levelInput.value = String(Math.max(0, Math.min(255, Math.round(Number(levelInput.value) || 0))));
+      refresh(false);
+    });
     document.getElementById("errOk").onclick = () => { document.getElementById("errDialog").hidden = true; };
     document.getElementById("apply").addEventListener("click", apply);
-    window.addEventListener("resize", fit);
-    const initial = Number(params.get("level"));
-    if (Number.isFinite(initial)) setLevel(initial, false);
-    fit();
+    document.getElementById("btnFit").onclick = () => fitView(false);
+    document.getElementById("btnOne").onclick = () => {
+      const rect = view.parentElement.getBoundingClientRect();
+      cam.scale = 1;
+      cam.x = (rect.width - size.width) / 2;
+      cam.y = (rect.height - size.height) / 2;
+      cam.user = true;
+      paintView();
+    };
+    document.getElementById("btnIn").onclick = () => zoomAt(1.25, view.clientWidth / 2, view.clientHeight / 2);
+    document.getElementById("btnOut").onclick = () => zoomAt(1 / 1.25, view.clientWidth / 2, view.clientHeight / 2);
+    document.querySelectorAll("button[data-mode]").forEach((button) => {
+      button.onclick = () => setMode(button.dataset.mode);
+    });
+    setMode(mouseMode);
+    view.addEventListener("wheel", (event) => {
+      if (!pictureSize()) return;
+      event.preventDefault();
+      const rect = view.getBoundingClientRect();
+      zoomAt(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - rect.left, event.clientY - rect.top);
+    }, { passive: false });
+    view.addEventListener("mousedown", (event) => {
+      if (event.button !== 0 || !pictureSize()) return;
+      const point = imagePoint(event);
+      panning = { x: point.x, y: point.y, camX: cam.x, camY: cam.y, col: point.col, row: point.row, mode: mouseMode };
+      if (mouseMode === "pan") view.classList.add("panning");
+    });
+    window.addEventListener("mouseup", (event) => {
+      const start = panning;
+      panning = null;
+      zoomBox = null;
+      view.classList.remove("panning");
+      if (histoDrag) {
+        histoDrag = false;
+        apply();
+        return;
+      }
+      if (!start) return;
+      const point = imagePoint(event);
+      const moved = Math.hypot(point.x - start.x, point.y - start.y) > 4;
+      if (start.mode !== "zoom" && !moved) pickAt(start.col, start.row);
+      if (start.mode === "zoom") {
+        if (moved) {
+          const left = Math.min(start.col, point.col);
+          const top = Math.min(start.row, point.row);
+          const width = Math.max(1, Math.abs(point.col - start.col));
+          const height = Math.max(1, Math.abs(point.row - start.row));
+          const rect = view.getBoundingClientRect();
+          cam.scale = Math.min(48, Math.max(0.05, Math.min((rect.width - 16) / width, (rect.height - 16) / height)));
+          cam.x = (rect.width - width * cam.scale) / 2 - left * cam.scale;
+          cam.y = (rect.height - height * cam.scale) / 2 - top * cam.scale;
+          cam.user = true;
+        } else {
+          zoomAt(1.4, point.x, point.y);
+        }
+        paintView();
+      }
+    });
+    view.addEventListener("mousemove", (event) => {
+      const point = imagePoint(event);
+      if (panning && panning.mode === "pan") {
+        cam.x = panning.camX + point.x - panning.x;
+        cam.y = panning.camY + point.y - panning.y;
+        cam.user = true;
+        paintView();
+      } else if (panning && panning.mode === "zoom") {
+        zoomBox = { x: panning.x, y: panning.y, x2: point.x, y2: point.y };
+        paintView();
+      }
+      if (pictureSize()) showProbe(point);
+    });
+    view.addEventListener("mouseleave", () => { probe.hidden = true; });
+    bars.addEventListener("mousedown", (event) => {
+      if (!bins.length) return;
+      histoDrag = true;
+      const rect = bars.getBoundingClientRect();
+      const value = Math.min(255, Math.max(0, Math.floor(((event.clientX - rect.left) / (rect.width || 1)) * 256)));
+      levelInput.value = String(value);
+      paintHisto();
+      refresh(false);
+    });
+    window.addEventListener("mousemove", (event) => {
+      if (!histoDrag) return;
+      const rect = bars.getBoundingClientRect();
+      const value = Math.min(255, Math.max(0, Math.floor(((event.clientX - rect.left) / (rect.width || 1)) * 256)));
+      levelInput.value = String(value);
+      paintHisto();
+      refresh(false);
+    });
+    window.addEventListener("resize", () => { if (cam.user) paintView(); else fitView(false); });
+    new ResizeObserver(() => { if (cam.user) paintView(); else fitView(false); paintHisto(); }).observe(view.parentElement);
+    let seenStamp = null;
+    let seenStateAt = 0;
+    setInterval(() => {
+      const raw = localStorage.getItem("visdev.threshold");
+      if (!raw) return;
+      let data;
+      try { data = JSON.parse(raw); } catch (_err) { return; }
+      if (!data || data.at === seenStateAt) return;
+      seenStateAt = data.at || 0;
+      const stamp = data.imageStamp;
+      const imageChanged = seenStamp != null && stamp != null && stamp !== seenStamp;
+      if (stamp != null) seenStamp = stamp;
+      if (data.id && data.id !== sessionId) sessionId = data.id;
+      if (imageChanged) {
+        pick = null;
+        photo = null;
+        cam.user = false;
+      }
+      refresh(imageChanged || !photo);
+    }, 400);
     refresh(true);
   </script>
 </body>

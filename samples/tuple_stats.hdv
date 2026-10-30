@@ -1,0 +1,17 @@
+* 連通物件面積的 tuple 長度、最小、最大、總和、平均
+read_image (Image, 'samples/parts.png')
+rgb1_to_gray (Image, Gray)
+threshold (Gray, Region, 60, 255)
+connection (Region, Parts, 1)
+area_center (Parts, Area, Row, Column)
+tuple_length (Area, Length)
+tuple_min (Area, MinArea)
+tuple_max (Area, MaxArea)
+tuple_sum (Area, SumArea)
+tuple_mean (Area, MeanArea)
+dev_display (Gray)
+dev_set_colored (16)
+dev_display (Parts)
+Label := 'n=' + Length + ' mean=' + MeanArea
+dev_set_color ('white')
+dev_disp_text (Label, 24, 12)
