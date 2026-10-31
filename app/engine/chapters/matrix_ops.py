@@ -97,7 +97,7 @@ def _reduce(data: np.ndarray, kind: str, fn) -> np.ndarray:
     [P("MatrixID", "矩陣")],
     "建立矩陣",
     "索引從 0 開始。數值按列排：第一列從左到右，再排下一列。",
-    "create_matrix (2, 2, [1, 2, 3, 4], MatrixID)",
+    "Vizion.create_matrix (2, 2, [1, 2, 3, 4], MatrixID)",
 )
 def create_matrix(rows, columns, value, *, ctx):
     height = whole(rows, "Rows")
@@ -122,7 +122,7 @@ def create_matrix(rows, columns, value, *, ctx):
     [],
     "關閉矩陣",
     "關閉後不能再讀寫。變數還在。",
-    "clear_matrix (MatrixID)",
+    "Vizion.clear_matrix (MatrixID)",
 )
 def clear_matrix(matrix, *, ctx):
     handle = _expect(matrix)
@@ -139,7 +139,7 @@ def clear_matrix(matrix, *, ctx):
     [P("Rows", "列數"), P("Columns", "行數")],
     "讀取矩陣大小",
     "回傳列數和行數。",
-    "get_size_matrix (MatrixID, Rows, Columns)",
+    "Vizion.get_size_matrix (MatrixID, Rows, Columns)",
 )
 def get_size_matrix(matrix, *, ctx):
     data = _expect(matrix).data
@@ -154,7 +154,7 @@ def get_size_matrix(matrix, *, ctx):
     [P("Values", "依列排開的數字")],
     "把矩陣讀成 tuple",
     "順序和 create_matrix 一樣，先左後右、先上後下。",
-    "get_full_matrix (MatrixID, Values)",
+    "Vizion.get_full_matrix (MatrixID, Values)",
 )
 def get_full_matrix(matrix, *, ctx):
     data = _expect(matrix).data
@@ -169,7 +169,7 @@ def get_full_matrix(matrix, *, ctx):
     [],
     "整批寫入矩陣",
     "個數必須等於列數乘行數。寫進原來的矩陣。",
-    "set_full_matrix (MatrixID, [1, 0, 0, 1])",
+    "Vizion.set_full_matrix (MatrixID, [1, 0, 0, 1])",
 )
 def set_full_matrix(matrix, values, *, ctx):
     handle = _expect(matrix)
@@ -189,7 +189,7 @@ def set_full_matrix(matrix, values, *, ctx):
     [P("Value", "元素")],
     "讀一個元素",
     "Row 和 Column 可以是等長 tuple，一次讀多個。",
-    "get_value_matrix (MatrixID, 0, 1, Value)",
+    "Vizion.get_value_matrix (MatrixID, 0, 1, Value)",
 )
 def get_value_matrix(matrix, row, column, *, ctx):
     data = _expect(matrix).data
@@ -226,7 +226,7 @@ def get_value_matrix(matrix, row, column, *, ctx):
     [],
     "寫一個元素",
     "多個位置時 Value 也要等長。寫進原來的矩陣。",
-    "set_value_matrix (MatrixID, 0, 0, 1)",
+    "Vizion.set_value_matrix (MatrixID, 0, 0, 1)",
 )
 def set_value_matrix(matrix, row, column, value, *, ctx):
     handle = _expect(matrix)
@@ -262,7 +262,7 @@ def set_value_matrix(matrix, row, column, value, *, ctx):
     [P("MatrixSubID", "子矩陣")],
     "取出子矩陣",
     "含左上角，往右往下數 Rows 列、Columns 行。",
-    "get_sub_matrix (MatrixID, 0, 0, 2, 2, MatrixSubID)",
+    "Vizion.get_sub_matrix (MatrixID, 0, 0, 2, 2, MatrixSubID)",
 )
 def get_sub_matrix(matrix, row, column, rows, columns, *, ctx):
     data = _expect(matrix).data
@@ -288,7 +288,7 @@ def get_sub_matrix(matrix, row, column, rows, columns, *, ctx):
     [],
     "寫入子矩陣",
     "來源矩陣必須放得進目標矩陣。",
-    "set_sub_matrix (MatrixID, MatrixSubID, 0, 0)",
+    "Vizion.set_sub_matrix (MatrixID, MatrixSubID, 0, 0)",
 )
 def set_sub_matrix(matrix, sub, row, column, *, ctx):
     handle = _expect(matrix)
@@ -309,7 +309,7 @@ def set_sub_matrix(matrix, sub, row, column, *, ctx):
     [P("VectorID", "對角元素，排成一行")],
     "讀取對角線",
     "正的 Diagonal 是主對角線右上方。負的往左下方。",
-    "get_diagonal_matrix (MatrixID, 0, VectorID)",
+    "Vizion.get_diagonal_matrix (MatrixID, 0, VectorID)",
 )
 def get_diagonal_matrix(matrix, diagonal, *, ctx):
     data = _expect(matrix).data
@@ -332,7 +332,7 @@ def get_diagonal_matrix(matrix, diagonal, *, ctx):
     [],
     "寫入對角線",
     "元素個數必須和那條對角線一樣長。",
-    "set_diagonal_matrix (MatrixID, [1, 1], 0)",
+    "Vizion.set_diagonal_matrix (MatrixID, [1, 1], 0)",
 )
 def set_diagonal_matrix(matrix, vector, diagonal, *, ctx):
     handle = _expect(matrix)
@@ -356,7 +356,7 @@ def set_diagonal_matrix(matrix, vector, diagonal, *, ctx):
     [P("MatrixRepeatedID", "重複後的矩陣")],
     "重複排矩陣",
     "Rows 和 Columns 是重複次數，不是最後的大小。",
-    "repeat_matrix (MatrixID, 2, 1, MatrixRepeatedID)",
+    "Vizion.repeat_matrix (MatrixID, 2, 1, MatrixRepeatedID)",
 )
 def repeat_matrix(matrix, rows, columns, *, ctx):
     data = _expect(matrix).data
@@ -387,9 +387,9 @@ def _binary(name, short, detail, example, fn):
     )(impl)
 
 
-_binary("add_matrix", "矩陣相加", "兩個矩陣必須一樣大。", "add_matrix (A, B, Sum)", lambda a, b: a + b)
-_binary("sub_matrix", "矩陣相減", "結果是 A - B。", "sub_matrix (A, B, Difference)", lambda a, b: a - b)
-_binary("mult_element_matrix", "元素相乘", "對應位置相乘，不是矩陣乘法。", "mult_element_matrix (A, B, Product)", lambda a, b: a * b)
+_binary("add_matrix", "矩陣相加", "兩個矩陣必須一樣大。", "Vizion.add_matrix (A, B, Sum)", lambda a, b: a + b)
+_binary("sub_matrix", "矩陣相減", "結果是 A - B。", "Vizion.sub_matrix (A, B, Difference)", lambda a, b: a - b)
+_binary("mult_element_matrix", "元素相乘", "對應位置相乘，不是矩陣乘法。", "Vizion.mult_element_matrix (A, B, Product)", lambda a, b: a * b)
 
 
 @operator(
@@ -400,7 +400,7 @@ _binary("mult_element_matrix", "元素相乘", "對應位置相乘，不是矩�
     [P("MatrixDivID", "元素相除的結果")],
     "元素相除",
     "除數裡有 0 會失敗。",
-    "div_element_matrix (A, B, Quotient)",
+    "Vizion.div_element_matrix (A, B, Quotient)",
 )
 def div_element_matrix(left, right, *, ctx):
     a = _expect(left)
@@ -419,7 +419,7 @@ def div_element_matrix(left, right, *, ctx):
     [P("MatrixScaledID", "縮放後的矩陣")],
     "矩陣乘上常數",
     "每個元素都乘 Factor。",
-    "scale_matrix (MatrixID, 2, MatrixScaledID)",
+    "Vizion.scale_matrix (MatrixID, 2, MatrixScaledID)",
 )
 def scale_matrix(matrix, factor, *, ctx):
     return Result([], [_wrap(_expect(matrix).data * scalar(factor, "Factor"))])
@@ -437,7 +437,7 @@ def scale_matrix(matrix, factor, *, ctx):
     [P("MatrixMultID", "乘積")],
     "矩陣乘法",
     "AB 是 A×B。T 表示先轉置。A 的行數必須等於 B 的列數；轉置後也要對得起來。",
-    "mult_matrix (A, B, 'AB', Product)",
+    "Vizion.mult_matrix (A, B, 'AB', Product)",
 )
 def mult_matrix(left, right, mult_type, *, ctx):
     a = _expect(left).data
@@ -464,7 +464,7 @@ def mult_matrix(left, right, mult_type, *, ctx):
     [P("MatrixTransposedID", "轉置")],
     "轉置",
     "列和行對調。",
-    "transpose_matrix (MatrixID, MatrixTransposedID)",
+    "Vizion.transpose_matrix (MatrixID, MatrixTransposedID)",
 )
 def transpose_matrix(matrix, *, ctx):
     return Result([], [_wrap(_expect(matrix).data.T.copy())])
@@ -482,7 +482,7 @@ def transpose_matrix(matrix, *, ctx):
     [P("MatrixInvertedID", "逆矩陣")],
     "矩陣求逆",
     "必須是方陣。Epsilon 為 0 時，奇異矩陣會失敗。大於 0 時用偽逆。",
-    "invert_matrix (MatrixID, 'general', 0, MatrixInvertedID)",
+    "Vizion.invert_matrix (MatrixID, 'general', 0, MatrixInvertedID)",
 )
 def invert_matrix(matrix, matrix_type, epsilon, *, ctx):
     data = _expect(matrix).data
@@ -510,7 +510,7 @@ def invert_matrix(matrix, matrix_type, epsilon, *, ctx):
     [P("Value", "行列式")],
     "行列式",
     "必須是方陣。",
-    "determinant_matrix (MatrixID, Value)",
+    "Vizion.determinant_matrix (MatrixID, Value)",
 )
 def determinant_matrix(matrix, *, ctx):
     data = _expect(matrix).data
@@ -532,7 +532,7 @@ def determinant_matrix(matrix, *, ctx):
     [P("MatrixXID", "解")],
     "解線性方程",
     "解 L × X = R。L 是方陣而且 Epsilon 為 0 時用直接法。否則用最小平方。",
-    "solve_matrix (L, 'general', 0, R, X)",
+    "Vizion.solve_matrix (L, 'general', 0, R, X)",
 )
 def solve_matrix(left, matrix_type, epsilon, right, *, ctx):
     coeff = _expect(left).data
@@ -561,7 +561,7 @@ def solve_matrix(left, matrix_type, epsilon, right, *, ctx):
     [P("MatrixUID", "左奇異向量"), P("MatrixSID", "奇異值對角矩陣"), P("MatrixVID", "右奇異向量的轉置")],
     "奇異值分解",
     "A = U × S × V。S 是對角矩陣。reduced 用經濟分解，full 把 U 和 V 補成方陣。",
-    "svd_matrix (MatrixID, 'reduced', U, S, V)",
+    "Vizion.svd_matrix (MatrixID, 'reduced', U, S, V)",
 )
 def svd_matrix(matrix, matrix_type, *, ctx):
     data = _expect(matrix).data
@@ -583,7 +583,7 @@ def svd_matrix(matrix, matrix_type, *, ctx):
     [P("Value", "範數")],
     "矩陣範數",
     "frobenius 是元素平方和的平方根。1 是最大的行絕對值和。2 是最大奇異值。infinity 是最大的列絕對值和。",
-    "norm_matrix (MatrixID, 'frobenius', Value)",
+    "Vizion.norm_matrix (MatrixID, 'frobenius', Value)",
 )
 def norm_matrix(matrix, norm_type, *, ctx):
     data = _expect(matrix).data
@@ -613,9 +613,9 @@ def _reduce_op(name, short, detail, example, fn):
     )(impl)
 
 
-_reduce_op("mean_matrix", "矩陣平均", "rows 得到一行一個平均值的直條。columns 得到橫條。all 得到 1×1。", "mean_matrix (MatrixID, 'all', Mean)", np.mean)
-_reduce_op("min_matrix", "矩陣最小值", "rows、columns、all 的排法和 mean_matrix 相同。", "min_matrix (MatrixID, 'all', Minimum)", np.min)
-_reduce_op("max_matrix", "矩陣最大值", "rows、columns、all 的排法和 mean_matrix 相同。", "max_matrix (MatrixID, 'all', Maximum)", np.max)
+_reduce_op("mean_matrix", "矩陣平均", "rows 得到一行一個平均值的直條。columns 得到橫條。all 得到 1×1。", "Vizion.mean_matrix (MatrixID, 'all', Mean)", np.mean)
+_reduce_op("min_matrix", "矩陣最小值", "rows、columns、all 的排法和 mean_matrix 相同。", "Vizion.min_matrix (MatrixID, 'all', Minimum)", np.min)
+_reduce_op("max_matrix", "矩陣最大值", "rows、columns、all 的排法和 mean_matrix 相同。", "Vizion.max_matrix (MatrixID, 'all', Maximum)", np.max)
 
 
 @operator(
@@ -626,7 +626,7 @@ _reduce_op("max_matrix", "矩陣最大值", "rows、columns、all 的排法和 m
     [P("MatrixQID", "正交矩陣"), P("MatrixRID", "上三角矩陣")],
     "QR 分解",
     "A = Q × R。reduced 讓 R 是方陣。這版沒有再做別種正交分解。",
-    "orthogonal_decompose_matrix (MatrixID, 'reduced', Q, R)",
+    "Vizion.orthogonal_decompose_matrix (MatrixID, 'reduced', Q, R)",
 )
 def orthogonal_decompose_matrix(matrix, matrix_type, *, ctx):
     data = _expect(matrix).data
@@ -645,7 +645,7 @@ def orthogonal_decompose_matrix(matrix, matrix_type, *, ctx):
     [P("EigenvaluesID", "特徵值，由大到小排成一行"), P("EigenvectorsID", "特徵向量，每一行一個")],
     "對稱矩陣的特徵值",
     "矩陣必須對稱。特徵向量的每一行對應同一個位置的特徵值。",
-    "eigenvalues_symmetric_matrix (MatrixID, Eigenvalues, Eigenvectors)",
+    "Vizion.eigenvalues_symmetric_matrix (MatrixID, Eigenvalues, Eigenvectors)",
 )
 def eigenvalues_symmetric_matrix(matrix, *, ctx):
     data = _expect(matrix).data
@@ -664,7 +664,7 @@ def eigenvalues_symmetric_matrix(matrix, *, ctx):
     [P("MatrixPowID", "次方")],
     "矩陣的整數次方",
     "0 次方是單位矩陣。負次方先求逆。元素各自的次方用 pow_scalar_element_matrix。",
-    "pow_matrix (MatrixID, 2, MatrixPowID)",
+    "Vizion.pow_matrix (MatrixID, 2, MatrixPowID)",
 )
 def pow_matrix(matrix, power, *, ctx):
     data = _expect(matrix).data
@@ -716,19 +716,19 @@ def _domain(low, high, message):
     return apply
 
 
-_unary("abs_matrix", "元素絕對值", "每個元素取絕對值。", "abs_matrix (MatrixID, MatrixAbsID)", np.abs)
-_unary("sqrt_matrix", "元素平方根", "有負數會失敗。", "sqrt_matrix (MatrixID, MatrixSqrtID)", _sqrt)
-_unary("exp_matrix", "元素指數", "每個元素做 e 的次方。", "exp_matrix (MatrixID, MatrixExpID)", np.exp)
-_unary("log_matrix", "元素自然對數", "只接受正數。", "log_matrix (MatrixID, MatrixLogID)", _log)
-_unary("sin_matrix", "元素正弦", "角度是弳度。", "sin_matrix (MatrixID, MatrixSinID)", np.sin)
-_unary("cos_matrix", "元素餘弦", "角度是弳度。", "cos_matrix (MatrixID, MatrixCosID)", np.cos)
-_unary("tan_matrix", "元素正切", "角度是弳度。", "tan_matrix (MatrixID, MatrixTanID)", np.tan)
-_unary("asin_matrix", "元素反正弦", "元素必須在 -1 到 1。", "asin_matrix (MatrixID, MatrixAsinID)", lambda data: np.arcsin(_domain(-1, 1, "asin_matrix 的元素必須在 -1 到 1")(data)))
-_unary("acos_matrix", "元素反餘弦", "元素必須在 -1 到 1。", "acos_matrix (MatrixID, MatrixAcosID)", lambda data: np.arccos(_domain(-1, 1, "acos_matrix 的元素必須在 -1 到 1")(data)))
-_unary("atan_matrix", "元素反正切", "結果是弳度。", "atan_matrix (MatrixID, MatrixAtanID)", np.arctan)
-_unary("sinh_matrix", "元素雙曲正弦", "每個元素做 sinh。", "sinh_matrix (MatrixID, MatrixSinhID)", np.sinh)
-_unary("cosh_matrix", "元素雙曲餘弦", "每個元素做 cosh。", "cosh_matrix (MatrixID, MatrixCoshID)", np.cosh)
-_unary("tanh_matrix", "元素雙曲正切", "每個元素做 tanh。", "tanh_matrix (MatrixID, MatrixTanhID)", np.tanh)
+_unary("abs_matrix", "元素絕對值", "每個元素取絕對值。", "Vizion.abs_matrix (MatrixID, MatrixAbsID)", np.abs)
+_unary("sqrt_matrix", "元素平方根", "有負數會失敗。", "Vizion.sqrt_matrix (MatrixID, MatrixSqrtID)", _sqrt)
+_unary("exp_matrix", "元素指數", "每個元素做 e 的次方。", "Vizion.exp_matrix (MatrixID, MatrixExpID)", np.exp)
+_unary("log_matrix", "元素自然對數", "只接受正數。", "Vizion.log_matrix (MatrixID, MatrixLogID)", _log)
+_unary("sin_matrix", "元素正弦", "角度是弳度。", "Vizion.sin_matrix (MatrixID, MatrixSinID)", np.sin)
+_unary("cos_matrix", "元素餘弦", "角度是弳度。", "Vizion.cos_matrix (MatrixID, MatrixCosID)", np.cos)
+_unary("tan_matrix", "元素正切", "角度是弳度。", "Vizion.tan_matrix (MatrixID, MatrixTanID)", np.tan)
+_unary("asin_matrix", "元素反正弦", "元素必須在 -1 到 1。", "Vizion.asin_matrix (MatrixID, MatrixAsinID)", lambda data: np.arcsin(_domain(-1, 1, "asin_matrix 的元素必須在 -1 到 1")(data)))
+_unary("acos_matrix", "元素反餘弦", "元素必須在 -1 到 1。", "Vizion.acos_matrix (MatrixID, MatrixAcosID)", lambda data: np.arccos(_domain(-1, 1, "acos_matrix 的元素必須在 -1 到 1")(data)))
+_unary("atan_matrix", "元素反正切", "結果是弳度。", "Vizion.atan_matrix (MatrixID, MatrixAtanID)", np.arctan)
+_unary("sinh_matrix", "元素雙曲正弦", "每個元素做 sinh。", "Vizion.sinh_matrix (MatrixID, MatrixSinhID)", np.sinh)
+_unary("cosh_matrix", "元素雙曲餘弦", "每個元素做 cosh。", "Vizion.cosh_matrix (MatrixID, MatrixCoshID)", np.cosh)
+_unary("tanh_matrix", "元素雙曲正切", "每個元素做 tanh。", "Vizion.tanh_matrix (MatrixID, MatrixTanhID)", np.tanh)
 
 
 @operator(
@@ -739,7 +739,7 @@ _unary("tanh_matrix", "元素雙曲正切", "每個元素做 tanh。", "tanh_mat
     [P("MatrixAtan2ID", "atan2(y, x)，弳度")],
     "元素的雙參數反正切",
     "兩個矩陣必須一樣大。",
-    "atan2_matrix (Y, X, Angle)",
+    "Vizion.atan2_matrix (Y, X, Angle)",
 )
 def atan2_matrix(y_matrix, x_matrix, *, ctx):
     y_data = _expect(y_matrix)
@@ -756,7 +756,7 @@ def atan2_matrix(y_matrix, x_matrix, *, ctx):
     [P("MatrixPowID", "每個元素的次方")],
     "每個元素乘上同一個次方",
     "負數的底配上非整數次方會失敗。",
-    "pow_scalar_element_matrix (MatrixID, 2, MatrixPowID)",
+    "Vizion.pow_scalar_element_matrix (MatrixID, 2, MatrixPowID)",
 )
 def pow_scalar_element_matrix(matrix, power, *, ctx):
     data = _expect(matrix).data
@@ -774,7 +774,7 @@ def pow_scalar_element_matrix(matrix, power, *, ctx):
     [P("MatrixPowID", "元素次方")],
     "元素各自的次方",
     "兩個矩陣必須一樣大。",
-    "pow_element_matrix (Base, Exponent, Power)",
+    "Vizion.pow_element_matrix (Base, Exponent, Power)",
 )
 def pow_element_matrix(base, exponent, *, ctx):
     left = _expect(base)

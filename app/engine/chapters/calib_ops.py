@@ -100,7 +100,7 @@ def _pose_from_vectors(rvec, tvec) -> list:
     [P("CalibDataID", "標定資料")],
     "建立標定資料",
     "只支援一台相機和一塊棋盤。相機參數是 OpenCV 的 fx、fy、cx、cy、k1、k2、p1、p2、k3，不是 HALCON 的 area_scan_division。",
-    "create_calib_data ('calibration_object', 1, 1, CalibDataID)",
+    "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)",
 )
 def create_calib_data(setup, num_cameras, num_objects, *, ctx):
     kind = text(setup, "CalibSetup").strip().strip("'\"").lower()
@@ -123,7 +123,7 @@ def create_calib_data(setup, num_cameras, num_objects, *, ctx):
     [],
     "設定棋盤格",
     "三個數是內角點的列數、行數和方格邊長，例如 '5,7,10'。不是 MVTec 的 .cpd 或 .descr。列數是直向的角點數。",
-    "set_calib_data_calib_object (CalibDataID, 0, '5,7,10')",
+    "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,10')",
 )
 def set_calib_data_calib_object(model, index, descr, *, ctx):
     calib = _alive(model, "CalibDataID")
@@ -165,7 +165,7 @@ def _store_observation(calib: CalibData, rows: np.ndarray, cols: np.ndarray, wid
     [],
     "在影像裡找棋盤格",
     "用 OpenCV 找內角點。找不到會失敗。同一塊板可以從不同角度多找幾次，calibrate_cameras 至少要三組。",
-    "find_calib_object (Image, CalibDataID, 0, 0, '', '')",
+    "Vizion.find_calib_object (Image, CalibDataID, 0, 0, '', '')",
 )
 def find_calib_object(image, model, camera_idx, object_idx, _name, _value, *, ctx):
     picture = expect_image(image, "Image")
@@ -206,7 +206,7 @@ def find_calib_object(image, model, camera_idx, object_idx, _name, _value, *, ct
     [P("Index", "這一組的編號"), P("Pose", "尚未標定時是 0")],
     "直接寫入一組角點",
     "點數必須等於列數乘行數。順序是列優先：先走完一行的行座標，再換下一列。影像座標的行是 x、列是 y。",
-    "set_calib_data_observ_points (CalibDataID, 0, 0, Rows, Columns, Index, Pose)",
+    "Vizion.set_calib_data_observ_points (CalibDataID, 0, 0, Rows, Columns, Index, Pose)",
 )
 def set_calib_data_observ_points(model, camera_idx, object_idx, row, column, *, ctx):
     calib = _alive(model, "CalibDataID")
@@ -230,7 +230,7 @@ def set_calib_data_observ_points(model, camera_idx, object_idx, row, column, *, 
     [P("Error", "平均重投影誤差，像素")],
     "標定相機",
     "至少要三組角點。誤差是 OpenCV 的平均重投影誤差。姿態在相機座標：x 向右、y 向下、z 朝前。",
-    "calibrate_cameras (CalibDataID, Error)",
+    "Vizion.calibrate_cameras (CalibDataID, Error)",
 )
 def calibrate_cameras(model, *, ctx):
     calib = _alive(model, "CalibDataID")
@@ -267,7 +267,7 @@ def calibrate_cameras(model, *, ctx):
     [P("DataValue", "結果")],
     "讀出標定結果",
     "camera/params 是九個數：fx、fy、cx、cy、k1、k2、p1、p2、k3。calib_obj_pose/pose 是七個數的姿態。model/error 是重投影誤差。",
-    "get_calib_data (CalibDataID, 'camera', 0, 'params', CamParam)",
+    "Vizion.get_calib_data (CalibDataID, 'camera', 0, 'params', CamParam)",
 )
 def get_calib_data(model, item_type, item_idx, data_name, *, ctx):
     calib = _alive(model, "CalibDataID")
@@ -303,7 +303,7 @@ def get_calib_data(model, item_type, item_idx, data_name, *, ctx):
     [P("X", "平面上的 x"), P("Y", "平面上的 y")],
     "把影像點投到 Z 為 0 的平面",
     "CamParam 是 OpenCV 的九個數。Pose 用同一套相機座標。平面是標定物的 Z=0。",
-    "image_points_to_world_plane (CamParam, Pose, Rows, Cols, 1, X, Y)",
+    "Vizion.image_points_to_world_plane (CamParam, Pose, Rows, Cols, 1, X, Y)",
 )
 def image_points_to_world_plane(cam_param, pose, rows, cols, scale, *, ctx):
     nums = [float(item) for item in as_list(cam_param)]
@@ -362,7 +362,7 @@ def _matrices(nums: list[float]):
     [P("CamParamOut", "新的九個相機參數")],
     "改相機的畸變參數",
     "參數是 OpenCV 的九個數，不是 HALCON 的 division 模型。none 把五個畸變都清成 0。fixed 只留下 k1，其餘畸變是 0。焦距和主點不變。",
-    "change_radial_distortion_cam_par ('none', CamParamIn, 0, CamParamOut)",
+    "Vizion.change_radial_distortion_cam_par ('none', CamParamIn, 0, CamParamOut)",
 )
 def change_radial_distortion_cam_par(mode, cam_param_in, kappa, *, ctx):
     kind = text(mode, "Mode").strip().strip("'\"").lower()
@@ -384,7 +384,7 @@ def change_radial_distortion_cam_par(mode, cam_param_in, kappa, *, ctx):
     [],
     "用相機參數校正影像",
     "整張圖都做，沒有 Region 參數。CamParamOut 的畸變通常先用 change_radial_distortion_cam_par 清成 0。邊緣補 0。",
-    "change_radial_distortion_image (Image, ImageRectified, CamParamIn, CamParamOut)",
+    "Vizion.change_radial_distortion_image (Image, ImageRectified, CamParamIn, CamParamOut)",
 )
 def change_radial_distortion_image(image, cam_param_in, cam_param_out, *, ctx):
     picture = expect_image(image, "Image")
@@ -408,7 +408,7 @@ def change_radial_distortion_image(image, cam_param_in, cam_param_out, *, ctx):
     [],
     "關閉標定資料",
     "關閉後不能再找角點或讀結果。",
-    "clear_calib_data (CalibDataID)",
+    "Vizion.clear_calib_data (CalibDataID)",
 )
 def clear_calib_data(model, *, ctx):
     calib = _alive(model, "CalibDataID")

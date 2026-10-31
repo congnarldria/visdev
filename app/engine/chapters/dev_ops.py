@@ -34,7 +34,7 @@ def _pairs(row, column):
     [],
     "在圖上畫圓",
     "疊在目前影像上，用現在的顏色和線寬。Row、Column 可以是 tuple。",
-    "dev_disp_circle (120, 100, 30)",
+    "Vizion.dev_disp_circle (120, 100, 30)",
 )
 def dev_disp_circle(row, column, radius, *, ctx):
     rows, cols = _pairs(row, column)
@@ -59,7 +59,7 @@ def dev_disp_circle(row, column, radius, *, ctx):
     [],
     "在圖上畫軸對齊矩形",
     "疊在目前影像上，用現在的顏色和線寬。",
-    "dev_disp_rectangle1 (40, 20, 120, 180)",
+    "Vizion.dev_disp_rectangle1 (40, 20, 120, 180)",
 )
 def dev_disp_rectangle1(row1, column1, row2, column2, *, ctx):
     top, left = scalar(row1, "Row1"), scalar(column1, "Column1")
@@ -76,7 +76,7 @@ def dev_disp_rectangle1(row1, column1, row2, column2, *, ctx):
     [],
     "在圖上畫直線",
     "疊在目前影像上，用現在的顏色和線寬。",
-    "dev_disp_line (10, 10, 100, 80)",
+    "Vizion.dev_disp_line (10, 10, 100, 80)",
 )
 def dev_disp_line(row1, column1, row2, column2, *, ctx):
     contour = [

@@ -133,7 +133,7 @@ def _store_pose(order: str, rotation_order: str, view: str, tx, ty, tz, rx, ry, 
     [P("HomMat2D", "剛性變換")],
     "用兩個點和角度建立剛性變換",
     "把 (Row1, Column1, Angle1) 送到 (Row2, Column2, Angle2)。座標和 HomMat2D 一樣，x 是列、y 是行。正角度是逆時針。",
-    "vector_angle_to_rigid (10, 0, 0, 0, 10, rad(90), HomMat2D)",
+    "Vizion.vector_angle_to_rigid (10, 0, 0, 0, 10, rad(90), HomMat2D)",
 )
 def vector_angle_to_rigid(row1, column1, angle1, row2, column2, angle2, *, ctx):
     r1 = scalar(row1, "Row1")
@@ -169,7 +169,7 @@ def vector_angle_to_rigid(row1, column1, angle1, row2, column2, angle2, *, ctx):
     "建立姿態",
     "旋轉順序是 Rx×Ry×Rz。存下來的平移一律換成 Rp+T、point，所以型別碼是 0。"
     "R(p-T) 會把平移改成旋轉之後的等效平移。coordinate_system 存的是點變換的反變換。",
-    "create_pose (0, 0, 0, 0, 0, rad(90), 'Rp+T', 'gba', 'point', Pose)",
+    "Vizion.create_pose (0, 0, 0, 0, 0, rad(90), 'Rp+T', 'gba', 'point', Pose)",
 )
 def create_pose(tx, ty, tz, rx, ry, rz, order, rotation, view, *, ctx):
     pose = _store_pose(
@@ -200,7 +200,7 @@ def create_pose(tx, ty, tz, rx, ry, rz, order, rotation, view, *, ctx):
     "轉換姿態的表示法",
     "輸入必須是型別碼 0。Rp+T 加 point 仍是 0。R(p-T) 的型別碼是 1。coordinate_system 的型別碼是 2。"
     "pose_to_hom_mat3d 看得懂這三個型別碼。",
-    "convert_pose_type (Pose, 'Rp+T', 'gba', 'point', PoseOut)",
+    "Vizion.convert_pose_type (Pose, 'Rp+T', 'gba', 'point', PoseOut)",
 )
 def convert_pose_type(pose, order, rotation, view, *, ctx):
     nums = _pose_numbers(pose)
@@ -233,7 +233,7 @@ def convert_pose_type(pose, order, rotation, view, *, ctx):
     [P("HomMat3D", "12 個數的三維矩陣")],
     "姿態轉成三維矩陣",
     "點的新座標是 R×p+T。十二個數是三列，每列四個。",
-    "pose_to_hom_mat3d (Pose, HomMat3D)",
+    "Vizion.pose_to_hom_mat3d (Pose, HomMat3D)",
 )
 def pose_to_hom_mat3d(pose, *, ctx):
     return Result([], [_pack3(_pose_matrix(_pose_numbers(pose)))])
@@ -247,7 +247,7 @@ def pose_to_hom_mat3d(pose, *, ctx):
     [P("Pose", "姿態")],
     "三維矩陣轉成姿態",
     "只接受剛性變換，旋轉用 gba 拆開。平移是 Rp+T。",
-    "hom_mat3d_to_pose (HomMat3D, Pose)",
+    "Vizion.hom_mat3d_to_pose (HomMat3D, Pose)",
 )
 def hom_mat3d_to_pose(hom_mat3d, *, ctx):
     matrix = _mat3_from(hom_mat3d)
@@ -267,7 +267,7 @@ def hom_mat3d_to_pose(hom_mat3d, *, ctx):
     [P("PoseInvert", "反姿態")],
     "姿態取反",
     "反過來的點變換。仍是型別碼 0。",
-    "pose_invert (Pose, PoseInvert)",
+    "Vizion.pose_invert (Pose, PoseInvert)",
 )
 def pose_invert(pose, *, ctx):
     matrix = np.linalg.inv(_pose_matrix(_pose_numbers(pose)))
@@ -284,7 +284,7 @@ def pose_invert(pose, *, ctx):
     [P("PoseCompose", "合成姿態")],
     "合成兩個姿態",
     "先做右邊，再做左邊。",
-    "pose_compose (PoseLeft, PoseRight, PoseCompose)",
+    "Vizion.pose_compose (PoseLeft, PoseRight, PoseCompose)",
 )
 def pose_compose(left, right, *, ctx):
     matrix = _pose_matrix(_pose_numbers(left)) @ _pose_matrix(_pose_numbers(right))
@@ -301,7 +301,7 @@ def pose_compose(left, right, *, ctx):
     [P("HomMat3D", "單位矩陣")],
     "三維單位矩陣",
     "十二個數。平移是 0，旋轉是單位矩陣。",
-    "hom_mat3d_identity (HomMat3D)",
+    "Vizion.hom_mat3d_identity (HomMat3D)",
 )
 def hom_mat3d_identity(*, ctx):
     return Result([], [_pack3(np.eye(4))])
@@ -315,7 +315,7 @@ def hom_mat3d_identity(*, ctx):
     [P("HomMat3DTranslate", "平移後的矩陣")],
     "在固定座標系加上三維平移",
     "先做原來的矩陣，再平移。",
-    "hom_mat3d_translate (HomMat3D, 1, 0, 0, HomMat3DTranslate)",
+    "Vizion.hom_mat3d_translate (HomMat3D, 1, 0, 0, HomMat3DTranslate)",
 )
 def hom_mat3d_translate(hom_mat3d, tx, ty, tz, *, ctx):
     matrix = _mat3_from(hom_mat3d)
@@ -339,7 +339,7 @@ def hom_mat3d_translate(hom_mat3d, tx, ty, tz, *, ctx):
     [P("HomMat3DRotate", "旋轉後的矩陣")],
     "繞一軸旋轉",
     "先做原來的矩陣，再繞指定的軸轉。軸是 x、y 或 z。",
-    "hom_mat3d_rotate (HomMat3D, rad(90), 'z', 0, 0, 0, HomMat3DRotate)",
+    "Vizion.hom_mat3d_rotate (HomMat3D, rad(90), 'z', 0, 0, 0, HomMat3DRotate)",
 )
 def hom_mat3d_rotate(hom_mat3d, phi, axis, px, py, pz, *, ctx):
     kind = _token(axis, "Axis").lower()
@@ -367,7 +367,7 @@ def hom_mat3d_rotate(hom_mat3d, phi, axis, px, py, pz, *, ctx):
     [P("HomMat3DCompose", "合成矩陣")],
     "兩個三維矩陣相乘",
     "先做右邊，再做左邊。",
-    "hom_mat3d_compose (HomMat3DLeft, HomMat3DRight, HomMat3DCompose)",
+    "Vizion.hom_mat3d_compose (HomMat3DLeft, HomMat3DRight, HomMat3DCompose)",
 )
 def hom_mat3d_compose(left, right, *, ctx):
     return Result([], [_pack3(_mat3_from(left) @ _mat3_from(right))])
@@ -381,7 +381,7 @@ def hom_mat3d_compose(left, right, *, ctx):
     [P("HomMat3DInvert", "反矩陣")],
     "三維矩陣取反",
     "不可逆時會失敗。",
-    "hom_mat3d_invert (HomMat3D, HomMat3DInvert)",
+    "Vizion.hom_mat3d_invert (HomMat3D, HomMat3DInvert)",
 )
 def hom_mat3d_invert(hom_mat3d, *, ctx):
     try:
@@ -399,7 +399,7 @@ def hom_mat3d_invert(hom_mat3d, *, ctx):
     [P("Qx", "轉換後的 x"), P("Qy", "轉換後的 y"), P("Qz", "轉換後的 z")],
     "用三維矩陣轉換點",
     "這是 x、y、z，不是影像的列和行。可以傳 tuple。",
-    "affine_trans_point_3d (HomMat3D, 1, 0, 0, Qx, Qy, Qz)",
+    "Vizion.affine_trans_point_3d (HomMat3D, 1, 0, 0, Qx, Qy, Qz)",
 )
 def affine_trans_point_3d(hom_mat3d, px, py, pz, *, ctx):
     matrix = _mat3_from(hom_mat3d)
@@ -512,7 +512,7 @@ def _quat_list(quat: np.ndarray) -> list:
     [P("Quaternion", "四元數 x、y、z、w")],
     "用軸和角度建立四元數",
     "四元數是 [x, y, z, w]。軸不必先歸一化。正角度和 pose 的 gba 一樣。",
-    "axis_angle_to_quat (0, 0, 1, rad(90), Quaternion)",
+    "Vizion.axis_angle_to_quat (0, 0, 1, rad(90), Quaternion)",
 )
 def axis_angle_to_quat(axis_x, axis_y, axis_z, angle, *, ctx):
     axis = np.array([scalar(axis_x, "AxisX"), scalar(axis_y, "AxisY"), scalar(axis_z, "AxisZ")], np.float64)
@@ -534,7 +534,7 @@ def axis_angle_to_quat(axis_x, axis_y, axis_z, angle, *, ctx):
     [P("QuaternionComposed", "合成後的四元數")],
     "合成兩個四元數",
     "先套用右邊，再套用左邊，和 pose_compose 一樣。",
-    "quat_compose (QuaternionLeft, QuaternionRight, QuaternionComposed)",
+    "Vizion.quat_compose (QuaternionLeft, QuaternionRight, QuaternionComposed)",
 )
 def quat_compose(left, right, *, ctx):
     return Result([], [_quat_list(_quat_mul(_unit_quat(left), _unit_quat(right)))])
@@ -548,7 +548,7 @@ def quat_compose(left, right, *, ctx):
     [P("Conjugate", "共軛")],
     "四元數共軛",
     "向量部分變號。單位四元數的共軛就是反旋轉。",
-    "quat_conjugate (Quaternion, Conjugate)",
+    "Vizion.quat_conjugate (Quaternion, Conjugate)",
 )
 def quat_conjugate(quaternion, *, ctx):
     quat = _quat_of(quaternion)
@@ -564,7 +564,7 @@ def quat_conjugate(quaternion, *, ctx):
     [P("Normalized", "單位四元數")],
     "把四元數歸一化",
     "長度變成 1。長度是 0 時會失敗。",
-    "quat_normalize (Quaternion, Normalized)",
+    "Vizion.quat_normalize (Quaternion, Normalized)",
 )
 def quat_normalize(quaternion, *, ctx):
     return Result([], [_quat_list(_quat_of(quaternion))])
@@ -578,7 +578,7 @@ def quat_normalize(quaternion, *, ctx):
     [P("Inverse", "反四元數")],
     "四元數取反",
     "用共軛除以長度平方。單位四元數的反元素就是共軛。",
-    "quat_invert (Quaternion, Inverse)",
+    "Vizion.quat_invert (Quaternion, Inverse)",
 )
 def quat_invert(quaternion, *, ctx):
     quat = _quat_of(quaternion)
@@ -598,7 +598,7 @@ def quat_invert(quaternion, *, ctx):
     [P("HomMat3D", "旋轉矩陣，平移是 0")],
     "四元數轉成三維矩陣",
     "只含旋轉，平移是 0。",
-    "quat_to_hom_mat3d (Quaternion, HomMat3D)",
+    "Vizion.quat_to_hom_mat3d (Quaternion, HomMat3D)",
 )
 def quat_to_hom_mat3d(quaternion, *, ctx):
     matrix = np.eye(4, dtype=np.float64)
@@ -614,7 +614,7 @@ def quat_to_hom_mat3d(quaternion, *, ctx):
     [P("Quaternion", "旋轉四元數")],
     "姿態的旋轉轉成四元數",
     "只用 Rx、Ry、Rz。平移不放進四元數。",
-    "pose_to_quat (Pose, Quaternion)",
+    "Vizion.pose_to_quat (Pose, Quaternion)",
 )
 def pose_to_quat(pose, *, ctx):
     rotation = _pose_matrix(_pose_numbers(pose))[:3, :3]
@@ -629,7 +629,7 @@ def pose_to_quat(pose, *, ctx):
     [P("Pose", "平移為 0 的姿態")],
     "四元數轉成姿態",
     "平移是 0，型別碼是 0，旋轉順序是 gba。",
-    "quat_to_pose (Quaternion, Pose)",
+    "Vizion.quat_to_pose (Quaternion, Pose)",
 )
 def quat_to_pose(quaternion, *, ctx):
     rx, ry, rz = _angles_gba(_quat_to_matrix(quaternion))
@@ -644,7 +644,7 @@ def quat_to_pose(quaternion, *, ctx):
     [P("Qx", "旋轉後的 x"), P("Qy", "旋轉後的 y"), P("Qz", "旋轉後的 z")],
     "用四元數旋轉點",
     "這是 x、y、z，不是影像的列和行。可以傳 tuple。",
-    "quat_rotate_point (Quaternion, 1, 0, 0, Qx, Qy, Qz)",
+    "Vizion.quat_rotate_point (Quaternion, 1, 0, 0, Qx, Qy, Qz)",
 )
 def quat_rotate_point(quaternion, px, py, pz, *, ctx):
     matrix = np.eye(4, dtype=np.float64)

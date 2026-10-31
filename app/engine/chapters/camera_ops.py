@@ -151,7 +151,7 @@ def _grab(handle: AcqHandle, flush: bool, ctx) -> Result:
     "沒有廠商採集卡。參數比 HALCON 少，順序是名稱、裝置、色彩、寬、高。"
     "File 的 Device 可以是一張圖或一個資料夾，資料夾裡的圖按檔名排序。"
     "OpenCV 的 Device 是相機編號，0 是第一台。Width 或 Height 只有一個大於 0 時會保持比例。",
-    "open_framegrabber ('File', 'samples/code39.png', AcqHandle)",
+    "Vizion.open_framegrabber ('File', 'samples/code39.png', AcqHandle)",
 )
 def open_framegrabber(name, device, color_space, width, height, *, ctx):
     kind = text(name, "Name").strip().strip("'\"").lower()
@@ -196,7 +196,7 @@ def open_framegrabber(name, device, color_space, width, height, *, ctx):
     [],
     "抓一張影像",
     "檔案會依序往下讀，讀完會失敗。相機讀目前畫面。",
-    "grab_image (Image, AcqHandle)",
+    "Vizion.grab_image (Image, AcqHandle)",
 )
 def grab_image(handle, *, ctx):
     return _grab(_alive(handle, "AcqHandle"), False, ctx)
@@ -210,7 +210,7 @@ def grab_image(handle, *, ctx):
     [],
     "抓最新的影像",
     "相機連讀兩次，留下較新的那張。檔案沒有延遲，和 grab_image 一樣往下讀一張。",
-    "grab_image_async (Image, AcqHandle, -1)",
+    "Vizion.grab_image_async (Image, AcqHandle, -1)",
 )
 def grab_image_async(handle, _delay, *, ctx):
     return _grab(_alive(handle, "AcqHandle"), True, ctx)
@@ -224,7 +224,7 @@ def grab_image_async(handle, _delay, *, ctx):
     [],
     "關閉採集",
     "會放開相機。之後不能再抓圖。",
-    "close_framegrabber (AcqHandle)",
+    "Vizion.close_framegrabber (AcqHandle)",
 )
 def close_framegrabber(handle, *, ctx):
     handle = _alive(handle, "AcqHandle")
@@ -246,7 +246,7 @@ def close_framegrabber(handle, *, ctx):
     [P("Information", "說明")],
     "查詢本機採集能做什麼",
     "這版不掃描每一台相機。device 對 File 是資料夾或檔案，對 OpenCV 是從 0 開始的編號。",
-    "info_framegrabber ('OpenCV', 'device', Information)",
+    "Vizion.info_framegrabber ('OpenCV', 'device', Information)",
 )
 def info_framegrabber(name, query, *, ctx):
     kind = text(name, "Name").strip().strip("'\"").lower()
@@ -276,7 +276,7 @@ def info_framegrabber(name, query, *, ctx):
     [],
     "修改採集參數",
     "image_dir 只對檔案有效，會把讀取位置歸零。start_index 從 0 開始。color_space 可以是 gray 或 rgb。",
-    "set_framegrabber_param (AcqHandle, 'color_space', 'gray')",
+    "Vizion.set_framegrabber_param (AcqHandle, 'color_space', 'gray')",
 )
 def set_framegrabber_param(handle, param, value, *, ctx):
     handle = _alive(handle, "AcqHandle")

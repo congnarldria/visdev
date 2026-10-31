@@ -53,7 +53,7 @@ def _features(value, name: str) -> np.ndarray:
     [P("ClassKnn", "分類器")],
     "建立 k 近鄰分類器",
     "樣本存在記憶體裡。不讀 HALCON 的分類檔，也沒有 GMM、SVM 或 MLP。",
-    "create_class_knn (1, ClassKnn)",
+    "Vizion.create_class_knn (1, ClassKnn)",
 )
 def create_class_knn(k, *, ctx):
     neighbors = whole(k, "K")
@@ -70,7 +70,7 @@ def create_class_knn(k, *, ctx):
     [],
     "加入一筆訓練樣本",
     "特徵是一個數值 tuple。每一筆的長度要相同。類別可以是數字或字串。",
-    "add_sample_class_knn (ClassKnn, [0, 0], 1)",
+    "Vizion.add_sample_class_knn (ClassKnn, [0, 0], 1)",
 )
 def add_sample_class_knn(model, features, class_id, *, ctx):
     knn = _alive(model, "ClassKnn")
@@ -90,7 +90,7 @@ def add_sample_class_knn(model, features, class_id, *, ctx):
     [P("ClassID", "類別"), P("Confidence", "信心")],
     "用 k 近鄰分類",
     "鄰居不足 K 時用全部樣本。信心是距離倒數加權後，勝出類別佔的比例。距離 0 的鄰居權重最大。",
-    "classify_class_knn (ClassKnn, [0.2, 0], ClassID, Confidence)",
+    "Vizion.classify_class_knn (ClassKnn, [0.2, 0], ClassID, Confidence)",
 )
 def classify_class_knn(model, features, *, ctx):
     knn = _alive(model, "ClassKnn")
@@ -120,7 +120,7 @@ def classify_class_knn(model, features, *, ctx):
     [],
     "清掉訓練樣本",
     "K 保留，樣本全部移除。",
-    "clear_samples_class_knn (ClassKnn)",
+    "Vizion.clear_samples_class_knn (ClassKnn)",
 )
 def clear_samples_class_knn(model, *, ctx):
     knn = _alive(model, "ClassKnn")
@@ -137,7 +137,7 @@ def clear_samples_class_knn(model, *, ctx):
     [],
     "關閉分類器",
     "關閉後不能再加入樣本或分類。",
-    "clear_class_knn (ClassKnn)",
+    "Vizion.clear_class_knn (ClassKnn)",
 )
 def clear_class_knn(model, *, ctx):
     knn = _alive(model, "ClassKnn")
