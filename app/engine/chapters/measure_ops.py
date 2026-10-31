@@ -16,7 +16,7 @@ import numpy as np
 from .. import gauge
 from ..ncc_model import NccModel
 from ..objects import Result, XLD
-from ..operators import P, _optional_number, expect_image, operator, scalar, text, whole
+from ..operators import P, _optional_number, as_list, expect_image, operator, scalar, text, whole
 from ..shape_model import ScaledShapeModel, ShapeModel
 from ..shape_model import create_scaled_shape_model as build_scaled_shape_model
 from ..shape_model import find_scaled_shape_model as search_scaled_shape_model
@@ -70,6 +70,33 @@ class MeasureRectangle2:
     def summary(self) -> str:
         state = "已關閉" if self.closed else "使用中"
         return f"量測矩形  {state}  中心 {self.row:.1f},{self.column:.1f}  半長 {self.length1:.1f}"
+
+
+@dataclass
+class MeasureArc:
+    row: float
+    column: float
+    radius: float
+    angle_start: float
+    angle_extent: float
+    annulus: float
+    width: int
+    height: int
+    interpolation: str
+    closed: bool = False
+
+    def summary(self) -> str:
+        state = "已關閉" if self.closed else "使用中"
+        return f"量測弧  {state}  中心 {self.row:.1f},{self.column:.1f}  半徑 {self.radius:.1f}"
+
+
+@dataclass
+class Funct1D:
+    x: np.ndarray
+    y: np.ndarray
+
+    def summary(self) -> str:
+        return f"一維函數  {len(self.x)} 點  x {float(self.x[0]):.4g}…{float(self.x[-1]):.4g}"
 
 
 @dataclass
@@ -503,10 +530,11 @@ def measure_pairs(image, handle, sigma, threshold, transition, select, *, ctx):
     "close_measure (MeasureHandle)",
 )
 def close_measure(handle, *, ctx):
-    rect = handle if isinstance(handle, MeasureRectangle2) else None
-    if rect is None:
-        raise TypeError("MeasureHandle 必須是 gen_measure_rectangle2 建立的量測矩形")
-    rect.closed = True
+    if not isinstance(handle, (MeasureRectangle2, MeasureArc)):
+        raise TypeError("MeasureHandle 必須是 gen_measure_rectangle2 或 gen_measure_arc 建立的量測")
+    if handle.closed:
+        raise RuntimeError("量測物件已經 close_measure")
+    handle.closed = True
     return Result([], [])
 
 
@@ -1162,3 +1190,555 @@ def clear_ncc_model(model, *, ctx):
     ncc.cleared = True
     ncc.native = None
     return Result([], [])
+
+
+def _open_measure(handle):
+    if not isinstance(handle, (MeasureRectangle2, MeasureArc)):
+        raise TypeError("MeasureHandle 必須是 gen_measure_rectangle2 或 gen_measure_arc 建立的量測")
+    if handle.closed:
+        raise RuntimeError("量測物件已經 close_measure")
+    return handle
+
+
+def _measure_path(handle):
+    if isinstance(handle, MeasureRectangle2):
+        row1, col1, row2, col2 = _axis(handle)
+        real = math.hypot(col2 - col1, row2 - row1)
+        if real < 1e-9:
+            raise ValueError("量測長度是 0")
+        count = max(int(real / 0.5) + 1, 2)
+        blend = np.linspace(0.0, 1.0, count)
+        rows = row1 + (row2 - row1) * blend
+        cols = col1 + (col2 - col1) * blend
+        normal_row = np.full(count, (col2 - col1) / real)
+        normal_col = np.full(count, -((row2 - row1) / real))
+        return rows, cols, real * blend, normal_row, normal_col, handle.length2, handle.interpolation
+    length = abs(handle.radius * handle.angle_extent)
+    if length < 1e-9:
+        raise ValueError("弧長是 0")
+    count = max(int(length / 0.5) + 1, 2)
+    blend = np.linspace(0.0, 1.0, count)
+    angles = handle.angle_start + handle.angle_extent * blend
+    rows = handle.row + handle.radius * np.sin(angles)
+    cols = handle.column + handle.radius * np.cos(angles)
+    return rows, cols, length * blend, np.sin(angles), np.cos(angles), handle.annulus, handle.interpolation
+
+
+def _gather(gray: np.ndarray, domain, cols: np.ndarray, rows: np.ndarray, interpolation: str) -> np.ndarray:
+    if interpolation == "nearest_neighbor":
+        cols = np.rint(cols)
+        rows = np.rint(rows)
+    height, width = gray.shape
+    inside = (cols >= 0) & (rows >= 0) & (cols <= width - 1) & (rows <= height - 1)
+    x0 = np.floor(cols).astype(np.int32)
+    y0 = np.floor(rows).astype(np.int32)
+    x0s = np.clip(x0, 0, width - 1)
+    y0s = np.clip(y0, 0, height - 1)
+    x1 = np.clip(x0s + 1, 0, width - 1)
+    y1 = np.clip(y0s + 1, 0, height - 1)
+    dx = cols - x0
+    dy = rows - y0
+    top = gray[y0s, x0s].astype(np.float64) * (1.0 - dx) + gray[y0s, x1].astype(np.float64) * dx
+    bottom = gray[y1, x0s].astype(np.float64) * (1.0 - dx) + gray[y1, x1].astype(np.float64) * dx
+    values = top * (1.0 - dy) + bottom * dy
+    values[~inside] = np.nan
+    if domain is not None:
+        ix = np.clip(np.rint(cols).astype(np.int32), 0, width - 1)
+        iy = np.clip(np.rint(rows).astype(np.int32), 0, height - 1)
+        values[domain[iy, ix] <= 0] = np.nan
+    return values
+
+
+def _mean_profile(image, handle):
+    _check_size(image, handle.width, handle.height, "量測")
+    rows, cols, distances, normal_row, normal_col, thickness, interpolation = _measure_path(handle)
+    half = max(0, int(round(thickness)))
+    offsets = np.arange(-half, half + 1, dtype=np.float64)
+    sample_rows = rows[None, :] + normal_row[None, :] * offsets[:, None]
+    sample_cols = cols[None, :] + normal_col[None, :] * offsets[:, None]
+    gathered = _gather(image.gray(), image.domain, sample_cols, sample_rows, interpolation)
+    finite = np.isfinite(gathered)
+    counts = finite.sum(axis=0)
+    total = np.where(finite, gathered, 0.0).sum(axis=0)
+    profile = np.full(rows.shape, np.nan, np.float64)
+    ok = counts > 0
+    profile[ok] = total[ok] / counts[ok]
+    return profile, rows, cols, distances
+
+
+def _crossings(profile, threshold, rows, cols, distances):
+    if len(profile) < 2:
+        return [], [], []
+    previous = profile[:-1]
+    current = profile[1:]
+    finite = np.isfinite(previous) & np.isfinite(current)
+    hit = finite & (
+        ((previous < threshold) & (current >= threshold)) | ((previous >= threshold) & (current < threshold))
+    )
+    if not np.any(hit):
+        return [], [], []
+    delta = current - previous
+    blend = np.zeros(previous.shape, np.float64)
+    usable = np.abs(delta) > 1e-12
+    blend[usable] = (threshold - previous[usable]) / delta[usable]
+    blend = np.clip(blend, 0.0, 1.0)
+    index = np.flatnonzero(hit)
+    blend = blend[index]
+    found_rows = rows[index] * (1.0 - blend) + rows[index + 1] * blend
+    found_cols = cols[index] * (1.0 - blend) + cols[index + 1] * blend
+    found_dist = distances[index] * (1.0 - blend) + distances[index + 1] * blend
+    return found_rows.tolist(), found_cols.tolist(), found_dist.tolist()
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row", "圓心列"),
+        P("Column", "圓心行"),
+        P("Radius", "半徑"),
+        P("AngleStart", "起始角，弳度。0 朝右"),
+        P("AngleExtent", "掃過的角度，正值順時針"),
+        P("AnnulusRadius", "沿半徑方向的半寬"),
+        P("Width", "影像寬"),
+        P("Height", "影像高"),
+        P("Interpolation", "剖面取樣", "'bilinear'", _INTERP),
+    ],
+    [P("MeasureHandle", "量測弧")],
+    "建立量測弧",
+    "角度 0 朝右，正角度順時針。剖面沿弧長每 0.5 像素取一點，AnnulusRadius 是垂直方向要平均的半寬。",
+    "gen_measure_arc (30, 40, 10, 0, rad(180), 0, 80, 60, 'bilinear', MeasureHandle)",
+)
+def gen_measure_arc(row, column, radius, angle_start, angle_extent, annulus, width, height, interpolation, *, ctx):
+    mode = _token(interpolation, "Interpolation")
+    if mode not in ("nearest_neighbor", "bilinear", "bicubic"):
+        raise ValueError("Interpolation 只能是 nearest_neighbor、bilinear 或 bicubic")
+    rad = scalar(radius, "Radius")
+    extent = scalar(angle_extent, "AngleExtent")
+    thick = scalar(annulus, "AnnulusRadius")
+    if rad <= 0:
+        raise ValueError("半徑必須大於 0")
+    if abs(extent) < 1e-9:
+        raise ValueError("AngleExtent 不能是 0")
+    if thick < 0:
+        raise ValueError("AnnulusRadius 不能是負的")
+    wide, high = whole(width, "Width"), whole(height, "Height")
+    if wide < 2 or high < 2:
+        raise ValueError("Width 和 Height 至少要 2")
+    return Result([], [MeasureArc(scalar(row, "Row"), scalar(column, "Column"), rad, scalar(angle_start, "AngleStart"), extent, thick, wide, high, mode)])
+
+
+@operator(
+    "量測",
+    [P("Image", "灰階或彩色影像")],
+    [],
+    [P("MeasureHandle", "量測矩形或量測弧")],
+    [P("GrayValues", "沿量測方向的灰階")],
+    "讀出量測剖面",
+    "直線或弧都沿中心每 0.5 像素取一點，垂直方向用 AnnulusRadius 或 Length2 平均。彩色先轉成亮度。超出影像的點是空值。",
+    "measure_projection (Image, MeasureHandle, GrayValues)",
+)
+def measure_projection(image, handle, *, ctx):
+    picture = expect_image(image, "Image")
+    profile, _, _, _ = _mean_profile(picture, _open_measure(handle))
+    return Result([], [[float(item) for item in profile]])
+
+
+_THRESH_SELECT = ["'all'", "'first'", "'last'"]
+
+
+@operator(
+    "量測",
+    [P("Image", "灰階或彩色影像")],
+    [],
+    [
+        P("MeasureHandle", "量測矩形或量測弧"),
+        P("Sigma", "平滑，像素。0 表示不平滑"),
+        P("Threshold", "灰階門檻"),
+        P("Select", "all、first 或 last", "'all'", _THRESH_SELECT),
+    ],
+    [P("RowThresh", "過門檻的列"), P("ColumnThresh", "過門檻的行"), P("Distance", "離起點的距離")],
+    "剖面灰階過門檻的位置",
+    "看的是灰階本身，不是梯度。由小到大或由大到小經過 Threshold 都算。Sigma 為 0 不平滑。找不到時得到空 tuple。",
+    "measure_thresh (Image, MeasureHandle, 0, 40, 'all', RowThresh, ColumnThresh, Distance)",
+)
+def measure_thresh(image, handle, sigma, threshold, select, *, ctx):
+    picture = expect_image(image, "Image")
+    spread = scalar(sigma, "Sigma")
+    level = scalar(threshold, "Threshold")
+    if spread < 0:
+        raise ValueError("Sigma 不能是負的")
+    choice = _token(select, "Select")
+    if choice not in ("all", "first", "last"):
+        raise ValueError("Select 只能是 all、first 或 last")
+    profile, rows, cols, distances = _mean_profile(picture, _open_measure(handle))
+    smoothed = gauge._smooth(profile, spread, 0.5)
+    found_rows, found_cols, found_dist = _crossings(smoothed, level, rows, cols, distances)
+    if choice == "first":
+        found_rows, found_cols, found_dist = found_rows[:1], found_cols[:1], found_dist[:1]
+    elif choice == "last":
+        found_rows, found_cols, found_dist = found_rows[-1:], found_cols[-1:], found_dist[-1:]
+    return Result([], [found_rows, found_cols, found_dist])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [P("MeasureHandle", "量測矩形或量測弧"), P("Row", "新的中心列"), P("Column", "新的中心行")],
+    [],
+    "移動量測中心",
+    "直接改這個量測的中心，方向、長度和半徑不變。原來的變數就是移動後的量測。",
+    "translate_measure (MeasureHandle, 30, 50)",
+)
+def translate_measure(handle, row, column, *, ctx):
+    measure = _open_measure(handle)
+    measure.row = scalar(row, "Row")
+    measure.column = scalar(column, "Column")
+    return Result([], [])
+
+
+def _expect_funct(value) -> Funct1D:
+    if not isinstance(value, Funct1D):
+        raise TypeError("Function 必須是 create_funct_1d_pairs 建立的函數")
+    return value
+
+
+def _funct_numbers(x_value, y_value) -> tuple[np.ndarray, np.ndarray]:
+    xs = np.asarray([float(item) for item in as_list(x_value)], np.float64)
+    ys = np.asarray([float(item) for item in as_list(y_value)], np.float64)
+    if xs.size < 2 or xs.size != ys.size:
+        raise ValueError("X 和 Y 至少要兩個點，而且長度要相同")
+    if np.any(np.diff(xs) <= 0):
+        raise ValueError("X 要嚴格遞增")
+    return xs, ys
+
+
+_BORDERS = ["'constant'", "'zero'", "'mirror'", "'cyclic'", "'error'"]
+
+
+def _interp_inside(x: np.ndarray, y: np.ndarray, query: np.ndarray) -> np.ndarray:
+    if query.size == 0:
+        return query
+    index = np.clip(np.searchsorted(x, query, side="right") - 1, 0, len(x) - 2)
+    left = x[index]
+    span = x[index + 1] - left
+    blend = (query - left) / span
+    return y[index] * (1.0 - blend) + y[index + 1] * blend
+
+
+def _map_border(x: np.ndarray, query: np.ndarray, border: str) -> np.ndarray:
+    span = float(x[-1] - x[0])
+    if span <= 0:
+        raise ValueError("X 範圍是 0")
+    rel = (query - float(x[0])) / span
+    if border == "cyclic":
+        rel = np.mod(rel, 1.0)
+    else:
+        rel = np.abs(rel) % 2.0
+        rel = np.where(rel > 1.0, 2.0 - rel, rel)
+    return float(x[0]) + rel * span
+
+
+def _funct_at(funct: Funct1D, query, border: str) -> np.ndarray:
+    if border not in ("constant", "zero", "mirror", "cyclic", "error"):
+        raise ValueError("Border 只能是 constant、zero、mirror、cyclic 或 error")
+    x, y = funct.x, funct.y
+    asked = np.atleast_1d(np.asarray(query, np.float64))
+    below = asked < x[0]
+    above = asked > x[-1]
+    outside = below | above
+    inside = ~outside
+    out = np.empty(asked.shape, np.float64)
+    if border == "error" and np.any(outside):
+        raise ValueError("X 超出函數範圍")
+    if border == "zero":
+        out[outside] = 0.0
+    elif border == "constant":
+        out[below] = y[0]
+        out[above] = y[-1]
+    elif np.any(outside):
+        out[outside] = _interp_inside(x, y, _map_border(x, asked[outside], border))
+    out[inside] = _interp_inside(x, y, asked[inside])
+    return out
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [P("X", "自變數，要嚴格遞增"), P("Y", "函數值")],
+    [P("Function", "一維函數")],
+    "用點建立一維函數",
+    "X 和 Y 等長，至少兩點，X 要一個比一個大。之後可以用線性內插讀值。",
+    "create_funct_1d_pairs ([0, 2], [10, 30], Function)",
+)
+def create_funct_1d_pairs(x_value, y_value, *, ctx):
+    xs, ys = _funct_numbers(x_value, y_value)
+    return Result([], [Funct1D(xs, ys)])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Function", "一維函數"),
+        P("X", "要讀的自變數，可以是 tuple"),
+        P("Border", "超出範圍時 constant、zero、mirror、cyclic 或 error", "'constant'", _BORDERS),
+    ],
+    [P("Y", "內插後的函數值")],
+    "讀一維函數的值",
+    "範圍裡用線性內插。constant 沿用端點，zero 在外面是 0，error 會失敗。一個數回傳一個數。",
+    "get_y_value_funct_1d (Function, 1, 'constant', Y)",
+)
+def get_y_value_funct_1d(function, x_value, border, *, ctx):
+    funct = _expect_funct(function)
+    kind = _token(border, "Border")
+    values = _funct_at(funct, [float(item) for item in as_list(x_value)], kind)
+    if len(values) == 1 and not isinstance(x_value, (list, tuple)):
+        return Result([], [float(values[0])])
+    return Result([], [values.tolist()])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Function", "一維函數"),
+        P("XMin", "起始 X，含"),
+        P("XMax", "結束 X，含"),
+        P("XStep", "間隔，必須大於 0"),
+        P("Border", "超出範圍時 constant、zero、mirror、cyclic 或 error", "'constant'", _BORDERS),
+    ],
+    [P("Y", "取樣後的函數值")],
+    "等間隔取樣一維函數",
+    "從 XMin 走到不超過 XMax，間隔 XStep。結果是 Y 的 tuple。",
+    "sample_funct_1d (Function, 0, 2, 1, 'constant', Y)",
+)
+def sample_funct_1d(function, x_min, x_max, x_step, border, *, ctx):
+    funct = _expect_funct(function)
+    start, stop, step = scalar(x_min, "XMin"), scalar(x_max, "XMax"), scalar(x_step, "XStep")
+    if step <= 0:
+        raise ValueError("XStep 必須大於 0")
+    if stop < start:
+        raise ValueError("XMax 不能小於 XMin")
+    count = int(math.floor((stop - start) / step + 1e-9)) + 1
+    xs = start + np.arange(count, dtype=np.float64) * step
+    values = _funct_at(funct, xs, _token(border, "Border"))
+    return Result([], [values.tolist()])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [P("Function", "一維函數")],
+    [P("ZeroCrossings", "函數為 0 的 X")],
+    "找一維函數的零點",
+    "剛好是 0 的點會留下。兩點之間跨過 0 時，用線性內插。沒有零點時得到空 tuple。",
+    "zero_crossings_funct_1d (Function, ZeroCrossings)",
+)
+def zero_crossings_funct_1d(function, *, ctx):
+    funct = _expect_funct(function)
+    xs, ys = funct.x, funct.y
+    hits = []
+    for index in range(len(xs) - 1):
+        left, right = float(ys[index]), float(ys[index + 1])
+        if left == 0.0 and (index == 0 or float(ys[index - 1]) != 0.0):
+            hits.append(float(xs[index]))
+        if left * right < 0.0:
+            blend = -left / (right - left)
+            hits.append(float(xs[index] + blend * (xs[index + 1] - xs[index])))
+    if float(ys[-1]) == 0.0 and float(ys[-2]) != 0.0:
+        hits.append(float(xs[-1]))
+    return Result([], [hits])
+
+
+def _knot_derivative(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    slopes = np.diff(y) / np.diff(x)
+    out = np.empty(len(x), np.float64)
+    out[0] = slopes[0]
+    out[-1] = slopes[-1]
+    if len(x) > 2:
+        out[1:-1] = 0.5 * (slopes[:-1] + slopes[1:])
+    return out
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [P("Y", "函數值，至少兩個")],
+    [P("Function", "一維函數")],
+    "用一串值建立函數",
+    "X 自動是 0、1、2，一直到最後一個點。Y 至少要兩個數。",
+    "create_funct_1d_array ([4, 8, 6], Function)",
+)
+def create_funct_1d_array(y_value, *, ctx):
+    ys = np.asarray([float(item) for item in as_list(y_value)], np.float64)
+    if ys.size < 2:
+        raise ValueError("Y 至少要兩個數")
+    return Result([], [Funct1D(np.arange(ys.size, dtype=np.float64), ys)])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [P("Function", "一維函數")],
+    [P("X", "節點的自變數"), P("Y", "節點的函數值")],
+    "讀出函數的節點",
+    "把建立函數時的點原樣讀出來。X 從 0 開始編號的函數也看得到那些 X。",
+    "funct_1d_to_pairs (Function, X, Y)",
+)
+def funct_1d_to_pairs(function, *, ctx):
+    funct = _expect_funct(function)
+    return Result([], [funct.x.tolist(), funct.y.tolist()])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [P("Function", "一維函數"), P("XMin", "積分起點，含"), P("XMax", "積分終點，含")],
+    [P("Integral", "梯形積分")],
+    "對一維函數積分",
+    "把函數看成節點之間的直線，用梯形積分。起點和終點都要落在函數的 X 範圍裡。",
+    "integrate_funct_1d (Function, 0, 2, Integral)",
+)
+def integrate_funct_1d(function, x_min, x_max, *, ctx):
+    funct = _expect_funct(function)
+    start, stop = scalar(x_min, "XMin"), scalar(x_max, "XMax")
+    if stop < start:
+        raise ValueError("XMax 不能小於 XMin")
+    xs, ys = funct.x, funct.y
+    if start < float(xs[0]) or stop > float(xs[-1]):
+        raise ValueError("積分範圍要在函數的 X 裡面")
+    total = 0.0
+    for index in range(len(xs) - 1):
+        left, right = float(xs[index]), float(xs[index + 1])
+        if right <= start or left >= stop:
+            continue
+        begin, end = max(left, start), min(right, stop)
+        span = right - left
+        y_begin = float(ys[index]) + (float(ys[index + 1]) - float(ys[index])) * (begin - left) / span
+        y_end = float(ys[index]) + (float(ys[index + 1]) - float(ys[index])) * (end - left) / span
+        total += (y_begin + y_end) * 0.5 * (end - begin)
+    return Result([], [total])
+
+
+_DERIV = ["'first'", "'second'"]
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [P("Function", "一維函數"), P("Mode", "first 或 second", "'first'", _DERIV)],
+    [P("Derivative", "導數函數")],
+    "對一維函數求導",
+    "導數記在原來的節點上。端點用單側斜率，中間點用左右兩段斜率的平均。second 是再導一次。節點之間仍是直線，所以中間讀到的不是該段的固定斜率。",
+    "derivate_funct_1d (Function, 'first', Derivative)",
+)
+def derivate_funct_1d(function, mode, *, ctx):
+    funct = _expect_funct(function)
+    kind = _token(mode, "Mode")
+    if kind not in ("first", "second"):
+        raise ValueError("Mode 只能是 first 或 second")
+    slope = _knot_derivative(funct.x, funct.y)
+    if kind == "second":
+        slope = _knot_derivative(funct.x, slope)
+    return Result([], [Funct1D(funct.x.copy(), slope)])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [P("Function", "一維函數")],
+    [P("FunctionInverted", "反函數")],
+    "求一維函數的反函數",
+    "Y 必須嚴格遞增或嚴格遞減。反函數的 X 是原來的 Y，Y 是原來的 X。",
+    "invert_funct_1d (Function, FunctionInverted)",
+)
+def invert_funct_1d(function, *, ctx):
+    funct = _expect_funct(function)
+    delta = np.diff(funct.y)
+    if not (np.all(delta > 0) or np.all(delta < 0)):
+        raise ValueError("Y 必須嚴格遞增或嚴格遞減")
+    order = np.argsort(funct.y, kind="stable")
+    return Result([], [Funct1D(funct.y[order].copy(), funct.x[order].copy())])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [P("Function", "一維函數")],
+    [P("MinX", "局部最小的 X"), P("MaxX", "局部最大的 X")],
+    "找函數的局部高低點",
+    "只看中間的節點，端點不算。要比左右鄰居都低才是最小，都高才是最大。沒有時得到空 tuple。",
+    "local_min_max_funct_1d (Function, MinX, MaxX)",
+)
+def local_min_max_funct_1d(function, *, ctx):
+    funct = _expect_funct(function)
+    xs, ys = funct.x, funct.y
+    minima, maxima = [], []
+    for index in range(1, len(xs) - 1):
+        value = float(ys[index])
+        left, right = float(ys[index - 1]), float(ys[index + 1])
+        if value < left and value < right:
+            minima.append(float(xs[index]))
+        elif value > left and value > right:
+            maxima.append(float(xs[index]))
+    return Result([], [minima, maxima])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [P("Function", "一維函數")],
+    [P("FunctionAbs", "絕對值函數")],
+    "取一維函數的絕對值",
+    "每個節點取絕對值。兩點之間跨過 0 時，會補上那個零點，折線才不會把正負直接連起來。",
+    "abs_funct_1d (Function, FunctionAbs)",
+)
+def abs_funct_1d(function, *, ctx):
+    funct = _expect_funct(function)
+    xs, ys = funct.x, funct.y
+    out_x = [float(xs[0])]
+    out_y = [abs(float(ys[0]))]
+    for index in range(len(xs) - 1):
+        left, right = float(ys[index]), float(ys[index + 1])
+        if left * right < 0.0:
+            blend = -left / (right - left)
+            out_x.append(float(xs[index] + blend * (xs[index + 1] - xs[index])))
+            out_y.append(0.0)
+        out_x.append(float(xs[index + 1]))
+        out_y.append(abs(right))
+    return Result([], [Funct1D(np.asarray(out_x, np.float64), np.asarray(out_y, np.float64))])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Outer", "外層函數"),
+        P("Inner", "內層函數"),
+        P("Border", "內層結果超出外層時 constant、zero、mirror、cyclic 或 error", "'constant'", _BORDERS),
+    ],
+    [P("FunctionComposed", "合成函數")],
+    "合成兩個一維函數",
+    "先算 Inner，再把結果送進 Outer。新函數的節點沿用 Inner 的 X。Outer 在中間的轉折如果沒落在這些 X 上，不會被保留。",
+    "compose_funct_1d (Outer, Inner, 'constant', FunctionComposed)",
+)
+def compose_funct_1d(outer, inner, border, *, ctx):
+    outer_fn = _expect_funct(outer)
+    inner_fn = _expect_funct(inner)
+    values = _funct_at(outer_fn, inner_fn.y, _token(border, "Border"))
+    return Result([], [Funct1D(inner_fn.x.copy(), values)])

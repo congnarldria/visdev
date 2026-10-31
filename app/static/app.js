@@ -400,6 +400,46 @@ function exampleTokens(op) {
   return splitCall(op.example.slice(open + 1, close));
 }
 
+const OP_MEMORY = "visdev-op-memory";
+const OP_RECENT = "visdev-op-recent";
+
+function readJson(key, fallback) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "");
+    return parsed && typeof parsed === "object" ? parsed : fallback;
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function rememberedValues(op) {
+  const saved = readJson(OP_MEMORY, {})[op.name];
+  if (!saved) return null;
+  const values = callValues(op);
+  op.params.forEach((param, index) => {
+    if (param.role === "控制輸入" && saved[param.name]) values[index] = saved[param.name];
+  });
+  return values;
+}
+
+function rememberOperator(op, inputs) {
+  const memory = readJson(OP_MEMORY, {});
+  const fields = {};
+  inputs.forEach((node) => {
+    const param = op.params[Number(node.dataset.index)];
+    if (param && param.role === "控制輸入") fields[param.name] = node.value.trim();
+  });
+  memory[op.name] = fields;
+  const recent = readJson(OP_RECENT, []).filter((name) => name !== op.name);
+  recent.unshift(op.name);
+  try {
+    localStorage.setItem(OP_MEMORY, JSON.stringify(memory));
+    localStorage.setItem(OP_RECENT, JSON.stringify(recent.slice(0, 8)));
+  } catch (err) {
+    /* the dialog still inserts the call when storage is unavailable */
+  }
+}
+
 function callValues(op, tokens) {
   const source = tokens === undefined ? exampleTokens(op) : tokens;
   const controlIn = op.params.filter((param) => param.role === "控制輸入");
@@ -439,12 +479,19 @@ function buildOperatorMenu() {
   for (const op of operators) {
     if (!groups.includes(op.group)) groups.push(op.group);
   }
-  drop.innerHTML = groups.map((group) => {
+  const recent = readJson(OP_RECENT, []).filter((name) => operators.some((op) => op.name === name)).slice(0, 8);
+  const recentMenu = recent.length ? `<div class="menu-sub"><button type="button" data-submenu="1">最近<span class="menu-arrow">▸</span></button><div class="menu-fly" hidden>${
+    recent.map((name) => {
+      const op = operators.find((item) => item.name === name);
+      return `<button type="button" data-op="${esc(op.name)}"><b>${esc(op.name)}</b><span>${esc(op.short)}</span></button>`;
+    }).join("")
+  }</div></div>` : "";
+  drop.innerHTML = recentMenu + (groups.map((group) => {
     const items = operators.filter((op) => op.group === group).map((op) =>
       `<button type="button" data-op="${esc(op.name)}"><b>${esc(op.name)}</b><span>${esc(op.short)}</span></button>`
     ).join("");
     return `<div class="menu-sub"><button type="button" data-submenu="1">${esc(group)}<span class="menu-arrow">▸</span></button><div class="menu-fly" hidden>${items}</div></div>`;
-  }).join("") || `<div class="hint" style="padding:8px">沒有算子</div>`;
+  }).join("") || `<div class="hint" style="padding:8px">沒有算子</div>`);
 }
 
 function formFields() {
@@ -508,11 +555,11 @@ function openOperatorForm(name, preset, lineIndex) {
   activeOperator = op;
   editingLine = Number.isInteger(lineIndex) ? lineIndex : null;
   showOp(name);
-  const values = preset || callValues(op);
+  const values = preset || (editingLine == null ? rememberedValues(op) : null) || callValues(op);
   const ok = document.getElementById("opDialogOk");
   if (ok) ok.textContent = editingLine == null ? "插入" : "更新";
   document.getElementById("opDialogTitle").textContent = op.name;
-  document.getElementById("opDialogLead").textContent = op.short;
+  document.getElementById("opDialogLead").textContent = op.detail || op.short;
   let role = "";
   let html = "";
   op.params.forEach((param, index) => {
@@ -579,7 +626,9 @@ function insertOperatorCall() {
     code.selectionStart = code.selectionEnd = caret;
     renderEditor();
   } else {
+    rememberOperator(activeOperator, inputs);
     insertAtCursor(call);
+    buildOperatorMenu();
   }
   closeOperatorDialog();
 }
@@ -1615,6 +1664,11 @@ syncViewMenu();
 document.getElementById("aboutOk").onclick = () => { document.getElementById("aboutDialog").hidden = true; };
 document.getElementById("opDialogCancel").onclick = () => closeOperatorDialog();
 document.getElementById("opDialogOk").onclick = () => insertOperatorCall();
+document.getElementById("opDialog").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+  event.preventDefault();
+  insertOperatorCall();
+});
 document.getElementById("opForm").addEventListener("input", refreshOpPreview);
 document.getElementById("opForm").addEventListener("change", refreshOpPreview);
 

@@ -266,6 +266,7 @@ XLD_FEATURES = [
 ODD_SIZES = ["3", "5", "7", "9", "11", "13", "15"]
 REGION_FEATURE_CHOICES = ["'" + name + "'" for name in REGION_FEATURES]
 XLD_FEATURE_CHOICES = ["'" + name + "'" for name in XLD_FEATURES]
+GRAY_FEATURE_CHOICES = ["'" + name + "'" for name in GRAY_FEATURES]
 COLOR_CHOICES = [
     "'black'", "'white'", "'red'", "'green'", "'blue'", "'yellow'",
     "'cyan'", "'magenta'", "'orange'", "'coral'", "'gold'", "'pink'", "'gray'",
@@ -1228,6 +1229,68 @@ def select_obj(obj, index, *, ctx):
     return Result([Region(region.width, region.height, picked, multi_color=region.multi_color, links=picked_links or None)], [])
 
 
+def _same_links(region: Region):
+    if region.links is not None and len(region.links) == region.count():
+        return list(region.links)
+    return None
+
+
+@operator(
+    "區域",
+    [P("Objects1", "第一組"), P("Objects2", "第二組")],
+    [P("ObjectsConcat", "接在一起的物件")],
+    [],
+    [],
+    "把兩組物件接起來",
+    "兩邊都要是區域，或都要是輪廓。區域的寬高必須相同。原來的物件不會被合併成一塊。",
+    "concat_obj (Objects1, Objects2, ObjectsConcat)",
+)
+def concat_obj(first, second, *, ctx):
+    if isinstance(first, Region) and isinstance(second, Region):
+        if (first.width, first.height) != (second.width, second.height):
+            raise ValueError("兩個區域的尺寸不同")
+        links1 = _same_links(first)
+        links2 = _same_links(second)
+        links = (links1 + links2) if links1 is not None and links2 is not None else None
+        objects = list(first.objects) + list(second.objects)
+        return Result([Region(first.width, first.height, objects, multi_color=len(objects) > 1, links=links)], [])
+    if isinstance(first, XLD) and isinstance(second, XLD):
+        contours = list(first.contours) + list(second.contours)
+        return Result([XLD(max(first.width, second.width), max(first.height, second.height), contours, multi_color=len(contours) > 1)], [])
+    raise ValueError("concat_obj 的兩邊要同是區域，或同是輪廓")
+
+
+@operator(
+    "區域",
+    [P("Objects", "物件集合")],
+    [P("CopiedObjects", "複製出來的物件")],
+    [P("Index", "從 1 開始"), P("NumObj", "要複製幾個")],
+    [],
+    "複製連續的幾個物件",
+    "索引從 1 開始。區域和輪廓都可以。超出範圍會失敗。",
+    "copy_obj (Objects, CopiedObjects, 1, 1)",
+)
+def copy_obj(obj, index, number, *, ctx):
+    start = whole(index, "Index")
+    count = whole(number, "NumObj")
+    if start < 1 or count < 1:
+        raise ValueError("Index 從 1 開始，NumObj 至少要 1")
+    if isinstance(obj, XLD):
+        end = start - 1 + count
+        if end > len(obj.contours):
+            raise IndexError(f"輪廓索引超出範圍 1..{len(obj.contours)}")
+        picked = obj.contours[start - 1 : end]
+        return Result([XLD(obj.width, obj.height, picked, multi_color=len(picked) > 1)], [])
+    region = expect_region(obj, "Objects")
+    end = start - 1 + count
+    if end > region.count():
+        raise IndexError(f"物件索引超出範圍 1..{region.count()}")
+    links = _same_links(region)
+    picked_links = links[start - 1 : end] if links is not None else None
+    picked = region.objects[start - 1 : end]
+    return Result([Region(region.width, region.height, picked, multi_color=region.multi_color, links=picked_links)], [])
+
+
 @operator(
     "形態學",
     [P("Region", "輸入區域")],
@@ -1481,7 +1544,7 @@ def complement(region, *, ctx):
     [],
     [],
     "用區域限制影像",
-    "像素不會被裁掉，domain 以外的地方之後不會被 threshold 使用。顯示時 domain 外會變暗。",
+    "像素不會被裁掉。已經有定義域時會和這個區域取交集；change_domain 才是整段換掉。定義域以外之後不會被 threshold 使用，顯示時也會變暗。",
     "reduce_domain (Image, Region, ImageReduced)",
 )
 def reduce_domain(image, region, *, ctx):
@@ -1490,7 +1553,10 @@ def reduce_domain(image, region, *, ctx):
     if image.width != region.width or image.height != region.height:
         raise ValueError("影像和區域的尺寸不同")
     reduced = image.copy()
-    reduced.domain = region.union_mask()
+    mask = region.union_mask()
+    if image.domain is not None:
+        mask = cv2.bitwise_and(mask, image.domain)
+    reduced.domain = mask
     return Result([reduced], [])
 
 
@@ -1748,6 +1814,50 @@ def intensity(region, image, *, ctx):
     return Result([], [means, devs])
 
 
+def _gray_feature(values: np.ndarray, name: str) -> float:
+    feature = str(name).strip().lower().strip("'\"")
+    if feature not in GRAY_FEATURES:
+        known = ", ".join(GRAY_FEATURES)
+        raise ValueError(f"不支援的灰階特徵 {name}。可用 {known}")
+    if values.size == 0:
+        return 0.0
+    if feature == "gray_min":
+        return float(values.min())
+    if feature == "gray_max":
+        return float(values.max())
+    if feature == "gray_mean":
+        return float(values.mean())
+    if feature == "gray_deviation":
+        return float(values.std())
+    return float(np.median(values))
+
+
+@operator(
+    "特徵",
+    [P("Regions", "物件"), P("Image", "灰階影像")],
+    [],
+    [P("Features", "灰階特徵，可以是 tuple", choices=GRAY_FEATURE_CHOICES)],
+    [P("Value", "特徵值")],
+    "讀取灰階特徵",
+    "可選 gray_min、gray_max、gray_mean、gray_deviation、gray_median。單一特徵時依物件排列。多個特徵時先排完第一個特徵的全部物件。標準差和 intensity 一樣。彩色先轉成亮度。",
+    "gray_features (Regions, Image, 'gray_mean', Value)",
+)
+def gray_features(region, image, features, *, ctx):
+    source = expect_region(region, "Regions")
+    picture = expect_image(image, "Image")
+    if (picture.width, picture.height) != (source.width, source.height):
+        raise ValueError("影像和區域的尺寸不同")
+    gray = picture.gray()
+    names = as_list(features)
+    if not names:
+        raise ValueError("Features 不能是空的")
+    values = []
+    for feature in names:
+        for mask in source.objects:
+            values.append(_gray_feature(gray[mask > 0], feature))
+    return Result([], [values])
+
+
 @operator(
     "特徵",
     [P("Objects", "物件集合")],
@@ -1847,23 +1957,27 @@ def edges_sub_pix(image, _filter, alpha, low, high, *, ctx):
     "輪廓",
     [P("Regions", "區域")],
     [P("Contours", "區域外輪廓")],
-    [],
+    [P("Mode", "border、border_holes 或 center", "'border'", ["'border'", "'border_holes'", "'center'"])],
     [],
     "區域轉成輪廓",
-    "每個物件的外輪廓變成一條 XLD。",
-    "gen_contour_region_xld (Regions, Contours)",
+    "border 只要外輪廓。border_holes 連孔洞一起。center 這版和外輪廓相同，還沒有做到次像素的邊界中心。",
+    "gen_contour_region_xld (Regions, Contours, 'border')",
 )
-def gen_contour_region_xld(region, *, ctx):
+def gen_contour_region_xld(region, mode, *, ctx):
     region = expect_region(region, "Regions")
+    kind = text(mode, "Mode").lower()
+    if kind not in ("border", "border_holes", "center"):
+        raise ValueError("Mode 只能是 border、border_holes 或 center")
+    retrieval = cv2.RETR_CCOMP if kind == "border_holes" else cv2.RETR_EXTERNAL
     polylines = []
     for mask in region.objects:
-        for line in _contour_lines(mask):
+        for line in _contour_lines(mask, retrieval):
             polylines.append(line)
     return Result([XLD(region.width, region.height, polylines, multi_color=len(polylines) > 1)], [])
 
 
-def _contour_lines(mask: np.ndarray):
-    found = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+def _contour_lines(mask: np.ndarray, retrieval=cv2.RETR_EXTERNAL):
+    found = cv2.findContours(mask, retrieval, cv2.CHAIN_APPROX_NONE)
     contours = found[0] if len(found) == 2 else found[1]
     lines = []
     for contour in contours:
@@ -3612,6 +3726,277 @@ def distance_pl(row, column, row1, column1, row2, column2, *, ctx):
     )])
 
 
+def _project_line(row, column, row1, column1, row2, column2):
+    drow = row2 - row1
+    dcol = column2 - column1
+    length2 = drow * drow + dcol * dcol
+    if length2 < 1e-12:
+        return row1, column1, 0.0
+    scale = ((row - row1) * drow + (column - column1) * dcol) / length2
+    return row1 + scale * drow, column1 + scale * dcol, scale
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row", "點的列"), P("Column", "點的行"),
+        P("Row1", "線段起點的列"), P("Column1", "線段起點的行"),
+        P("Row2", "線段終點的列"), P("Column2", "線段終點的行"),
+    ],
+    [P("Distance", "點到線段的距離，像素")],
+    "點到線段的距離",
+    "垂足落在線段外時，距離改量到較近的端點。和 distance_pl 的無限長直線不同。",
+    "distance_ps (0, 0, 0, 10, 0, 20, Distance)",
+)
+def distance_ps(row, column, row1, column1, row2, column2, *, ctx):
+    py = scalar(row, "Row")
+    px = scalar(column, "Column")
+    r1 = scalar(row1, "Row1")
+    c1 = scalar(column1, "Column1")
+    r2 = scalar(row2, "Row2")
+    c2 = scalar(column2, "Column2")
+    proj_row, proj_col, scale = _project_line(py, px, r1, c1, r2, c2)
+    if scale < 0:
+        proj_row, proj_col = r1, c1
+    elif scale > 1:
+        proj_row, proj_col = r2, c2
+    return Result([], [math.hypot(py - proj_row, px - proj_col)])
+
+
+def _line_distances(rows, cols, row1: float, column1: float, row2: float, column2: float, segment: bool) -> np.ndarray:
+    rows = np.asarray(rows, np.float64).reshape(-1)
+    cols = np.asarray(cols, np.float64).reshape(-1)
+    drow = row2 - row1
+    dcol = column2 - column1
+    length = math.hypot(drow, dcol)
+    if length < 1e-6:
+        raise ValueError("直線的兩個點重疊")
+    if not segment:
+        return np.abs((cols - column1) * (drow / length) - (rows - row1) * (dcol / length))
+    scale = ((rows - row1) * drow + (cols - column1) * dcol) / (length * length)
+    scale = np.clip(scale, 0.0, 1.0)
+    return np.hypot(rows - (row1 + scale * drow), cols - (column1 + scale * dcol))
+
+
+def _region_line_distance(region, row1, column1, row2, column2, segment: bool) -> list[float]:
+    source = expect_region(region, "Region")
+    r1, c1 = scalar(row1, "Row1"), scalar(column1, "Column1")
+    r2, c2 = scalar(row2, "Row2"), scalar(column2, "Column2")
+    distances = []
+    for mask in source.objects:
+        rows, cols = np.nonzero(mask)
+        if len(rows) == 0:
+            continue
+        distances.append(float(_line_distances(rows, cols, r1, c1, r2, c2, segment).min()))
+    if not distances:
+        raise ValueError("區域是空的")
+    return distances
+
+
+@operator(
+    "量測",
+    [P("Region", "區域")],
+    [],
+    [
+        P("Row1", "直線起點的列"), P("Column1", "直線起點的行"),
+        P("Row2", "直線終點的列"), P("Column2", "直線終點的行"),
+    ],
+    [P("Distance", "區域到無限長直線的最短距離")],
+    "區域到直線的距離",
+    "每個物件一個距離，量的是區域裡最近的像素到無限長直線的垂直距離。",
+    "distance_lr (Region, 0, 0, 0, 100, Distance)",
+)
+def distance_lr(region, row1, column1, row2, column2, *, ctx):
+    return Result([], [_region_line_distance(region, row1, column1, row2, column2, False)])
+
+
+@operator(
+    "量測",
+    [P("Region", "區域")],
+    [],
+    [
+        P("Row1", "線段起點的列"), P("Column1", "線段起點的行"),
+        P("Row2", "線段終點的列"), P("Column2", "線段終點的行"),
+    ],
+    [P("Distance", "區域到線段的最短距離")],
+    "區域到線段的距離",
+    "垂足落在線段外時，改量到較近的端點。每個物件一個距離。",
+    "distance_sr (Region, 0, 0, 0, 100, Distance)",
+)
+def distance_sr(region, row1, column1, row2, column2, *, ctx):
+    return Result([], [_region_line_distance(region, row1, column1, row2, column2, True)])
+
+
+@operator(
+    "量測",
+    [P("Contour", "輪廓")],
+    [],
+    [
+        P("Row1", "直線起點的列"), P("Column1", "直線起點的行"),
+        P("Row2", "直線終點的列"), P("Column2", "直線終點的行"),
+    ],
+    [P("Distance", "輪廓到無限長直線的最短距離")],
+    "輪廓到直線的距離",
+    "每條輪廓一個距離，用輪廓上的點量到無限長直線。",
+    "distance_lc (Contour, 0, 0, 0, 100, Distance)",
+)
+def distance_lc(contour, row1, column1, row2, column2, *, ctx):
+    source = expect_xld(contour, "Contour")
+    r1, c1 = scalar(row1, "Row1"), scalar(column1, "Column1")
+    r2, c2 = scalar(row2, "Row2"), scalar(column2, "Column2")
+    distances = []
+    for item in source.contours:
+        points = _points(item)
+        if len(points) < 2:
+            continue
+        cols = [point[0] for point in points]
+        rows = [point[1] for point in points]
+        distances.append(float(_line_distances(rows, cols, r1, c1, r2, c2, False).min()))
+    if not distances:
+        raise ValueError("輪廓是空的")
+    return Result([], [distances])
+
+
+def _edges_cross(row1, column1, row2, column2, er1, ec1, er2, ec2) -> bool:
+    def side(orow, ocol, arow, acol, brow, bcol):
+        return (arow - orow) * (bcol - ocol) - (acol - ocol) * (brow - orow)
+
+    left = side(row1, column1, row2, column2, er1, ec1)
+    right = side(row1, column1, row2, column2, er2, ec2)
+    start = side(er1, ec1, er2, ec2, row1, column1)
+    end = side(er1, ec1, er2, ec2, row2, column2)
+    return bool(np.any((left * right < 0) & (start * end < 0)))
+
+
+def _points_to_edges(rows, cols, er1, ec1, er2, ec2) -> float:
+    rows = np.asarray(rows, np.float64).reshape(-1, 1)
+    cols = np.asarray(cols, np.float64).reshape(-1, 1)
+    drow = er2 - er1
+    dcol = ec2 - ec1
+    length2 = drow * drow + dcol * dcol
+    scale = np.zeros((len(rows), len(er1)), np.float64)
+    nonzero = length2 > 1e-12
+    proj = (rows - er1) * drow + (cols - ec1) * dcol
+    scale[:, nonzero] = proj[:, nonzero] / length2[nonzero]
+    scale = np.clip(scale, 0.0, 1.0)
+    return float(np.hypot(rows - (er1 + scale * drow), cols - (ec1 + scale * dcol)).min())
+
+
+def _polyline_segment_distance(rows, cols, row1, column1, row2, column2) -> float:
+    best = float(_line_distances(rows, cols, row1, column1, row2, column2, True).min())
+    if len(np.asarray(rows).reshape(-1)) < 2:
+        return best
+    er1 = np.asarray(rows, np.float64).reshape(-1)[:-1]
+    ec1 = np.asarray(cols, np.float64).reshape(-1)[:-1]
+    er2 = np.asarray(rows, np.float64).reshape(-1)[1:]
+    ec2 = np.asarray(cols, np.float64).reshape(-1)[1:]
+    if _edges_cross(row1, column1, row2, column2, er1, ec1, er2, ec2):
+        return 0.0
+    return min(best, _points_to_edges([row1, row2], [column1, column2], er1, ec1, er2, ec2))
+
+
+@operator(
+    "量測",
+    [P("Contour", "輪廓")],
+    [],
+    [
+        P("Row1", "線段起點的列"), P("Column1", "線段起點的行"),
+        P("Row2", "線段終點的列"), P("Column2", "線段終點的行"),
+    ],
+    [P("Distance", "輪廓到線段的最短距離")],
+    "輪廓到線段的距離",
+    "每條輪廓一個距離。折線和線段相交時是 0，否則量端點到另一段的距離。不會自動把輪廓封閉。",
+    "distance_sc (Contour, 0, 0, 0, 100, Distance)",
+)
+def distance_sc(contour, row1, column1, row2, column2, *, ctx):
+    source = expect_xld(contour, "Contour")
+    r1, c1 = scalar(row1, "Row1"), scalar(column1, "Column1")
+    r2, c2 = scalar(row2, "Row2"), scalar(column2, "Column2")
+    distances = []
+    for item in source.contours:
+        points = _points(item)
+        if len(points) < 2:
+            continue
+        cols = [point[0] for point in points]
+        rows = [point[1] for point in points]
+        distances.append(_polyline_segment_distance(rows, cols, r1, c1, r2, c2))
+    if not distances:
+        raise ValueError("輪廓是空的")
+    return Result([], [distances])
+
+
+def _segment_gap(row1, column1, row2, column2, row3, column3, row4, column4) -> float:
+    def point_gap(row, column, start_row, start_col, end_row, end_col) -> float:
+        proj_row, proj_col, scale = _project_line(row, column, start_row, start_col, end_row, end_col)
+        if scale < 0:
+            proj_row, proj_col = start_row, start_col
+        elif scale > 1:
+            proj_row, proj_col = end_row, end_col
+        return math.hypot(row - proj_row, column - proj_col)
+
+    def cross(origin, left, right) -> float:
+        return (left[0] - origin[0]) * (right[1] - origin[1]) - (left[1] - origin[1]) * (right[0] - origin[0])
+
+    first = (row1, column1)
+    second = (row2, column2)
+    third = (row3, column3)
+    fourth = (row4, column4)
+    if cross(first, second, third) * cross(first, second, fourth) < 0 and cross(third, fourth, first) * cross(third, fourth, second) < 0:
+        return 0.0
+    return min(
+        point_gap(row1, column1, row3, column3, row4, column4),
+        point_gap(row2, column2, row3, column3, row4, column4),
+        point_gap(row3, column3, row1, column1, row2, column2),
+        point_gap(row4, column4, row1, column1, row2, column2),
+    )
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row1", "第一條起點的列"), P("Column1", "第一條起點的行"),
+        P("Row2", "第一條終點的列"), P("Column2", "第一條終點的行"),
+        P("Row3", "第二條起點的列"), P("Column3", "第二條起點的行"),
+        P("Row4", "第二條終點的列"), P("Column4", "第二條終點的行"),
+    ],
+    [P("Distance", "兩條線段的最短距離")],
+    "兩條線段的距離",
+    "線段相交或端點落在另一條上時，距離是 0。這不是無限長直線。",
+    "distance_ss (0, 0, 0, 10, 5, 0, 5, 10, Distance)",
+)
+def distance_ss(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
+    return Result([], [_segment_gap(
+        scalar(row1, "Row1"), scalar(column1, "Column1"), scalar(row2, "Row2"), scalar(column2, "Column2"),
+        scalar(row3, "Row3"), scalar(column3, "Column3"), scalar(row4, "Row4"), scalar(column4, "Column4"),
+    )])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row", "點的列"), P("Column", "點的行"),
+        P("Row1", "直線起點的列"), P("Column1", "直線起點的行"),
+        P("Row2", "直線終點的列"), P("Column2", "直線終點的行"),
+    ],
+    [P("RowProj", "垂足的列"), P("ColProj", "垂足的行")],
+    "點在直線上的垂足",
+    "直線是無限長的。兩個端點重合時，垂足就是那個點。",
+    "projection_pl (5, 4, 0, 0, 0, 10, RowProj, ColProj)",
+)
+def projection_pl(row, column, row1, column1, row2, column2, *, ctx):
+    proj_row, proj_col, _scale = _project_line(
+        scalar(row, "Row"), scalar(column, "Column"),
+        scalar(row1, "Row1"), scalar(column1, "Column1"), scalar(row2, "Row2"), scalar(column2, "Column2"),
+    )
+    return Result([], [proj_row, proj_col])
+
+
 @operator(
     "量測",
     [],
@@ -3677,7 +4062,356 @@ def intersection_ll(row1, column1, row2, column2, row3, column3, row4, column4, 
     return Result([], [row, column])
 
 
-GROUP_ORDER = ["檔案", "灰階與濾波", "幾何", "分割", "形態學", "區域", "特徵", "輪廓", "量測", "文字", "形狀匹配", "NCC定位", "顯示", "Tuple"]
+def _line_phi(row1, column1, row2, column2) -> float:
+    drow = row2 - row1
+    dcol = column2 - column1
+    if abs(drow) < 1e-12 and abs(dcol) < 1e-12:
+        raise ValueError("兩個點重合，沒有方向")
+    return math.atan2(drow, dcol)
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row1", "起點列"), P("Column1", "起點行"),
+        P("Row2", "終點列"), P("Column2", "終點行"),
+    ],
+    [P("Angle", "和水平方向的夾角，弳度")],
+    "直線的方向",
+    "水平朝右是 0。正角度在畫面上順時針，朝下是 π/2。範圍是 −π 到 π。",
+    "angle_lx (0, 0, 0, 10, Angle)",
+)
+def angle_lx(row1, column1, row2, column2, *, ctx):
+    return Result([], [_line_phi(scalar(row1, "Row1"), scalar(column1, "Column1"), scalar(row2, "Row2"), scalar(column2, "Column2"))])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row1", "起點列"), P("Column1", "起點行"),
+        P("Row2", "終點列"), P("Column2", "終點行"),
+    ],
+    [
+        P("RowCenter", "中點列"), P("ColCenter", "中點行"),
+        P("Length", "長度"), P("Phi", "方向，弳度"),
+    ],
+    "直線的中點、長度和方向",
+    "方向和 angle_lx 相同。",
+    "line_position (0, 0, 0, 10, RowCenter, ColCenter, Length, Phi)",
+)
+def line_position(row1, column1, row2, column2, *, ctx):
+    r1 = scalar(row1, "Row1")
+    c1 = scalar(column1, "Column1")
+    r2 = scalar(row2, "Row2")
+    c2 = scalar(column2, "Column2")
+    return Result([], [(r1 + r2) / 2.0, (c1 + c2) / 2.0, math.hypot(r2 - r1, c2 - c1), _line_phi(r1, c1, r2, c2)])
+
+
+def _cross(row_a: float, col_a: float, row_b: float, col_b: float) -> float:
+    return row_a * col_b - col_a * row_b
+
+
+def _on_segment(row, column, row1, column1, row2, column2) -> bool:
+    _proj_row, _proj_col, scale = _project_line(row, column, row1, column1, row2, column2)
+    if scale < -1e-6 or scale > 1 + 1e-6:
+        return False
+    if scale < 0:
+        return math.hypot(row - row1, column - column1) <= 1e-4
+    if scale > 1:
+        return math.hypot(row - row2, column - column2) <= 1e-4
+    foot_row = row1 + scale * (row2 - row1)
+    foot_col = column1 + scale * (column2 - column1)
+    return math.hypot(row - foot_row, column - foot_col) <= 1e-4
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row1", "第一條起點的列"), P("Column1", "第一條起點的行"),
+        P("Row2", "第一條終點的列"), P("Column2", "第一條終點的行"),
+        P("Row3", "第二條起點的列"), P("Column3", "第二條起點的行"),
+        P("Row4", "第二條終點的列"), P("Column4", "第二條終點的行"),
+    ],
+    [P("Row", "交點列"), P("Column", "交點行"), P("IsOverlapping", "1 表示有交點")],
+    "兩條線段的交點",
+    "只算線段，不算無限長直線。沒有交點時座標是 0，IsOverlapping 是 0。端點落在另一條上也算相交。",
+    "intersection_segments (0, 0, 10, 10, 0, 10, 10, 0, Row, Column, IsOverlapping)",
+)
+def intersection_segments(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
+    r1 = scalar(row1, "Row1")
+    c1 = scalar(column1, "Column1")
+    r2 = scalar(row2, "Row2")
+    c2 = scalar(column2, "Column2")
+    r3 = scalar(row3, "Row3")
+    c3 = scalar(column3, "Column3")
+    r4 = scalar(row4, "Row4")
+    c4 = scalar(column4, "Column4")
+    drow1, dcol1 = r2 - r1, c2 - c1
+    drow2, dcol2 = r4 - r3, c4 - c3
+    den = _cross(drow1, dcol1, drow2, dcol2)
+    if abs(den) >= 1e-9:
+        t = _cross(r3 - r1, c3 - c1, drow2, dcol2) / den
+        u = _cross(r3 - r1, c3 - c1, drow1, dcol1) / den
+        if -1e-6 <= t <= 1 + 1e-6 and -1e-6 <= u <= 1 + 1e-6:
+            return Result([], [r1 + t * drow1, c1 + t * dcol1, 1])
+        return Result([], [0, 0, 0])
+    for row, col in ((r1, c1), (r2, c2)):
+        if _on_segment(row, col, r3, c3, r4, c4):
+            return Result([], [row, col, 1])
+    for row, col in ((r3, c3), (r4, c4)):
+        if _on_segment(row, col, r1, c1, r2, c2):
+            return Result([], [row, col, 1])
+    return Result([], [0, 0, 0])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row1", "第一條起點的列"), P("Column1", "第一條起點的行"),
+        P("Row2", "第一條終點的列"), P("Column2", "第一條終點的行"),
+        P("Row3", "第二條起點的列"), P("Column3", "第二條起點的行"),
+        P("Row4", "第二條終點的列"), P("Column4", "第二條終點的行"),
+    ],
+    [P("Row", "交點列"), P("Column", "交點行"), P("IsOverlapping", "1 表示有交點")],
+    "兩條無限長直線的交點",
+    "平行時沒有交點，座標是 0，IsOverlapping 是 0。這不是線段。",
+    "intersection_lines (0, 0, 0, 80, 0, 20, 40, 20, Row, Column, IsOverlapping)",
+)
+def intersection_lines(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
+    r1, c1 = scalar(row1, "Row1"), scalar(column1, "Column1")
+    r2, c2 = scalar(row2, "Row2"), scalar(column2, "Column2")
+    r3, c3 = scalar(row3, "Row3"), scalar(column3, "Column3")
+    r4, c4 = scalar(row4, "Row4"), scalar(column4, "Column4")
+    drow1, dcol1 = r2 - r1, c2 - c1
+    drow2, dcol2 = r4 - r3, c4 - c3
+    if math.hypot(drow1, dcol1) < 1e-9 or math.hypot(drow2, dcol2) < 1e-9:
+        raise ValueError("直線的兩個點重疊")
+    den = _cross(drow1, dcol1, drow2, dcol2)
+    if abs(den) < 1e-9:
+        return Result([], [0, 0, 0])
+    along = _cross(r3 - r1, c3 - c1, drow2, dcol2) / den
+    return Result([], [r1 + along * drow1, c1 + along * dcol1, 1])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row1", "線段起點的列"), P("Column1", "線段起點的行"),
+        P("Row2", "線段終點的列"), P("Column2", "線段終點的行"),
+        P("Row3", "直線起點的列"), P("Column3", "直線起點的行"),
+        P("Row4", "直線終點的列"), P("Column4", "直線終點的行"),
+    ],
+    [P("Row", "交點列"), P("Column", "交點行"), P("IsOverlapping", "1 表示交在線段上")],
+    "線段和無限長直線的交點",
+    "第一組兩點是線段，第二組是無限長直線。交點不在線段上、或兩線平行時，座標是 0，IsOverlapping 是 0。",
+    "intersection_segment_line (10, 0, 10, 40, 0, 20, 40, 20, Row, Column, IsOverlapping)",
+)
+def intersection_segment_line(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
+    r1, c1 = scalar(row1, "Row1"), scalar(column1, "Column1")
+    r2, c2 = scalar(row2, "Row2"), scalar(column2, "Column2")
+    r3, c3 = scalar(row3, "Row3"), scalar(column3, "Column3")
+    r4, c4 = scalar(row4, "Row4"), scalar(column4, "Column4")
+    drow1, dcol1 = r2 - r1, c2 - c1
+    drow2, dcol2 = r4 - r3, c4 - c3
+    if math.hypot(drow1, dcol1) < 1e-9 or math.hypot(drow2, dcol2) < 1e-9:
+        raise ValueError("直線的兩個點重疊")
+    den = _cross(drow1, dcol1, drow2, dcol2)
+    if abs(den) < 1e-9:
+        return Result([], [0, 0, 0])
+    along = _cross(r3 - r1, c3 - c1, drow2, dcol2) / den
+    if along < -1e-9 or along > 1.0 + 1e-9:
+        return Result([], [0, 0, 0])
+    return Result([], [r1 + along * drow1, c1 + along * dcol1, 1])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row1", "直線起點的列"), P("Column1", "直線起點的行"),
+        P("Row2", "直線終點的列"), P("Column2", "直線終點的行"),
+        P("Row", "圓心列"), P("Column", "圓心行"), P("Radius", "半徑"),
+    ],
+    [P("RowIntersect", "交點列"), P("ColumnIntersect", "交點行")],
+    "無限長直線和圓的交點",
+    "沒有交點時得到空 tuple。相切時只有一個點。直線由兩個點決定。",
+    "intersection_line_circle (0, -10, 0, 10, 0, 0, 5, Row, Column)",
+)
+def intersection_line_circle(row1, column1, row2, column2, row, column, radius, *, ctx):
+    r1 = scalar(row1, "Row1")
+    c1 = scalar(column1, "Column1")
+    r2 = scalar(row2, "Row2")
+    c2 = scalar(column2, "Column2")
+    center_row = scalar(row, "Row")
+    center_col = scalar(column, "Column")
+    rad = scalar(radius, "Radius")
+    if rad < 0:
+        raise ValueError("半徑不能是負的")
+    drow, dcol = r2 - r1, c2 - c1
+    quad_a = drow * drow + dcol * dcol
+    if quad_a < 1e-12:
+        raise ValueError("直線的兩個點不能重合")
+    rel_row, rel_col = r1 - center_row, c1 - center_col
+    quad_b = 2.0 * (rel_row * drow + rel_col * dcol)
+    quad_c = rel_row * rel_row + rel_col * rel_col - rad * rad
+    disc = quad_b * quad_b - 4.0 * quad_a * quad_c
+    if disc < -1e-6:
+        return Result([], [[], []])
+    if disc < 0:
+        disc = 0.0
+    root = math.sqrt(disc)
+    times = [(-quad_b - root) / (2.0 * quad_a)]
+    if root > 1e-6:
+        times.append((-quad_b + root) / (2.0 * quad_a))
+    rows = [r1 + item * drow for item in times]
+    cols = [c1 + item * dcol for item in times]
+    return Result([], [rows, cols])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row1", "線段起點的列"), P("Column1", "線段起點的行"),
+        P("Row2", "線段終點的列"), P("Column2", "線段終點的行"),
+        P("Row3", "直線起點的列"), P("Column3", "直線起點的行"),
+        P("Row4", "直線終點的列"), P("Column4", "直線終點的行"),
+    ],
+    [P("Distance", "線段到無限長直線的距離")],
+    "線段到直線的距離",
+    "線段穿過直線時距離是 0。否則是兩個端點裡較近的那個垂直距離。",
+    "distance_sl (0, 0, 0, 10, 5, 0, 5, 20, Distance)",
+)
+def distance_sl(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
+    r1 = scalar(row1, "Row1")
+    c1 = scalar(column1, "Column1")
+    r2 = scalar(row2, "Row2")
+    c2 = scalar(column2, "Column2")
+    r3 = scalar(row3, "Row3")
+    c3 = scalar(column3, "Column3")
+    r4 = scalar(row4, "Row4")
+    c4 = scalar(column4, "Column4")
+    drow, dcol = r4 - r3, c4 - c3
+    length = math.hypot(drow, dcol)
+    if length < 1e-12:
+        raise ValueError("直線的兩個點不能重合")
+
+    def side(row: float, col: float) -> float:
+        return _cross(drow, dcol, row - r3, col - c3) / length
+
+    side1 = side(r1, c1)
+    side2 = side(r2, c2)
+    if side1 * side2 <= 0:
+        return Result([], [0.0])
+    return Result([], [min(abs(side1), abs(side2))])
+
+
+def _circle_hits(row1, col1, row2, col2, center_row, center_col, radius):
+    if radius < 0:
+        raise ValueError("半徑不能是負的")
+    drow, dcol = row2 - row1, col2 - col1
+    quad_a = drow * drow + dcol * dcol
+    if quad_a < 1e-12:
+        raise ValueError("兩個點不能重合")
+    rel_row, rel_col = row1 - center_row, col1 - center_col
+    quad_b = 2.0 * (rel_row * drow + rel_col * dcol)
+    quad_c = rel_row * rel_row + rel_col * rel_col - radius * radius
+    disc = quad_b * quad_b - 4.0 * quad_a * quad_c
+    if disc < -1e-6:
+        return []
+    root = math.sqrt(max(disc, 0.0))
+    times = [(-quad_b - root) / (2.0 * quad_a)]
+    if root > 1e-6:
+        times.append((-quad_b + root) / (2.0 * quad_a))
+    return [(item, row1 + item * drow, col1 + item * dcol) for item in times]
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row1", "第一個圓心的列"), P("Column1", "第一個圓心的行"), P("Radius1", "第一個半徑"),
+        P("Row2", "第二個圓心的列"), P("Column2", "第二個圓心的行"), P("Radius2", "第二個半徑"),
+    ],
+    [P("Row", "交點列"), P("Column", "交點行")],
+    "兩個圓的交點",
+    "沒有交點時得到空 tuple。相切時只有一個點。兩圓完全重合會失敗。",
+    "intersection_circles (0, 0, 5, 0, 6, 5, Row, Column)",
+)
+def intersection_circles(row1, column1, radius1, row2, column2, radius2, *, ctx):
+    center1_row = scalar(row1, "Row1")
+    center1_col = scalar(column1, "Column1")
+    rad1 = scalar(radius1, "Radius1")
+    center2_row = scalar(row2, "Row2")
+    center2_col = scalar(column2, "Column2")
+    rad2 = scalar(radius2, "Radius2")
+    if rad1 < 0 or rad2 < 0:
+        raise ValueError("半徑不能是負的")
+    drow = center2_row - center1_row
+    dcol = center2_col - center1_col
+    dist = math.hypot(drow, dcol)
+    if dist < 1e-9:
+        if abs(rad1 - rad2) < 1e-6:
+            raise ValueError("兩圓重合，交點無限多")
+        return Result([], [[], []])
+    if dist > rad1 + rad2 + 1e-6 or dist < abs(rad1 - rad2) - 1e-6:
+        return Result([], [[], []])
+    along = (rad1 * rad1 - rad2 * rad2 + dist * dist) / (2.0 * dist)
+    height = math.sqrt(max(rad1 * rad1 - along * along, 0.0))
+    mid_row = center1_row + along * drow / dist
+    mid_col = center1_col + along * dcol / dist
+    if height < 1e-6:
+        return Result([], [[mid_row], [mid_col]])
+    off_row = -height * dcol / dist
+    off_col = height * drow / dist
+    return Result([], [[mid_row + off_row, mid_row - off_row], [mid_col + off_col, mid_col - off_col]])
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row1", "線段起點的列"), P("Column1", "線段起點的行"),
+        P("Row2", "線段終點的列"), P("Column2", "線段終點的行"),
+        P("Row", "圓心列"), P("Column", "圓心行"), P("Radius", "半徑"),
+    ],
+    [P("RowIntersect", "交點列"), P("ColumnIntersect", "交點行")],
+    "線段和圓的交點",
+    "只算線段，不算無限長直線。沒有交點時得到空 tuple。",
+    "intersection_segment_circle (0, -10, 0, 10, 0, 0, 5, Row, Column)",
+)
+def intersection_segment_circle(row1, column1, row2, column2, row, column, radius, *, ctx):
+    hits = _circle_hits(
+        scalar(row1, "Row1"),
+        scalar(column1, "Column1"),
+        scalar(row2, "Row2"),
+        scalar(column2, "Column2"),
+        scalar(row, "Row"),
+        scalar(column, "Column"),
+        scalar(radius, "Radius"),
+    )
+    kept = [item for item in hits if -1e-6 <= item[0] <= 1 + 1e-6]
+    return Result([], [[item[1] for item in kept], [item[2] for item in kept]])
+
+
+GROUP_ORDER = [
+    "檔案", "灰階與濾波", "幾何", "分割", "形態學", "區域", "特徵", "輪廓", "量測",
+    "文字", "條碼", "相機", "標定", "三維", "分類", "形狀匹配", "NCC定位", "顯示", "矩陣", "Tuple",
+]
 
 
 def list_operators() -> list[dict]:

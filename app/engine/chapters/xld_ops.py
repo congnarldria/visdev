@@ -2,12 +2,29 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import cv2
 
-from ..objects import Result, XLD
-from ..operators import P, expect_xld, operator, scalar, text
-from .image_ops import _mat_from
+from ..objects import Image, Result, XLD
+from ..operators import (
+    P,
+    XLD_FEATURE_CHOICES,
+    _sample_rectangle,
+    _xld_feature_name,
+    as_list,
+    expect_image,
+    expect_xld,
+    image_out,
+    operator,
+    scalar,
+    text,
+    whole,
+    xld_measures,
+)
+from .image_ops import _apply_proj, _mat_from, _proj_from
+from .region_ops import skeleton
 
 
 def _inside(point, row1, col1, row2, col2) -> bool:
@@ -106,3 +123,1532 @@ def affine_trans_contour_xld(contours, hom_mat2d, *, ctx):
         if len(moved) >= 2:
             pieces.append(moved)
     return Result([XLD(max(width, 1), max(height, 1), pieces, multi_color=len(pieces) > 1)], [])
+
+
+def _fit_canvas(ctx, contours: list) -> XLD:
+    height, width = ctx.canvas_size()
+    for contour in contours:
+        for col, row in contour:
+            width = max(width, int(math.ceil(float(col))) + 1)
+            height = max(height, int(math.ceil(float(row))) + 1)
+    return XLD(max(width, 1), max(height, 1), contours, multi_color=len(contours) > 1)
+
+
+def _arc(row, col, radius1, radius2, phi, start, end, resolution, order) -> list:
+    if radius1 <= 0 or radius2 <= 0:
+        raise ValueError("半徑必須大於 0")
+    if resolution <= 0:
+        raise ValueError("Resolution 必須大於 0")
+    mode = text(order, "PointOrder").lower()
+    if mode not in ("positive", "negative"):
+        raise ValueError("PointOrder 只能是 positive 或 negative")
+    span = float(end) - float(start)
+    while span <= 1e-9:
+        span += 2 * math.pi
+    steps = int(math.ceil(max(radius1, radius2) * span / resolution))
+    steps = min(max(steps, 2), 4096)
+    angles = np.linspace(float(start), float(start) + span, steps + 1)
+    ex = radius1 * np.cos(angles)
+    ey = radius2 * np.sin(angles)
+    cosine = math.cos(phi)
+    sine = math.sin(phi)
+    cols = col + ex * cosine - ey * sine
+    rows = row + ex * sine + ey * cosine
+    points = [[float(item_col), float(item_row)] for item_col, item_row in zip(cols, rows)]
+    if mode == "negative":
+        points.reverse()
+    return points
+
+
+_POINT_ORDER = ["'positive'", "'negative'"]
+
+
+@operator(
+    "輪廓",
+    [],
+    [P("ContCircle", "圓或圓弧")],
+    [
+        P("Row", "圓心列"),
+        P("Column", "圓心行"),
+        P("Radius", "半徑"),
+        P("StartPhi", "起始角，弳度"),
+        P("EndPhi", "結束角，弳度"),
+        P("PointOrder", "positive 或 negative", "'positive'", _POINT_ORDER),
+        P("Resolution", "相鄰點的大約間距", "1"),
+    ],
+    [],
+    "產生圓或圓弧輪廓",
+    "角度 0 朝右，正角度在畫面上順時針。結束角小於等於起始角時會繞過一圈。negative 會把點序反過來。",
+    "gen_circle_contour_xld (ContCircle, 15, 20, 8, 0, rad(360), 'positive', 1)",
+)
+def gen_circle_contour_xld(row, column, radius, start_phi, end_phi, point_order, resolution, *, ctx):
+    radius_value = scalar(radius, "Radius")
+    points = _arc(
+        scalar(row, "Row"), scalar(column, "Column"), radius_value, radius_value, 0.0,
+        scalar(start_phi, "StartPhi"), scalar(end_phi, "EndPhi"), scalar(resolution, "Resolution"), point_order,
+    )
+    return Result([_fit_canvas(ctx, [points])], [])
+
+
+@operator(
+    "輪廓",
+    [],
+    [P("ContEllipse", "橢圓或橢圓弧")],
+    [
+        P("Row", "中心列"),
+        P("Column", "中心行"),
+        P("Phi", "第一軸角度，弳度"),
+        P("Radius1", "第一軸半徑"),
+        P("Radius2", "第二軸半徑"),
+        P("StartPhi", "起始角，弳度"),
+        P("EndPhi", "結束角，弳度"),
+        P("PointOrder", "positive 或 negative", "'positive'", _POINT_ORDER),
+        P("Resolution", "相鄰點的大約間距", "1"),
+    ],
+    [],
+    "產生橢圓輪廓",
+    "角度和 gen_ellipse 相同。點距是大約值，最長軸用來決定點數。",
+    "gen_ellipse_contour_xld (ContEllipse, 15, 20, 0, 12, 6, 0, rad(360), 'positive', 1)",
+)
+def gen_ellipse_contour_xld(row, column, phi, radius1, radius2, start_phi, end_phi, point_order, resolution, *, ctx):
+    points = _arc(
+        scalar(row, "Row"), scalar(column, "Column"), scalar(radius1, "Radius1"), scalar(radius2, "Radius2"), scalar(phi, "Phi"),
+        scalar(start_phi, "StartPhi"), scalar(end_phi, "EndPhi"), scalar(resolution, "Resolution"), point_order,
+    )
+    return Result([_fit_canvas(ctx, [points])], [])
+
+
+@operator(
+    "輪廓",
+    [],
+    [P("Rectangle", "封閉矩形輪廓")],
+    [
+        P("Row", "中心列"),
+        P("Column", "中心行"),
+        P("Phi", "長邊角度，弳度。0 沿著行"),
+        P("Length1", "半長"),
+        P("Length2", "半寬"),
+    ],
+    [],
+    "產生旋轉矩形輪廓",
+    "Phi 0 時長邊是水平的。正角度在畫面上順時針。輪廓是封閉的五個點。",
+    "gen_rectangle2_contour_xld (Rectangle, 15, 20, 0, 10, 4)",
+)
+def gen_rectangle2_contour_xld(row, column, phi, length1, length2, *, ctx):
+    long_side = scalar(length1, "Length1")
+    short_side = scalar(length2, "Length2")
+    if long_side < 0 or short_side < 0:
+        raise ValueError("長度不能是負的")
+    points = _sample_rectangle(scalar(row, "Row"), scalar(column, "Column"), scalar(phi, "Phi"), long_side, short_side)
+    return Result([_fit_canvas(ctx, [points])], [])
+
+
+def _right_offset(points: list, distance: float) -> list:
+    pts = np.asarray(points, np.float64)
+    if len(pts) < 2:
+        return []
+    forward = np.zeros_like(pts)
+    forward[:-1] = pts[1:] - pts[:-1]
+    forward[-1] = forward[-2]
+    backward = np.zeros_like(pts)
+    backward[1:] = pts[1:] - pts[:-1]
+    backward[0] = backward[1]
+    tangent = forward + backward
+    dc = tangent[:, 0]
+    dr = tangent[:, 1]
+    norm = np.maximum(np.hypot(dc, dr), 1e-9)
+    shifted = np.column_stack([pts[:, 0] + distance * (-dr) / norm, pts[:, 1] + distance * dc / norm])
+    return shifted.tolist()
+
+
+def _as_points(contour) -> np.ndarray:
+    pts = np.asarray(contour, np.float64).reshape(-1, 2)
+    if len(pts) == 0:
+        raise ValueError("輪廓是空的")
+    return pts
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輸入輪廓")],
+    [P("ParallelContours", "平移後的輪廓")],
+    [
+        P("Mode", "contour_normal 或 regression_normal", "'contour_normal'", ["'contour_normal'", "'regression_normal'"]),
+        P("Distance", "平移距離，像素。正值在行進方向的右側"),
+    ],
+    [],
+    "把輪廓沿法線平移",
+    "正距離在畫面上是行進方向的右側。這版兩種 Mode 都用法線，沒有用灰階梯度，也沒有先擬合成直線。",
+    "gen_parallel_contour_xld (Contours, ParallelContours, 'contour_normal', 4)",
+)
+def gen_parallel_contour_xld(contours, mode, distance, *, ctx):
+    source = expect_xld(contours, "Contours")
+    kind = text(mode, "Mode").lower()
+    if kind not in ("contour_normal", "regression_normal"):
+        raise ValueError("Mode 只能是 contour_normal 或 regression_normal")
+    gap = scalar(distance, "Distance")
+    pieces = []
+    for contour in source.contours:
+        moved = _right_offset(contour, gap)
+        if len(moved) >= 2:
+            pieces.append(moved)
+    if not pieces:
+        raise ValueError("沒有可以平移的輪廓")
+    return Result([_fit_canvas(ctx, pieces)], [])
+
+
+@operator(
+    "輪廓",
+    [P("XLD", "輪廓")],
+    [],
+    [],
+    [P("Row1", "上"), P("Column1", "左"), P("Row2", "下"), P("Column2", "右")],
+    "輪廓的正外包矩形",
+    "每一條輪廓一組。座標是點的最小和最大列、行。",
+    "smallest_rectangle1_xld (XLD, Row1, Column1, Row2, Column2)",
+)
+def smallest_rectangle1_xld(contours, *, ctx):
+    source = expect_xld(contours, "XLD")
+    if not source.contours:
+        raise ValueError("沒有輪廓")
+    row1, col1, row2, col2 = [], [], [], []
+    for contour in source.contours:
+        pts = _as_points(contour)
+        row1.append(float(np.min(pts[:, 1])))
+        col1.append(float(np.min(pts[:, 0])))
+        row2.append(float(np.max(pts[:, 1])))
+        col2.append(float(np.max(pts[:, 0])))
+    return Result([], [row1, col1, row2, col2])
+
+
+@operator(
+    "輪廓",
+    [P("XLD", "輪廓")],
+    [],
+    [],
+    [P("Row", "圓心列"), P("Column", "圓心行"), P("Radius", "半徑")],
+    "輪廓的最小外包圓",
+    "每一條輪廓一個圓。",
+    "smallest_circle_xld (XLD, Row, Column, Radius)",
+)
+def smallest_circle_xld(contours, *, ctx):
+    source = expect_xld(contours, "XLD")
+    if not source.contours:
+        raise ValueError("沒有輪廓")
+    rows, cols, radii = [], [], []
+    for contour in source.contours:
+        pts = _as_points(contour).astype(np.float32).reshape(-1, 1, 2)
+        (col, row), radius = cv2.minEnclosingCircle(pts)
+        rows.append(float(row))
+        cols.append(float(col))
+        radii.append(float(radius))
+    return Result([], [rows, cols, radii])
+
+
+@operator(
+    "輪廓",
+    [],
+    [P("Arrow", "箭頭輪廓")],
+    [
+        P("Row1", "起點列"),
+        P("Column1", "起點行"),
+        P("Row2", "終點列"),
+        P("Column2", "終點行"),
+        P("HeadLength", "箭頭長度", "8"),
+        P("HeadWidth", "箭頭寬度", "4"),
+    ],
+    [],
+    "產生箭頭輪廓",
+    "包含箭身和兩邊的箭頭。不填長度和寬度時用 8 和 4。",
+    "gen_arrow_contour_xld (Arrow, 5, 5, 5, 25, 6, 3)",
+)
+def gen_arrow_contour_xld(row1, column1, row2, column2, head_length, head_width, *, ctx):
+    start = np.array([scalar(column1, "Column1"), scalar(row1, "Row1")], np.float64)
+    end = np.array([scalar(column2, "Column2"), scalar(row2, "Row2")], np.float64)
+    delta = end - start
+    length = float(np.hypot(delta[0], delta[1]))
+    if length < 1e-6:
+        raise ValueError("箭頭的兩點不能重合")
+    direction = delta / length
+    normal = np.array([-direction[1], direction[0]])
+    head = min(max(0.0, scalar(head_length, "HeadLength")), length)
+    half = max(0.0, scalar(head_width, "HeadWidth")) / 2.0
+    base = end - direction * head
+    left = base + normal * half
+    right = base - normal * half
+    pieces = [
+        [start.tolist(), end.tolist()],
+        [left.tolist(), end.tolist()],
+        [right.tolist(), end.tolist()],
+    ]
+    return Result([_fit_canvas(ctx, pieces)], [])
+
+
+def _point_segment_min(points: np.ndarray, contour: np.ndarray) -> float:
+    if len(contour) < 2:
+        delta = points - contour[:1]
+        return float(np.min(np.hypot(delta[:, 0], delta[:, 1])))
+    start = contour[:-1]
+    stop = contour[1:]
+    edge = stop - start
+    length2 = np.maximum(np.sum(edge * edge, axis=1), 1e-12)
+    best = float("inf")
+    for begin in range(0, len(points), 256):
+        chunk = points[begin : begin + 256]
+        offset = chunk[:, None, :] - start[None, :, :]
+        scale = np.clip(np.sum(offset * edge, axis=2) / length2, 0.0, 1.0)
+        proj = start[None, :, :] + scale[:, :, None] * edge
+        dist = np.hypot(chunk[:, None, 0] - proj[:, :, 0], chunk[:, None, 1] - proj[:, :, 1])
+        best = min(best, float(dist.min()))
+    return best
+
+
+@operator(
+    "輪廓",
+    [P("Contour1", "第一條輪廓"), P("Contour2", "第二條輪廓")],
+    [],
+    [P("Mode", "point_to_point 或 point_to_segment", "'point_to_segment'", ["'point_to_point'", "'point_to_segment'"])],
+    [P("DistanceMin", "最近距離"), P("DistanceMax", "最遠的點距")],
+    "兩條輪廓的距離",
+    "最近距離在 point_to_segment 時量到線段，point_to_point 只量頂點。最遠距離都是頂點之間的最大距離。多條輪廓會先接在一起再量。",
+    "distance_cc (Contour1, Contour2, 'point_to_segment', DistanceMin, DistanceMax)",
+)
+def distance_cc(contour1, contour2, mode, *, ctx):
+    first = expect_xld(contour1, "Contour1")
+    second = expect_xld(contour2, "Contour2")
+    kind = text(mode, "Mode").lower()
+    if kind not in ("point_to_point", "point_to_segment"):
+        raise ValueError("Mode 只能是 point_to_point 或 point_to_segment")
+    if not first.contours or not second.contours:
+        raise ValueError("輪廓是空的")
+    left = np.vstack([_as_points(item) for item in first.contours])
+    right = np.vstack([_as_points(item) for item in second.contours])
+    delta = left[:, None, :] - right[None, :, :]
+    pairwise = np.hypot(delta[:, :, 0], delta[:, :, 1])
+    farthest = float(pairwise.max())
+    if kind == "point_to_point":
+        return Result([], [float(pairwise.min()), farthest])
+    nearest = min(_point_segment_min(left, right), _point_segment_min(right, left))
+    return Result([], [nearest, farthest])
+
+
+@operator(
+    "輪廓",
+    [P("XLD", "要畫的輪廓"), P("Image", "底圖")],
+    [P("ImageResult", "畫完的影像")],
+    [P("Grayval", "灰階。彩色可給紅、綠、藍", "255")],
+    [],
+    "把輪廓畫進影像",
+    "線寬 1 像素。不填灰階時用 255。超出影像的部分會被裁掉。這會產生新影像。",
+    "paint_xld (XLD, Image, ImageResult, 200)",
+)
+def paint_xld(contours, image, grayval, *, ctx):
+    source = expect_xld(contours, "XLD")
+    picture = expect_image(image, "Image")
+    data = picture.data.copy()
+    color = _gray_color(picture, grayval, "Grayval")
+    for contour in source.contours:
+        if len(contour) < 2:
+            continue
+        pts = np.int32(np.round(np.asarray(contour, np.float64))).reshape(-1, 1, 2)
+        cv2.polylines(data, [pts], False, color, 1, cv2.LINE_8)
+    return image_out(picture, data)
+
+
+def _gray_color(image: Image, grayval, name: str):
+    values = [int(np.clip(round(float(item)), 0, 255)) for item in as_list(grayval)]
+    if not values:
+        raise ValueError(f"{name} 不能是空的")
+    if image.data.ndim == 2:
+        if len(values) != 1:
+            raise ValueError("灰階圖只能填一個灰階")
+        return int(values[0])
+    if len(values) == 1:
+        return (values[0], values[0], values[0])
+    if len(values) != 3:
+        raise ValueError("彩色圖要一個灰階，或紅、綠、藍三個數")
+    red, green, blue = values
+    return (int(blue), int(green), int(red))
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輸入輪廓")],
+    [P("ContoursProjTrans", "轉換後輪廓")],
+    [P("HomMat2D", "投影矩陣")],
+    [],
+    "用投影矩陣轉換輪廓",
+    "和 projective_trans_pixel 同一套矩陣。6 個數會當成仿射。點的存放順序仍是先行、再列。",
+    "projective_trans_contour_xld (Contours, ContoursProjTrans, HomMat2D)",
+)
+def projective_trans_contour_xld(contours, hom_mat2d, *, ctx):
+    source = expect_xld(contours, "Contours")
+    matrix = _proj_from(hom_mat2d)
+    pieces = []
+    for contour in source.contours:
+        if len(contour) < 2:
+            continue
+        cols = [float(point[0]) for point in contour]
+        rows = [float(point[1]) for point in contour]
+        moved_rows, moved_cols = _apply_proj(matrix, rows, cols)
+        if not isinstance(moved_rows, list):
+            moved_rows, moved_cols = [moved_rows], [moved_cols]
+        pieces.append([[float(col), float(row)] for row, col in zip(moved_rows, moved_cols)])
+    if not pieces:
+        raise ValueError("沒有可以轉換的輪廓")
+    return Result([_fit_canvas(ctx, pieces)], [])
+
+
+@operator(
+    "輪廓",
+    [P("Region", "輸入區域")],
+    [P("Contours", "骨架輪廓")],
+    [],
+    [],
+    "把區域骨架轉成輪廓",
+    "先做形態學骨架，再把細線收成輪廓。交叉處可能被拆成幾段。",
+    "gen_contours_skeleton_xld (Region, Contours)",
+)
+def gen_contours_skeleton_xld(region, *, ctx):
+    skel = skeleton(region, ctx=ctx).iconic[0]
+    pieces = []
+    width, height = skel.width, skel.height
+    for mask in skel.objects:
+        found = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+        contours = found[0] if len(found) == 2 else found[1]
+        for contour in contours:
+            if len(contour) < 2:
+                continue
+            pieces.append([[float(point[0][0]), float(point[0][1])] for point in contour])
+    if not pieces:
+        raise ValueError("骨架沒有可連成線的點")
+    return Result([XLD(width, height, pieces, multi_color=len(pieces) > 1)], [])
+
+
+def _sample_field(field: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> np.ndarray:
+    return cv2.remap(
+        field,
+        cols.astype(np.float32),
+        rows.astype(np.float32),
+        cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_REPLICATE,
+    )
+
+
+@operator(
+    "輪廓",
+    [P("Image", "輸入影像")],
+    [P("Lines", "脊線輪廓")],
+    [
+        P("Sigma", "平滑標準差"),
+        P("Low", "遲滯的低門檻"),
+        P("High", "遲滯的高門檻"),
+        P("LightDark", "light 亮線、dark 暗線或 both", "'light'", ["'light'", "'dark'", "'both'"]),
+    ],
+    [],
+    "抽出亮線或暗線",
+    "用 Hessian 找脊線，再沿法線做非極大抑制。這是像素級結果，不是 HALCON 的次像素 lines_gauss，交叉處也不會特別補齊。彩色先轉成亮度。",
+    "lines_gauss (Image, Lines, 1.2, 1, 5, 'light')",
+)
+def lines_gauss(image, sigma, low, high, light_dark, *, ctx):
+    picture = expect_image(image, "Image")
+    spread = scalar(sigma, "Sigma")
+    if spread <= 0:
+        raise ValueError("Sigma 必須大於 0")
+    low_value = scalar(low, "Low")
+    high_value = scalar(high, "High")
+    if high_value < low_value:
+        raise ValueError("High 不能小於 Low")
+    kind = text(light_dark, "LightDark").lower()
+    if kind not in ("light", "dark", "both"):
+        raise ValueError("LightDark 只能是 light、dark 或 both")
+    kernel = min(31, max(3, int(round(spread * 6)) | 1))
+    smooth = cv2.GaussianBlur(picture.gray().astype(np.float32), (kernel, kernel), spread)
+    ixx = cv2.Sobel(smooth, cv2.CV_32F, 2, 0, ksize=3)
+    iyy = cv2.Sobel(smooth, cv2.CV_32F, 0, 2, ksize=3)
+    ixy = cv2.Sobel(smooth, cv2.CV_32F, 1, 1, ksize=3)
+    trace = ixx + iyy
+    det = ixx * iyy - ixy * ixy
+    disc = np.sqrt(np.maximum(trace * trace * 0.25 - det, 0.0))
+    larger = trace * 0.5 + disc
+    smaller = trace * 0.5 - disc
+    if kind == "light":
+        strength = -smaller
+        normal_col = ixy
+        normal_row = smaller - ixx
+    elif kind == "dark":
+        strength = larger
+        normal_col = ixy
+        normal_row = larger - ixx
+    else:
+        light_strength = -smaller
+        use_light = light_strength >= larger
+        strength = np.where(use_light, light_strength, larger)
+        normal_col = ixy
+        normal_row = np.where(use_light, smaller - ixx, larger - ixx)
+    norm = np.hypot(normal_col, normal_row)
+    fallback_col = np.where(np.abs(ixx) >= np.abs(iyy), 1.0, 0.0)
+    normal_col = np.where(norm > 1e-6, normal_col / np.maximum(norm, 1e-6), fallback_col)
+    normal_row = np.where(norm > 1e-6, normal_row / np.maximum(norm, 1e-6), 1.0 - fallback_col)
+    rows, cols = np.mgrid[0 : picture.height, 0 : picture.width]
+    ahead = _sample_field(strength, rows + normal_row, cols + normal_col)
+    behind = _sample_field(strength, rows - normal_row, cols - normal_col)
+    ridge = (strength >= ahead) & (strength >= behind) & (strength >= low_value)
+    seeds = ((strength >= high_value) & ridge).astype(np.uint8)
+    allowed = np.where(ridge, 255, 0).astype(np.uint8)
+    if int(seeds.sum()) == 0:
+        return Result([XLD(picture.width, picture.height, [])], [])
+    count, labels = cv2.connectedComponents(allowed, connectivity=8)
+    seed_labels = np.unique(labels[seeds > 0])
+    seed_labels = seed_labels[seed_labels > 0]
+    keep = np.isin(labels, seed_labels)
+    mask = np.where(keep, 255, 0).astype(np.uint8)
+    found = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    contours = found[0] if len(found) == 2 else found[1]
+    pieces = []
+    for contour in contours:
+        if len(contour) < 4:
+            continue
+        pieces.append([[float(point[0][0]), float(point[0][1])] for point in contour])
+    return Result([XLD(picture.width, picture.height, pieces, multi_color=len(pieces) > 1)], [])
+
+
+@operator(
+    "輪廓",
+    [P("XLD", "輪廓")],
+    [],
+    [],
+    [
+        P("Row", "中心列"),
+        P("Column", "中心行"),
+        P("Phi", "長邊角度，弳度"),
+        P("Length1", "半長"),
+        P("Length2", "半寬"),
+    ],
+    "輪廓的最小旋轉外接矩形",
+    "每一條輪廓一組。長邊角度收在 −90 到 90 度。點太少時會失敗。",
+    "smallest_rectangle2_xld (XLD, Row, Column, Phi, Length1, Length2)",
+)
+def smallest_rectangle2_xld(contours, *, ctx):
+    source = expect_xld(contours, "XLD")
+    if not source.contours:
+        raise ValueError("沒有輪廓")
+    rows, cols, phis, long_sides, short_sides = [], [], [], [], []
+    for contour in source.contours:
+        pts = _as_points(contour).astype(np.float32).reshape(-1, 1, 2)
+        if len(pts) < 3:
+            raise ValueError("旋轉矩形至少要 3 個點")
+        (col, row), (width, height), angle = cv2.minAreaRect(pts)
+        if width < height:
+            width, height = height, width
+            angle += 90.0
+        while angle >= 90.0:
+            angle -= 180.0
+        while angle < -90.0:
+            angle += 180.0
+        rows.append(float(row))
+        cols.append(float(col))
+        phis.append(math.radians(float(angle)))
+        long_sides.append(float(width) / 2.0)
+        short_sides.append(float(height) / 2.0)
+    return Result([], [rows, cols, phis, long_sides, short_sides])
+
+
+def _axis_phi(direction_col: float, direction_row: float) -> float:
+    phi = math.atan2(direction_row, direction_col)
+    if phi > math.pi / 2:
+        phi -= math.pi
+    elif phi <= -math.pi / 2:
+        phi += math.pi
+    return phi
+
+
+def _line_through(points: np.ndarray, mode: str, iterations: int) -> list[list[float]]:
+    current = points
+    rounds = iterations if mode == "drop" else 0
+    for step in range(rounds + 1):
+        if len(current) < 2:
+            raise ValueError("點太少，不能擬合直線")
+        center = current.mean(axis=0)
+        centered = current - center
+        if float(np.max(np.abs(centered))) < 1e-9:
+            raise ValueError("點都重疊，不能擬合直線")
+        _u, _s, vt = np.linalg.svd(centered, full_matrices=False)
+        direction = vt[0]
+        offset = centered @ direction
+        distance = np.abs(centered[:, 0] * direction[1] - centered[:, 1] * direction[0])
+        if mode == "drop" and step < rounds and len(current) > 4:
+            limit = max(float(np.median(distance)) * 2.0, 0.5)
+            kept = current[distance <= limit]
+            if len(kept) >= 2 and len(kept) < len(current):
+                current = kept
+                continue
+        start = center + float(offset.min()) * direction
+        end = center + float(offset.max()) * direction
+        return [[float(start[0]), float(start[1])], [float(end[0]), float(end[1])]]
+    raise ValueError("不能擬合直線")
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輸入輪廓")],
+    [P("RegressContours", "擬合成直線段")],
+    [
+        P("Mode", "no、drop 或 gauss", "'no'", ["'no'", "'drop'", "'gauss'"]),
+        P("Iterations", "drop 時剔除離群點的次數", "0"),
+    ],
+    [],
+    "把輪廓擬合成直線段",
+    "每條輪廓換成它在直線上的投影範圍。no 和 gauss 這版都用全部的點，沒有高斯權重。drop 會把離直線較遠的點拿掉。",
+    "regress_contours_xld (Contours, RegressContours, 'no', 0)",
+)
+def regress_contours_xld(contours, mode, iterations, *, ctx):
+    source = expect_xld(contours, "Contours")
+    if not source.contours:
+        raise ValueError("沒有輪廓")
+    kind = text(mode, "Mode").lower()
+    if kind not in ("no", "drop", "gauss"):
+        raise ValueError("Mode 只能是 no、drop 或 gauss")
+    rounds = whole(iterations, "Iterations")
+    if rounds < 0:
+        raise ValueError("Iterations 不能是負的")
+    pieces = [_line_through(_as_points(contour), kind, rounds) for contour in source.contours]
+    return Result([XLD(source.width, source.height, pieces, multi_color=len(pieces) > 1)], [])
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輸入輪廓")],
+    [],
+    [],
+    [P("Phi", "長軸角度，弳度，−π/2 到 π/2")],
+    "輪廓的方向",
+    "用點的主軸，0 是向右，正值在畫面上往下轉。不是填滿後的區域方向。一條輪廓一個角度。",
+    "orientation_xld (Contours, Phi)",
+)
+def orientation_xld(contours, *, ctx):
+    source = expect_xld(contours, "Contours")
+    if not source.contours:
+        raise ValueError("沒有輪廓")
+    angles = []
+    for contour in source.contours:
+        points = _as_points(contour)
+        center = points.mean(axis=0)
+        centered = points - center
+        if float(np.max(np.abs(centered))) < 1e-9:
+            raise ValueError("點都重疊，沒有方向")
+        _u, _s, vt = np.linalg.svd(centered, full_matrices=False)
+        angles.append(_axis_phi(float(vt[0, 0]), float(vt[0, 1])))
+    return Result([], [angles])
+
+
+@operator(
+    "輪廓",
+    [P("XLD", "輪廓")],
+    [],
+    [],
+    [P("Ra", "長軸"), P("Rb", "短軸"), P("Phi", "長軸角度，弳度")],
+    "用輪廓點估計橢圓",
+    "Ra 和 Rb 是 2 倍的標準差，不是區域版 elliptic_axis 的半徑。點如果只在邊界上，半徑會和填滿的橢圓不同。0 是向右。每條輪廓一組。",
+    "elliptic_axis_xld (XLD, Ra, Rb, Phi)",
+)
+def elliptic_axis_xld(contours, *, ctx):
+    source = expect_xld(contours, "XLD")
+    if not source.contours:
+        raise ValueError("沒有輪廓")
+    long_axes, short_axes, angles = [], [], []
+    for contour in source.contours:
+        points = _as_points(contour)
+        center = points.mean(axis=0)
+        centered = points - center
+        if len(points) < 2 or float(np.max(np.abs(centered))) < 1e-9:
+            raise ValueError("點太少，不能估計橢圓")
+        cov = centered.T @ centered / len(points)
+        values, vectors = np.linalg.eigh(cov)
+        order = int(np.argmax(values))
+        major = math.sqrt(max(float(values[order]), 0.0))
+        minor = math.sqrt(max(float(values[1 - order]), 0.0))
+        direction = vectors[:, order]
+        long_axes.append(2.0 * major)
+        short_axes.append(2.0 * minor)
+        angles.append(_axis_phi(float(direction[0]), float(direction[1])))
+    return Result([], [long_axes, short_axes, angles])
+
+
+def _fillet(previous, current, following, radius: float):
+    backward = previous - current
+    forward = following - current
+    length_back = float(np.hypot(backward[0], backward[1]))
+    length_forward = float(np.hypot(forward[0], forward[1]))
+    if length_back < 1e-6 or length_forward < 1e-6:
+        return None
+    unit_back = backward / length_back
+    unit_forward = forward / length_forward
+    cosine = float(np.clip(np.dot(unit_back, unit_forward), -1.0, 1.0))
+    angle = math.acos(cosine)
+    if angle < 1e-3 or abs(math.pi - angle) < 1e-3:
+        return None
+    half = angle / 2.0
+    inset = min(radius / math.tan(half), length_back * 0.5, length_forward * 0.5)
+    if inset < 1e-6:
+        return None
+    used = inset * math.tan(half)
+    start = current + unit_back * inset
+    stop = current + unit_forward * inset
+    bisector = unit_back + unit_forward
+    bisector = bisector / np.hypot(bisector[0], bisector[1])
+    center = current + bisector * (used / math.sin(half))
+    angle_start = math.atan2(float(start[1] - center[1]), float(start[0] - center[0]))
+    angle_stop = math.atan2(float(stop[1] - center[1]), float(stop[0] - center[0]))
+    sweep = (angle_stop - angle_start + math.pi) % (2.0 * math.pi) - math.pi
+    steps = max(2, int(math.ceil(abs(sweep) * used)))
+    arc = []
+    for step in range(steps + 1):
+        theta = angle_start + sweep * step / steps
+        arc.append(np.array([center[0] + used * math.cos(theta), center[1] + used * math.sin(theta)]))
+    return arc
+
+
+@operator(
+    "輪廓",
+    [],
+    [P("Contour", "圓角後的輪廓")],
+    [
+        P("Row", "折線的列"),
+        P("Col", "折線的行"),
+        P("Radius", "圓角半徑"),
+        P("Sampling", "圓弧上相鄰點的大約間距", "1"),
+    ],
+    [],
+    "把折線的轉角修成圓弧",
+    "首尾同一個點時當成封閉。半徑 0 就是原來的折線。圓弧太大會縮到線段的一半，避免把相鄰轉角疊在一起。",
+    "gen_contour_polygon_rounded_xld (Contour, [0, 0, 20], [0, 20, 20], 5, 1)",
+)
+def gen_contour_polygon_rounded_xld(row, col, radius, sampling, *, ctx):
+    rows = [float(item) for item in as_list(row)]
+    cols = [float(item) for item in as_list(col)]
+    if len(rows) != len(cols) or len(rows) < 2:
+        raise ValueError("Row 和 Col 的長度要相同，而且至少兩個點")
+    curve = scalar(radius, "Radius")
+    step = scalar(sampling, "Sampling")
+    if curve < 0 or step <= 0:
+        raise ValueError("半徑不能是負的，Sampling 要大於 0")
+    points = [np.array([col_value, row_value], np.float64) for row_value, col_value in zip(rows, cols)]
+    closed = float(np.hypot(points[0][0] - points[-1][0], points[0][1] - points[-1][1])) < 1e-6
+    core = points[:-1] if closed and len(points) > 2 else points
+    if curve == 0 or len(core) < 3:
+        rounded = points
+    else:
+        count = len(core)
+        rounded = []
+
+        def emit(point):
+            if not rounded or float(np.hypot(point[0] - rounded[-1][0], point[1] - rounded[-1][1])) > 1e-6:
+                rounded.append(point)
+
+        if not closed:
+            emit(core[0])
+        corner_count = count if closed else count - 2
+        for index in range(corner_count):
+            vertex = index if closed else index + 1
+            arc = _fillet(core[(vertex - 1) % count], core[vertex], core[(vertex + 1) % count], curve)
+            if arc is None:
+                emit(core[vertex])
+            else:
+                gap = max(1, int(round(step)))
+                for point in arc[::gap]:
+                    emit(point)
+                emit(arc[-1])
+        if not closed:
+            emit(core[-1])
+        elif rounded:
+            emit(rounded[0])
+    height, width = ctx.canvas_size()
+    stored = [[float(point[0]), float(point[1])] for point in rounded]
+    for col_value, row_value in stored:
+        width = max(width, int(math.ceil(col_value)) + 1)
+        height = max(height, int(math.ceil(row_value)) + 1)
+    return Result([XLD(width, height, [stored])], [])
+
+
+def _trim_end(points: list, amount: float) -> list:
+    if amount <= 0 or len(points) < 2:
+        return points
+    remain = amount
+    index = 0
+    while index < len(points) - 1 and remain > 1e-9:
+        step = math.hypot(points[index + 1][0] - points[index][0], points[index + 1][1] - points[index][1])
+        if step > remain + 1e-9:
+            scale = remain / step if step else 0.0
+            landed = [
+                points[index][0] + scale * (points[index + 1][0] - points[index][0]),
+                points[index][1] + scale * (points[index + 1][1] - points[index][1]),
+            ]
+            return [landed] + points[index + 1 :]
+        remain -= step
+        index += 1
+    return [points[-1]]
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輸入輪廓")],
+    [P("ClippedContours", "去掉兩端之後")],
+    [
+        P("Mode", "num_points 去掉點數，length 去掉長度", "'num_points'", ["'num_points'", "'length'"]),
+        P("Length", "兩端各去掉多少"),
+    ],
+    [],
+    "去掉輪廓的兩端",
+    "num_points 是點數，length 是沿著線的像素長度。剩下少於 2 個點就丟掉這條輪廓。封閉輪廓也是從序列兩端切，不會改成從中間切。",
+    "clip_end_points_contours_xld (Contours, ClippedContours, 'num_points', 1)",
+)
+def clip_end_points_contours_xld(contours, mode, length, *, ctx):
+    source = expect_xld(contours, "Contours")
+    kind = text(mode, "Mode").lower()
+    amount = scalar(length, "Length")
+    if amount < 0:
+        raise ValueError("Length 不能是負的")
+    if kind not in ("num_points", "length"):
+        raise ValueError("Mode 只能是 num_points 或 length")
+    pieces = []
+    for contour in source.contours:
+        points = [[float(point[0]), float(point[1])] for point in contour]
+        if kind == "num_points":
+            count = whole(length, "Length")
+            if len(points) - 2 * count >= 2:
+                pieces.append(points[count : len(points) - count])
+            continue
+        trimmed = _trim_end(points, amount)
+        trimmed = _trim_end(list(reversed(trimmed)), amount)
+        trimmed.reverse()
+        if len(trimmed) >= 2:
+            pieces.append(trimmed)
+    return Result([XLD(source.width, source.height, pieces, multi_color=len(pieces) > 1)], [])
+
+
+def _contour_cross(first, second):
+    row1, col1 = first[0][1], first[0][0]
+    row2, col2 = first[1][1], first[1][0]
+    row3, col3 = second[0][1], second[0][0]
+    row4, col4 = second[1][1], second[1][0]
+    drow1, dcol1 = row2 - row1, col2 - col1
+    drow2, dcol2 = row4 - row3, col4 - col3
+    den = drow1 * dcol2 - dcol1 * drow2
+    if abs(den) < 1e-9:
+        return None
+    factor1 = ((row3 - row1) * dcol2 - (col3 - col1) * drow2) / den
+    factor2 = ((row3 - row1) * dcol1 - (col3 - col1) * drow1) / den
+    if -1e-6 <= factor1 <= 1 + 1e-6 and -1e-6 <= factor2 <= 1 + 1e-6:
+        return (row1 + factor1 * drow1, col1 + factor1 * dcol1)
+    return None
+
+
+@operator(
+    "輪廓",
+    [P("Contour1", "第一組輪廓"), P("Contour2", "第二組輪廓")],
+    [],
+    [],
+    [P("Row", "交點列"), P("Column", "交點行")],
+    "兩組輪廓的交點",
+    "每一段和另一組的每一段互相比。沒有交點時得到空 tuple。很長的輪廓會比較慢。靠得很近的交點會合成一個。",
+    "intersection_contours_xld (Contour1, Contour2, Row, Column)",
+)
+def intersection_contours_xld(contour1, contour2, *, ctx):
+    first = expect_xld(contour1, "Contour1")
+    second = expect_xld(contour2, "Contour2")
+    hits = []
+    for left in first.contours:
+        for right in second.contours:
+            for index in range(len(left) - 1):
+                for other in range(len(right) - 1):
+                    point = _contour_cross(left[index : index + 2], right[other : other + 2])
+                    if point is None:
+                        continue
+                    if any(math.hypot(point[0] - old[0], point[1] - old[1]) < 0.5 for old in hits):
+                        continue
+                    hits.append(point)
+    return Result([], [[item[0] for item in hits], [item[1] for item in hits]])
+
+
+def _turn(previous: float, following: float) -> float:
+    delta = following - previous
+    while delta > math.pi:
+        delta -= 2.0 * math.pi
+    while delta < -math.pi:
+        delta += 2.0 * math.pi
+    return delta
+
+
+@operator(
+    "輪廓",
+    [P("Contour", "輪廓")],
+    [],
+    [P("Mode", "abs 是方向，rel 是轉角", "'abs'", ["'abs'", "'rel'"])],
+    [P("Angle", "每個點一個角度，弳度")],
+    "輪廓每個點的角度",
+    "abs 的 0 是向右，正值在畫面上往下轉。rel 是這一點轉了多少，直線接近 0，端點是 0。多條輪廓會依序接在同一個 tuple。",
+    "get_contour_angle_xld (Contour, 'abs', Angle)",
+)
+def get_contour_angle_xld(contour, mode, *, ctx):
+    source = expect_xld(contour, "Contour")
+    kind = text(mode, "Mode").lower()
+    if kind not in ("abs", "rel"):
+        raise ValueError("Mode 只能是 abs 或 rel")
+    angles = []
+    for item in source.contours:
+        points = _as_points(item)
+        if len(points) < 2:
+            continue
+        directions = []
+        for index in range(len(points) - 1):
+            dcol = float(points[index + 1, 0] - points[index, 0])
+            drow = float(points[index + 1, 1] - points[index, 1])
+            directions.append(math.atan2(drow, dcol))
+        if kind == "abs":
+            angles.extend(directions)
+            angles.append(directions[-1])
+            continue
+        angles.append(0.0)
+        for index in range(len(directions) - 1):
+            angles.append(_turn(directions[index], directions[index + 1]))
+        angles.append(0.0)
+    return Result([], [angles])
+
+
+@operator(
+    "輪廓",
+    [P("XLD", "輪廓")],
+    [],
+    [],
+    [P("IsClosed", "1 表示首尾接在一起")],
+    "輪廓是否封閉",
+    "首尾距離小於 1.5 像素就算封閉。每條輪廓一個 0 或 1。",
+    "test_closed_xld (XLD, IsClosed)",
+)
+def test_closed_xld(contours, *, ctx):
+    source = expect_xld(contours, "XLD")
+    flags = []
+    for contour in source.contours:
+        points = _as_points(contour)
+        if len(points) < 3:
+            flags.append(0)
+            continue
+        gap = float(np.hypot(points[0, 0] - points[-1, 0], points[0, 1] - points[-1, 1]))
+        flags.append(1 if gap <= 1.5 else 0)
+    return Result([], [flags])
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輪廓")],
+    [],
+    [P("Features", "輪廓特徵，可以是 tuple", choices=XLD_FEATURE_CHOICES)],
+    [P("Value", "特徵值")],
+    "讀取輪廓特徵",
+    "名稱和 select_contours_xld 相同，例如 contlength、area、circularity。單一特徵時依輪廓排列。多個特徵時先排完第一個特徵的全部輪廓。",
+    "xld_features (Contours, 'contlength', Value)",
+)
+def xld_features(contours, features, *, ctx):
+    source = expect_xld(contours, "Contours")
+    names = [_xld_feature_name(item) for item in as_list(features)]
+    if not names:
+        raise ValueError("Features 不能是空的")
+    values = []
+    for name in names:
+        for contour in source.contours:
+            values.append(float(xld_measures(contour).get(name, 0.0)))
+    return Result([], [values])
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輪廓")],
+    [P("DestContours", "包含這些點的輪廓")],
+    [P("Row", "列，可以是 tuple"), P("Column", "行，可以是 tuple")],
+    [],
+    "留下包含指定點的輪廓",
+    "把點序當成多邊形。點在內部或邊上就留下，碰到其中一個點即可。少於 3 個點的輪廓不會被選到。",
+    "select_xld_point (Contours, DestContours, 20, 20)",
+)
+def select_xld_point(contours, row, column, *, ctx):
+    source = expect_xld(contours, "Contours")
+    rows = [float(item) for item in as_list(row)]
+    cols = [float(item) for item in as_list(column)]
+    if not rows or len(rows) != len(cols):
+        raise ValueError("Row 和 Column 的長度要相同，而且不能是空的")
+    kept = []
+    for contour in source.contours:
+        points = _as_points(contour)
+        if len(points) < 3:
+            continue
+        polygon = points.astype(np.float32).reshape(-1, 1, 2)
+        if any(cv2.pointPolygonTest(polygon, (float(col), float(item_row)), False) >= 0 for item_row, col in zip(rows, cols)):
+            kept.append(points.tolist())
+    return Result([XLD(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輪廓")],
+    [P("ContoursPolar", "展開後的輪廓")],
+    [
+        P("Row", "極座標中心列"),
+        P("Column", "極座標中心行"),
+        P("AngleStart", "起始角，弳度"),
+        P("AngleEnd", "結束角，弳度"),
+        P("RadiusStart", "內半徑"),
+        P("RadiusEnd", "外半徑"),
+        P("Width", "角度方向的寬度"),
+        P("Height", "半徑方向的高度"),
+    ],
+    [],
+    "把輪廓轉成極座標",
+    "角度 0 朝右，正角度順時針。點會線性對到寬和高，可以落在影像外面。小於起始角的角度會加一整圈，用來對上 0 到 360 度的展開圖。",
+    "polar_trans_contour_xld (Contour, ContourPolar, 30, 40, 0, rad(360), 0, 20, 40, 20)",
+)
+def polar_trans_contour_xld(contours, row, column, angle_start, angle_end, radius_start, radius_end, width, height, *, ctx):
+    source = expect_xld(contours, "Contours")
+    wide = whole(width, "Width")
+    high = whole(height, "Height")
+    if wide < 1 or high < 1:
+        raise ValueError("寬高至少要 1")
+    center_row = scalar(row, "Row")
+    center_col = scalar(column, "Column")
+    start = scalar(angle_start, "AngleStart")
+    span = scalar(angle_end, "AngleEnd") - start
+    inner = scalar(radius_start, "RadiusStart")
+    radial = scalar(radius_end, "RadiusEnd") - inner
+    if abs(span) < 1e-9 or abs(radial) < 1e-9:
+        raise ValueError("角度範圍和半徑範圍都不能是 0")
+    kept = []
+    for contour in source.contours:
+        points = _as_points(contour)
+        delta_row = points[:, 1] - center_row
+        delta_col = points[:, 0] - center_col
+        angle = np.arctan2(delta_row, delta_col)
+        if span > 0:
+            angle = np.where(angle < start, angle + math.tau, angle)
+        else:
+            angle = np.where(angle > start, angle - math.tau, angle)
+        polar_col = (angle - start) / span * wide
+        polar_row = (np.hypot(delta_row, delta_col) - inner) / radial * high
+        kept.append(np.stack([polar_col, polar_row], axis=1).tolist())
+    return Result([XLD(wide, high, kept, multi_color=len(kept) > 1)], [])
+
+
+def _contour_intersections(points: np.ndarray, row1: float, column1: float, row2: float, column2: float, segment: bool):
+    if len(points) < 2:
+        return [], []
+    start = points[:-1]
+    stop = points[1:]
+    start_row, start_col = start[:, 1], start[:, 0]
+    stop_row, stop_col = stop[:, 1], stop[:, 0]
+    line_row = row2 - row1
+    line_col = column2 - column1
+    edge_row = stop_row - start_row
+    edge_col = stop_col - start_col
+    den = line_row * edge_col - line_col * edge_row
+    valid = np.abs(den) > 1e-9
+    origin_row = start_row - row1
+    origin_col = start_col - column1
+    along = np.zeros(len(den), np.float64)
+    across = np.zeros(len(den), np.float64)
+    along[valid] = (origin_row[valid] * edge_col[valid] - origin_col[valid] * edge_row[valid]) / den[valid]
+    across[valid] = (origin_row[valid] * line_col - origin_col[valid] * line_row) / den[valid]
+    hit = valid & (across >= -1e-6) & (across <= 1.0 + 1e-6)
+    if segment:
+        hit &= (along >= -1e-6) & (along <= 1.0 + 1e-6)
+    if not np.any(hit):
+        return [], []
+    found = np.stack([row1 + along[hit] * line_row, column1 + along[hit] * line_col], axis=1)
+    _, order = np.unique(np.round(found, 6), axis=0, return_index=True)
+    found = found[np.sort(order)]
+    return found[:, 0].tolist(), found[:, 1].tolist()
+
+
+def _all_intersections(contours, row1, column1, row2, column2, segment: bool):
+    source = expect_xld(contours, "Contour")
+    r1, c1 = scalar(row1, "Row1"), scalar(column1, "Column1")
+    r2, c2 = scalar(row2, "Row2"), scalar(column2, "Column2")
+    if math.hypot(r2 - r1, c2 - c1) < 1e-9:
+        raise ValueError("直線的兩個點重疊")
+    rows, cols = [], []
+    for contour in source.contours:
+        hit_rows, hit_cols = _contour_intersections(_as_points(contour), r1, c1, r2, c2, segment)
+        rows.extend(hit_rows)
+        cols.extend(hit_cols)
+    return Result([], [rows, cols])
+
+
+@operator(
+    "量測",
+    [P("Contour", "輪廓")],
+    [],
+    [
+        P("Row1", "直線起點的列"), P("Column1", "直線起點的行"),
+        P("Row2", "直線終點的列"), P("Column2", "直線終點的行"),
+    ],
+    [P("Row", "交點列"), P("Column", "交點行")],
+    "無限長直線和輪廓的交點",
+    "用輪廓上相鄰的點組成折線。沒有交點時得到空 tuple。平行或重疊的這版不回傳。不會自動把輪廓封閉。",
+    "intersection_line_contour_xld (Contour, 0, 20, 40, 20, Row, Column)",
+)
+def intersection_line_contour_xld(contour, row1, column1, row2, column2, *, ctx):
+    return _all_intersections(contour, row1, column1, row2, column2, False)
+
+
+@operator(
+    "量測",
+    [P("Contour", "輪廓")],
+    [],
+    [
+        P("Row1", "線段起點的列"), P("Column1", "線段起點的行"),
+        P("Row2", "線段終點的列"), P("Column2", "線段終點的行"),
+    ],
+    [P("Row", "交點列"), P("Column", "交點行")],
+    "線段和輪廓的交點",
+    "只算線段碰到折線的地方。延長出去的交點不算。沒有交點時得到空 tuple。",
+    "intersection_segment_contour_xld (Contour, 0, 20, 15, 20, Row, Column)",
+)
+def intersection_segment_contour_xld(contour, row1, column1, row2, column2, *, ctx):
+    return _all_intersections(contour, row1, column1, row2, column2, True)
+
+
+_XLD_SHAPES = ["'rectangle1'", "'rectangle2'", "'convex'", "'outer_circle'", "'ellipse'"]
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輪廓")],
+    [P("ContoursTrans", "換成規則外形")],
+    [P("Type", "rectangle1、rectangle2、convex、outer_circle 或 ellipse", "'rectangle1'", _XLD_SHAPES)],
+    [],
+    "把輪廓換成規則外形",
+    "rectangle1 是正外接矩形。rectangle2 和 ellipse 用 OpenCV 的外接矩形與橢圓。outer_circle 是最小外包圓。點不夠擬合橢圓時改成圓。",
+    "shape_trans_xld (Contours, ContoursTrans, 'rectangle1')",
+)
+def shape_trans_xld(contours, kind, *, ctx):
+    source = expect_xld(contours, "Contours")
+    mode = text(kind, "Type").lower()
+    if mode not in ("rectangle1", "rectangle2", "convex", "outer_circle", "ellipse"):
+        raise ValueError("Type 只能是 rectangle1、rectangle2、convex、outer_circle 或 ellipse")
+    kept = []
+    for contour in source.contours:
+        points = _as_points(contour)
+        if len(points) < 2:
+            continue
+        shaped = _xld_shape(points, mode)
+        if len(shaped) >= 2:
+            kept.append(shaped)
+    return Result([XLD(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+def _xld_shape(points: np.ndarray, mode: str) -> list:
+    if mode == "rectangle1":
+        row1, col1 = float(points[:, 1].min()), float(points[:, 0].min())
+        row2, col2 = float(points[:, 1].max()), float(points[:, 0].max())
+        return [[col1, row1], [col2, row1], [col2, row2], [col1, row2], [col1, row1]]
+    cloud = points.astype(np.float32)
+    if mode == "convex":
+        hull = cv2.convexHull(cloud).reshape(-1, 2)
+        if len(hull) == 0:
+            return []
+        if not np.allclose(hull[0], hull[-1]):
+            hull = np.vstack([hull, hull[0]])
+        return hull.tolist()
+    if mode == "rectangle2":
+        box = cv2.boxPoints(cv2.minAreaRect(cloud))
+        return np.vstack([box, box[0]]).tolist()
+    if mode == "ellipse" and len(points) >= 5:
+        try:
+            (center_col, center_row), axes, angle = cv2.fitEllipse(cloud)
+            return _ellipse_poly(center_row, center_col, axes[1] / 2.0, axes[0] / 2.0, math.radians(angle))
+        except cv2.error:
+            pass
+    (center_col, center_row), radius = cv2.minEnclosingCircle(cloud)
+    return _ellipse_poly(center_row, center_col, radius, radius, 0.0)
+
+
+def _ellipse_poly(row: float, col: float, radius_row: float, radius_col: float, phi: float) -> list:
+    angles = np.linspace(0.0, math.tau, 64, endpoint=False)
+    cosine, sine = math.cos(phi), math.sin(phi)
+    flat_col = radius_col * np.cos(angles)
+    flat_row = radius_row * np.sin(angles)
+    cols = col + cosine * flat_col - sine * flat_row
+    rows = row + sine * flat_col + cosine * flat_row
+    poly = np.stack([cols, rows], axis=1)
+    return np.vstack([poly, poly[0]]).tolist()
+
+
+def _ellipse_point_distance(cols, rows, center_row, center_col, phi, radius1, radius2) -> np.ndarray:
+    cosine, sine = math.cos(phi), math.sin(phi)
+    delta_col = np.asarray(cols, np.float64) - center_col
+    delta_row = np.asarray(rows, np.float64) - center_row
+    local_a = cosine * delta_col + sine * delta_row
+    local_b = -sine * delta_col + cosine * delta_row
+    unit_a = local_a / radius1
+    unit_b = local_b / radius2
+    norm = np.hypot(unit_a, unit_b)
+    distance = np.empty(norm.shape, np.float64)
+    origin = norm <= 1e-12
+    distance[origin] = min(radius1, radius2)
+    usable = ~origin
+    scale = np.zeros(norm.shape, np.float64)
+    scale[usable] = 1.0 / norm[usable]
+    on_a = unit_a * scale * radius1
+    on_b = unit_b * scale * radius2
+    distance[usable] = np.hypot(local_a[usable] - on_a[usable], local_b[usable] - on_b[usable])
+    return distance
+
+
+@operator(
+    "量測",
+    [P("Contours", "輪廓")],
+    [],
+    [
+        P("Row", "橢圓中心列"),
+        P("Column", "橢圓中心行"),
+        P("Phi", "第一軸角度，弳度。0 沿著行"),
+        P("Radius1", "第一軸半徑"),
+        P("Radius2", "第二軸半徑"),
+    ],
+    [P("MaxDistance", "最大距離")],
+    "輪廓到橢圓的最大距離",
+    "每條輪廓一個距離。用徑向投影，正圓是準的。很扁的橢圓和真正的最短距離可能有一點差。Phi 為 0 時 Radius1 沿著行。",
+    "dist_ellipse_contour_xld (Contour, 30, 40, 0, 10, 10, MaxDistance)",
+)
+def dist_ellipse_contour_xld(contours, row, column, phi, radius1, radius2, *, ctx):
+    source = expect_xld(contours, "Contours")
+    center_row, center_col = scalar(row, "Row"), scalar(column, "Column")
+    angle = scalar(phi, "Phi")
+    major, minor = scalar(radius1, "Radius1"), scalar(radius2, "Radius2")
+    if major <= 0 or minor <= 0:
+        raise ValueError("半徑必須大於 0")
+    distances = []
+    for contour in source.contours:
+        points = _as_points(contour)
+        if len(points) == 0:
+            continue
+        gap = _ellipse_point_distance(points[:, 0], points[:, 1], center_row, center_col, angle, major, minor)
+        distances.append(float(gap.max()))
+    if not distances:
+        raise ValueError("輪廓是空的")
+    return Result([], [distances])
+
+
+def _segment_crosses(row1, column1, row2, column2, er1, ec1, er2, ec2) -> bool:
+    line_row = row2 - row1
+    line_col = column2 - column1
+    edge_row = er2 - er1
+    edge_col = ec2 - ec1
+    den = line_row * edge_col - line_col * edge_row
+    valid = np.abs(den) > 1e-9
+    origin_row = er1 - row1
+    origin_col = ec1 - column1
+    along = np.zeros(np.shape(den), np.float64)
+    across = np.zeros(np.shape(den), np.float64)
+    along[valid] = (origin_row[valid] * edge_col[valid] - origin_col[valid] * edge_row[valid]) / den[valid]
+    across[valid] = (origin_row[valid] * line_col - origin_col[valid] * line_row) / den[valid]
+    near = 1e-6
+    on_line = valid & (along >= -near) & (along <= 1.0 + near) & (across >= -near) & (across <= 1.0 + near)
+    shared_end = ((np.abs(along) <= near) | (np.abs(along - 1.0) <= near)) & (
+        (np.abs(across) <= near) | (np.abs(across - 1.0) <= near)
+    )
+    return bool(np.any(on_line & ~shared_end))
+
+
+def _crosses_self(points: np.ndarray) -> int:
+    if len(points) < 4:
+        return 0
+    closed = float(np.hypot(points[0, 0] - points[-1, 0], points[0, 1] - points[-1, 1])) <= 1.5
+    start = points[:-1]
+    stop = points[1:]
+    count = len(start)
+    for index in range(count):
+        last = count - 1 if closed and index == 0 else count
+        follow = np.arange(index + 2, last)
+        if len(follow) == 0:
+            continue
+        if _segment_crosses(
+            float(start[index, 1]),
+            float(start[index, 0]),
+            float(stop[index, 1]),
+            float(stop[index, 0]),
+            stop[follow, 1],
+            stop[follow, 0],
+            start[follow, 1],
+            start[follow, 0],
+        ):
+            return 1
+    return 0
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輪廓")],
+    [],
+    [],
+    [P("IsSelfIntersecting", "1 表示折線自己交叉")],
+    "輪廓是否自交",
+    "相鄰邊共用的端點不算交叉。封閉輪廓的首尾兩邊也不算。每條輪廓一個 0 或 1。",
+    "test_self_intersection_xld (Contours, IsSelfIntersecting)",
+)
+def test_self_intersection_xld(contours, *, ctx):
+    source = expect_xld(contours, "Contours")
+    return Result([], [[_crosses_self(_as_points(contour)) for contour in source.contours]])
+
+
+def _curvature_points(points: np.ndarray, limit: float):
+    closed = len(points) >= 3 and float(np.hypot(points[0, 0] - points[-1, 0], points[0, 1] - points[-1, 1])) <= 1.5
+    pts = points[:-1] if closed and np.allclose(points[0], points[-1]) else points
+    if len(pts) < 3:
+        return np.zeros((0, 2))
+    if closed:
+        previous = np.roll(pts, 1, axis=0)
+        current = pts
+        following = np.roll(pts, -1, axis=0)
+    else:
+        previous, current, following = pts[:-2], pts[1:-1], pts[2:]
+    first = current - previous
+    second = following - current
+    cross = first[:, 0] * second[:, 1] - first[:, 1] * second[:, 0]
+    dot = first[:, 0] * second[:, 0] + first[:, 1] * second[:, 1]
+    turn = np.abs(np.arctan2(cross, dot))
+    if len(turn) == 1:
+        left = np.zeros(1)
+        right = np.zeros(1)
+    elif closed:
+        left = np.roll(turn, 1)
+        right = np.roll(turn, -1)
+    else:
+        left = np.concatenate([[0.0], turn[:-1]])
+        right = np.concatenate([turn[1:], [0.0]])
+    keep = (turn + 1e-9 >= left) & (turn + 1e-9 >= right) & (turn >= limit)
+    return current[keep]
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輪廓")],
+    [],
+    [P("Threshold", "最小轉角，弳度", "0.5")],
+    [P("Row", "轉角的列"), P("Column", "轉角的行")],
+    "留下轉角大的輪廓點",
+    "用相鄰三點的轉角。比 Threshold 大，而且不比左右轉角小的點會留下。封閉輪廓的首尾接點只算一次。這是折線頂點，不是曲線擬合。",
+    "critical_points_xld (Contours, 0.5, Row, Column)",
+)
+def critical_points_xld(contours, threshold, *, ctx):
+    source = expect_xld(contours, "Contours")
+    limit = scalar(threshold, "Threshold")
+    if limit < 0:
+        raise ValueError("Threshold 不能是負的")
+    rows, cols = [], []
+    for contour in source.contours:
+        found = _curvature_points(_as_points(contour), limit)
+        rows.extend(float(item) for item in found[:, 1])
+        cols.extend(float(item) for item in found[:, 0])
+    return Result([], [rows, cols])
+
+
+def _rectangle2_distance(cols, rows, center_row, center_col, phi, length1, length2) -> np.ndarray:
+    cosine, sine = math.cos(phi), math.sin(phi)
+    delta_col = np.asarray(cols, np.float64) - center_col
+    delta_row = np.asarray(rows, np.float64) - center_row
+    along = np.abs(delta_col * cosine + delta_row * sine)
+    side = np.abs(-delta_col * sine + delta_row * cosine)
+    outside_along = np.maximum(along - length1, 0.0)
+    outside_side = np.maximum(side - length2, 0.0)
+    outside = np.hypot(outside_along, outside_side)
+    inside = np.minimum(length1 - along, length2 - side)
+    return np.where((outside_along == 0.0) & (outside_side == 0.0), inside, outside)
+
+
+@operator(
+    "量測",
+    [P("Contours", "輪廓")],
+    [],
+    [
+        P("Row", "矩形中心列"),
+        P("Column", "矩形中心行"),
+        P("Phi", "長邊角度，弳度。0 沿著行"),
+        P("Length1", "角度方向的半長"),
+        P("Length2", "垂直方向的半長"),
+    ],
+    [P("MaxDistance", "最大距離")],
+    "輪廓到旋轉矩形邊界的最大距離",
+    "每條輪廓一個距離。在矩形裡面是到最近一邊的距離，在外面是到矩形的距離。Phi 為 0 時 Length1 沿著行。",
+    "dist_rectangle2_contour_xld (Contour, 30, 40, 0, 10, 5, MaxDistance)",
+)
+def dist_rectangle2_contour_xld(contours, row, column, phi, length1, length2, *, ctx):
+    source = expect_xld(contours, "Contours")
+    center_row, center_col = scalar(row, "Row"), scalar(column, "Column")
+    angle = scalar(phi, "Phi")
+    half_along, half_side = scalar(length1, "Length1"), scalar(length2, "Length2")
+    if half_along <= 0 or half_side <= 0:
+        raise ValueError("半長必須大於 0")
+    distances = []
+    for contour in source.contours:
+        points = _as_points(contour)
+        if len(points) == 0:
+            continue
+        gap = _rectangle2_distance(points[:, 0], points[:, 1], center_row, center_col, angle, half_along, half_side)
+        distances.append(float(gap.max()))
+    if not distances:
+        raise ValueError("輪廓是空的")
+    return Result([], [distances])
+
+
+def _split_edges(contour, epsilon: float) -> list:
+    if len(contour) < 2:
+        return []
+    points = np.asarray(contour, np.float32).reshape(-1, 1, 2)
+    closed = float(np.hypot(points[0, 0, 0] - points[-1, 0, 0], points[0, 0, 1] - points[-1, 0, 1])) <= 1.5
+    approx = cv2.approxPolyDP(points, epsilon, closed)
+    simplified = [[float(point[0][0]), float(point[0][1])] for point in approx]
+    if len(simplified) >= 2 and math.hypot(simplified[0][0] - simplified[-1][0], simplified[0][1] - simplified[-1][1]) <= 1.5:
+        simplified = simplified[:-1]
+    if len(simplified) < 2:
+        return []
+    count = len(simplified)
+    last = count if closed and count >= 3 else count - 1
+    return [[simplified[index], simplified[(index + 1) % count]] for index in range(last)]
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輪廓")],
+    [P("SplitContours", "拆開的邊")],
+    [P("Weight", "允許偏離的像素距離", "0.5")],
+    [],
+    "把輪廓拆成一段一段",
+    "先用 Douglas-Peucker 留下轉折，再把每條邊拆成獨立輪廓。封閉輪廓會接回起點。Weight 是頂點可以離開原輪廓的最大距離。",
+    "split_contours_xld (Contours, SplitContours, 0.5)",
+)
+def split_contours_xld(contours, weight, *, ctx):
+    source = expect_xld(contours, "Contours")
+    epsilon = scalar(weight, "Weight")
+    if epsilon < 0:
+        raise ValueError("Weight 不能是負的")
+    pieces = []
+    for contour in source.contours:
+        pieces.extend(_split_edges(contour, epsilon))
+    return Result([XLD(source.width, source.height, pieces, multi_color=len(pieces) > 1)], [])
+
+
+@operator(
+    "輪廓",
+    [P("ContoursPolar", "極座標輪廓")],
+    [P("ContoursXY", "還原後的輪廓")],
+    [
+        P("Row", "極座標中心列"),
+        P("Column", "極座標中心行"),
+        P("AngleStart", "起始角，弳度"),
+        P("AngleEnd", "結束角，弳度"),
+        P("RadiusStart", "內半徑"),
+        P("RadiusEnd", "外半徑"),
+        P("Width", "角度方向的取樣數"),
+        P("Height", "半徑方向的取樣數"),
+    ],
+    [],
+    "把極座標輪廓還原",
+    "參數和 polar_trans_contour_xld 相同。寬和高是極座標圖的取樣數。角度 0 朝右，正角度順時針。",
+    "polar_trans_contour_xld_inv (ContoursPolar, ContoursXY, 30, 40, 0, rad(360), 0, 20, 40, 20)",
+)
+def polar_trans_contour_xld_inv(contours, row, column, angle_start, angle_end, radius_start, radius_end, width, height, *, ctx):
+    source = expect_xld(contours, "ContoursPolar")
+    wide = whole(width, "Width")
+    high = whole(height, "Height")
+    if wide < 1 or high < 1:
+        raise ValueError("寬高至少要 1")
+    center_row = scalar(row, "Row")
+    center_col = scalar(column, "Column")
+    start = scalar(angle_start, "AngleStart")
+    span = scalar(angle_end, "AngleEnd") - start
+    inner = scalar(radius_start, "RadiusStart")
+    radial = scalar(radius_end, "RadiusEnd") - inner
+    if abs(span) < 1e-9 or abs(radial) < 1e-9:
+        raise ValueError("角度範圍和半徑範圍都不能是 0")
+    kept = []
+    for contour in source.contours:
+        points = _as_points(contour)
+        if len(points) == 0:
+            continue
+        angle = start + points[:, 0] / wide * span
+        radius = inner + points[:, 1] / high * radial
+        cols = center_col + radius * np.cos(angle)
+        rows = center_row + radius * np.sin(angle)
+        kept.append(np.stack([cols, rows], axis=1).tolist())
+    return Result([_fit_canvas(ctx, kept)], [])
+
+
+def _circle_hits(points: np.ndarray, center_row: float, center_col: float, radius: float):
+    if len(points) < 2:
+        return [], []
+    start = points[:-1]
+    stop = points[1:]
+    delta_col = stop[:, 0] - start[:, 0]
+    delta_row = stop[:, 1] - start[:, 1]
+    offset_col = start[:, 0] - center_col
+    offset_row = start[:, 1] - center_row
+    quad_a = delta_row * delta_row + delta_col * delta_col
+    quad_b = 2.0 * (offset_row * delta_row + offset_col * delta_col)
+    quad_c = offset_row * offset_row + offset_col * offset_col - radius * radius
+    valid = quad_a > 1e-12
+    disc = quad_b * quad_b - 4.0 * quad_a * quad_c
+    valid = valid & (disc >= -1e-8)
+    root = np.sqrt(np.maximum(disc, 0.0))
+    found = []
+    for sign in (-1.0, 1.0):
+        along = np.full(quad_a.shape, np.nan)
+        along[valid] = (-quad_b[valid] + sign * root[valid]) / (2.0 * quad_a[valid])
+        keep = np.isfinite(along) & (along >= -1e-6) & (along <= 1.0 + 1e-6)
+        if np.any(keep):
+            rows = start[keep, 1] + along[keep] * delta_row[keep]
+            cols = start[keep, 0] + along[keep] * delta_col[keep]
+            found.append(np.stack([rows, cols], axis=1))
+    if not found:
+        return [], []
+    stacked = np.vstack(found)
+    _, order = np.unique(np.round(stacked, 6), axis=0, return_index=True)
+    stacked = stacked[np.sort(order)]
+    return stacked[:, 0].tolist(), stacked[:, 1].tolist()
+
+
+@operator(
+    "量測",
+    [P("Contour", "輪廓")],
+    [],
+    [P("Row", "圓心列"), P("Column", "圓心行"), P("Radius", "半徑")],
+    [P("RowIntersect", "交點列"), P("ColumnIntersect", "交點行")],
+    "輪廓和圓的交點",
+    "不把輪廓自動封閉。沒有交點時得到空 tuple。相切只有一個點。",
+    "intersection_circle_contour_xld (Contour, 30, 40, 10, Row, Column)",
+)
+def intersection_circle_contour_xld(contour, row, column, radius, *, ctx):
+    source = expect_xld(contour, "Contour")
+    center_row, center_col = scalar(row, "Row"), scalar(column, "Column")
+    rad = scalar(radius, "Radius")
+    if rad < 0:
+        raise ValueError("半徑不能是負的")
+    rows, cols = [], []
+    for item in source.contours:
+        hit_rows, hit_cols = _circle_hits(_as_points(item), center_row, center_col, rad)
+        rows.extend(hit_rows)
+        cols.extend(hit_cols)
+    return Result([], [rows, cols])
+
+
+@operator(
+    "輪廓",
+    [P("Contours", "輪廓")],
+    [],
+    [],
+    [P("Length", "每條輪廓的點數")],
+    "輪廓的點數",
+    "每一條輪廓一個數。封閉輪廓若終點和起點重複，那個點也算進去。",
+    "contour_point_num_xld (Contours, Length)",
+)
+def contour_point_num_xld(contours, *, ctx):
+    source = expect_xld(contours, "Contours")
+    return Result([], [[len(_as_points(contour)) for contour in source.contours]])
