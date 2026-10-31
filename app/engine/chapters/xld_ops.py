@@ -7,11 +7,12 @@ import math
 import numpy as np
 import cv2
 
-from ..objects import Image, Result, XLD
+from ..objects import Image, Region, Result, XLD
 from ..operators import (
     P,
     XLD_FEATURE_CHOICES,
     _sample_rectangle,
+    _fit_line,
     _xld_feature_name,
     as_list,
     expect_image,
@@ -40,7 +41,7 @@ def _inside(point, row1, col1, row2, col2) -> bool:
     [],
     "用矩形裁切輪廓",
     "落在矩形外的點會被拿掉。一條輪廓若被裁成幾段，就變成幾條。少於兩個點的片段丟掉。",
-    "clip_contours_xld (Contours, Clipped, 0, 0, 100, 100)",
+    "Vizion.clip_contours_xld (Contours, Clipped, 0, 0, 100, 100)",
 )
 def clip_contours_xld(contours, row1, column1, row2, column2, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -72,7 +73,7 @@ def clip_contours_xld(contours, row1, column1, row2, column2, *, ctx):
     [],
     "把輪廓近似成多邊形",
     "ramer 和 douglas 都是 Douglas-Peucker。Alpha 是頂點可以離開原輪廓的最大距離，單位是像素。",
-    "gen_polygons_xld (Contours, Polygons, 'ramer', 2)",
+    "Vizion.gen_polygons_xld (Contours, Polygons, 'ramer', 2)",
 )
 def gen_polygons_xld(contours, kind, alpha, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -102,7 +103,7 @@ def gen_polygons_xld(contours, kind, alpha, *, ctx):
     [],
     "用仿射矩陣轉換輪廓",
     "和 affine_trans_pixel 同一套矩陣：x 是列、y 是行。點的存放順序仍是先行、再列。",
-    "affine_trans_contour_xld (Contours, ContoursAffineTrans, HomMat2D)",
+    "Vizion.affine_trans_contour_xld (Contours, ContoursAffineTrans, HomMat2D)",
 )
 def affine_trans_contour_xld(contours, hom_mat2d, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -179,7 +180,7 @@ _POINT_ORDER = ["'positive'", "'negative'"]
     [],
     "產生圓或圓弧輪廓",
     "角度 0 朝右，正角度在畫面上順時針。結束角小於等於起始角時會繞過一圈。negative 會把點序反過來。",
-    "gen_circle_contour_xld (ContCircle, 15, 20, 8, 0, rad(360), 'positive', 1)",
+    "Vizion.gen_circle_contour_xld (ContCircle, 15, 20, 8, 0, rad(360), 'positive', 1)",
 )
 def gen_circle_contour_xld(row, column, radius, start_phi, end_phi, point_order, resolution, *, ctx):
     radius_value = scalar(radius, "Radius")
@@ -208,7 +209,7 @@ def gen_circle_contour_xld(row, column, radius, start_phi, end_phi, point_order,
     [],
     "產生橢圓輪廓",
     "角度和 gen_ellipse 相同。點距是大約值，最長軸用來決定點數。",
-    "gen_ellipse_contour_xld (ContEllipse, 15, 20, 0, 12, 6, 0, rad(360), 'positive', 1)",
+    "Vizion.gen_ellipse_contour_xld (ContEllipse, 15, 20, 0, 12, 6, 0, rad(360), 'positive', 1)",
 )
 def gen_ellipse_contour_xld(row, column, phi, radius1, radius2, start_phi, end_phi, point_order, resolution, *, ctx):
     points = _arc(
@@ -232,7 +233,7 @@ def gen_ellipse_contour_xld(row, column, phi, radius1, radius2, start_phi, end_p
     [],
     "產生旋轉矩形輪廓",
     "Phi 0 時長邊是水平的。正角度在畫面上順時針。輪廓是封閉的五個點。",
-    "gen_rectangle2_contour_xld (Rectangle, 15, 20, 0, 10, 4)",
+    "Vizion.gen_rectangle2_contour_xld (Rectangle, 15, 20, 0, 10, 4)",
 )
 def gen_rectangle2_contour_xld(row, column, phi, length1, length2, *, ctx):
     long_side = scalar(length1, "Length1")
@@ -261,6 +262,26 @@ def _right_offset(points: list, distance: float) -> list:
     return shifted.tolist()
 
 
+def _regression_offset(points: list, distance: float) -> list:
+    pts = np.asarray(points, np.float64).reshape(-1, 2)
+    if len(pts) < 2:
+        return []
+    start, end = _fit_line(pts.tolist())
+    direction = np.array([end[0] - start[0], end[1] - start[1]], np.float64)
+    travel = pts[-1] - pts[0]
+    if float(np.hypot(travel[0], travel[1])) < 1e-9 and len(pts) >= 3:
+        travel = pts[len(pts) // 2] - pts[0]
+    if float(direction @ travel) < 0:
+        direction = -direction
+    length = float(np.hypot(direction[0], direction[1]))
+    if length < 1e-9:
+        return _right_offset(points, distance)
+    dc = direction[0] / length
+    dr = direction[1] / length
+    moved = np.column_stack([pts[:, 0] + distance * (-dr), pts[:, 1] + distance * dc])
+    return moved.tolist()
+
+
 def _as_points(contour) -> np.ndarray:
     pts = np.asarray(contour, np.float64).reshape(-1, 2)
     if len(pts) == 0:
@@ -278,8 +299,8 @@ def _as_points(contour) -> np.ndarray:
     ],
     [],
     "把輪廓沿法線平移",
-    "正距離在畫面上是行進方向的右側。這版兩種 Mode 都用法線，沒有用灰階梯度，也沒有先擬合成直線。",
-    "gen_parallel_contour_xld (Contours, ParallelContours, 'contour_normal', 4)",
+    "正距離在畫面上是行進方向的右側。contour_normal 沿每個點自己的法線。regression_normal 先把整條輪廓擬合成直線，再沿那條直線的右側法線平移，所以直線上的一個尖角不會把旁邊的點往側面推。",
+    "Vizion.gen_parallel_contour_xld (Contours, ParallelContours, 'contour_normal', 4)",
 )
 def gen_parallel_contour_xld(contours, mode, distance, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -289,7 +310,7 @@ def gen_parallel_contour_xld(contours, mode, distance, *, ctx):
     gap = scalar(distance, "Distance")
     pieces = []
     for contour in source.contours:
-        moved = _right_offset(contour, gap)
+        moved = _regression_offset(contour, gap) if kind == "regression_normal" else _right_offset(contour, gap)
         if len(moved) >= 2:
             pieces.append(moved)
     if not pieces:
@@ -305,7 +326,7 @@ def gen_parallel_contour_xld(contours, mode, distance, *, ctx):
     [P("Row1", "上"), P("Column1", "左"), P("Row2", "下"), P("Column2", "右")],
     "輪廓的正外包矩形",
     "每一條輪廓一組。座標是點的最小和最大列、行。",
-    "smallest_rectangle1_xld (XLD, Row1, Column1, Row2, Column2)",
+    "Vizion.smallest_rectangle1_xld (XLD, Row1, Column1, Row2, Column2)",
 )
 def smallest_rectangle1_xld(contours, *, ctx):
     source = expect_xld(contours, "XLD")
@@ -329,7 +350,7 @@ def smallest_rectangle1_xld(contours, *, ctx):
     [P("Row", "圓心列"), P("Column", "圓心行"), P("Radius", "半徑")],
     "輪廓的最小外包圓",
     "每一條輪廓一個圓。",
-    "smallest_circle_xld (XLD, Row, Column, Radius)",
+    "Vizion.smallest_circle_xld (XLD, Row, Column, Radius)",
 )
 def smallest_circle_xld(contours, *, ctx):
     source = expect_xld(contours, "XLD")
@@ -360,7 +381,7 @@ def smallest_circle_xld(contours, *, ctx):
     [],
     "產生箭頭輪廓",
     "包含箭身和兩邊的箭頭。不填長度和寬度時用 8 和 4。",
-    "gen_arrow_contour_xld (Arrow, 5, 5, 5, 25, 6, 3)",
+    "Vizion.gen_arrow_contour_xld (Arrow, 5, 5, 5, 25, 6, 3)",
 )
 def gen_arrow_contour_xld(row1, column1, row2, column2, head_length, head_width, *, ctx):
     start = np.array([scalar(column1, "Column1"), scalar(row1, "Row1")], np.float64)
@@ -411,7 +432,7 @@ def _point_segment_min(points: np.ndarray, contour: np.ndarray) -> float:
     [P("DistanceMin", "最近距離"), P("DistanceMax", "最遠的點距")],
     "兩條輪廓的距離",
     "最近距離在 point_to_segment 時量到線段，point_to_point 只量頂點。最遠距離都是頂點之間的最大距離。多條輪廓會先接在一起再量。",
-    "distance_cc (Contour1, Contour2, 'point_to_segment', DistanceMin, DistanceMax)",
+    "Vizion.distance_cc (Contour1, Contour2, 'point_to_segment', DistanceMin, DistanceMax)",
 )
 def distance_cc(contour1, contour2, mode, *, ctx):
     first = expect_xld(contour1, "Contour1")
@@ -440,7 +461,7 @@ def distance_cc(contour1, contour2, mode, *, ctx):
     [],
     "把輪廓畫進影像",
     "線寬 1 像素。不填灰階時用 255。超出影像的部分會被裁掉。這會產生新影像。",
-    "paint_xld (XLD, Image, ImageResult, 200)",
+    "Vizion.paint_xld (XLD, Image, ImageResult, 200)",
 )
 def paint_xld(contours, image, grayval, *, ctx):
     source = expect_xld(contours, "XLD")
@@ -479,7 +500,7 @@ def _gray_color(image: Image, grayval, name: str):
     [],
     "用投影矩陣轉換輪廓",
     "和 projective_trans_pixel 同一套矩陣。6 個數會當成仿射。點的存放順序仍是先行、再列。",
-    "projective_trans_contour_xld (Contours, ContoursProjTrans, HomMat2D)",
+    "Vizion.projective_trans_contour_xld (Contours, ContoursProjTrans, HomMat2D)",
 )
 def projective_trans_contour_xld(contours, hom_mat2d, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -507,7 +528,7 @@ def projective_trans_contour_xld(contours, hom_mat2d, *, ctx):
     [],
     "把區域骨架轉成輪廓",
     "先做形態學骨架，再把細線收成輪廓。交叉處可能被拆成幾段。",
-    "gen_contours_skeleton_xld (Region, Contours)",
+    "Vizion.gen_contours_skeleton_xld (Region, Contours)",
 )
 def gen_contours_skeleton_xld(region, *, ctx):
     skel = skeleton(region, ctx=ctx).iconic[0]
@@ -535,82 +556,422 @@ def _sample_field(field: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> np.n
     )
 
 
+def _gauss_deriv_kernels(sigma: float):
+    radius = max(1, int(math.ceil(sigma * 4.0)))
+    axis = np.arange(-radius, radius + 1, dtype=np.float64)
+    variance = sigma * sigma
+    smooth = np.exp(-0.5 * axis * axis / variance)
+    smooth /= smooth.sum()
+    first = (-axis / variance) * smooth
+    second = ((axis * axis / (variance * variance)) - (1.0 / variance)) * smooth
+    return [item.astype(np.float32) for item in (smooth, first, second)]
+
+
+def _sep(image, across, along):
+    return cv2.sepFilter2D(image, cv2.CV_32F, across, along, borderType=cv2.BORDER_REFLECT_101)
+
+
+def _ridge_fields(picture: Image, sigma: float, kind: str):
+    """Steger's line detector: Gaussian-derivative Hessian, subpixel along the normal."""
+    if sigma <= 0:
+        raise ValueError("Sigma 必須大於 0")
+    if kind not in ("light", "dark", "both"):
+        raise ValueError("LightDark 只能是 light、dark 或 both")
+    smooth, first, second = _gauss_deriv_kernels(sigma)
+    gray = picture.gray().astype(np.float32)
+    dx = _sep(gray, first, smooth)
+    dy = _sep(gray, smooth, first)
+    dxx = _sep(gray, second, smooth)
+    dyy = _sep(gray, smooth, second)
+    dxy = _sep(gray, first, first)
+    trace = dxx + dyy
+    det = dxx * dyy - dxy * dxy
+    disc = np.sqrt(np.maximum(trace * trace * 0.25 - det, 0.0))
+    larger = trace * 0.5 + disc
+    smaller = trace * 0.5 - disc
+    light = np.maximum(-smaller, 0.0)
+    dark = np.maximum(larger, 0.0)
+    if kind == "light":
+        use_light = np.ones(gray.shape, np.bool_)
+    elif kind == "dark":
+        use_light = np.zeros(gray.shape, np.bool_)
+    else:
+        use_light = light >= dark
+    strength = np.where(use_light, light, dark)
+    curvature = np.where(use_light, smaller, larger)
+    other = np.where(use_light, larger, smaller)
+    left = dxx - curvature
+    right = dyy - curvature
+    prefer_left = np.abs(left) >= np.abs(right)
+    normal_x = np.where(prefer_left, -dxy, right)
+    normal_y = np.where(prefer_left, left, -dxy)
+    norm = np.hypot(normal_x, normal_y)
+    pointed = norm > 1e-6
+    normal_x = np.divide(normal_x, norm, out=np.zeros_like(normal_x), where=pointed)
+    normal_y = np.divide(normal_y, norm, out=np.zeros_like(normal_y), where=pointed)
+    slope = normal_x * dx + normal_y * dy
+    shift = np.divide(-slope, curvature, out=np.full_like(strength, 9.0), where=np.abs(curvature) > 1e-6)
+    rows, cols = np.mgrid[0 : picture.height, 0 : picture.width]
+    ahead = _sample_field(strength, rows + normal_y, cols + normal_x)
+    behind = _sample_field(strength, rows - normal_y, cols - normal_x)
+    linear = np.abs(other) <= 0.5 * np.maximum(strength, 1e-6)
+    center = pointed & linear & (np.abs(shift) <= 0.5) & (strength >= ahead) & (strength >= behind) & (strength > 0)
+    if picture.domain is not None:
+        center &= picture.domain > 0
+    return strength, normal_x, normal_y, shift, center
+
+
+def _polarity(value, name: str) -> str:
+    kind = text(value, name).lower()
+    if kind not in ("light", "dark", "both"):
+        raise ValueError(f"{name} 只能是 light、dark 或 both")
+    return kind
+
+
+def _link_ridge(mask: np.ndarray, shift, normal_x, normal_y) -> list[list]:
+    ys, xs = np.nonzero(mask)
+    if len(ys) == 0:
+        return []
+    points = {(int(row), int(col)) for row, col in zip(ys, xs)}
+    neighbors = {}
+    for row, col in points:
+        found = []
+        for d_row in (-1, 0, 1):
+            for d_col in (-1, 0, 1):
+                if d_row == 0 and d_col == 0:
+                    continue
+                nxt = (row + d_row, col + d_col)
+                if nxt in points:
+                    found.append(nxt)
+        neighbors[(row, col)] = found
+
+    def edge(a, b):
+        return (a, b) if a <= b else (b, a)
+
+    used = set()
+    chains = []
+
+    def walk(start, nxt):
+        key = edge(start, nxt)
+        if key in used:
+            return
+        chain = [start]
+        previous, current = start, nxt
+        used.add(key)
+        while True:
+            chain.append(current)
+            choices = [item for item in neighbors[current] if edge(current, item) not in used]
+            if len(choices) != 1:
+                break
+            previous, current = current, choices[0]
+            used.add(edge(previous, current))
+        if len(chain) >= 2:
+            chains.append(chain)
+
+    starts = [point for point, items in neighbors.items() if len(items) != 2]
+    if not starts:
+        starts = [min(points)]
+    starts.sort()
+    for start in starts:
+        for nxt in neighbors[start]:
+            walk(start, nxt)
+    polylines = []
+    for chain in chains:
+        polyline = []
+        for row, col in chain:
+            moved = float(shift[row, col])
+            polyline.append([float(col) + moved * float(normal_x[row, col]), float(row) + moved * float(normal_y[row, col])])
+        polylines.append(polyline)
+    return polylines
+
+
+def _line_facts(polylines: list[list]):
+    if not polylines:
+        return 0, 0.0, 0.0, 0.0, 0.0
+    best = None
+    for polyline in polylines:
+        length = 0.0
+        for left, right in zip(polyline, polyline[1:]):
+            length += math.hypot(right[0] - left[0], right[1] - left[1])
+        rows = [point[1] for point in polyline]
+        cols = [point[0] for point in polyline]
+        mean_row = float(sum(rows) / len(rows))
+        mean_col = float(sum(cols) / len(cols))
+        rank = (length, -mean_row, -mean_col)
+        if best is None or rank > best[0]:
+            best = (rank, polyline, length, mean_row, mean_col)
+    _rank, polyline, length, mean_row, mean_col = best
+    phi = math.atan2(polyline[-1][1] - polyline[0][1], polyline[-1][0] - polyline[0][0])
+    if phi <= -math.pi / 2:
+        phi += math.pi
+    elif phi > math.pi / 2:
+        phi -= math.pi
+    return len(polylines), length, phi, mean_row, mean_col
+
+
 @operator(
     "輪廓",
     [P("Image", "輸入影像")],
     [P("Lines", "脊線輪廓")],
     [
         P("Sigma", "平滑標準差"),
-        P("Low", "遲滯的低門檻"),
-        P("High", "遲滯的高門檻"),
+        P("Low", "中心強度的低門檻"),
+        P("High", "能當種子的高門檻"),
         P("LightDark", "light 亮線、dark 暗線或 both", "'light'", ["'light'", "'dark'", "'both'"]),
     ],
     [],
     "抽出亮線或暗線",
-    "用 Hessian 找脊線，再沿法線做非極大抑制。這是像素級結果，不是 HALCON 的次像素 lines_gauss，交叉處也不會特別補齊。彩色先轉成亮度。",
-    "lines_gauss (Image, Lines, 1.2, 1, 5, 'light')",
+    "用可分離的高斯導數做 Hessian，沿法線把脊線收到次像素。0 朝右，垂直是 1.5708。"
+    "Low 以上的中心才會相連，其中要有一點達到 High 才留下。交叉處分成幾段，不補角。"
+    "平坦處和大方塊的邊緣不會當成細線。彩色先轉成亮度。Sigma 要大於 0，High 不能小於 Low。",
+    "Vizion.lines_gauss (Image, Lines, 1.2, 1, 5, 'light')",
 )
 def lines_gauss(image, sigma, low, high, light_dark, *, ctx):
     picture = expect_image(image, "Image")
-    spread = scalar(sigma, "Sigma")
-    if spread <= 0:
-        raise ValueError("Sigma 必須大於 0")
     low_value = scalar(low, "Low")
     high_value = scalar(high, "High")
     if high_value < low_value:
         raise ValueError("High 不能小於 Low")
-    kind = text(light_dark, "LightDark").lower()
-    if kind not in ("light", "dark", "both"):
-        raise ValueError("LightDark 只能是 light、dark 或 both")
-    kernel = min(31, max(3, int(round(spread * 6)) | 1))
-    smooth = cv2.GaussianBlur(picture.gray().astype(np.float32), (kernel, kernel), spread)
-    ixx = cv2.Sobel(smooth, cv2.CV_32F, 2, 0, ksize=3)
-    iyy = cv2.Sobel(smooth, cv2.CV_32F, 0, 2, ksize=3)
-    ixy = cv2.Sobel(smooth, cv2.CV_32F, 1, 1, ksize=3)
-    trace = ixx + iyy
-    det = ixx * iyy - ixy * ixy
-    disc = np.sqrt(np.maximum(trace * trace * 0.25 - det, 0.0))
-    larger = trace * 0.5 + disc
-    smaller = trace * 0.5 - disc
-    if kind == "light":
-        strength = -smaller
-        normal_col = ixy
-        normal_row = smaller - ixx
-    elif kind == "dark":
-        strength = larger
-        normal_col = ixy
-        normal_row = larger - ixx
-    else:
-        light_strength = -smaller
-        use_light = light_strength >= larger
-        strength = np.where(use_light, light_strength, larger)
-        normal_col = ixy
-        normal_row = np.where(use_light, smaller - ixx, larger - ixx)
-    norm = np.hypot(normal_col, normal_row)
-    fallback_col = np.where(np.abs(ixx) >= np.abs(iyy), 1.0, 0.0)
-    normal_col = np.where(norm > 1e-6, normal_col / np.maximum(norm, 1e-6), fallback_col)
-    normal_row = np.where(norm > 1e-6, normal_row / np.maximum(norm, 1e-6), 1.0 - fallback_col)
-    rows, cols = np.mgrid[0 : picture.height, 0 : picture.width]
-    ahead = _sample_field(strength, rows + normal_row, cols + normal_col)
-    behind = _sample_field(strength, rows - normal_row, cols - normal_col)
-    ridge = (strength >= ahead) & (strength >= behind) & (strength >= low_value)
-    seeds = ((strength >= high_value) & ridge).astype(np.uint8)
-    allowed = np.where(ridge, 255, 0).astype(np.uint8)
-    if int(seeds.sum()) == 0:
+    strength, normal_x, normal_y, shift, center = _ridge_fields(picture, scalar(sigma, "Sigma"), _polarity(light_dark, "LightDark"))
+    allowed = center & (strength >= low_value)
+    seeds = center & (strength >= high_value)
+    if not np.any(seeds):
         return Result([XLD(picture.width, picture.height, [])], [])
-    count, labels = cv2.connectedComponents(allowed, connectivity=8)
-    seed_labels = np.unique(labels[seeds > 0])
-    seed_labels = seed_labels[seed_labels > 0]
-    keep = np.isin(labels, seed_labels)
-    mask = np.where(keep, 255, 0).astype(np.uint8)
-    found = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-    contours = found[0] if len(found) == 2 else found[1]
-    pieces = []
-    for contour in contours:
-        if len(contour) < 4:
-            continue
-        pieces.append([[float(point[0][0]), float(point[0][1])] for point in contour])
+    labels = cv2.connectedComponents(np.where(allowed, 255, 0).astype(np.uint8), connectivity=8)[1]
+    keep_ids = np.unique(labels[seeds])
+    keep_ids = keep_ids[keep_ids > 0]
+    keep = np.isin(labels, keep_ids)
+    pieces = _link_ridge(keep, shift, normal_x, normal_y)
     return Result([XLD(picture.width, picture.height, pieces, multi_color=len(pieces) > 1)], [])
+
+
+_RIDGE_POLARITY = ["'dark'", "'light'", "'both'"]
+
+
+@operator(
+    "輪廓",
+    [P("Image", "輸入影像")],
+    [P("Response", "脊線強度，0 是沒有")],
+    [
+        P("Sigma", "平滑標準差", "1"),
+        P("LightDark", "dark 暗線、light 亮線或 both", "'dark'", _RIDGE_POLARITY),
+    ],
+    [],
+    "把細線強度畫成灰階",
+    "只有脊線中心有值，旁邊和平坦處是 0。數字是 Hessian 曲率的絕對值，四捨五入到 0 到 255。"
+    "用來決定 lines_gauss 的 Low 和 High：中心灰階就是強度。彩色先轉成亮度。",
+    "Vizion.ridge_response (Image, Response, 1, 'dark')",
+)
+def ridge_response(image, sigma, light_dark, *, ctx):
+    picture = expect_image(image, "Image")
+    strength, _normal_x, _normal_y, _shift, center = _ridge_fields(picture, scalar(sigma, "Sigma"), _polarity(light_dark, "LightDark"))
+    out = np.zeros(picture.gray().shape, np.uint8)
+    if np.any(center):
+        out[center] = np.clip(np.round(strength[center]), 0, 255).astype(np.uint8)
+    return image_out(picture, out)
+
+
+@operator(
+    "輪廓",
+    [P("Image", "輸入影像")],
+    [P("Region", "細線中心")],
+    [
+        P("Sigma", "平滑標準差", "1"),
+        P("MinStrength", "中心至少要多強", "8"),
+        P("LightDark", "dark 暗線、light 亮線或 both", "'dark'", _RIDGE_POLARITY),
+    ],
+    [],
+    "細線中心變成區域",
+    "一像素寬，每條不相連的線是一個物件。面積就是這條線上的點數。"
+    "大方塊邊緣和只差幾個灰階的雜訊不會留下。MinStrength 不能是負的，0 表示只要有中心就算。",
+    "Vizion.ridge_region (Image, Region, 1, 8, 'dark')",
+)
+def ridge_region(image, sigma, minimum, light_dark, *, ctx):
+    picture = expect_image(image, "Image")
+    floor = scalar(minimum, "MinStrength")
+    if floor < 0:
+        raise ValueError("MinStrength 不能是負的")
+    strength, _normal_x, _normal_y, _shift, center = _ridge_fields(picture, scalar(sigma, "Sigma"), _polarity(light_dark, "LightDark"))
+    mask = np.where(center & (strength >= floor), 255, 0).astype(np.uint8)
+    count, labels = cv2.connectedComponents(mask, connectivity=8)
+    objects = [np.where(labels == index, 255, 0).astype(np.uint8) for index in range(1, count)]
+    return Result([Region(picture.width, picture.height, objects, multi_color=len(objects) > 1)], [])
+
+
+@operator(
+    "輪廓",
+    [P("Image", "輸入影像")],
+    [],
+    [
+        P("Sigma", "平滑標準差", "1"),
+        P("MinStrength", "中心至少要多強", "8"),
+        P("LightDark", "dark 暗線、light 亮線或 both", "'dark'", _RIDGE_POLARITY),
+    ],
+    [
+        P("Count", "有幾條"),
+        P("Length", "最長那條的長度"),
+        P("Phi", "最長那條的方向，0 朝右"),
+        P("Row", "最長那條的中心列"),
+        P("Column", "最長那條的中心行"),
+    ],
+    "細線有幾條、朝哪",
+    "Count 不算孤立的一個點。Length 是相鄰中心的距離和，不是面積。"
+    "Phi 收在 -1.5708 到 1.5708，水平是 0，垂直是 1.5708。沒有線時五個數都是 0。"
+    "同一條線從哪一頭起算都得到同一個方向。",
+    "Vizion.ridge_stats (Image, 1, 8, 'dark', Count, Length, Phi, Row, Column)",
+)
+def ridge_stats(image, sigma, minimum, light_dark, *, ctx):
+    picture = expect_image(image, "Image")
+    floor = scalar(minimum, "MinStrength")
+    if floor < 0:
+        raise ValueError("MinStrength 不能是負的")
+    strength, normal_x, normal_y, shift, center = _ridge_fields(picture, scalar(sigma, "Sigma"), _polarity(light_dark, "LightDark"))
+    pieces = _link_ridge(center & (strength >= floor), shift, normal_x, normal_y)
+    count, length, phi, row, column = _line_facts(pieces)
+    return Result([], [count, length, phi, row, column])
+
+
+def _edge_fields(picture: Image, sigma: float, sigma_name: str = "Alpha"):
+    """Subpixel step edge: Gaussian gradient, parabolic peak along the normal."""
+    if sigma <= 0:
+        raise ValueError(f"{sigma_name} 必須大於 0")
+    smooth, first, _second = _gauss_deriv_kernels(sigma)
+    gray = picture.gray().astype(np.float32)
+    dx = _sep(gray, first, smooth)
+    dy = _sep(gray, smooth, first)
+    magnitude = np.hypot(dx, dy)
+    scale = np.maximum(magnitude, 1e-6)
+    normal_x = dx / scale
+    normal_y = dy / scale
+    rows, cols = np.mgrid[0 : picture.height, 0 : picture.width]
+    ahead = _sample_field(magnitude, rows + normal_y, cols + normal_x)
+    behind = _sample_field(magnitude, rows - normal_y, cols - normal_x)
+    denom = behind + ahead - 2.0 * magnitude
+    shift = np.divide(
+        0.5 * (behind - ahead),
+        denom,
+        out=np.full_like(magnitude, 9.0),
+        where=np.abs(denom) > 1e-6,
+    )
+    center = (magnitude >= ahead) & (magnitude >= behind) & (magnitude > 0) & (shift > -0.5) & (shift <= 0.5)
+    if picture.domain is not None:
+        center &= picture.domain > 0
+    return magnitude, normal_x, normal_y, shift, center
+
+
+@operator(
+    "輪廓",
+    [P("Image", "輸入影像")],
+    [P("Edges", "次像素邊緣")],
+    [
+        P("Filter", "canny。用高斯導數，不是整數 Canny", "'canny'", ["'canny'"]),
+        P("Alpha", "平滑標準差"),
+        P("Low", "梯度低門檻"),
+        P("High", "能當種子的高門檻"),
+    ],
+    [],
+    "萃取次像素邊緣",
+    "高斯導數的梯度在法線上做拋物線內插，邊緣落在強度最高的次像素，而不是整數像素的外框。"
+    "Low 以上才相連，其中要有一點達到 High。黑白階躍在 Sigma 1 時強度大約 60，門檻 20 和 40 留得住明顯的邊。"
+    "差幾個灰階的雜訊不會留下。彩色先轉成亮度。Alpha 要大於 0，High 不能小於 Low。",
+    "Vizion.edges_sub_pix (Image, Edges, 'canny', 1.0, 20, 40)",
+)
+def edges_sub_pix(image, kind, alpha, low, high, *, ctx):
+    picture = expect_image(image, "Image")
+    if text(kind, "Filter").lower() != "canny":
+        raise ValueError("Filter 這版是 canny")
+    low_value = scalar(low, "Low")
+    high_value = scalar(high, "High")
+    if high_value < low_value:
+        raise ValueError("High 不能小於 Low")
+    magnitude, normal_x, normal_y, shift, center = _edge_fields(picture, scalar(alpha, "Alpha"))
+    allowed = center & (magnitude >= low_value)
+    seeds = center & (magnitude >= high_value)
+    if not np.any(seeds):
+        return Result([XLD(picture.width, picture.height, [])], [])
+    labels = cv2.connectedComponents(np.where(allowed, 255, 0).astype(np.uint8), connectivity=8)[1]
+    keep_ids = np.unique(labels[seeds])
+    keep_ids = keep_ids[keep_ids > 0]
+    keep = np.isin(labels, keep_ids)
+    pieces = _link_ridge(keep, shift, normal_x, normal_y)
+    return Result([XLD(picture.width, picture.height, pieces, multi_color=len(pieces) > 1)], [])
+
+
+@operator(
+    "輪廓",
+    [P("Image", "輸入影像")],
+    [P("Response", "邊緣強度，0 是沒有")],
+    [P("Alpha", "平滑標準差", "1")],
+    [],
+    "把邊緣強度畫成灰階",
+    "只有次像素邊緣所在的那個整數像素有值。數字是梯度大小，四捨五入到 0 到 255，用來決定 Low 和 High。"
+    "彩色先轉成亮度。",
+    "Vizion.edge_response (Image, Response, 1)",
+)
+def edge_response(image, alpha, *, ctx):
+    picture = expect_image(image, "Image")
+    magnitude, _normal_x, _normal_y, _shift, center = _edge_fields(picture, scalar(alpha, "Alpha"))
+    out = np.zeros(picture.gray().shape, np.uint8)
+    if np.any(center):
+        out[center] = np.clip(np.round(magnitude[center]), 0, 255).astype(np.uint8)
+    return image_out(picture, out)
+
+
+@operator(
+    "輪廓",
+    [P("Image", "輸入影像")],
+    [P("Region", "邊緣像素")],
+    [
+        P("Alpha", "平滑標準差", "1"),
+        P("MinAmplitude", "梯度至少要多大", "20"),
+    ],
+    [],
+    "邊緣變成區域",
+    "區域畫在梯度峰值的整數像素上，次像素位置要看 edge_stats。"
+    "不相連的邊各自一個物件。MinAmplitude 不能是負的。",
+    "Vizion.edge_region (Image, Region, 1, 20)",
+)
+def edge_region(image, alpha, minimum, *, ctx):
+    picture = expect_image(image, "Image")
+    floor = scalar(minimum, "MinAmplitude")
+    if floor < 0:
+        raise ValueError("MinAmplitude 不能是負的")
+    magnitude, _normal_x, _normal_y, _shift, center = _edge_fields(picture, scalar(alpha, "Alpha"))
+    mask = np.where(center & (magnitude >= floor), 255, 0).astype(np.uint8)
+    count, labels = cv2.connectedComponents(mask, connectivity=8)
+    objects = [np.where(labels == index, 255, 0).astype(np.uint8) for index in range(1, count)]
+    return Result([Region(picture.width, picture.height, objects, multi_color=len(objects) > 1)], [])
+
+
+@operator(
+    "輪廓",
+    [P("Image", "輸入影像")],
+    [],
+    [
+        P("Alpha", "平滑標準差", "1"),
+        P("MinAmplitude", "梯度至少要多大", "20"),
+    ],
+    [
+        P("Count", "有幾條"),
+        P("Length", "最長那條的長度"),
+        P("Phi", "最長那條的方向，0 朝右"),
+        P("Row", "最長那條的次像素列"),
+        P("Column", "最長那條的次像素行"),
+    ],
+    "邊緣在哪、朝哪",
+    "Row 和 Column 是次像素，可以落在兩個整數像素中間。Phi 收在 -1.5708 到 1.5708，垂直是 1.5708。"
+    "沒有邊時五個數都是 0。孤立的一個點不算一條。",
+    "Vizion.edge_stats (Image, 1, 20, Count, Length, Phi, Row, Column)",
+)
+def edge_stats(image, alpha, minimum, *, ctx):
+    picture = expect_image(image, "Image")
+    floor = scalar(minimum, "MinAmplitude")
+    if floor < 0:
+        raise ValueError("MinAmplitude 不能是負的")
+    magnitude, normal_x, normal_y, shift, center = _edge_fields(picture, scalar(alpha, "Alpha"))
+    pieces = _link_ridge(center & (magnitude >= floor), shift, normal_x, normal_y)
+    count, length, phi, row, column = _line_facts(pieces)
+    return Result([], [count, length, phi, row, column])
 
 
 @operator(
@@ -627,7 +988,7 @@ def lines_gauss(image, sigma, low, high, light_dark, *, ctx):
     ],
     "輪廓的最小旋轉外接矩形",
     "每一條輪廓一組。長邊角度收在 −90 到 90 度。點太少時會失敗。",
-    "smallest_rectangle2_xld (XLD, Row, Column, Phi, Length1, Length2)",
+    "Vizion.smallest_rectangle2_xld (XLD, Row, Column, Phi, Length1, Length2)",
 )
 def smallest_rectangle2_xld(contours, *, ctx):
     source = expect_xld(contours, "XLD")
@@ -663,19 +1024,54 @@ def _axis_phi(direction_col: float, direction_row: float) -> float:
     return phi
 
 
+def _weighted_axis(points: np.ndarray, weights: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    if float(weights.sum()) < 1e-8:
+        raise ValueError("點太少，不能擬合直線")
+    center = (weights[:, None] * points).sum(axis=0) / float(weights.sum())
+    centered = (points - center) * np.sqrt(weights)[:, None]
+    if float(np.max(np.abs(centered))) < 1e-9:
+        raise ValueError("點都重疊，不能擬合直線")
+    _u, _s, vt = np.linalg.svd(centered, full_matrices=False)
+    return center, vt[0]
+
+
+def _segment(points: np.ndarray, center: np.ndarray, direction: np.ndarray, keep: np.ndarray) -> list[list[float]]:
+    if int(np.count_nonzero(keep)) < 2:
+        keep = np.ones(len(points), dtype=bool)
+    offset = (points[keep] - center) @ direction
+    start = center + direction * float(offset.min())
+    end = center + direction * float(offset.max())
+    return [[float(start[0]), float(start[1])], [float(end[0]), float(end[1])]]
+
+
+def _gauss_line(points: np.ndarray, iterations: int) -> list[list[float]]:
+    weights = np.ones(len(points), np.float64)
+    passes = iterations if iterations > 0 else 4
+    center, direction = _weighted_axis(points, weights)
+    for _step in range(passes):
+        distance = np.abs((points - center) @ np.array([-direction[1], direction[0]]))
+        if float(distance.max()) < 1e-8:
+            break
+        deviation = float(np.median(np.abs(distance - np.median(distance))))
+        sigma = 1.4826 * deviation if deviation > 0.05 else 1.0
+        weights = np.exp(-0.5 * (distance / sigma) ** 2)
+        center, direction = _weighted_axis(points, weights)
+    return _segment(points, center, direction, weights > 0.05)
+
+
 def _line_through(points: np.ndarray, mode: str, iterations: int) -> list[list[float]]:
+    if len(points) < 2:
+        raise ValueError("點太少，不能擬合直線")
+    if mode == "gauss":
+        return _gauss_line(points, iterations)
     current = points
     rounds = iterations if mode == "drop" else 0
     for step in range(rounds + 1):
         if len(current) < 2:
             raise ValueError("點太少，不能擬合直線")
-        center = current.mean(axis=0)
+        weights = np.ones(len(current), np.float64)
+        center, direction = _weighted_axis(current, weights)
         centered = current - center
-        if float(np.max(np.abs(centered))) < 1e-9:
-            raise ValueError("點都重疊，不能擬合直線")
-        _u, _s, vt = np.linalg.svd(centered, full_matrices=False)
-        direction = vt[0]
-        offset = centered @ direction
         distance = np.abs(centered[:, 0] * direction[1] - centered[:, 1] * direction[0])
         if mode == "drop" and step < rounds and len(current) > 4:
             limit = max(float(np.median(distance)) * 2.0, 0.5)
@@ -683,9 +1079,7 @@ def _line_through(points: np.ndarray, mode: str, iterations: int) -> list[list[f
             if len(kept) >= 2 and len(kept) < len(current):
                 current = kept
                 continue
-        start = center + float(offset.min()) * direction
-        end = center + float(offset.max()) * direction
-        return [[float(start[0]), float(start[1])], [float(end[0]), float(end[1])]]
+        return _segment(current, center, direction, np.ones(len(current), dtype=bool))
     raise ValueError("不能擬合直線")
 
 
@@ -695,12 +1089,12 @@ def _line_through(points: np.ndarray, mode: str, iterations: int) -> list[list[f
     [P("RegressContours", "擬合成直線段")],
     [
         P("Mode", "no、drop 或 gauss", "'no'", ["'no'", "'drop'", "'gauss'"]),
-        P("Iterations", "drop 時剔除離群點的次數", "0"),
+        P("Iterations", "加權或剔除的次數，0 代表 gauss 做 4 次", "0"),
     ],
     [],
     "把輪廓擬合成直線段",
-    "每條輪廓換成它在直線上的投影範圍。no 和 gauss 這版都用全部的點，沒有高斯權重。drop 會把離直線較遠的點拿掉。",
-    "regress_contours_xld (Contours, RegressContours, 'no', 0)",
+    "每條輪廓換成它在直線上的投影範圍。no 每個點一樣重。gauss 依離直線的距離做高斯加權，飛點幾乎沒有影響力，Iterations 為 0 時做 4 次。drop 會把離直線較遠的點拿掉。點都在直線上時，三種結果一樣。",
+    "Vizion.regress_contours_xld (Contours, RegressContours, 'no', 0)",
 )
 def regress_contours_xld(contours, mode, iterations, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -724,7 +1118,7 @@ def regress_contours_xld(contours, mode, iterations, *, ctx):
     [P("Phi", "長軸角度，弳度，−π/2 到 π/2")],
     "輪廓的方向",
     "用點的主軸，0 是向右，正值在畫面上往下轉。不是填滿後的區域方向。一條輪廓一個角度。",
-    "orientation_xld (Contours, Phi)",
+    "Vizion.orientation_xld (Contours, Phi)",
 )
 def orientation_xld(contours, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -750,7 +1144,7 @@ def orientation_xld(contours, *, ctx):
     [P("Ra", "長軸"), P("Rb", "短軸"), P("Phi", "長軸角度，弳度")],
     "用輪廓點估計橢圓",
     "Ra 和 Rb 是 2 倍的標準差，不是區域版 elliptic_axis 的半徑。點如果只在邊界上，半徑會和填滿的橢圓不同。0 是向右。每條輪廓一組。",
-    "elliptic_axis_xld (XLD, Ra, Rb, Phi)",
+    "Vizion.elliptic_axis_xld (XLD, Ra, Rb, Phi)",
 )
 def elliptic_axis_xld(contours, *, ctx):
     source = expect_xld(contours, "XLD")
@@ -822,7 +1216,7 @@ def _fillet(previous, current, following, radius: float):
     [],
     "把折線的轉角修成圓弧",
     "首尾同一個點時當成封閉。半徑 0 就是原來的折線。圓弧太大會縮到線段的一半，避免把相鄰轉角疊在一起。",
-    "gen_contour_polygon_rounded_xld (Contour, [0, 0, 20], [0, 20, 20], 5, 1)",
+    "Vizion.gen_contour_polygon_rounded_xld (Contour, [0, 0, 20], [0, 20, 20], 5, 1)",
 )
 def gen_contour_polygon_rounded_xld(row, col, radius, sampling, *, ctx):
     rows = [float(item) for item in as_list(row)]
@@ -901,7 +1295,7 @@ def _trim_end(points: list, amount: float) -> list:
     [],
     "去掉輪廓的兩端",
     "num_points 是點數，length 是沿著線的像素長度。剩下少於 2 個點就丟掉這條輪廓。封閉輪廓也是從序列兩端切，不會改成從中間切。",
-    "clip_end_points_contours_xld (Contours, ClippedContours, 'num_points', 1)",
+    "Vizion.clip_end_points_contours_xld (Contours, ClippedContours, 'num_points', 1)",
 )
 def clip_end_points_contours_xld(contours, mode, length, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -952,7 +1346,7 @@ def _contour_cross(first, second):
     [P("Row", "交點列"), P("Column", "交點行")],
     "兩組輪廓的交點",
     "每一段和另一組的每一段互相比。沒有交點時得到空 tuple。很長的輪廓會比較慢。靠得很近的交點會合成一個。",
-    "intersection_contours_xld (Contour1, Contour2, Row, Column)",
+    "Vizion.intersection_contours_xld (Contour1, Contour2, Row, Column)",
 )
 def intersection_contours_xld(contour1, contour2, *, ctx):
     first = expect_xld(contour1, "Contour1")
@@ -988,7 +1382,7 @@ def _turn(previous: float, following: float) -> float:
     [P("Angle", "每個點一個角度，弳度")],
     "輪廓每個點的角度",
     "abs 的 0 是向右，正值在畫面上往下轉。rel 是這一點轉了多少，直線接近 0，端點是 0。多條輪廓會依序接在同一個 tuple。",
-    "get_contour_angle_xld (Contour, 'abs', Angle)",
+    "Vizion.get_contour_angle_xld (Contour, 'abs', Angle)",
 )
 def get_contour_angle_xld(contour, mode, *, ctx):
     source = expect_xld(contour, "Contour")
@@ -1024,7 +1418,7 @@ def get_contour_angle_xld(contour, mode, *, ctx):
     [P("IsClosed", "1 表示首尾接在一起")],
     "輪廓是否封閉",
     "首尾距離小於 1.5 像素就算封閉。每條輪廓一個 0 或 1。",
-    "test_closed_xld (XLD, IsClosed)",
+    "Vizion.test_closed_xld (XLD, IsClosed)",
 )
 def test_closed_xld(contours, *, ctx):
     source = expect_xld(contours, "XLD")
@@ -1047,7 +1441,7 @@ def test_closed_xld(contours, *, ctx):
     [P("Value", "特徵值")],
     "讀取輪廓特徵",
     "名稱和 select_contours_xld 相同，例如 contlength、area、circularity。單一特徵時依輪廓排列。多個特徵時先排完第一個特徵的全部輪廓。",
-    "xld_features (Contours, 'contlength', Value)",
+    "Vizion.xld_features (Contours, 'contlength', Value)",
 )
 def xld_features(contours, features, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -1069,7 +1463,7 @@ def xld_features(contours, features, *, ctx):
     [],
     "留下包含指定點的輪廓",
     "把點序當成多邊形。點在內部或邊上就留下，碰到其中一個點即可。少於 3 個點的輪廓不會被選到。",
-    "select_xld_point (Contours, DestContours, 20, 20)",
+    "Vizion.select_xld_point (Contours, DestContours, 20, 20)",
 )
 def select_xld_point(contours, row, column, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -1105,7 +1499,7 @@ def select_xld_point(contours, row, column, *, ctx):
     [],
     "把輪廓轉成極座標",
     "角度 0 朝右，正角度順時針。點會線性對到寬和高，可以落在影像外面。小於起始角的角度會加一整圈，用來對上 0 到 360 度的展開圖。",
-    "polar_trans_contour_xld (Contour, ContourPolar, 30, 40, 0, rad(360), 0, 20, 40, 20)",
+    "Vizion.polar_trans_contour_xld (Contour, ContourPolar, 30, 40, 0, rad(360), 0, 20, 40, 20)",
 )
 def polar_trans_contour_xld(contours, row, column, angle_start, angle_end, radius_start, radius_end, width, height, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -1192,7 +1586,7 @@ def _all_intersections(contours, row1, column1, row2, column2, segment: bool):
     [P("Row", "交點列"), P("Column", "交點行")],
     "無限長直線和輪廓的交點",
     "用輪廓上相鄰的點組成折線。沒有交點時得到空 tuple。平行或重疊的這版不回傳。不會自動把輪廓封閉。",
-    "intersection_line_contour_xld (Contour, 0, 20, 40, 20, Row, Column)",
+    "Vizion.intersection_line_contour_xld (Contour, 0, 20, 40, 20, Row, Column)",
 )
 def intersection_line_contour_xld(contour, row1, column1, row2, column2, *, ctx):
     return _all_intersections(contour, row1, column1, row2, column2, False)
@@ -1209,7 +1603,7 @@ def intersection_line_contour_xld(contour, row1, column1, row2, column2, *, ctx)
     [P("Row", "交點列"), P("Column", "交點行")],
     "線段和輪廓的交點",
     "只算線段碰到折線的地方。延長出去的交點不算。沒有交點時得到空 tuple。",
-    "intersection_segment_contour_xld (Contour, 0, 20, 15, 20, Row, Column)",
+    "Vizion.intersection_segment_contour_xld (Contour, 0, 20, 15, 20, Row, Column)",
 )
 def intersection_segment_contour_xld(contour, row1, column1, row2, column2, *, ctx):
     return _all_intersections(contour, row1, column1, row2, column2, True)
@@ -1226,7 +1620,7 @@ _XLD_SHAPES = ["'rectangle1'", "'rectangle2'", "'convex'", "'outer_circle'", "'e
     [],
     "把輪廓換成規則外形",
     "rectangle1 是正外接矩形。rectangle2 和 ellipse 用 OpenCV 的外接矩形與橢圓。outer_circle 是最小外包圓。點不夠擬合橢圓時改成圓。",
-    "shape_trans_xld (Contours, ContoursTrans, 'rectangle1')",
+    "Vizion.shape_trans_xld (Contours, ContoursTrans, 'rectangle1')",
 )
 def shape_trans_xld(contours, kind, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -1316,7 +1710,7 @@ def _ellipse_point_distance(cols, rows, center_row, center_col, phi, radius1, ra
     [P("MaxDistance", "最大距離")],
     "輪廓到橢圓的最大距離",
     "每條輪廓一個距離。用徑向投影，正圓是準的。很扁的橢圓和真正的最短距離可能有一點差。Phi 為 0 時 Radius1 沿著行。",
-    "dist_ellipse_contour_xld (Contour, 30, 40, 0, 10, 10, MaxDistance)",
+    "Vizion.dist_ellipse_contour_xld (Contour, 30, 40, 0, 10, 10, MaxDistance)",
 )
 def dist_ellipse_contour_xld(contours, row, column, phi, radius1, radius2, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -1392,7 +1786,7 @@ def _crosses_self(points: np.ndarray) -> int:
     [P("IsSelfIntersecting", "1 表示折線自己交叉")],
     "輪廓是否自交",
     "相鄰邊共用的端點不算交叉。封閉輪廓的首尾兩邊也不算。每條輪廓一個 0 或 1。",
-    "test_self_intersection_xld (Contours, IsSelfIntersecting)",
+    "Vizion.test_self_intersection_xld (Contours, IsSelfIntersecting)",
 )
 def test_self_intersection_xld(contours, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -1436,7 +1830,7 @@ def _curvature_points(points: np.ndarray, limit: float):
     [P("Row", "轉角的列"), P("Column", "轉角的行")],
     "留下轉角大的輪廓點",
     "用相鄰三點的轉角。比 Threshold 大，而且不比左右轉角小的點會留下。封閉輪廓的首尾接點只算一次。這是折線頂點，不是曲線擬合。",
-    "critical_points_xld (Contours, 0.5, Row, Column)",
+    "Vizion.critical_points_xld (Contours, 0.5, Row, Column)",
 )
 def critical_points_xld(contours, threshold, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -1478,7 +1872,7 @@ def _rectangle2_distance(cols, rows, center_row, center_col, phi, length1, lengt
     [P("MaxDistance", "最大距離")],
     "輪廓到旋轉矩形邊界的最大距離",
     "每條輪廓一個距離。在矩形裡面是到最近一邊的距離，在外面是到矩形的距離。Phi 為 0 時 Length1 沿著行。",
-    "dist_rectangle2_contour_xld (Contour, 30, 40, 0, 10, 5, MaxDistance)",
+    "Vizion.dist_rectangle2_contour_xld (Contour, 30, 40, 0, 10, 5, MaxDistance)",
 )
 def dist_rectangle2_contour_xld(contours, row, column, phi, length1, length2, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -1523,7 +1917,7 @@ def _split_edges(contour, epsilon: float) -> list:
     [],
     "把輪廓拆成一段一段",
     "先用 Douglas-Peucker 留下轉折，再把每條邊拆成獨立輪廓。封閉輪廓會接回起點。Weight 是頂點可以離開原輪廓的最大距離。",
-    "split_contours_xld (Contours, SplitContours, 0.5)",
+    "Vizion.split_contours_xld (Contours, SplitContours, 0.5)",
 )
 def split_contours_xld(contours, weight, *, ctx):
     source = expect_xld(contours, "Contours")
@@ -1553,7 +1947,7 @@ def split_contours_xld(contours, weight, *, ctx):
     [],
     "把極座標輪廓還原",
     "參數和 polar_trans_contour_xld 相同。寬和高是極座標圖的取樣數。角度 0 朝右，正角度順時針。",
-    "polar_trans_contour_xld_inv (ContoursPolar, ContoursXY, 30, 40, 0, rad(360), 0, 20, 40, 20)",
+    "Vizion.polar_trans_contour_xld_inv (ContoursPolar, ContoursXY, 30, 40, 0, rad(360), 0, 20, 40, 20)",
 )
 def polar_trans_contour_xld_inv(contours, row, column, angle_start, angle_end, radius_start, radius_end, width, height, *, ctx):
     source = expect_xld(contours, "ContoursPolar")
@@ -1623,7 +2017,7 @@ def _circle_hits(points: np.ndarray, center_row: float, center_col: float, radiu
     [P("RowIntersect", "交點列"), P("ColumnIntersect", "交點行")],
     "輪廓和圓的交點",
     "不把輪廓自動封閉。沒有交點時得到空 tuple。相切只有一個點。",
-    "intersection_circle_contour_xld (Contour, 30, 40, 10, Row, Column)",
+    "Vizion.intersection_circle_contour_xld (Contour, 30, 40, 10, Row, Column)",
 )
 def intersection_circle_contour_xld(contour, row, column, radius, *, ctx):
     source = expect_xld(contour, "Contour")
@@ -1647,7 +2041,7 @@ def intersection_circle_contour_xld(contour, row, column, radius, *, ctx):
     [P("Length", "每條輪廓的點數")],
     "輪廓的點數",
     "每一條輪廓一個數。封閉輪廓若終點和起點重複，那個點也算進去。",
-    "contour_point_num_xld (Contours, Length)",
+    "Vizion.contour_point_num_xld (Contours, Length)",
 )
 def contour_point_num_xld(contours, *, ctx):
     source = expect_xld(contours, "Contours")

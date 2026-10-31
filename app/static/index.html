@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VisDev 視覺開發環境</title>
   <link rel="icon" href="/static/magpie.ico">
-  <link rel="stylesheet" href="/static/app.css?v=28">
+  <link rel="stylesheet" href="/static/app.css?v=30">
 </head>
 <body>
   <nav class="menubar" aria-label="主選單">
@@ -114,7 +114,7 @@
     <button id="btnStep" type="button">單步 <kbd>F6</kbd></button>
     <button id="btnRun" class="primary" type="button">執行 <kbd>F5</kbd></button>
     <button id="btnStop" type="button">停止</button>
-    <input id="fileOpen" type="file" accept=".hdv,.txt" hidden>
+    <input id="fileOpen" type="file" accept=".viz,.hdv,.txt" hidden>
   </header>
 
   <main id="dock" class="workspace">
@@ -181,29 +181,31 @@
         <button class="tab on" type="button" data-tab="ops">算子</button>
         <button class="tab" type="button" data-tab="syntax">語法</button>
         <button class="tab" type="button" data-tab="log">輸出</button>
+        <button class="tab" type="button" data-tab="problems">錯誤清單 <span id="problemBadge" class="badge">0</span></button>
         <input id="opSearch" placeholder="搜尋算子，例如 threshold" spellcheck="false">
       </div>
       <div class="tabpage on" data-page="ops">
         <div id="opList" class="op-list"></div>
         <div id="opHelp" class="op-help">
-          <p class="lead">參數順序與 HDevelop 相同：圖像輸入、圖像輸出、控制輸入、控制輸出。</p>
-          <p>雙擊算子會把範本插進程式。新算子加在 <code>app/engine/operators.py</code>。</p>
+          <p class="lead">點一個算子，可以看到用途、原理、如何設定和範例用法。</p>
+          <p>雙擊算子會把範例插進程式。參數順序是圖像輸入、圖像輸出、控制輸入、控制輸出。</p>
         </div>
       </div>
       <div class="tabpage" data-page="syntax">
         <div class="syntax">
           <p>程式一行一個敘述。算子名稱不分大小寫，變數名稱則要完全一致。運算式 T[1] 的索引從 1 開始。tuple_select 這類算子的索引從 0 開始，和 HALCON 一樣。</p>
+          <p><code>ho_</code> 是 HObject。幾個區域，或幾條輪廓，用 <code>:=</code> 放進同一個 tuple，會收成一個物件集合再傳進程序和算子。圖形視窗每一塊用不同顏色。<code>ho_Objects[1]</code> 是第一個，從 1 開始。<code>hv_</code> 是 HTuple，索引從 0 開始。</p>
           <pre>* 這是註解
-read_image (Image, 'samples/parts.png')
+Vizion.read_image (Image, 'samples/parts.png')
 MinGray := 80
-threshold (Image, Region, MinGray, 255)
+Vizion.threshold (Image, Region, MinGray, 255)
 Area := [10, 20, 30]
 First := Area[1]
 Length := |Area|
 Label := 'n=' + Length
 for Index := 1 to Length by 1
   if (Area[Index] > 15)
-    stop ()
+    Vizion.stop ()
   endif
 endfor</pre>
           <p>行尾的 <code>\</code> 表示這一行還沒結束。路徑請寫 <code>C:/data/a.png</code>，不要用結尾的反斜線。</p>
@@ -211,7 +213,30 @@ endfor</pre>
         </div>
       </div>
       <div class="tabpage" data-page="log">
+        <div class="outbar">
+          <label>顯示來源
+            <select id="logSource">
+              <option value="run">執行</option>
+            </select>
+          </label>
+          <button id="btnClearLog" type="button">清除</button>
+        </div>
         <pre id="logBox" class="log"></pre>
+      </div>
+      <div class="tabpage" data-page="problems">
+        <div class="errbar" id="errFilters">
+          <button class="errfilter on" type="button" data-sev="error">錯誤 <span id="errCount">0</span></button>
+          <button class="errfilter on" type="button" data-sev="warning">警告 <span id="warnCount">0</span></button>
+          <button class="errfilter on" type="button" data-sev="message">訊息 <span id="msgCount">0</span></button>
+        </div>
+        <div class="errtable-wrap">
+          <table class="errtable">
+            <thead>
+              <tr><th>嚴重性</th><th>代碼</th><th>說明</th><th>檔案</th><th>行</th></tr>
+            </thead>
+            <tbody id="errBody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
   </main>
@@ -226,11 +251,10 @@ endfor</pre>
   </div>
   <div id="opDialog" hidden>
     <h2 id="opDialogTitle">算子</h2>
-    <p id="opDialogLead"></p>
-    <p class="hint">圖像和輸出填變數名稱。控制輸入可寫數字、變數或算式，字串要加引號。</p>
+    <div id="opDialogGuide"></div>
     <p id="opDrawHint" class="hint" hidden>在圖上按右鍵，選矩形、圓或橢圓再拖曳。確認後填進參數。留成空字串的圖形不會使用，ocr_find 就讀整張圖。</p>
     <form id="opForm"></form>
-    <div class="hint">將插入</div>
+    <h3>範例用法</h3>
     <pre id="opPreview"></pre>
     <div class="actions">
       <button id="opDialogCancel" type="button">取消</button>
@@ -251,11 +275,14 @@ endfor</pre>
     <span id="stLine"></span>
     <span id="stZoom"></span>
     <span id="stPix">Row — &nbsp; Column — &nbsp; R — G — B —</span>
+    <button id="stErrors" class="problem-count" type="button">錯誤 0</button>
+    <button id="stWarnings" class="problem-count" type="button">警告 0</button>
+    <button id="stMessages" class="problem-count" type="button">訊息 0</button>
     <button id="btnLayout" type="button" title="把程式、圖形、變數、算子放回預設位置">回復版面</button>
     <div class="spacer"></div>
     <span class="hint">取代 HALCON 的第一版。常用流程先用這套語法寫，缺的算子再補。</span>
   </footer>
   <script src="/static/dock.js?v=9"></script>
-  <script src="/static/app.js?v=47"></script>
+  <script src="/static/app.js?v=52"></script>
 </body>
 </html>

@@ -2,7 +2,11 @@
 
 The template is taught from an image, optionally a rectangle. Its origin is the
 center of that taught region. A pyramid of matchTemplate searches rotation and
-translation; a parabolic fit then gives a sub-pixel row, column, and angle.
+translation. interpolation then places the peak with a Keys cubic (a = -0.5)
+on the score samples around that integer. A flat score top stays on the integer
+instead of sliding with a tiny slope. least_squares still starts from the
+integer peak and refines row and column with Lucas-Kanade on the gray residual,
+keeping the step only when the NCC score does not fall.
 """
 
 from __future__ import annotations
@@ -192,11 +196,152 @@ def score_at(scene, rel_col, rel_row, values, row: float, col: float, angle: flo
     return score
 
 
-def _parabola(left: float, center: float, right: float) -> float:
-    denom = left - 2 * center + right
-    if abs(denom) < 1e-6 or center < left or center < right:
+def _keys_weight(distance: float) -> float:
+    span = abs(distance)
+    if span < 1.0:
+        return ((1.5 * span - 2.5) * span * span) + 1.0
+    if span < 2.0:
+        return ((-0.5 * span + 2.5) * span - 4.0) * span + 2.0
+    return 0.0
+
+
+def _keys_peak(samples: np.ndarray) -> float:
+    """Offset, in samples, of the Keys cubic maximum on five neighboring scores.
+
+    Index 2 is the integer under test. A flat top returns 0 so a tiny slope
+    cannot drag the peak. The maximum of a tied top stays on the sample nearest
+    that integer.
+    """
+    values = np.asarray(samples, dtype=np.float64)
+    peak = float(values.max())
+    if peak <= 0.0 or peak - float(values.min()) < 1e-4:
         return 0.0
-    return float(np.clip(0.5 * (left - right) / denom, -0.75, 0.75))
+    tied = [int(index) for index in np.flatnonzero(values >= peak - 1e-5)]
+    best = min(tied, key=lambda index: (abs(index - 2), index))
+    if best == 0 or best == 4:
+        return float(best - 2)
+    center = float(values[best])
+    if min(center - float(values[best - 1]), center - float(values[best + 1])) < 2e-3:
+        return float(best - 2)
+    best_pos = float(best)
+    best_value = -1e9
+    position = float(best - 1)
+    while position <= best + 1.0 + 1e-9:
+        value = sum(_keys_weight(position - index) * float(values[index]) for index in range(5))
+        if value > best_value + 1e-8:
+            best_value = value
+            best_pos = position
+        position += 0.01
+    return best_pos - 2.0
+
+
+def _axis_peak(value_at, center: float, spacing: float = 1.0) -> float:
+    offsets = (-2, -1, 0, 1, 2)
+
+    def samples(origin: float) -> np.ndarray:
+        return np.array([value_at(origin + spacing * offset) for offset in offsets], dtype=np.float64)
+
+    window = samples(center)
+    offset = _keys_peak(window)
+    if abs(offset) > 1.0:
+        center = center + math.copysign(spacing, offset)
+        offset = float(np.clip(_keys_peak(samples(center)), -1.0, 1.0))
+    return center + offset * spacing
+
+
+def _interpolate_ncc(image, model: NccModel, rows, cols, angles, scores, min_score: float):
+    scene = image.gray().astype(np.float32)
+    rel_col, rel_row, values = _points(model.gray, model.mask, model.origin_row, model.origin_col, 2200)
+    step = max(float(model.angle_step), math.radians(0.6))
+    refine_angle = float(model.angle_extent) > 1e-6
+    poses = []
+    for row, col, angle, _score in zip(rows, cols, angles, scores):
+        row = _axis_peak(lambda rr, col=col, angle=angle: score_at(scene, rel_col, rel_row, values, rr, col, angle, model.metric), float(row))
+        col = _axis_peak(lambda cc, row=row, angle=angle: score_at(scene, rel_col, rel_row, values, row, cc, angle, model.metric), float(col))
+        if refine_angle:
+            angle = _axis_peak(
+                lambda aa, row=row, col=col: score_at(scene, rel_col, rel_row, values, row, col, aa, model.metric),
+                float(angle),
+                step,
+            )
+        else:
+            angle = float(angle)
+        score = score_at(scene, rel_col, rel_row, values, row, col, angle, model.metric)
+        if score >= min_score:
+            poses.append((row, col, angle, score))
+    return poses
+
+
+def _ncc_mode(subpixel) -> str:
+    if subpixel is True or subpixel == "interpolation":
+        return "interpolation"
+    if subpixel is False or subpixel in ("none", 0):
+        return "none"
+    if subpixel == "least_squares":
+        return "least_squares"
+    return "interpolation"
+
+
+def _lucas_kanade(scene, rel_col, rel_row, values, row: float, col: float, angle: float, metric: str):
+    step = max(1, int(math.ceil(len(values) / 500)))
+    point_col = rel_col[::step]
+    point_row = rel_row[::step]
+    template = values[::step].astype(np.float64)
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    offset_col = point_col * cosine + point_row * sine
+    offset_row = -point_col * sine + point_row * cosine
+    pose = (float(row), float(col))
+    best = score_at(scene, rel_col, rel_row, values, pose[0], pose[1], angle, metric)
+    for _turn in range(10):
+        row, col = pose
+        sampled, valid = _sample(scene, col + offset_col, row + offset_row)
+        right, valid_right = _sample(scene, col + offset_col + 0.5, row + offset_row)
+        left, valid_left = _sample(scene, col + offset_col - 0.5, row + offset_row)
+        down, valid_down = _sample(scene, col + offset_col, row + offset_row + 0.5)
+        up, valid_up = _sample(scene, col + offset_col, row + offset_row - 0.5)
+        keep = valid & valid_right & valid_left & valid_down & valid_up
+        if int(np.count_nonzero(keep)) < 16:
+            break
+        reference = template[keep]
+        image = sampled[keep].astype(np.float64)
+        slope_col = (right[keep] - left[keep]).astype(np.float64)
+        slope_row = (down[keep] - up[keep]).astype(np.float64)
+        residual = (reference - float(reference.mean())) - (image - float(image.mean()))
+        jac_col = slope_col - float(slope_col.mean())
+        jac_row = slope_row - float(slope_row.mean())
+        delta, *_rest = np.linalg.lstsq(np.column_stack([jac_col, jac_row]), residual, rcond=None)
+        accepted = False
+        scale = 1.0
+        while scale >= 0.1:
+            cand_col = col + float(np.clip(delta[0] * scale, -0.6, 0.6))
+            cand_row = row + float(np.clip(delta[1] * scale, -0.6, 0.6))
+            cand = score_at(scene, rel_col, rel_row, values, cand_row, cand_col, angle, metric)
+            if cand + 1e-6 >= best:
+                pose = (cand_row, cand_col)
+                best = cand
+                accepted = True
+                break
+            scale *= 0.5
+        if not accepted or abs(pose[0] - row) + abs(pose[1] - col) < 1e-3:
+            break
+    return pose[0], pose[1], float(angle), best
+
+
+def _refine_ncc(image, model: NccModel, rows, cols, angles, scores):
+    scene = image.gray().astype(np.float32)
+    rel_col, rel_row, values = _points(model.gray, model.mask, model.origin_row, model.origin_col, 800)
+    refined_rows, refined_cols, refined_angles, refined_scores = [], [], [], []
+    for row, col, angle, score in zip(rows, cols, angles, scores):
+        nrow, ncol, nangle, new = _lucas_kanade(
+            scene, rel_col, rel_row, values, float(row), float(col), float(angle), model.metric
+        )
+        moved = abs(nrow - float(row)) + abs(ncol - float(col)) > 1e-3
+        refined_rows.append(nrow if moved else float(row))
+        refined_cols.append(ncol if moved else float(col))
+        refined_angles.append(nangle)
+        refined_scores.append(new if moved else float(score))
+    return refined_rows, refined_cols, refined_angles, refined_scores
 
 
 def _angles(start: float, extent: float, step: float) -> list[float]:
@@ -272,10 +417,11 @@ def find_ncc_model(
     subpixel: bool,
     num_levels: int,
 ):
+    mode = _ncc_mode(subpixel)
     backend = _match_backend()
     if backend is not None and getattr(model, "native", None) is not None:
         gray = np.ascontiguousarray(image.gray())
-        return backend.ncc_find(
+        rows, cols, angles, scores = backend.ncc_find(
             model.native,
             gray,
             float(angle_start),
@@ -283,9 +429,20 @@ def find_ncc_model(
             float(min_score),
             int(num_matches),
             float(max_overlap),
-            1 if subpixel else 0,
+            0,
             int(num_levels),
         )
+        if mode == "least_squares":
+            return _refine_ncc(image, model, rows, cols, angles, scores)
+        if mode == "interpolation" and rows:
+            poses = _interpolate_ncc(image, model, rows, cols, angles, scores, float(min_score))
+            return (
+                [item[0] for item in poses],
+                [item[1] for item in poses],
+                [item[2] for item in poses],
+                [item[3] for item in poses],
+            )
+        return rows, cols, angles, scores
     gray = image.gray().astype(np.float32)
     levels_used = model.num_levels if not num_levels else max(1, min(int(num_levels), model.num_levels))
     pyramid = _pyramid(gray, levels_used)
@@ -334,34 +491,28 @@ def find_ncc_model(
         if not found:
             break
 
-    poses = []
-    if found and subpixel:
-        rel_col, rel_row, values = _points(model.gray, model.mask, model.origin_row, model.origin_col, 2200)
-        scene = pyramid[0]
-        step = max(model.angle_step, np.deg2rad(0.6))
-        for row, col, angle, _score in found:
-            for _ in range(2):
-                def value(rr, cc, aa, step=step):
-                    return score_at(scene, rel_col, rel_row, values, rr, cc, aa, model.metric)
-
-                row += _parabola(value(row - 1, col, angle), value(row, col, angle), value(row + 1, col, angle))
-                col += _parabola(value(row, col - 1, angle), value(row, col, angle), value(row, col + 1, angle))
-                angle += _parabola(value(row, col, angle - step), value(row, col, angle), value(row, col, angle + step)) * step
-                step *= 0.5
-            score = score_at(scene, rel_col, rel_row, values, row, col, angle, model.metric)
-            if score >= min_score:
-                poses.append((row, col, angle, score))
+    if found and mode == "interpolation":
+        poses = _interpolate_ncc(
+            image,
+            model,
+            [item[0] for item in found],
+            [item[1] for item in found],
+            [item[2] for item in found],
+            [item[3] for item in found],
+            float(min_score),
+        )
     else:
         poses = [item for item in found if item[3] >= min_score]
     poses.sort(key=lambda item: item[3], reverse=True)
     min_dist = model.radius * max(0.25, 1.0 - max_overlap)
     poses = _suppress(poses, min_dist, num_matches)
-    return (
-        [item[0] for item in poses],
-        [item[1] for item in poses],
-        [item[2] for item in poses],
-        [item[3] for item in poses],
-    )
+    rows = [item[0] for item in poses]
+    cols = [item[1] for item in poses]
+    angles = [item[2] for item in poses]
+    scores = [item[3] for item in poses]
+    if mode == "least_squares" and rows:
+        return _refine_ncc(image, model, rows, cols, angles, scores)
+    return rows, cols, angles, scores
 
 
 def marker_contours(row: float, col: float, angle: float, length: float) -> list:

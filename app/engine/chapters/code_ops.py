@@ -1,9 +1,9 @@
 """Barcodes, QR codes, and text results.
 
 1D codes are EAN-13, UPC-A, Code 39, and Code 128. The scanline reader is used
-when OpenCV's barcode detector returns nothing. 2D codes are QR codes from
-OpenCV. find_text stores the word boxes from the local OCR engine; it does not
-read an MLP or OCR classifier file.
+when OpenCV's barcode detector returns nothing. QR codes come from OpenCV.
+Data Matrix ECC200 is written here. find_text stores the word boxes from the
+local OCR engine; it does not read an MLP or OCR classifier file.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from ..ocr import method_choices, normalize_method, read_text
 from ..operators import P, expect_image, expect_region, operator, text
 
 _CODE_TYPES = ["'auto'", "'EAN-13'", "'UPC-A'", "'Code 39'", "'Code 128'"]
-_SYMBOLS = ["'QR Code'"]
+_SYMBOLS = ["'QR Code'", "'Data Matrix'"]
 _TEXT_MODE = ["'auto'", "'manual'"]
 _TEXT_RESULT = ["'class'", "'confidence'", "'row'", "'column'"]
 
@@ -113,6 +113,15 @@ class TextResult:
 
 def _token(value, name: str) -> str:
     return text(value, name).strip().strip("'\"")
+
+
+def _symbol_kind(symbol_type) -> str:
+    symbol = _token(symbol_type, "SymbolType").lower().replace(" ", "").replace("_", "")
+    if symbol in ("qrcode", "qr"):
+        return "QR Code"
+    if symbol in ("datamatrix", "datamatrixecc200"):
+        return "Data Matrix"
+    raise ValueError("SymbolType 只能是 QR Code 或 Data Matrix")
 
 
 def _runs(binary: np.ndarray):
@@ -488,7 +497,7 @@ def _select_code(code: str, kind: str, requested: str):
     [P("BarCodeHandle", "條碼模型")],
     "建立一維條碼模型",
     "能讀 EAN-13、UPC-A、Code 39 和 Code 128。Data Matrix 和 PDF417 這版不解。",
-    "create_bar_code_model (BarCodeHandle)",
+    "Vizion.create_bar_code_model (BarCodeHandle)",
 )
 def create_bar_code_model(_name, _value, *, ctx):
     return Result([], [BarCodeModel()])
@@ -506,7 +515,7 @@ def create_bar_code_model(_name, _value, *, ctx):
     "尋找一維條碼",
     "EAN-13 和 UPC-A 先問 OpenCV，沒有結果再用掃描線。Code 39 與 Code 128 用掃描線，Code 128 這版依字元集 B 產生、也能讀字元集 C 的數字對。"
     "UPC-A 是開頭為 0 的 EAN-13，去掉第一個 0。auto 先找 EAN，沒有再找 Code 128 和 Code 39。找不到時區域是空的，字串是空 tuple。",
-    "find_bar_code (Image, SymbolRegions, BarCodeHandle, 'auto', DecodedDataStrings)",
+    "Vizion.find_bar_code (Image, SymbolRegions, BarCodeHandle, 'auto', DecodedDataStrings)",
 )
 def find_bar_code(image, handle, code_type, *, ctx):
     picture = expect_image(image, "Image")
@@ -567,7 +576,7 @@ def find_bar_code(image, handle, code_type, *, ctx):
     [],
     "關閉一維條碼模型",
     "關閉後不能再搜尋。",
-    "clear_bar_code_model (BarCodeHandle)",
+    "Vizion.clear_bar_code_model (BarCodeHandle)",
 )
 def clear_bar_code_model(handle, *, ctx):
     if not isinstance(handle, BarCodeModel):
@@ -579,27 +588,74 @@ def clear_bar_code_model(handle, *, ctx):
 @operator(
     "條碼",
     [],
+    [P("Image", "白底黑點的 QR")],
+    [P("Text", "要寫進 QR 的文字")],
+    [],
+    "做出一張 QR 圖",
+    "OpenCV 產生 QR，放大 8 倍並在四周留白，find_data_code_2d 才讀得回來。"
+    "只做 QR。Data Matrix 用 gen_datamatrix。PDF417、Aztec 沒有。文字不能是空的。",
+    "Vizion.gen_qrcode (Image, 'VISDEV')",
+)
+def gen_qrcode(message, *, ctx):
+    payload = text(message, "Text")
+    if payload == "":
+        raise ValueError("Text 不能是空的")
+    try:
+        raw = cv2.QRCodeEncoder.create().encode(payload)
+    except cv2.error as exc:
+        raise ValueError("這段文字沒辦法做成 QR") from exc
+    if raw is None or raw.size == 0:
+        raise ValueError("這段文字沒辦法做成 QR")
+    module = cv2.resize(raw, None, fx=8, fy=8, interpolation=cv2.INTER_NEAREST)
+    canvas = cv2.copyMakeBorder(module, 32, 32, 32, 32, cv2.BORDER_CONSTANT, value=255)
+    return Result([Image(canvas)], [])
+
+
+@operator(
+    "條碼",
+    [],
+    [P("Image", "白底黑點的 Data Matrix")],
+    [P("Text", "要寫進 Data Matrix 的文字")],
+    [],
+    "做出一張 Data Matrix",
+    "ECC200 方碼，10×10 到 26×26，自己排模組和 Reed-Solomon。放大 8 倍並在四周留白。"
+    "只寫 ASCII。超過 44 個碼字放不進去。文字不能是空的。",
+    "Vizion.gen_datamatrix (Image, 'VISDEV')",
+)
+def gen_datamatrix(message, *, ctx):
+    from ..datamatrix import encode_modules
+
+    payload = text(message, "Text")
+    raw = encode_modules(payload)
+    module = cv2.resize(raw, None, fx=8, fy=8, interpolation=cv2.INTER_NEAREST)
+    canvas = cv2.copyMakeBorder(module, 32, 32, 32, 32, cv2.BORDER_CONSTANT, value=255)
+    return Result([Image(canvas)], [])
+
+
+@operator(
+    "條碼",
+    [],
     [],
     [
-        P("SymbolType", "這版只做 QR Code", "'QR Code'", _SYMBOLS),
+        P("SymbolType", "QR Code 或 Data Matrix", "'QR Code'", _SYMBOLS),
         P("GenParamName", "這版不使用，留空字串", "''"),
         P("GenParamValue", "這版不使用，留空字串", "''"),
     ],
     [P("DataCodeHandle", "二維碼模型")],
     "建立二維碼模型",
-    "只解 QR Code。Data Matrix、PDF417、Aztec 這版沒有解碼器。",
-    "create_data_code_2d_model ('QR Code', DataCodeHandle)",
+    "QR 用 OpenCV。Data Matrix 是自己寫的 ECC200。PDF417 和 Aztec 這版沒有。",
+    "Vizion.create_data_code_2d_model ('QR Code', DataCodeHandle)",
 )
 def create_data_code_2d_model(symbol_type, _name, _value, *, ctx):
-    symbol = _token(symbol_type, "SymbolType")
-    if symbol.lower().replace(" ", "") not in ("qrcode", "qr"):
-        raise ValueError("SymbolType 這版只接受 QR Code")
-    return Result([], [DataCodeModel("QR Code")])
+    return Result([], [DataCodeModel(_symbol_kind(symbol_type))])
 
 
 def _decode_qr(gray: np.ndarray):
     detector = cv2.QRCodeDetector()
-    for scale in (1, 2, 3):
+    height, width = gray.shape[:2]
+    for scale in (1, 2, 4, 8):
+        if scale > 1 and max(height, width) * scale > 1600:
+            continue
         picture = gray if scale == 1 else cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
         ok, decoded, points, _straight = detector.detectAndDecodeMulti(picture)
         if not ok or points is None:
@@ -629,9 +685,9 @@ def _decode_qr(gray: np.ndarray):
         P("GenParamValue", "這版不使用，留空字串", "''"),
     ],
     [P("ResultHandles", "從 0 開始的結果編號"), P("DecodedDataStrings", "讀到的字串")],
-    "尋找 QR Code",
-    "太小的碼會先放大再解，外框座標會縮回原圖。找不到時輪廓和字串都是空的。",
-    "find_data_code_2d (Image, SymbolXLDs, DataCodeHandle, ResultHandles, DecodedDataStrings)",
+    "尋找 QR 或 Data Matrix",
+    "QR 太小會先放大再解。Data Matrix 依實心 L 和時鐘邊取樣。外框座標在原圖上。找不到時輪廓和字串都是空的。",
+    "Vizion.find_data_code_2d (Image, SymbolXLDs, DataCodeHandle, ResultHandles, DecodedDataStrings)",
 )
 def find_data_code_2d(image, handle, _name, _value, *, ctx):
     picture = expect_image(image, "Image")
@@ -639,7 +695,12 @@ def find_data_code_2d(image, handle, _name, _value, *, ctx):
         raise TypeError("DataCodeHandle 必須是 create_data_code_2d_model 建立的模型")
     if handle.closed:
         raise RuntimeError("二維碼模型已經 clear_data_code_2d_model")
-    hits = _decode_qr(picture.gray())
+    if handle.symbol == "Data Matrix":
+        from ..datamatrix import decode_image
+
+        hits = decode_image(picture.gray())
+    else:
+        hits = _decode_qr(picture.gray())
     contours = []
     codes = []
     for text_value, quad in hits:
@@ -660,7 +721,7 @@ def find_data_code_2d(image, handle, _name, _value, *, ctx):
     [],
     "關閉二維碼模型",
     "關閉後不能再搜尋。",
-    "clear_data_code_2d_model (DataCodeHandle)",
+    "Vizion.clear_data_code_2d_model (DataCodeHandle)",
 )
 def clear_data_code_2d_model(handle, *, ctx):
     if not isinstance(handle, DataCodeModel):
@@ -680,7 +741,7 @@ def clear_data_code_2d_model(handle, *, ctx):
     [P("TextModel", "文字模型")],
     "建立文字模型",
     "這不是 HALCON 的 MLP 分類器。auto 只用已安裝的本機通用引擎，不會把影像送到雲端。指定引擎名稱時才用那個引擎。",
-    "create_text_model_reader ('auto', 'auto', TextModel)",
+    "Vizion.create_text_model_reader ('auto', 'auto', TextModel)",
 )
 def create_text_model_reader(mode, classifier, *, ctx):
     kind = _token(mode, "Mode").lower()
@@ -700,7 +761,7 @@ def create_text_model_reader(mode, classifier, *, ctx):
     [P("TextResultID", "文字結果")],
     "找出文字塊",
     "用文字模型指定的引擎找出每個字塊，並把讀到的字一起存起來。和 ocr_find 分開，結果要用 get_text_result 或 do_ocr_multi_class_mlp 取出。",
-    "find_text (Image, TextModel, TextResultID)",
+    "Vizion.find_text (Image, TextModel, TextResultID)",
 )
 def find_text(image, model, *, ctx):
     picture = expect_image(image, "Image")
@@ -737,7 +798,7 @@ def find_text(image, model, *, ctx):
     [P("ResultValue", "結果")],
     "讀取文字結果",
     "class 是每個字塊的字。confidence 是 0 到 1。row 和 column 是字塊中心。",
-    "get_text_result (TextResultID, 'class', ResultValue)",
+    "Vizion.get_text_result (TextResultID, 'class', ResultValue)",
 )
 def get_text_result(result, result_name, *, ctx):
     if not isinstance(result, TextResult):
@@ -764,7 +825,7 @@ def get_text_result(result, result_name, *, ctx):
     [P("Class", "讀到的字"), P("Confidence", "信心")],
     "用文字模型讀區域裡的字",
     "這不是 MLP。它把區域外框裁下來，交給文字模型的引擎。一個區域可以是一個字或一行字。",
-    "do_ocr_multi_class_mlp (Character, Image, TextModel, Class, Confidence)",
+    "Vizion.do_ocr_multi_class_mlp (Character, Image, TextModel, Class, Confidence)",
 )
 def do_ocr_multi_class_mlp(character, image, model, *, ctx):
     region = expect_region(character, "Character")
@@ -794,7 +855,7 @@ def do_ocr_multi_class_mlp(character, image, model, *, ctx):
     [],
     "關閉文字模型",
     "關閉後不能再 find_text。",
-    "clear_text_model (TextModel)",
+    "Vizion.clear_text_model (TextModel)",
 )
 def clear_text_model(model, *, ctx):
     if not isinstance(model, TextModel):
@@ -811,7 +872,7 @@ def clear_text_model(model, *, ctx):
     [],
     "關閉文字結果",
     "關閉後不能再讀結果。",
-    "clear_text_result (TextResultID)",
+    "Vizion.clear_text_result (TextResultID)",
 )
 def clear_text_result(result, *, ctx):
     if not isinstance(result, TextResult):

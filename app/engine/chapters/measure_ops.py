@@ -167,6 +167,16 @@ def _sample_at(gray, domain, column: float, row: float, interpolation: str) -> f
     if interpolation == "nearest_neighbor":
         column = round(column)
         row = round(row)
+    if interpolation == "bicubic":
+        height, width = gray.shape
+        if column < 0 or row < 0 or column > width - 1 or row > height - 1:
+            return math.nan
+        if domain is not None:
+            ix = min(max(int(round(column)), 0), width - 1)
+            iy = min(max(int(round(row)), 0), height - 1)
+            if domain[iy, ix] <= 0:
+                return math.nan
+        return float(gauge.sample_bicubic(gray, row, column))
     return gauge._sample(gray, domain, column, row)
 
 
@@ -348,7 +358,7 @@ def _contour_of(obj: MetrologyObject, resolution: float):
     return _ellipse_contour(result["row"], result["column"], result["phi"], result["radius1"], result["radius2"], resolution)
 
 
-def _ellipse_points(gray, domain, row, col, phi, radius1, radius2, length1, sigma, threshold, transition):
+def _ellipse_points(gray, domain, row, col, phi, radius1, radius2, length1, sigma, threshold, transition, length2=0.0):
     points = []
     steps = 36
     for index in range(steps):
@@ -370,6 +380,7 @@ def _ellipse_points(gray, domain, row, col, phi, radius1, radius2, length1, sigm
             sigma,
             threshold,
             transition,
+            length2,
         )
         if not hits:
             continue
@@ -395,8 +406,8 @@ def _ellipse_points(gray, domain, row, col, phi, radius1, radius2, length1, sigm
     [P("MeasureHandle", "量測矩形")],
     "建立量測矩形",
     "剖面沿 Phi 從中心往兩側各 Length1。Phi 為 0 時沿行方向。positive 是沿著這個方向由暗到亮。"
-    "nearest_neighbor 會把取樣座標取整。bicubic 這版仍用雙線性。",
-    "gen_measure_rectangle2 (120, 100, 0, 40, 5, 640, 480, 'bilinear', MeasureHandle)",
+    "nearest_neighbor 會把取樣座標取整。bilinear 看四個像素。bicubic 用周圍 16 個像素的三次內插。",
+    "Vizion.gen_measure_rectangle2 (120, 100, 0, 40, 5, 640, 480, 'bilinear', MeasureHandle)",
 )
 def gen_measure_rectangle2(row, column, phi, length1, length2, width, height, interpolation, *, ctx):
     mode = _token(interpolation, "Interpolation")
@@ -441,7 +452,7 @@ def gen_measure_rectangle2(row, column, phi, length1, length2, width, height, in
     "沿量測矩形找邊緣",
     "這是 measure_pos。找不到邊緣時回傳空 tuple，不會中斷。Select 的 best 是振幅最大的一個，HALCON 的 measure_pos 沒有這個選項。"
     "gauge_line 仍是另一套簡化量規，不會被這個算子取代。",
-    "measure_pos (Image, MeasureHandle, 1, 20, 'all', 'all', RowEdge, ColumnEdge, Amplitude, Distance)",
+    "Vizion.measure_pos (Image, MeasureHandle, 1, 20, 'all', 'all', RowEdge, ColumnEdge, Amplitude, Distance)",
 )
 def measure_pos(image, handle, sigma, threshold, transition, select, *, ctx):
     picture = expect_image(image, "Image")
@@ -487,7 +498,7 @@ def measure_pos(image, handle, sigma, threshold, transition, select, *, ctx):
     ],
     "沿量測矩形找成對邊緣",
     "一對的兩個邊緣梯度方向相反。Transition 決定這一對的第一個邊緣。找不到時回傳空 tuple。",
-    "measure_pairs (Image, MeasureHandle, 1, 20, 'positive', 'first', Row1, Col1, Amp1, Row2, Col2, Amp2, Intra, Inter)",
+    "Vizion.measure_pairs (Image, MeasureHandle, 1, 20, 'positive', 'first', Row1, Col1, Amp1, Row2, Col2, Amp2, Intra, Inter)",
 )
 def measure_pairs(image, handle, sigma, threshold, transition, select, *, ctx):
     picture = expect_image(image, "Image")
@@ -527,7 +538,7 @@ def measure_pairs(image, handle, sigma, threshold, transition, select, *, ctx):
     [],
     "關閉量測矩形",
     "關閉後再呼叫 measure_pos 或 measure_pairs 會失敗。變數還在，只是不能再量。",
-    "close_measure (MeasureHandle)",
+    "Vizion.close_measure (MeasureHandle)",
 )
 def close_measure(handle, *, ctx):
     if not isinstance(handle, (MeasureRectangle2, MeasureArc)):
@@ -546,7 +557,7 @@ def close_measure(handle, *, ctx):
     [P("MetrologyHandle", "計量模型")],
     "建立計量模型",
     "模型先是空的。接著設定影像大小，加入直線、圓或橢圓，再 apply。",
-    "create_metrology_model (MetrologyHandle)",
+    "Vizion.create_metrology_model (MetrologyHandle)",
 )
 def create_metrology_model(*, ctx):
     return Result([], [MetrologyModel()])
@@ -564,7 +575,7 @@ def create_metrology_model(*, ctx):
     [],
     "設定計量模型的影像大小",
     "apply 時影像尺寸必須和這裡相同。",
-    "set_metrology_model_image_size (MetrologyHandle, 640, 480)",
+    "Vizion.set_metrology_model_image_size (MetrologyHandle, 640, 480)",
 )
 def set_metrology_model_image_size(handle, width, height, *, ctx):
     model = _expect_metro(handle)
@@ -602,7 +613,7 @@ def _add_object(handle, kind: str, nominal: dict, length1, length2, sigma, thres
         P("RowEnd", "名義直線的終點列"),
         P("ColumnEnd", "名義直線的終點行"),
         P("MeasureLength1", "垂直於直線的搜尋半長"),
-        P("MeasureLength2", "沿直線的卡尺半寬。這版有存下來，搜尋仍用中心剖面"),
+        P("MeasureLength2", "沿直線的卡尺半寬。剖面會在這個寬度裡平均"),
         P("MeasureSigma", "平滑，像素"),
         P("MeasureThreshold", "梯度門檻"),
         P("GenParamName", "這版不使用，留空字串", "''"),
@@ -610,8 +621,8 @@ def _add_object(handle, kind: str, nominal: dict, length1, length2, sigma, thres
     ],
     [P("Index", "物件索引，從 0 開始")],
     "加入直線計量物件",
-    "名義線兩側各搜尋 MeasureLength1。MeasureLength2 不會沿切向平均，這一點和 HALCON 不同。",
-    "add_metrology_object_line_measure (MetrologyHandle, 40, 40, 200, 40, 12, 3, 1, 20, Index)",
+    "名義線兩側各搜尋 MeasureLength1。每支卡尺再沿直線把 MeasureLength2 寬度的灰階平均，壓掉沿邊緣的雜點。",
+    "Vizion.add_metrology_object_line_measure (MetrologyHandle, 40, 40, 200, 40, 12, 3, 1, 20, Index)",
 )
 def add_metrology_object_line_measure(
     handle, row_begin, column_begin, row_end, column_end, length1, length2, sigma, threshold, _name, _value, *, ctx
@@ -643,7 +654,7 @@ def add_metrology_object_line_measure(
         P("Column", "名義圓心行"),
         P("Radius", "名義半徑"),
         P("MeasureLength1", "沿半徑方向的搜尋半長"),
-        P("MeasureLength2", "沿切向的卡尺半寬。這版有存下來，搜尋仍用中心剖面"),
+        P("MeasureLength2", "沿切向的卡尺半寬。剖面會在這個寬度裡平均"),
         P("MeasureSigma", "平滑，像素"),
         P("MeasureThreshold", "梯度門檻"),
         P("GenParamName", "這版不使用，留空字串", "''"),
@@ -651,8 +662,8 @@ def add_metrology_object_line_measure(
     ],
     [P("Index", "物件索引，從 0 開始")],
     "加入圓計量物件",
-    "沿名義圓取样，再把找到的邊緣重擬合。MeasureLength2 沒有用來平均切向寬度。",
-    "add_metrology_object_circle_measure (MetrologyHandle, 120, 100, 30, 12, 3, 1, 20, Index)",
+    "沿名義圓取样，再把找到的邊緣重擬合。每支卡尺沿切向平均 MeasureLength2。",
+    "Vizion.add_metrology_object_circle_measure (MetrologyHandle, 120, 100, 30, 12, 3, 1, 20, Index)",
 )
 def add_metrology_object_circle_measure(handle, row, column, radius, length1, length2, sigma, threshold, _name, _value, *, ctx):
     index = _add_object(
@@ -679,7 +690,7 @@ def add_metrology_object_circle_measure(handle, row, column, radius, length1, le
         P("Radius1", "第一軸的半長"),
         P("Radius2", "第二軸的半長"),
         P("MeasureLength1", "沿法向的搜尋半長"),
-        P("MeasureLength2", "沿切向的卡尺半寬。這版有存下來，搜尋仍用中心射線"),
+        P("MeasureLength2", "沿切向的卡尺半寬。剖面會在這個寬度裡平均"),
         P("MeasureSigma", "平滑，像素"),
         P("MeasureThreshold", "梯度門檻"),
         P("GenParamName", "這版不使用，留空字串", "''"),
@@ -687,8 +698,8 @@ def add_metrology_object_circle_measure(handle, row, column, radius, length1, le
     ],
     [P("Index", "物件索引，從 0 開始")],
     "加入橢圓計量物件",
-    "沿名義橢圓的法向找邊緣，再用這些點擬合。擬合出來的 Phi 可能和輸入差 90 度，因為兩軸可以對調。",
-    "add_metrology_object_ellipse_measure (MetrologyHandle, 160, 220, rad(25), 36, 22, 12, 3, 1, 20, Index)",
+    "沿名義橢圓的法向找邊緣，每支卡尺沿切向平均 MeasureLength2，再用這些點擬合。擬合出來的 Phi 可能和輸入差 90 度，因為兩軸可以對調。",
+    "Vizion.add_metrology_object_ellipse_measure (MetrologyHandle, 160, 220, rad(25), 36, 22, 12, 3, 1, 20, Index)",
 )
 def add_metrology_object_ellipse_measure(
     handle, row, column, phi, radius1, radius2, length1, length2, sigma, threshold, _name, _value, *, ctx
@@ -719,7 +730,7 @@ def add_metrology_object_ellipse_measure(
     [],
     "套用量測並擬合",
     "每個物件各自擬合。直線回傳兩端點，圓回傳圓心和半徑，橢圓回傳中心、角度和兩軸。某個物件找不到邊緣時，整個 apply 失敗。",
-    "apply_metrology_model (Image, MetrologyHandle)",
+    "Vizion.apply_metrology_model (Image, MetrologyHandle)",
 )
 def apply_metrology_model(image, handle, *, ctx):
     picture = expect_image(image, "Image")
@@ -743,6 +754,7 @@ def apply_metrology_model(image, handle, *, ctx):
                     obj.threshold,
                     "all",
                     "all",
+                    obj.measure_length2,
                 )
                 obj.result = {
                     "row_begin": fit.row1,
@@ -762,6 +774,7 @@ def apply_metrology_model(image, handle, *, ctx):
                     obj.threshold,
                     "all",
                     "all",
+                    obj.measure_length2,
                 )
                 obj.result = {"row": fit.row, "column": fit.column, "radius": fit.radius}
             else:
@@ -777,6 +790,7 @@ def apply_metrology_model(image, handle, *, ctx):
                     obj.sigma,
                     obj.threshold,
                     "all",
+                    obj.measure_length2,
                 )
                 if len(points) < 5:
                     raise ValueError("橢圓量規找不到足夠的邊緣")
@@ -810,7 +824,7 @@ def apply_metrology_model(image, handle, *, ctx):
     "讀取計量結果",
     "直線的 all_param 是起點列、起點行、終點列、終點行。圓是列、行、半徑。橢圓是列、行、角度、Radius1、Radius2。"
     "索引從 0 開始。多個物件會依索引接成一條 tuple。",
-    "get_metrology_object_result (MetrologyHandle, 0, 'all', 'result_type', 'all_param', Parameter)",
+    "Vizion.get_metrology_object_result (MetrologyHandle, 0, 'all', 'result_type', 'all_param', Parameter)",
 )
 def get_metrology_object_result(handle, index, instance, gen_name, gen_value, *, ctx):
     model = _expect_metro(handle)
@@ -841,7 +855,7 @@ def get_metrology_object_result(handle, index, instance, gen_name, gen_value, *,
     [],
     "把計量結果畫成輪廓",
     "直線、圓、橢圓各自變成一條 XLD。點距是 Resolution。",
-    "get_metrology_object_result_contour (Contour, MetrologyHandle, 'all', 'all', 1.5)",
+    "Vizion.get_metrology_object_result_contour (Contour, MetrologyHandle, 'all', 'all', 1.5)",
 )
 def get_metrology_object_result_contour(handle, index, instance, resolution, *, ctx):
     model = _expect_metro(handle)
@@ -866,7 +880,7 @@ def get_metrology_object_result_contour(handle, index, instance, resolution, *, 
     [],
     "清除計量模型",
     "物件和結果都會清掉。之後不能再 apply 或讀結果。",
-    "clear_metrology_model (MetrologyHandle)",
+    "Vizion.clear_metrology_model (MetrologyHandle)",
 )
 def clear_metrology_model(handle, *, ctx):
     model = handle if isinstance(handle, MetrologyModel) else None
@@ -898,7 +912,7 @@ def clear_metrology_model(handle, *, ctx):
     "建立可縮放的形狀模型",
     "每個尺度各建一個形狀模型，最多 8 個。尺度是模板相對原圖的大小：0.5 代表把模板縮小一半再搜尋。"
     "這不是在金字塔裡連續縮放，數值不會和 HALCON 的同一個模型檔相同。",
-    "create_scaled_shape_model (Template, 2, 0, rad(20), 0.1, 0.9, 1.1, 0.1, 'none', 'use_polarity', 'auto', 'auto', ModelID)",
+    "Vizion.create_scaled_shape_model (Template, 2, 0, rad(20), 0.1, 0.9, 1.1, 0.1, 'none', 'use_polarity', 'auto', 'auto', ModelID)",
 )
 def create_scaled_shape_model(
     template,
@@ -966,8 +980,8 @@ def create_scaled_shape_model(
         P("Score", "分數"),
     ],
     "尋找可縮放的形狀模型",
-    "只搜尋建立時算過、而且落在 ScaleMin 到 ScaleMax 裡的那些尺度。least_squares 這版和 interpolation 一樣做分數曲面的拋物線內插。",
-    "find_scaled_shape_model (Image, ModelID, 0, rad(20), 0.9, 1.1, 0.5, 1, 0.5, 'interpolation', 0, 0.7, Row, Column, Angle, Scale, Score)",
+    "只搜尋建立時算過、而且落在 ScaleMin 到 ScaleMax 裡的那些尺度。interpolation 用分數曲面的拋物線。least_squares 再沿邊緣法線把列、行、角度和尺度一起做最小二乘，尺度可以落在兩個教過的倍率中間。",
+    "Vizion.find_scaled_shape_model (Image, ModelID, 0, rad(20), 0.9, 1.1, 0.5, 1, 0.5, 'interpolation', 0, 0.7, Row, Column, Angle, Scale, Score)",
 )
 def find_scaled_shape_model(
     image,
@@ -1001,7 +1015,7 @@ def find_scaled_shape_model(
         scalar(min_score, "MinScore"),
         whole(num_matches, "NumMatches"),
         scalar(max_overlap, "MaxOverlap"),
-        mode != "none",
+        mode,
         whole(num_levels, "NumLevels"),
         scalar(greediness, "Greediness"),
     )
@@ -1029,7 +1043,7 @@ def find_scaled_shape_model(
     ],
     "讀取形狀模型參數",
     "一般形狀模型的尺度是 1。縮放模型回傳建立時實際用的尺度範圍。",
-    "get_shape_model_params (ModelID, NumLevels, AngleStart, AngleExtent, AngleStep, ScaleMin, ScaleMax, ScaleStep, Metric, MinContrast)",
+    "Vizion.get_shape_model_params (ModelID, NumLevels, AngleStart, AngleExtent, AngleStep, ScaleMin, ScaleMax, ScaleStep, Metric, MinContrast)",
 )
 def get_shape_model_params(model, *, ctx):
     shape = _expect_shape(model)
@@ -1069,7 +1083,7 @@ def get_shape_model_params(model, *, ctx):
     [P("Row", "原點列"), P("Column", "原點行")],
     "讀取形狀模型原點",
     "沒有改過時，原點是教導區域的重心；沒有 domain 時是影像中心。",
-    "get_shape_model_origin (ModelID, Row, Column)",
+    "Vizion.get_shape_model_origin (ModelID, Row, Column)",
 )
 def get_shape_model_origin(model, *, ctx):
     row, column = _origin_of(_expect_shape(model))
@@ -1088,7 +1102,7 @@ def get_shape_model_origin(model, *, ctx):
     [],
     "設定形狀模型原點",
     "之後 find 回傳的是這個原點在搜尋圖上的位置。縮放模型會依匹配到的尺度放大這段偏移。",
-    "set_shape_model_origin (ModelID, 0, 0)",
+    "Vizion.set_shape_model_origin (ModelID, 0, 0)",
 )
 def set_shape_model_origin(model, row, column, *, ctx):
     shape = _expect_shape(model)
@@ -1105,7 +1119,7 @@ def set_shape_model_origin(model, row, column, *, ctx):
     [],
     "清除形狀模型",
     "清掉後不能再搜尋。變數還在。",
-    "clear_shape_model (ModelID)",
+    "Vizion.clear_shape_model (ModelID)",
 )
 def clear_shape_model(model, *, ctx):
     shape = _expect_shape(model)
@@ -1132,7 +1146,7 @@ def clear_shape_model(model, *, ctx):
     ],
     "讀取 NCC 模型參數",
     "回傳建立時實際使用的層數、角度和極性。",
-    "get_ncc_model_params (ModelID, NumLevels, AngleStart, AngleExtent, AngleStep, Metric)",
+    "Vizion.get_ncc_model_params (ModelID, NumLevels, AngleStart, AngleExtent, AngleStep, Metric)",
 )
 def get_ncc_model_params(model, *, ctx):
     ncc = _expect_ncc(model)
@@ -1147,7 +1161,7 @@ def get_ncc_model_params(model, *, ctx):
     [P("Row", "原點列"), P("Column", "原點行")],
     "讀取 NCC 模型原點",
     "預設是教導區域的中心。",
-    "get_ncc_model_origin (ModelID, Row, Column)",
+    "Vizion.get_ncc_model_origin (ModelID, Row, Column)",
 )
 def get_ncc_model_origin(model, *, ctx):
     row, column = _origin_of(_expect_ncc(model))
@@ -1166,7 +1180,7 @@ def get_ncc_model_origin(model, *, ctx):
     [],
     "設定 NCC 模型原點",
     "之後 find_ncc_model 回傳的是這個原點在搜尋圖上的位置。",
-    "set_ncc_model_origin (ModelID, 0, 0)",
+    "Vizion.set_ncc_model_origin (ModelID, 0, 0)",
 )
 def set_ncc_model_origin(model, row, column, *, ctx):
     ncc = _expect_ncc(model)
@@ -1183,7 +1197,7 @@ def set_ncc_model_origin(model, row, column, *, ctx):
     [],
     "清除 NCC 模型",
     "清掉後不能再搜尋。變數還在。",
-    "clear_ncc_model (ModelID)",
+    "Vizion.clear_ncc_model (ModelID)",
 )
 def clear_ncc_model(model, *, ctx):
     ncc = _expect_ncc(model)
@@ -1230,17 +1244,20 @@ def _gather(gray: np.ndarray, domain, cols: np.ndarray, rows: np.ndarray, interp
         rows = np.rint(rows)
     height, width = gray.shape
     inside = (cols >= 0) & (rows >= 0) & (cols <= width - 1) & (rows <= height - 1)
-    x0 = np.floor(cols).astype(np.int32)
-    y0 = np.floor(rows).astype(np.int32)
-    x0s = np.clip(x0, 0, width - 1)
-    y0s = np.clip(y0, 0, height - 1)
-    x1 = np.clip(x0s + 1, 0, width - 1)
-    y1 = np.clip(y0s + 1, 0, height - 1)
-    dx = cols - x0
-    dy = rows - y0
-    top = gray[y0s, x0s].astype(np.float64) * (1.0 - dx) + gray[y0s, x1].astype(np.float64) * dx
-    bottom = gray[y1, x0s].astype(np.float64) * (1.0 - dx) + gray[y1, x1].astype(np.float64) * dx
-    values = top * (1.0 - dy) + bottom * dy
+    if interpolation == "bicubic":
+        values = gauge.sample_bicubic(gray, rows, cols).astype(np.float64, copy=True)
+    else:
+        x0 = np.floor(cols).astype(np.int32)
+        y0 = np.floor(rows).astype(np.int32)
+        x0s = np.clip(x0, 0, width - 1)
+        y0s = np.clip(y0, 0, height - 1)
+        x1 = np.clip(x0s + 1, 0, width - 1)
+        y1 = np.clip(y0s + 1, 0, height - 1)
+        dx = cols - x0
+        dy = rows - y0
+        top = gray[y0s, x0s].astype(np.float64) * (1.0 - dx) + gray[y0s, x1].astype(np.float64) * dx
+        bottom = gray[y1, x0s].astype(np.float64) * (1.0 - dx) + gray[y1, x1].astype(np.float64) * dx
+        values = top * (1.0 - dy) + bottom * dy
     values[~inside] = np.nan
     if domain is not None:
         ix = np.clip(np.rint(cols).astype(np.int32), 0, width - 1)
@@ -1308,7 +1325,7 @@ def _crossings(profile, threshold, rows, cols, distances):
     [P("MeasureHandle", "量測弧")],
     "建立量測弧",
     "角度 0 朝右，正角度順時針。剖面沿弧長每 0.5 像素取一點，AnnulusRadius 是垂直方向要平均的半寬。",
-    "gen_measure_arc (30, 40, 10, 0, rad(180), 0, 80, 60, 'bilinear', MeasureHandle)",
+    "Vizion.gen_measure_arc (30, 40, 10, 0, rad(180), 0, 80, 60, 'bilinear', MeasureHandle)",
 )
 def gen_measure_arc(row, column, radius, angle_start, angle_extent, annulus, width, height, interpolation, *, ctx):
     mode = _token(interpolation, "Interpolation")
@@ -1337,7 +1354,7 @@ def gen_measure_arc(row, column, radius, angle_start, angle_extent, annulus, wid
     [P("GrayValues", "沿量測方向的灰階")],
     "讀出量測剖面",
     "直線或弧都沿中心每 0.5 像素取一點，垂直方向用 AnnulusRadius 或 Length2 平均。彩色先轉成亮度。超出影像的點是空值。",
-    "measure_projection (Image, MeasureHandle, GrayValues)",
+    "Vizion.measure_projection (Image, MeasureHandle, GrayValues)",
 )
 def measure_projection(image, handle, *, ctx):
     picture = expect_image(image, "Image")
@@ -1361,7 +1378,7 @@ _THRESH_SELECT = ["'all'", "'first'", "'last'"]
     [P("RowThresh", "過門檻的列"), P("ColumnThresh", "過門檻的行"), P("Distance", "離起點的距離")],
     "剖面灰階過門檻的位置",
     "看的是灰階本身，不是梯度。由小到大或由大到小經過 Threshold 都算。Sigma 為 0 不平滑。找不到時得到空 tuple。",
-    "measure_thresh (Image, MeasureHandle, 0, 40, 'all', RowThresh, ColumnThresh, Distance)",
+    "Vizion.measure_thresh (Image, MeasureHandle, 0, 40, 'all', RowThresh, ColumnThresh, Distance)",
 )
 def measure_thresh(image, handle, sigma, threshold, select, *, ctx):
     picture = expect_image(image, "Image")
@@ -1390,7 +1407,7 @@ def measure_thresh(image, handle, sigma, threshold, select, *, ctx):
     [],
     "移動量測中心",
     "直接改這個量測的中心，方向、長度和半徑不變。原來的變數就是移動後的量測。",
-    "translate_measure (MeasureHandle, 30, 50)",
+    "Vizion.translate_measure (MeasureHandle, 30, 50)",
 )
 def translate_measure(handle, row, column, *, ctx):
     measure = _open_measure(handle)
@@ -1472,7 +1489,7 @@ def _funct_at(funct: Funct1D, query, border: str) -> np.ndarray:
     [P("Function", "一維函數")],
     "用點建立一維函數",
     "X 和 Y 等長，至少兩點，X 要一個比一個大。之後可以用線性內插讀值。",
-    "create_funct_1d_pairs ([0, 2], [10, 30], Function)",
+    "Vizion.create_funct_1d_pairs ([0, 2], [10, 30], Function)",
 )
 def create_funct_1d_pairs(x_value, y_value, *, ctx):
     xs, ys = _funct_numbers(x_value, y_value)
@@ -1491,7 +1508,7 @@ def create_funct_1d_pairs(x_value, y_value, *, ctx):
     [P("Y", "內插後的函數值")],
     "讀一維函數的值",
     "範圍裡用線性內插。constant 沿用端點，zero 在外面是 0，error 會失敗。一個數回傳一個數。",
-    "get_y_value_funct_1d (Function, 1, 'constant', Y)",
+    "Vizion.get_y_value_funct_1d (Function, 1, 'constant', Y)",
 )
 def get_y_value_funct_1d(function, x_value, border, *, ctx):
     funct = _expect_funct(function)
@@ -1516,7 +1533,7 @@ def get_y_value_funct_1d(function, x_value, border, *, ctx):
     [P("Y", "取樣後的函數值")],
     "等間隔取樣一維函數",
     "從 XMin 走到不超過 XMax，間隔 XStep。結果是 Y 的 tuple。",
-    "sample_funct_1d (Function, 0, 2, 1, 'constant', Y)",
+    "Vizion.sample_funct_1d (Function, 0, 2, 1, 'constant', Y)",
 )
 def sample_funct_1d(function, x_min, x_max, x_step, border, *, ctx):
     funct = _expect_funct(function)
@@ -1539,7 +1556,7 @@ def sample_funct_1d(function, x_min, x_max, x_step, border, *, ctx):
     [P("ZeroCrossings", "函數為 0 的 X")],
     "找一維函數的零點",
     "剛好是 0 的點會留下。兩點之間跨過 0 時，用線性內插。沒有零點時得到空 tuple。",
-    "zero_crossings_funct_1d (Function, ZeroCrossings)",
+    "Vizion.zero_crossings_funct_1d (Function, ZeroCrossings)",
 )
 def zero_crossings_funct_1d(function, *, ctx):
     funct = _expect_funct(function)
@@ -1575,7 +1592,7 @@ def _knot_derivative(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     [P("Function", "一維函數")],
     "用一串值建立函數",
     "X 自動是 0、1、2，一直到最後一個點。Y 至少要兩個數。",
-    "create_funct_1d_array ([4, 8, 6], Function)",
+    "Vizion.create_funct_1d_array ([4, 8, 6], Function)",
 )
 def create_funct_1d_array(y_value, *, ctx):
     ys = np.asarray([float(item) for item in as_list(y_value)], np.float64)
@@ -1592,7 +1609,7 @@ def create_funct_1d_array(y_value, *, ctx):
     [P("X", "節點的自變數"), P("Y", "節點的函數值")],
     "讀出函數的節點",
     "把建立函數時的點原樣讀出來。X 從 0 開始編號的函數也看得到那些 X。",
-    "funct_1d_to_pairs (Function, X, Y)",
+    "Vizion.funct_1d_to_pairs (Function, X, Y)",
 )
 def funct_1d_to_pairs(function, *, ctx):
     funct = _expect_funct(function)
@@ -1607,7 +1624,7 @@ def funct_1d_to_pairs(function, *, ctx):
     [P("Integral", "梯形積分")],
     "對一維函數積分",
     "把函數看成節點之間的直線，用梯形積分。起點和終點都要落在函數的 X 範圍裡。",
-    "integrate_funct_1d (Function, 0, 2, Integral)",
+    "Vizion.integrate_funct_1d (Function, 0, 2, Integral)",
 )
 def integrate_funct_1d(function, x_min, x_max, *, ctx):
     funct = _expect_funct(function)
@@ -1641,7 +1658,7 @@ _DERIV = ["'first'", "'second'"]
     [P("Derivative", "導數函數")],
     "對一維函數求導",
     "導數記在原來的節點上。端點用單側斜率，中間點用左右兩段斜率的平均。second 是再導一次。節點之間仍是直線，所以中間讀到的不是該段的固定斜率。",
-    "derivate_funct_1d (Function, 'first', Derivative)",
+    "Vizion.derivate_funct_1d (Function, 'first', Derivative)",
 )
 def derivate_funct_1d(function, mode, *, ctx):
     funct = _expect_funct(function)
@@ -1662,7 +1679,7 @@ def derivate_funct_1d(function, mode, *, ctx):
     [P("FunctionInverted", "反函數")],
     "求一維函數的反函數",
     "Y 必須嚴格遞增或嚴格遞減。反函數的 X 是原來的 Y，Y 是原來的 X。",
-    "invert_funct_1d (Function, FunctionInverted)",
+    "Vizion.invert_funct_1d (Function, FunctionInverted)",
 )
 def invert_funct_1d(function, *, ctx):
     funct = _expect_funct(function)
@@ -1681,7 +1698,7 @@ def invert_funct_1d(function, *, ctx):
     [P("MinX", "局部最小的 X"), P("MaxX", "局部最大的 X")],
     "找函數的局部高低點",
     "只看中間的節點，端點不算。要比左右鄰居都低才是最小，都高才是最大。沒有時得到空 tuple。",
-    "local_min_max_funct_1d (Function, MinX, MaxX)",
+    "Vizion.local_min_max_funct_1d (Function, MinX, MaxX)",
 )
 def local_min_max_funct_1d(function, *, ctx):
     funct = _expect_funct(function)
@@ -1705,7 +1722,7 @@ def local_min_max_funct_1d(function, *, ctx):
     [P("FunctionAbs", "絕對值函數")],
     "取一維函數的絕對值",
     "每個節點取絕對值。兩點之間跨過 0 時，會補上那個零點，折線才不會把正負直接連起來。",
-    "abs_funct_1d (Function, FunctionAbs)",
+    "Vizion.abs_funct_1d (Function, FunctionAbs)",
 )
 def abs_funct_1d(function, *, ctx):
     funct = _expect_funct(function)
@@ -1735,7 +1752,7 @@ def abs_funct_1d(function, *, ctx):
     [P("FunctionComposed", "合成函數")],
     "合成兩個一維函數",
     "先算 Inner，再把結果送進 Outer。新函數的節點沿用 Inner 的 X。Outer 在中間的轉折如果沒落在這些 X 上，不會被保留。",
-    "compose_funct_1d (Outer, Inner, 'constant', FunctionComposed)",
+    "Vizion.compose_funct_1d (Outer, Inner, 'constant', FunctionComposed)",
 )
 def compose_funct_1d(outer, inner, border, *, ctx):
     outer_fn = _expect_funct(outer)

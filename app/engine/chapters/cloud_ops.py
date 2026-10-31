@@ -6,6 +6,7 @@ mesh, no 3D matching, and no HALCON file format.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 
 import cv2
@@ -101,7 +102,7 @@ def _min_distance(left: np.ndarray, right: np.ndarray) -> float:
     [P("ObjectModel3D", "點雲")],
     "用點座標建立點雲",
     "這是點，不是曲面，也沒有網格。X、Y、Z 可以是 tuple。",
-    "gen_object_model_3d_from_points ([0, 1], [0, 0], [0, 0], ObjectModel3D)",
+    "Vizion.gen_object_model_3d_from_points ([0, 1], [0, 0], [0, 0], ObjectModel3D)",
 )
 def gen_object_model_3d_from_points(x_value, y_value, z_value, *, ctx):
     return Result([], [ObjectModel3D(_coords(x_value, y_value, z_value))])
@@ -118,7 +119,7 @@ def gen_object_model_3d_from_points(x_value, y_value, z_value, *, ctx):
     [P("ParamValue", "結果")],
     "讀取點雲參數",
     "center 是三個數。diameter 在 800 點以內是最遠兩點的距離，更多點時是包圍盒對角線，比較快。",
-    "get_object_model_3d_params (ObjectModel3D, 'center', Center)",
+    "Vizion.get_object_model_3d_params (ObjectModel3D, 'center', Center)",
 )
 def get_object_model_3d_params(model, param_name, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -145,7 +146,7 @@ def get_object_model_3d_params(model, param_name, *, ctx):
     [P("ObjectModel3DAffineTrans", "轉換後的新點雲")],
     "用三維矩陣轉換點雲",
     "原來的點雲不會被改掉。點是 x、y、z。",
-    "affine_trans_object_model_3d (ObjectModel3D, HomMat3D, ObjectModel3DAffineTrans)",
+    "Vizion.affine_trans_object_model_3d (ObjectModel3D, HomMat3D, ObjectModel3DAffineTrans)",
 )
 def affine_trans_object_model_3d(model, hom_mat3d, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -170,7 +171,7 @@ def affine_trans_object_model_3d(model, hom_mat3d, *, ctx):
     [P("ObjectModel3DThresholded", "留下的點")],
     "按座標留下點",
     "上下限都包含。沒有點落在範圍裡會得到空點雲。",
-    "select_points_object_model_3d (ObjectModel3D, 'point_coord_z', 0, 10, Kept)",
+    "Vizion.select_points_object_model_3d (ObjectModel3D, 'point_coord_z', 0, 10, Kept)",
 )
 def select_points_object_model_3d(model, param_name, min_value, max_value, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -193,7 +194,7 @@ def select_points_object_model_3d(model, param_name, min_value, max_value, *, ct
     [P("ObjectModel3DUnion", "合併後的新點雲")],
     "合併兩個點雲",
     "只是把點接在一起，不做法向，也不去掉重複點。",
-    "union_object_model_3d (ObjectModel3D1, ObjectModel3D2, ObjectModel3DUnion)",
+    "Vizion.union_object_model_3d (ObjectModel3D1, ObjectModel3D2, ObjectModel3DUnion)",
 )
 def union_object_model_3d(first, second, *, ctx):
     left = _alive(first, "ObjectModel3D1")
@@ -209,7 +210,7 @@ def union_object_model_3d(first, second, *, ctx):
     [P("Distance", "最近兩點的距離")],
     "兩個點雲的最短距離",
     "這是點到點的最短距離，沒有姿態搜尋，也不是曲面距離。",
-    "distance_object_model_3d (ObjectModel3D1, ObjectModel3D2, Distance)",
+    "Vizion.distance_object_model_3d (ObjectModel3D1, ObjectModel3D2, Distance)",
 )
 def distance_object_model_3d(first, second, *, ctx):
     left = _alive(first, "ObjectModel3D1")
@@ -227,7 +228,7 @@ def distance_object_model_3d(first, second, *, ctx):
     [],
     "關閉點雲",
     "關閉後不能再讀或轉換。",
-    "clear_object_model_3d (ObjectModel3D)",
+    "Vizion.clear_object_model_3d (ObjectModel3D)",
 )
 def clear_object_model_3d(model, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -256,7 +257,7 @@ def _low_high(first, second) -> tuple[float, float]:
     [P("ObjectModel3D", "八個角的點雲")],
     "用盒子的兩個角建立點雲",
     "只放八個角，不是填滿的盒子。兩個角誰大誰小都可以，會自動排好。",
-    "gen_box_object_model_3d (0, 1, 2, 4, 5, 6, ObjectModel3D)",
+    "Vizion.gen_box_object_model_3d (0, 1, 2, 4, 5, 6, ObjectModel3D)",
 )
 def gen_box_object_model_3d(x1, y1, z1, x2, y2, z2, *, ctx):
     xs, ys, zs = _low_high(x1, x2), _low_high(y1, y2), _low_high(z1, z2)
@@ -279,7 +280,7 @@ def gen_box_object_model_3d(x1, y1, z1, x2, y2, z2, *, ctx):
     ],
     "點雲的軸對齊包圍盒",
     "各軸分開取最小和最大，不是轉正後的最小盒子。空點雲不能算。",
-    "smallest_bounding_box_object_model_3d (ObjectModel3D, MinX, MinY, MinZ, MaxX, MaxY, MaxZ)",
+    "Vizion.smallest_bounding_box_object_model_3d (ObjectModel3D, MinX, MinY, MinZ, MaxX, MaxY, MaxZ)",
 )
 def smallest_bounding_box_object_model_3d(model, *, ctx):
     points = _points(model, "ObjectModel3D")
@@ -295,7 +296,7 @@ def smallest_bounding_box_object_model_3d(model, *, ctx):
     [P("ObjectModel3DTranslated", "平移後的新點雲")],
     "平移點雲",
     "原來的點雲不會被改掉。",
-    "translate_object_model_3d (ObjectModel3D, 10, -1, 2, ObjectModel3DTranslated)",
+    "Vizion.translate_object_model_3d (ObjectModel3D, 10, -1, 2, ObjectModel3DTranslated)",
 )
 def translate_object_model_3d(model, tx, ty, tz, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -314,7 +315,7 @@ _MIRROR = ["'x'", "'y'", "'z'"]
     [P("ObjectModel3DMirrored", "翻轉後的新點雲")],
     "對一個軸鏡射點雲",
     "x 是把 x 變號，y 和 z 一樣。原來的點雲不會被改掉。",
-    "mirror_object_model_3d (ObjectModel3D, 'x', ObjectModel3DMirrored)",
+    "Vizion.mirror_object_model_3d (ObjectModel3D, 'x', ObjectModel3DMirrored)",
 )
 def mirror_object_model_3d(model, axis, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -327,6 +328,62 @@ def mirror_object_model_3d(model, axis, *, ctx):
     return Result([], [ObjectModel3D(points)])
 
 
+def _plane_svd(points: np.ndarray):
+    center = points.mean(axis=0)
+    singular, vh = np.linalg.svd(points - center, full_matrices=False)[1:]
+    if len(singular) < 2 or singular[-2] <= 1e-8 * max(float(singular[0]), 1.0):
+        raise ValueError("這些點排不成一個平面")
+    normal = vh[-1].astype(np.float64)
+    biggest = int(np.argmax(np.abs(normal)))
+    if normal[biggest] < 0:
+        normal = -normal
+    return normal, float(normal @ center)
+
+
+def _cloud_plane_error(points: np.ndarray, normal: np.ndarray, dist: float) -> np.ndarray:
+    return np.abs(points @ normal - dist)
+
+
+def _robust_cloud_plane(points: np.ndarray):
+    normal, dist = _plane_svd(points)
+    if len(points) <= 3:
+        return normal, dist
+    error = _cloud_plane_error(points, normal, dist)
+    if float(np.max(error)) <= 1.0:
+        return normal, dist
+    count = len(points)
+    if count <= 16:
+        draws = itertools.combinations(range(count), 3)
+    else:
+        generator = np.random.default_rng(0)
+        draws = (tuple(int(item) for item in generator.choice(count, 3, replace=False)) for _turn in range(80))
+    best_normal = normal
+    best_dist = dist
+    best_error = error
+    best_score = float(np.median(error))
+    best_total = float(np.sum(error))
+    for index in draws:
+        chosen = list(index)
+        try:
+            trial_normal, trial_dist = _plane_svd(points[chosen])
+        except ValueError:
+            continue
+        trial_error = _cloud_plane_error(points, trial_normal, trial_dist)
+        score = float(np.median(trial_error))
+        total = float(np.sum(trial_error))
+        if score < best_score - 1e-9 or (abs(score - best_score) <= 1e-9 and total < best_total - 1e-6):
+            best_normal = trial_normal
+            best_dist = trial_dist
+            best_error = trial_error
+            best_score = score
+            best_total = total
+    limit = 2.5 * best_score if best_score > 0.4 else 1.0
+    keep = best_error <= limit + 1e-9
+    if int(np.count_nonzero(keep)) < 3 or bool(np.all(keep)):
+        return best_normal, best_dist
+    return _plane_svd(points[keep])
+
+
 @operator(
     "三維",
     [],
@@ -334,22 +391,15 @@ def mirror_object_model_3d(model, axis, *, ctx):
     [P("ObjectModel3D", "點雲")],
     [P("Nx", "法向量 x"), P("Ny", "法向量 y"), P("Nz", "法向量 z"), P("Dist", "平面常數")],
     "用點擬合平面",
-    "平面是 Nx·x + Ny·y + Nz·z = Dist，法向量長度是 1。至少要三個不在同一直線上的點。法向量最大的那個分量會取正號。",
-    "fit_plane_object_model_3d (ObjectModel3D, Nx, Ny, Nz, Dist)",
+    "平面是 Nx·x + Ny·y + Nz·z = Dist，法向量長度是 1。點比較多、而且有一個離平面很遠時，會先從三點子集裡挑中位誤差小的平面，再丟掉那個飛點重擬合。剛好三個點，或每個點一開始就在 1 以內時，不會丟。至少要三個不在同一直線上的點。法向量最大的那個分量會取正號。",
+    "Vizion.fit_plane_object_model_3d (ObjectModel3D, Nx, Ny, Nz, Dist)",
 )
 def fit_plane_object_model_3d(model, *, ctx):
     points = _points(model, "ObjectModel3D")
     if len(points) < 3:
         raise ValueError("至少要三個點")
-    center = points.mean(axis=0)
-    singular, vh = np.linalg.svd(points - center, full_matrices=False)[1:]
-    if len(singular) < 2 or singular[-2] <= 1e-8 * max(float(singular[0]), 1.0):
-        raise ValueError("這些點排不成一個平面")
-    normal = vh[-1]
-    biggest = int(np.argmax(np.abs(normal)))
-    if normal[biggest] < 0:
-        normal = -normal
-    return Result([], [float(normal[0]), float(normal[1]), float(normal[2]), float(normal @ center)])
+    normal, dist = _robust_cloud_plane(points)
+    return Result([], [float(normal[0]), float(normal[1]), float(normal[2]), dist])
 
 
 @operator(
@@ -366,7 +416,7 @@ def fit_plane_object_model_3d(model, *, ctx):
     [P("Distances", "每個點的有號距離")],
     "點到平面的距離",
     "距離是 (Nx·x + Ny·y + Nz·z - Dist) 再除以法向量長度，所以法向量不必是單位長。平面法向量的那一側是正的。",
-    "distance_plane_object_model_3d (ObjectModel3D, 0, 0, 1, 3, Distances)",
+    "Vizion.distance_plane_object_model_3d (ObjectModel3D, 0, 0, 1, 3, Distances)",
 )
 def distance_plane_object_model_3d(model, nx, ny, nz, dist, *, ctx):
     points = _points(model, "ObjectModel3D")
@@ -386,7 +436,7 @@ def distance_plane_object_model_3d(model, nx, ny, nz, dist, *, ctx):
     [P("ObjectModel3DSampled", "留下的新點雲")],
     "按間隔抽點",
     "Step 為 1 會留下全部。Step 為 2 留下第 1、3、5 個點。順序不變，原來的點雲也不改。",
-    "sample_object_model_3d (ObjectModel3D, 2, ObjectModel3DSampled)",
+    "Vizion.sample_object_model_3d (ObjectModel3D, 2, ObjectModel3DSampled)",
 )
 def sample_object_model_3d(model, step, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -404,7 +454,7 @@ def sample_object_model_3d(model, step, *, ctx):
     [P("Distance", "最近距離")],
     "點到點雲的最近距離",
     "是到最近那個點的直線距離，不是到曲面的距離。空點雲不能算。",
-    "distance_point_object_model_3d (ObjectModel3D, 0, 4, 0, Distance)",
+    "Vizion.distance_point_object_model_3d (ObjectModel3D, 0, 4, 0, Distance)",
 )
 def distance_point_object_model_3d(model, x_value, y_value, z_value, *, ctx):
     points = _points(model, "ObjectModel3D")
@@ -444,7 +494,7 @@ _AXES_XYZ = ["'x'", "'y'", "'z'"]
     [P("ObjectModel3DScaled", "縮放後的新點雲")],
     "縮放點雲",
     "預設以原點為中心。倍率可以是負的，0 會把該軸壓到中心上。原來的點雲不會被改掉。",
-    "scale_object_model_3d (ObjectModel3D, 2, 1, 1, ObjectModel3DScaled)",
+    "Vizion.scale_object_model_3d (ObjectModel3D, 2, 1, 1, ObjectModel3DScaled)",
 )
 def scale_object_model_3d(model, sx, sy, sz, cx, cy, cz, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -465,7 +515,7 @@ def scale_object_model_3d(model, sx, sy, sz, cx, cy, cz, *, ctx):
     [P("ObjectModel3DRotated", "旋轉後的新點雲")],
     "繞軸旋轉點雲",
     "繞過原點。正角度用右手定則，繞 z 時 x 軸轉向 y 軸。原來的點雲不會被改掉。",
-    "rotate_object_model_3d (ObjectModel3D, 'z', rad(90), ObjectModel3DRotated)",
+    "Vizion.rotate_object_model_3d (ObjectModel3D, 'z', rad(90), ObjectModel3DRotated)",
 )
 def rotate_object_model_3d(model, axis, angle, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -492,7 +542,7 @@ _PROJECT = ["'xy'", "'xz'", "'yz'"]
     [P("ObjectModel3DProjected", "投影後的新點雲")],
     "把點投到座標面",
     "xy 把 z 變成 0，xz 把 y 變成 0，yz 把 x 變成 0。原來的點雲不會被改掉。",
-    "project_object_model_3d (ObjectModel3D, 'xy', ObjectModel3DProjected)",
+    "Vizion.project_object_model_3d (ObjectModel3D, 'xy', ObjectModel3DProjected)",
 )
 def project_object_model_3d(model, plane, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -520,7 +570,7 @@ def project_object_model_3d(model, plane, *, ctx):
     [P("ObjectModel3DSelected", "留下的點")],
     "留下靠近平面的點",
     "距離用絕對值，平面兩側都算。法向量會先除以長度。沒有點落在範圍裡會得到空點雲。",
-    "select_plane_object_model_3d (ObjectModel3D, 0, 0, 1, 3, 0.5, ObjectModel3DSelected)",
+    "Vizion.select_plane_object_model_3d (ObjectModel3D, 0, 0, 1, 3, 0.5, ObjectModel3DSelected)",
 )
 def select_plane_object_model_3d(model, nx, ny, nz, dist, max_dist, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -545,7 +595,7 @@ def select_plane_object_model_3d(model, nx, ny, nz, dist, max_dist, *, ctx):
     [P("Distance", "最遠距離")],
     "點到點雲的最遠距離",
     "是到最遠那個點的直線距離。空點雲不能算。",
-    "max_distance_point_object_model_3d (ObjectModel3D, 0, 4, 0, Distance)",
+    "Vizion.max_distance_point_object_model_3d (ObjectModel3D, 0, 4, 0, Distance)",
 )
 def max_distance_point_object_model_3d(model, x_value, y_value, z_value, *, ctx):
     points = _points(model, "ObjectModel3D")
@@ -579,7 +629,7 @@ def _near_mask(left: np.ndarray, right: np.ndarray, epsilon: float) -> np.ndarra
     [P("ObjectModel3DDifference", "去掉之後的新點雲")],
     "從點雲去掉靠近的點",
     "第一個點雲裡，凡是和第二個點雲距離不大於 Epsilon 的點都會刪掉。Epsilon 為 0 表示座標要完全一樣。順序保留。",
-    "difference_object_model_3d (ObjectModel3D, ObjectModel3DRemove, 0, ObjectModel3DDifference)",
+    "Vizion.difference_object_model_3d (ObjectModel3D, ObjectModel3DRemove, 0, ObjectModel3DDifference)",
 )
 def difference_object_model_3d(model, remove, epsilon, *, ctx):
     left = _alive(model, "ObjectModel3D")
@@ -608,7 +658,7 @@ _SORT_ORDER = ["'ascending'", "'descending'"]
     [P("ObjectModel3DSorted", "排序後的新點雲")],
     "依座標排序點雲",
     "相同座標維持原來的先後。原來的點雲不會被改掉。",
-    "sort_object_model_3d (ObjectModel3D, 'x', 'ascending', ObjectModel3DSorted)",
+    "Vizion.sort_object_model_3d (ObjectModel3D, 'x', 'ascending', ObjectModel3DSorted)",
 )
 def sort_object_model_3d(model, axis, order, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -622,6 +672,62 @@ def sort_object_model_3d(model, axis, order, *, ctx):
     return Result([], [ObjectModel3D(cloud.points[arranged].copy())])
 
 
+def _axis_svd(points: np.ndarray):
+    center = points.mean(axis=0)
+    singular, vh = np.linalg.svd(points - center, full_matrices=False)[1:]
+    if float(singular[0]) <= 1e-12:
+        raise ValueError("這些點沒有方向")
+    axis = vh[0].astype(np.float64).copy()
+    biggest = int(np.argmax(np.abs(axis)))
+    if axis[biggest] < 0:
+        axis = -axis
+    return axis, center
+
+
+def _axis_error(points: np.ndarray, axis: np.ndarray, center: np.ndarray) -> np.ndarray:
+    delta = points - center
+    parallel = (delta @ axis)[:, None] * axis
+    return np.linalg.norm(delta - parallel, axis=1)
+
+
+def _robust_axis(points: np.ndarray) -> np.ndarray:
+    axis, center = _axis_svd(points)
+    if len(points) <= 2:
+        return axis
+    error = _axis_error(points, axis, center)
+    if float(np.max(error)) <= 1.0:
+        return axis
+    count = len(points)
+    if count <= 16:
+        draws = itertools.combinations(range(count), 2)
+    else:
+        generator = np.random.default_rng(0)
+        draws = (tuple(int(item) for item in generator.choice(count, 2, replace=False)) for _turn in range(80))
+    best_axis = axis
+    best_error = error
+    best_score = float(np.median(error))
+    best_total = float(np.sum(error))
+    for index in draws:
+        chosen = list(index)
+        try:
+            trial_axis, trial_center = _axis_svd(points[chosen])
+        except ValueError:
+            continue
+        trial_error = _axis_error(points, trial_axis, trial_center)
+        score = float(np.median(trial_error))
+        total = float(np.sum(trial_error))
+        if score < best_score - 1e-9 or (abs(score - best_score) <= 1e-9 and total < best_total - 1e-6):
+            best_axis = trial_axis
+            best_error = trial_error
+            best_score = score
+            best_total = total
+    limit = 2.5 * best_score if best_score > 0.4 else 1.0
+    keep = best_error <= limit + 1e-9
+    if int(np.count_nonzero(keep)) < 2 or bool(np.all(keep)):
+        return axis
+    return _axis_svd(points[keep])[0]
+
+
 @operator(
     "三維",
     [],
@@ -629,21 +735,14 @@ def sort_object_model_3d(model, axis, order, *, ctx):
     [P("ObjectModel3D", "點雲")],
     [P("Ax", "主軸 x"), P("Ay", "主軸 y"), P("Az", "主軸 z")],
     "點雲拉得最長的方向",
-    "這是變異數最大的方向，長度是 1。最大的那個分量會取正號。至少要兩個不重疊的點。",
-    "principal_axis_object_model_3d (ObjectModel3D, Ax, Ay, Az)",
+    "這是變異數最大的方向，長度是 1。點比較多、而且有一個點離這條軸很遠時，會先從兩點子集裡挑中位誤差小的方向，再丟掉那個點重算。剛好兩個點，或每個點一開始就在 1 以內時，不會丟。最大的那個分量會取正號。至少要兩個不重疊的點。",
+    "Vizion.principal_axis_object_model_3d (ObjectModel3D, Ax, Ay, Az)",
 )
 def principal_axis_object_model_3d(model, *, ctx):
     points = _points(model, "ObjectModel3D")
     if len(points) < 2:
         raise ValueError("至少要兩個點")
-    centered = points - points.mean(axis=0)
-    singular, vh = np.linalg.svd(centered, full_matrices=False)[1:]
-    if float(singular[0]) <= 1e-12:
-        raise ValueError("這些點沒有方向")
-    axis = vh[0].copy()
-    biggest = int(np.argmax(np.abs(axis)))
-    if axis[biggest] < 0:
-        axis = -axis
+    axis = _robust_axis(points)
     return Result([], [float(axis[0]), float(axis[1]), float(axis[2])])
 
 
@@ -663,7 +762,7 @@ def _empty_cloud() -> ObjectModel3D:
     [P("ObjectModel3DIntersection", "留下的新點雲")],
     "留下兩邊都有的點",
     "第一個點雲裡，和第二個點雲距離不大於 Epsilon 的點會留下。Epsilon 為 0 表示座標要完全一樣。任一邊是空的，結果就是空的。",
-    "intersect_object_model_3d (ObjectModel3D, ObjectModel3DNear, 0, ObjectModel3DIntersection)",
+    "Vizion.intersect_object_model_3d (ObjectModel3D, ObjectModel3DNear, 0, ObjectModel3DIntersection)",
 )
 def intersect_object_model_3d(model, other, epsilon, *, ctx):
     left = _alive(model, "ObjectModel3D")
@@ -685,7 +784,7 @@ def intersect_object_model_3d(model, other, epsilon, *, ctx):
     [P("ObjectModel3DCentered", "中心移到原點的新點雲")],
     "把點雲中心移到原點",
     "每個座標都減掉平均值。空點雲不能算。原來的點雲不會被改掉。",
-    "center_object_model_3d (ObjectModel3D, ObjectModel3DCentered)",
+    "Vizion.center_object_model_3d (ObjectModel3D, ObjectModel3DCentered)",
 )
 def center_object_model_3d(model, *, ctx):
     points = _points(model, "ObjectModel3D")
@@ -708,7 +807,7 @@ def center_object_model_3d(model, *, ctx):
     [P("ObjectModel3DClipped", "留下的點")],
     "用盒子裁點雲",
     "六個邊界都包含。兩端誰大誰小都可以。沒有點落在裡面會得到空點雲。",
-    "clip_object_model_3d (ObjectModel3D, 1, 0, 0, 3, 0, 0, ObjectModel3DClipped)",
+    "Vizion.clip_object_model_3d (ObjectModel3D, 1, 0, 0, 3, 0, 0, ObjectModel3DClipped)",
 )
 def clip_object_model_3d(model, x1, y1, z1, x2, y2, z2, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -737,7 +836,7 @@ _VOXEL = ["'point'", "'center'"]
     [P("ObjectModel3DReduced", "簡化後的新點雲")],
     "用格子簡化點雲",
     "每個格子只留一個點。point 留最先出現的那個點，座標不變。center 改成該格的中心。格子從 0 往正負兩邊量。",
-    "voxel_object_model_3d (ObjectModel3D, 2, 'point', ObjectModel3DReduced)",
+    "Vizion.voxel_object_model_3d (ObjectModel3D, 2, 'point', ObjectModel3DReduced)",
 )
 def voxel_object_model_3d(model, size, mode, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -779,7 +878,7 @@ def _farthest_near(left: np.ndarray, right: np.ndarray) -> float:
     [P("Distance", "最遠的那個最近距離")],
     "點雲到另一個點雲的最大間隙",
     "對第一個點雲的每個點，先找它到第二個點雲的最近距離，再取其中最大的。方向不能對調。空點雲不能算。",
-    "max_distance_object_model_3d (ObjectModel3D, ObjectModel3DRef, Distance)",
+    "Vizion.max_distance_object_model_3d (ObjectModel3D, ObjectModel3DRef, Distance)",
 )
 def max_distance_object_model_3d(model, reference, *, ctx):
     left = _points(model, "ObjectModel3D")
@@ -795,7 +894,7 @@ def max_distance_object_model_3d(model, reference, *, ctx):
     [P("X", "所有 x"), P("Y", "所有 y"), P("Z", "所有 z")],
     "讀出點雲的座標",
     "一個點時各回傳一個數，多個點時是 tuple。空點雲得到三個空 tuple。",
-    "get_object_model_3d_points (ObjectModel3D, X, Y, Z)",
+    "Vizion.get_object_model_3d_points (ObjectModel3D, X, Y, Z)",
 )
 def get_object_model_3d_points(model, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -820,7 +919,7 @@ def get_object_model_3d_points(model, *, ctx):
     [P("ObjectModel3D", "平面上的點")],
     "在平面上產生格子點",
     "z 都一樣。先沿 x 排，再換下一列 y。這是點，不是填滿的面。",
-    "gen_plane_object_model_3d (0, 0, 3, 2, 2, 1, ObjectModel3D)",
+    "Vizion.gen_plane_object_model_3d (0, 0, 3, 2, 2, 1, ObjectModel3D)",
 )
 def gen_plane_object_model_3d(x0, y0, z_value, rows, cols, step, *, ctx):
     high = whole(rows, "Rows")
@@ -846,7 +945,7 @@ def gen_plane_object_model_3d(x0, y0, z_value, rows, cols, step, *, ctx):
     [P("Spread1", "最長主軸的平方和"), P("Spread2", "第二主軸"), P("Spread3", "最短主軸")],
     "主軸上的平方和",
     "先把中心移到原點，再沿三個主軸算座標平方的總和，由大到小。全部重疊時三個都是 0。至少要兩個點。",
-    "principal_spread_object_model_3d (ObjectModel3D, Spread1, Spread2, Spread3)",
+    "Vizion.principal_spread_object_model_3d (ObjectModel3D, Spread1, Spread2, Spread3)",
 )
 def principal_spread_object_model_3d(model, *, ctx):
     points = _points(model, "ObjectModel3D")
@@ -873,7 +972,7 @@ def _pixel_index(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     [P("ObjectModel3D", "點雲")],
     "用區域的像素建立點雲",
     "每個前景像素一點。x 是行，y 是列，z 是 0。多個物件會合成一個點雲。沒有像素就得到空點雲。",
-    "gen_object_model_3d_from_region (Region, ObjectModel3D)",
+    "Vizion.gen_object_model_3d_from_region (Region, ObjectModel3D)",
 )
 def gen_object_model_3d_from_region(region, *, ctx):
     mask = expect_region(region, "Region").union_mask()
@@ -892,7 +991,7 @@ def gen_object_model_3d_from_region(region, *, ctx):
     [P("ObjectModel3D", "點雲")],
     "用影像的像素建立點雲",
     "x 是行，y 是列，z 是灰階。有定義域時只取定義域裡的像素，沒有就整張。彩色先轉成亮度。",
-    "gen_object_model_3d_from_image (Image, ObjectModel3D)",
+    "Vizion.gen_object_model_3d_from_image (Image, ObjectModel3D)",
 )
 def gen_object_model_3d_from_image(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -916,7 +1015,7 @@ def gen_object_model_3d_from_image(image, *, ctx):
     [P("ObjectModel3D", "點雲")],
     "用輪廓的點建立點雲",
     "x 是行，y 是列，z 是 0。多條輪廓依序接在一起。沒有點就得到空點雲。",
-    "gen_object_model_3d_from_xld (Contours, ObjectModel3D)",
+    "Vizion.gen_object_model_3d_from_xld (Contours, ObjectModel3D)",
 )
 def gen_object_model_3d_from_xld(contours, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -939,7 +1038,7 @@ def gen_object_model_3d_from_xld(contours, *, ctx):
     [],
     "把點雲畫成區域",
     "x 四捨五入成行，y 四捨五入成列。超出寬高的點略過，z 不使用。同一個像素只算一次。",
-    "gen_region_object_model_3d (Region, ObjectModel3D, 80, 60)",
+    "Vizion.gen_region_object_model_3d (Region, ObjectModel3D, 80, 60)",
 )
 def gen_region_object_model_3d(model, width, height, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -969,7 +1068,7 @@ _PAINT = ["'gray'", "'z'"]
     [],
     "把點雲畫進影像",
     "x 四捨五入成行，y 四捨五入成列。超出影像的點略過。同一個像素後來的點蓋掉前面的。z 模式會把高度裁到 0 到 255。定義域不改。",
-    "paint_object_model_3d (Image, ImageResult, ObjectModel3D, 255, 'gray')",
+    "Vizion.paint_object_model_3d (Image, ImageResult, ObjectModel3D, 255, 'gray')",
 )
 def paint_object_model_3d(image, model, gray, mode, *, ctx):
     picture = expect_image(image, "Image")
@@ -998,7 +1097,7 @@ def paint_object_model_3d(image, model, gray, mode, *, ctx):
     [P("Grayval", "每個點讀到的灰階")],
     "在點的位置讀灰階",
     "x 四捨五入成行，y 四捨五入成列。有一個點在影像外面就失敗。一個點回傳一個數。彩色先轉成亮度。",
-    "get_grayval_object_model_3d (Image, ObjectModel3D, Grayval)",
+    "Vizion.get_grayval_object_model_3d (Image, ObjectModel3D, Grayval)",
 )
 def get_grayval_object_model_3d(image, model, *, ctx):
     picture = expect_image(image, "Image")
@@ -1021,7 +1120,7 @@ _SIDE = ["'inside'", "'outside'"]
     [P("ObjectModel3DSelected", "留下的點")],
     "用區域篩點",
     "x 四捨五入成行，y 四捨五入成列。inside 留下落在區域裡的點。超出這張區域範圍的點算 outside。",
-    "select_object_model_3d_region (Region, ObjectModel3D, 'inside', ObjectModel3DSelected)",
+    "Vizion.select_object_model_3d_region (Region, ObjectModel3D, 'inside', ObjectModel3DSelected)",
 )
 def select_object_model_3d_region(region, model, mode, *, ctx):
     cloud = _alive(model, "ObjectModel3D")
@@ -1048,7 +1147,7 @@ def select_object_model_3d_region(region, model, mode, *, ctx):
     [P("ObjectModel3DZ", "z 改成灰階的新點雲")],
     "用影像灰階當高度",
     "x 和 y 不變。z 改成該像素的灰階。x 四捨五入成行，y 四捨五入成列。有一個點在影像外面就失敗。彩色先轉成亮度。",
-    "set_object_model_3d_z (Image, ObjectModel3D, ObjectModel3DZ)",
+    "Vizion.set_object_model_3d_z (Image, ObjectModel3D, ObjectModel3DZ)",
 )
 def set_object_model_3d_z(image, model, *, ctx):
     picture = expect_image(image, "Image")
@@ -1113,7 +1212,7 @@ def _with_domain(picture: Image, data: np.ndarray) -> Image:
     [P("Alpha", "列的係數"), P("Beta", "行的係數"), P("Gamma", "常數")],
     "擬合高度平面",
     "灰階 = Alpha × 列 + Beta × 行 + Gamma。彩色先轉成亮度。用整張圖，不看定義域。",
-    "fit_image_plane (Image, Alpha, Beta, Gamma)",
+    "Vizion.fit_image_plane (Image, Alpha, Beta, Gamma)",
 )
 def fit_image_plane(image, *, ctx):
     _picture, height = _height(image)
@@ -1129,7 +1228,7 @@ def fit_image_plane(image, *, ctx):
     [],
     "減掉擬合平面",
     "每個像素減掉最佳平面，再加上 Offset。完美的斜面會變成一整片 Offset。超出 0 到 255 會裁切。定義域不改。",
-    "sub_image_plane (Image, ImageFlat, 128)",
+    "Vizion.sub_image_plane (Image, ImageFlat, 128)",
 )
 def sub_image_plane(image, offset, *, ctx):
     picture, height = _height(image)
@@ -1147,7 +1246,7 @@ def sub_image_plane(image, offset, *, ctx):
     [P("Deviation", "離開平面的均方根")],
     "高度離開平面多少",
     "先減掉最佳平面，再取均方根。完美平面是 0。彩色先轉成亮度。",
-    "image_plane_deviation (Image, Deviation)",
+    "Vizion.image_plane_deviation (Image, Deviation)",
 )
 def image_plane_deviation(image, *, ctx):
     _picture, height = _height(image)
@@ -1163,7 +1262,7 @@ def image_plane_deviation(image, *, ctx):
     [P("Nx", "法向量 x"), P("Ny", "法向量 y"), P("Nz", "法向量 z")],
     "擬合平面的法線",
     "長度是 1，z 維持正的，所以朝上。x 是行，y 是列。平坦的圖是 (0, 0, 1)。",
-    "image_plane_normal (Image, Nx, Ny, Nz)",
+    "Vizion.image_plane_normal (Image, Nx, Ny, Nz)",
 )
 def image_plane_normal(image, *, ctx):
     _picture, height = _height(image)
@@ -1181,7 +1280,7 @@ def image_plane_normal(image, *, ctx):
     [],
     "高度的坡度",
     "和正上方的夾角。平坦是 0。行每加 1、灰階也加 1 時，中間是 45 度。Scale 越大看起來越平。邊緣用反射邊界。",
-    "height_slope_image (Image, ImageSlope, 1)",
+    "Vizion.height_slope_image (Image, ImageSlope, 1)",
 )
 def height_slope_image(image, scale, *, ctx):
     picture, height = _height(image)
@@ -1199,7 +1298,7 @@ def height_slope_image(image, scale, *, ctx):
     [],
     "每個像素的法線",
     "分量乘 127 再加 128。平坦是 (128, 128, 255)，z 朝上。x 是行，y 是列。Scale 越大法線越接近正上方。",
-    "height_normal_image (Image, Nx, Ny, Nz, 1)",
+    "Vizion.height_normal_image (Image, Nx, Ny, Nz, 1)",
 )
 def height_normal_image(image, scale, *, ctx):
     picture, height = _height(image)
@@ -1224,7 +1323,7 @@ _SHADE = ["'clamp'", "'full'"]
     [],
     "依高度畫明暗",
     "平坦又從正上方打光，clamp 是 255。方位 0 沿 +行，順時針轉到 +列。full 把正對光源畫成接近 255，背光畫成接近 0，128 是側光。定義域不改。",
-    "shade_height_field (Image, ImageShade, 0, 90, 1, 'clamp')",
+    "Vizion.shade_height_field (Image, ImageShade, 0, 90, 1, 'clamp')",
 )
 def shade_height_field(image, azimuth, elevation, scale, mode, *, ctx):
     picture, height = _height(image)
@@ -1256,7 +1355,7 @@ _ABOVE = ["'above'", "'below'"]
     [],
     "留下高出或低於平面的像素",
     "先擬合平面。above 留下比平面高出 0.000001 以上的像素，below 留下更低的。剛好貼在平面上的不算。結果是一個區域。",
-    "above_image_plane (Image, Region, 'above')",
+    "Vizion.above_image_plane (Image, Region, 'above')",
 )
 def above_image_plane(image, mode, *, ctx):
     picture, height = _height(image)
@@ -1304,7 +1403,7 @@ def _row_col(row, column) -> tuple[list[float], list[float]]:
     [],
     "減掉指定的平面",
     "用你給的係數，不重新擬合，所以局部的凸起會留著。灰階減去 Alpha × 列 + Beta × 行 + Gamma，再加上 Offset。超出 0 到 255 會裁切。定義域不改。",
-    "sub_plane_image (Image, ImageFlat, 0, 1, 0, 128)",
+    "Vizion.sub_plane_image (Image, ImageFlat, 0, 1, 0, 128)",
 )
 def sub_plane_image(image, alpha, beta, gamma, offset, *, ctx):
     picture, height = _height(image)
@@ -1321,7 +1420,7 @@ def sub_plane_image(image, alpha, beta, gamma, offset, *, ctx):
     [],
     "加上指定的平面",
     "每個像素加上 Alpha × 列 + Beta × 行 + Gamma。超出 0 到 255 會裁切。定義域不改。",
-    "add_plane_image (Image, ImageTilted, 0, 1, 0)",
+    "Vizion.add_plane_image (Image, ImageTilted, 0, 1, 0)",
 )
 def add_plane_image(image, alpha, beta, gamma, *, ctx):
     picture, height = _height(image)
@@ -1337,7 +1436,7 @@ def add_plane_image(image, alpha, beta, gamma, *, ctx):
     [],
     "用係數畫出平面",
     "尺寸跟輸入一樣，原點在左上角。灰階 = Alpha × 列 + Beta × 行 + Gamma，再夾到 0 到 255。係數可以直接接 fit_image_plane。",
-    "gen_image_plane (Image, ImagePlane, 0, 1, 0)",
+    "Vizion.gen_image_plane (Image, ImagePlane, 0, 1, 0)",
 )
 def gen_image_plane(image, alpha, beta, gamma, *, ctx):
     picture, height = _height(image)
@@ -1359,7 +1458,7 @@ def gen_image_plane(image, alpha, beta, gamma, *, ctx):
     [P("Gray", "平面在該點的值")],
     "計算平面上某一點的高度",
     "值是 Alpha × 列 + Beta × 行 + Gamma，不裁切。Row 和 Column 可以是 tuple。一個點回傳一個數。",
-    "plane_gray (0, 1, 5, 2, 3, Gray)",
+    "Vizion.plane_gray (0, 1, 5, 2, 3, Gray)",
 )
 def plane_gray(alpha, beta, gamma, row, column, *, ctx):
     rows, cols = _row_col(row, column)
@@ -1376,7 +1475,7 @@ def plane_gray(alpha, beta, gamma, row, column, *, ctx):
     [P("Tilt", "和正上方的夾角，單位是度"), P("Azimuth", "爬升方向，單位是度")],
     "平面的傾角和爬升方向",
     "傾角 0 是平坦。爬升方向 0 是往 +行，順時針轉到 +列，範圍 0 到 360。沒有坡度時方向是 0。",
-    "plane_angle (0, 1, Tilt, Azimuth)",
+    "Vizion.plane_angle (0, 1, Tilt, Azimuth)",
 )
 def plane_angle(alpha, beta, *, ctx):
     rise_row = scalar(alpha, "Alpha")
@@ -1406,7 +1505,7 @@ def plane_angle(alpha, beta, *, ctx):
     [],
     "留下和指定平面相差在範圍內的像素",
     "比較的是灰階減去平面。下限和上限含在內，寫反了會自動對調。結果是一個區域。",
-    "band_image_plane (Image, Region, 0, 1, 0, -1, 1)",
+    "Vizion.band_image_plane (Image, Region, 0, 1, 0, -1, 1)",
 )
 def band_image_plane(image, alpha, beta, gamma, low, high, *, ctx):
     picture, height = _height(image)
@@ -1435,7 +1534,7 @@ _VOLUME = ["'above'", "'below'", "'signed'"]
     [P("Volume", "灰階差的總和")],
     "把高出或低於平面的灰階加起來",
     "above 只加高出的部分，below 只加低於的部分，兩邊都記成正的。signed 高出是正、低於是負。單位是灰階，一個像素一份。",
-    "volume_image_plane (Image, 0, 0, 0, 'above', Volume)",
+    "Vizion.volume_image_plane (Image, 0, 0, 0, 'above', Volume)",
 )
 def volume_image_plane(image, alpha, beta, gamma, mode, *, ctx):
     _picture, height = _height(image)
@@ -1466,7 +1565,7 @@ _EXTREME = ["'high'", "'low'"]
     [P("Row", "列"), P("Column", "行"), P("Residual", "高出平面多少")],
     "找離指定平面最高或最低的像素",
     "比的是灰階減去平面。一樣高時留列最小、再來行最小的那一點。",
-    "extreme_image_plane (Image, 0, 0, 0, 'high', Row, Column, Residual)",
+    "Vizion.extreme_image_plane (Image, 0, 0, 0, 'high', Row, Column, Residual)",
 )
 def extreme_image_plane(image, alpha, beta, gamma, mode, *, ctx):
     picture, height = _height(image)
@@ -1509,6 +1608,48 @@ def _fit_pixels(rows: np.ndarray, cols: np.ndarray, values: np.ndarray) -> tuple
     return float(alpha), float(beta), float(gamma)
 
 
+def _plane_error(rows, cols, values, plane) -> np.ndarray:
+    alpha, beta, gamma = plane
+    return np.abs(values - (alpha * rows + beta * cols + gamma))
+
+
+def _robust_plane(rows, cols, values, max_dist: float):
+    base = _fit_pixels(rows, cols, values)
+    error = _plane_error(rows, cols, values, base)
+    if float(np.max(error)) <= max_dist + 1e-9:
+        return base
+    count = len(rows)
+    if count <= 16:
+        draws = itertools.combinations(range(count), 3)
+    else:
+        generator = np.random.default_rng(0)
+        draws = (tuple(int(item) for item in generator.choice(count, 3, replace=False)) for _turn in range(80))
+    best = base
+    best_error = error
+    best_score = float(np.median(error))
+    best_total = float(np.sum(error))
+    for index in draws:
+        chosen = list(index)
+        try:
+            trial = _fit_pixels(rows[chosen], cols[chosen], values[chosen])
+        except ValueError:
+            continue
+        trial_error = _plane_error(rows, cols, values, trial)
+        score = float(np.median(trial_error))
+        total = float(np.sum(trial_error))
+        if score < best_score - 1e-9 or (abs(score - best_score) <= 1e-9 and total < best_total - 1e-6):
+            best = trial
+            best_error = trial_error
+            best_score = score
+            best_total = total
+    keep = best_error <= max_dist + 1e-9
+    if int(np.count_nonzero(keep)) < 3:
+        raise ValueError("留下的像素少於三個")
+    if bool(np.all(keep)):
+        return best
+    return _fit_pixels(rows[keep], cols[keep], values[keep])
+
+
 def _residual_at(rows, cols, values, alpha, beta, gamma) -> np.ndarray:
     return values - (
         scalar(alpha, "Alpha") * rows + scalar(beta, "Beta") * cols + scalar(gamma, "Gamma")
@@ -1523,7 +1664,7 @@ def _residual_at(rows, cols, values, alpha, beta, gamma) -> np.ndarray:
     [P("Alpha", "列的係數"), P("Beta", "行的係數"), P("Gamma", "常數")],
     "用區域裡的像素擬合平面",
     "只用量區域裡的像素，背景不會把平面拉走。多個物件會合併。有定義域時再和定義域取交集。至少要三個排得成面的像素。彩色先轉成亮度。",
-    "fit_plane_region (Region, Image, Alpha, Beta, Gamma)",
+    "Vizion.fit_plane_region (Region, Image, Alpha, Beta, Gamma)",
 )
 def fit_plane_region(region, image, *, ctx):
     _picture, _mask, rows, cols, values = _region_samples(region, image)
@@ -1536,11 +1677,11 @@ def fit_plane_region(region, image, *, ctx):
     "三維",
     [P("Region", "要擬合的區域"), P("Image", "高度圖")],
     [],
-    [P("MaxDist", "離第一次平面的最大差距", "1")],
+    [P("MaxDist", "像素可以離開平面的最大差距", "1")],
     [P("Alpha", "列的係數"), P("Beta", "行的係數"), P("Gamma", "常數")],
     "排除離群像素後再擬合平面",
-    "先擬合一次，留下差距不超過 MaxDist 的像素，再擬合一次。差距含等於 MaxDist。留下的像素少於三個就失敗。",
-    "fit_plane_region_inlier (Region, Image, 1, Alpha, Beta, Gamma)",
+    "先從三點子集裡挑中位誤差小的平面，再留下差距不超過 MaxDist 的像素重擬合。差距含等於 MaxDist。每個點一開始就在門檻裡時，直接用全部像素。留下的像素少於三個就失敗。",
+    "Vizion.fit_plane_region_inlier (Region, Image, 1, Alpha, Beta, Gamma)",
 )
 def fit_plane_region_inlier(region, image, max_dist, *, ctx):
     _picture, _mask, rows, cols, values = _region_samples(region, image)
@@ -1548,11 +1689,7 @@ def fit_plane_region_inlier(region, image, max_dist, *, ctx):
     dist = scalar(max_dist, "MaxDist")
     if dist < 0:
         raise ValueError("MaxDist 不能是負的")
-    alpha, beta, gamma = _fit_pixels(rows, cols, values)
-    keep = np.abs(values - (alpha * rows + beta * cols + gamma)) <= dist
-    if int(keep.sum()) < 3:
-        raise ValueError("留下的像素少於三個")
-    alpha, beta, gamma = _fit_pixels(rows[keep], cols[keep], values[keep])
+    alpha, beta, gamma = _robust_plane(rows, cols, values, dist)
     return Result([], [alpha, beta, gamma])
 
 
@@ -1564,7 +1701,7 @@ def fit_plane_region_inlier(region, image, max_dist, *, ctx):
     [P("Deviation", "均方根")],
     "區域裡離開平面的均方根",
     "只算區域裡的像素。均方根是差的平方平均再開根號。完美貼合是 0。",
-    "deviation_plane_region (Region, Image, 0, 1, 0, Deviation)",
+    "Vizion.deviation_plane_region (Region, Image, 0, 1, 0, Deviation)",
 )
 def deviation_plane_region(region, image, alpha, beta, gamma, *, ctx):
     _picture, _mask, rows, cols, values = _region_samples(region, image)
@@ -1581,7 +1718,7 @@ def deviation_plane_region(region, image, alpha, beta, gamma, *, ctx):
     [P("Mean", "平均差距")],
     "區域裡高出平面的平均",
     "每個像素先減去平面，再取平均。高出是正、低於是負。完美貼合是 0。",
-    "mean_plane_region (Region, Image, 0, 1, 0, Mean)",
+    "Vizion.mean_plane_region (Region, Image, 0, 1, 0, Mean)",
 )
 def mean_plane_region(region, image, alpha, beta, gamma, *, ctx):
     _picture, _mask, rows, cols, values = _region_samples(region, image)
@@ -1603,7 +1740,7 @@ def mean_plane_region(region, image, alpha, beta, gamma, *, ctx):
     [P("Volume", "灰階差的總和")],
     "把區域裡高出或低於平面的灰階加起來",
     "above 只加高出的部分，below 只加低於的部分，兩邊都記成正的。signed 高出是正、低於是負。背景不算。",
-    "volume_plane_region (Region, Image, 0, 0, 0, 'above', Volume)",
+    "Vizion.volume_plane_region (Region, Image, 0, 0, 0, 'above', Volume)",
 )
 def volume_plane_region(region, image, alpha, beta, gamma, mode, *, ctx):
     _picture, _mask, rows, cols, values = _region_samples(region, image)
@@ -1632,7 +1769,7 @@ def volume_plane_region(region, image, alpha, beta, gamma, mode, *, ctx):
     [P("Row", "列"), P("Column", "行"), P("Residual", "高出平面多少")],
     "找區域裡離平面最高或最低的像素",
     "只在區域裡找。一樣高時留列最小、再來行最小的那一點。",
-    "extreme_plane_region (Region, Image, 0, 0, 0, 'high', Row, Column, Residual)",
+    "Vizion.extreme_plane_region (Region, Image, 0, 0, 0, 'high', Row, Column, Residual)",
 )
 def extreme_plane_region(region, image, alpha, beta, gamma, mode, *, ctx):
     _picture, _mask, rows, cols, values = _region_samples(region, image)
@@ -1657,7 +1794,7 @@ def extreme_plane_region(region, image, alpha, beta, gamma, mode, *, ctx):
     [],
     "留下區域裡和平面相差在範圍內的像素",
     "比較的是灰階減去平面。下限和上限含在內，寫反了會自動對調。區域外面的像素不會留下。",
-    "band_plane_region (Region, Image, RegionBand, 0, 1, 0, -1, 1)",
+    "Vizion.band_plane_region (Region, Image, RegionBand, 0, 1, 0, -1, 1)",
 )
 def band_plane_region(region, image, alpha, beta, gamma, low, high, *, ctx):
     picture, mask, _rows, _cols, _values = _region_samples(region, image)
@@ -1683,7 +1820,7 @@ def band_plane_region(region, image, alpha, beta, gamma, low, high, *, ctx):
     [],
     "只在區域裡減掉指定平面",
     "區域裡變成灰階減去平面再加 Offset。區域外維持原來的亮度。彩色先轉成亮度。超出 0 到 255 會裁切。定義域不改。",
-    "sub_plane_region (Region, Image, ImageFlat, 0, 1, 0, 128)",
+    "Vizion.sub_plane_region (Region, Image, ImageFlat, 0, 1, 0, 128)",
 )
 def sub_plane_region(region, image, alpha, beta, gamma, offset, *, ctx):
     picture, _mask, rows, cols, values = _region_samples(region, image)
@@ -1742,7 +1879,7 @@ def _pick_region(area: Region, indexes: list[int]) -> Region:
     [P("Alpha", "每個物件的列係數"), P("Beta", "每個物件的行係數"), P("Gamma", "每個物件的常數")],
     "每個物件各自擬合平面",
     "不會把物件合併。結果依物件排列，一個物件也是 tuple。排不成平面時會指出是第幾個物件。彩色先轉成亮度。有定義域時再和定義域取交集。",
-    "fit_plane_objects (Region, Image, Alpha, Beta, Gamma)",
+    "Vizion.fit_plane_objects (Region, Image, Alpha, Beta, Gamma)",
 )
 def fit_plane_objects(region, image, *, ctx):
     _picture, _area, samples = _object_samples(region, image)
@@ -1763,7 +1900,7 @@ def fit_plane_objects(region, image, *, ctx):
     [P("Flatness", "每個物件離開自己平面的均方根")],
     "每個物件有多不平",
     "各自擬合平面後，算殘差的均方根。平的物件是 0。結果依物件排列。",
-    "flatness_objects (Region, Image, Flatness)",
+    "Vizion.flatness_objects (Region, Image, Flatness)",
 )
 def flatness_objects(region, image, *, ctx):
     _picture, _area, samples = _object_samples(region, image)
@@ -1783,7 +1920,7 @@ def flatness_objects(region, image, *, ctx):
     [P("Mean", "每個物件的平均差距")],
     "每個物件高出指定平面多少",
     "用同一組係數，不重新擬合。高出是正、低於是負。結果依物件排列。",
-    "mean_plane_objects (Region, Image, 0, 0, 0, Mean)",
+    "Vizion.mean_plane_objects (Region, Image, 0, 0, 0, Mean)",
 )
 def mean_plane_objects(region, image, alpha, beta, gamma, *, ctx):
     _picture, _area, samples = _object_samples(region, image)
@@ -1806,7 +1943,7 @@ def mean_plane_objects(region, image, alpha, beta, gamma, *, ctx):
     [P("Volume", "每個物件的灰階差總和")],
     "每個物件高出或低於平面的總和",
     "above 只加高出的部分，below 只加低於的部分，兩邊都記成正的。signed 高出是正、低於是負。結果依物件排列。",
-    "volume_plane_objects (Region, Image, 0, 0, 0, 'above', Volume)",
+    "Vizion.volume_plane_objects (Region, Image, 0, 0, 0, 'above', Volume)",
 )
 def volume_plane_objects(region, image, alpha, beta, gamma, mode, *, ctx):
     _picture, _area, samples = _object_samples(region, image)
@@ -1836,7 +1973,7 @@ def volume_plane_objects(region, image, alpha, beta, gamma, mode, *, ctx):
     [P("Row", "每個物件的列"), P("Column", "每個物件的行"), P("Residual", "高出平面多少")],
     "每個物件裡離平面最高或最低的像素",
     "一樣高時留該物件裡列最小、再來行最小的那一點。三個結果都依物件排列。",
-    "extreme_plane_objects (Region, Image, 0, 0, 0, 'high', Row, Column, Residual)",
+    "Vizion.extreme_plane_objects (Region, Image, 0, 0, 0, 'high', Row, Column, Residual)",
 )
 def extreme_plane_objects(region, image, alpha, beta, gamma, mode, *, ctx):
     _picture, _area, samples = _object_samples(region, image)
@@ -1859,7 +1996,7 @@ def extreme_plane_objects(region, image, alpha, beta, gamma, mode, *, ctx):
     [],
     "用每個物件自己的平坦度篩選",
     "各自擬合後，留下均方根在下限和上限之間的物件，兩端都含在內。寫反了會自動對調。沒有符合的就得到空區域。",
-    "select_flatness (Region, Image, Selected, 0, 1)",
+    "Vizion.select_flatness (Region, Image, Selected, 0, 1)",
 )
 def select_flatness(region, image, low, high, *, ctx):
     picture, area, samples = _object_samples(region, image)
@@ -1888,7 +2025,7 @@ def select_flatness(region, image, low, high, *, ctx):
     [],
     "用每個物件高出指定平面的平均來篩選",
     "用同一組係數。留下平均差距在下限和上限之間的物件，兩端都含在內。寫反了會自動對調。",
-    "select_plane_mean (Region, Image, Selected, 0, 0, 0, 0, 10)",
+    "Vizion.select_plane_mean (Region, Image, Selected, 0, 0, 0, 0, 10)",
 )
 def select_plane_mean(region, image, alpha, beta, gamma, low, high, *, ctx):
     _picture, area, samples = _object_samples(region, image)
@@ -1909,7 +2046,7 @@ def select_plane_mean(region, image, alpha, beta, gamma, low, high, *, ctx):
     [],
     "每個物件減掉自己的平面",
     "各自擬合，物件裡變成殘差再加 Offset。物件外維持原來的亮度。物件重疊時，後面的蓋掉前面的。彩色先轉成亮度。定義域不改。",
-    "level_objects (Region, Image, ImageFlat, 128)",
+    "Vizion.level_objects (Region, Image, ImageFlat, 128)",
 )
 def level_objects(region, image, offset, *, ctx):
     picture, _area, samples = _object_samples(region, image)
@@ -1977,7 +2114,7 @@ _QUAD = "灰階 = A×列² + B×行² + C×列×行 + D×列 + E×行 + F。彩�
     ],
     "用區域裡的像素擬合二次曲面",
     _QUAD + "至少要六個排得成曲面的像素。多個物件會合併。有定義域時再和定義域取交集。",
-    "fit_quad_region (Region, Image, A, B, C, D, E, F)",
+    "Vizion.fit_quad_region (Region, Image, A, B, C, D, E, F)",
 )
 def fit_quad_region(region, image, *, ctx):
     _picture, _mask, rows, cols, values = _region_samples(region, image)
@@ -2000,7 +2137,7 @@ def fit_quad_region(region, image, *, ctx):
     ],
     "每個物件各自擬合二次曲面",
     "不會把物件合併。結果依物件排列，一個物件也是 tuple。排不成曲面時會指出是第幾個物件。",
-    "fit_quad_objects (Region, Image, A, B, C, D, E, F)",
+    "Vizion.fit_quad_objects (Region, Image, A, B, C, D, E, F)",
 )
 def fit_quad_objects(region, image, *, ctx):
     _picture, _area, samples = _object_samples(region, image)
@@ -2019,7 +2156,7 @@ def fit_quad_objects(region, image, *, ctx):
     [P("Flatness", "每個物件離開自己二次曲面的均方根")],
     "每個物件離開二次曲面多少",
     "各自擬合二次曲面後，算殘差的均方根。抛物線和圓柱面可以是 0，即使它們對平面並不平。",
-    "flatness_quad_objects (Region, Image, Flatness)",
+    "Vizion.flatness_quad_objects (Region, Image, Flatness)",
 )
 def flatness_quad_objects(region, image, *, ctx):
     _picture, _area, samples = _object_samples(region, image)
@@ -2046,7 +2183,7 @@ def flatness_quad_objects(region, image, *, ctx):
     [P("Deviation", "均方根")],
     "區域裡離開指定二次曲面的均方根",
     "用你給的係數，不重新擬合。完美貼合是 0。",
-    "deviation_quad_region (Region, Image, 0, 1, 0, 0, 0, 0, Deviation)",
+    "Vizion.deviation_quad_region (Region, Image, 0, 1, 0, 0, 0, 0, Deviation)",
 )
 def deviation_quad_region(region, image, a, b, c, d, e, f, *, ctx):
     _picture, _mask, rows, cols, values = _region_samples(region, image)
@@ -2072,7 +2209,7 @@ def deviation_quad_region(region, image, a, b, c, d, e, f, *, ctx):
     [P("Gray", "曲面在該點的值")],
     "計算二次曲面上某一點的高度",
     _QUAD + "不裁切。Row 和 Column 可以是 tuple。一個點回傳一個數。",
-    "quad_gray (0, 1, 0, 0, -20, 100, 21, 12, Gray)",
+    "Vizion.quad_gray (0, 1, 0, 0, -20, 100, 21, 12, Gray)",
 )
 def quad_gray(a, b, c, d, e, f, row, column, *, ctx):
     rows, cols = _row_col(row, column)
@@ -2096,7 +2233,7 @@ def quad_gray(a, b, c, d, e, f, row, column, *, ctx):
     [],
     "減掉指定的二次曲面",
     "整張圖都減，不重新擬合。再加上 Offset。超出 0 到 255 會裁切。定義域不改。",
-    "sub_quad_image (Image, ImageFlat, 0, 1, 0, 0, 0, 0, 128)",
+    "Vizion.sub_quad_image (Image, ImageFlat, 0, 1, 0, 0, 0, 0, 128)",
 )
 def sub_quad_image(image, a, b, c, d, e, f, offset, *, ctx):
     picture, height = _height(image)
@@ -2114,7 +2251,7 @@ def sub_quad_image(image, a, b, c, d, e, f, offset, *, ctx):
     [],
     "每個物件減掉自己的二次曲面",
     "各自擬合。物件裡變成殘差再加 Offset，物件外維持原來的亮度。物件重疊時，後面的蓋掉前面的。定義域不改。",
-    "level_quad_objects (Region, Image, ImageFlat, 128)",
+    "Vizion.level_quad_objects (Region, Image, ImageFlat, 128)",
 )
 def level_quad_objects(region, image, offset, *, ctx):
     picture, _area, samples = _object_samples(region, image)
@@ -2134,7 +2271,7 @@ def level_quad_objects(region, image, offset, *, ctx):
     [],
     "用二次曲面的平坦度篩選物件",
     "各自擬合後，留下均方根在下限和上限之間的物件，兩端都含在內。寫反了會自動對調。沒有符合的就得到空區域。",
-    "select_quad_flatness (Region, Image, Selected, 0, 1)",
+    "Vizion.select_quad_flatness (Region, Image, Selected, 0, 1)",
 )
 def select_quad_flatness(region, image, low, high, *, ctx):
     _picture, area, samples = _object_samples(region, image)
@@ -2213,7 +2350,7 @@ def _diff_extreme(rows, cols, values, kind: str):
     [P("Mean", "平均差")],
     "區域裡兩張高度圖的平均差",
     "差是第一張減去參考圖，不裁切。高出是正、低於是負。完全相同是 0。彩色先轉成亮度。兩張圖都有定義域時先取交集。",
-    "mean_height_diff (Region, Image, Reference, Mean)",
+    "Vizion.mean_height_diff (Region, Image, Reference, Mean)",
 )
 def mean_height_diff(region, image, reference, *, ctx):
     _area, _mask, _rows, _cols, values, _delta = _diff_area(region, image, reference)
@@ -2228,7 +2365,7 @@ def mean_height_diff(region, image, reference, *, ctx):
     [P("Deviation", "差的均方根")],
     "區域裡兩張高度圖相差的均方根",
     "先算第一張減去參考圖，再取平方平均的根號。完全相同是 0。整片都高一個常數時，均方根就是那個常數。",
-    "deviation_height_diff (Region, Image, Reference, Deviation)",
+    "Vizion.deviation_height_diff (Region, Image, Reference, Deviation)",
 )
 def deviation_height_diff(region, image, reference, *, ctx):
     _area, _mask, _rows, _cols, values, _delta = _diff_area(region, image, reference)
@@ -2243,7 +2380,7 @@ def deviation_height_diff(region, image, reference, *, ctx):
     [P("Volume", "差的總和")],
     "把區域裡高出或低於參考圖的差加起來",
     "above 只加高出的部分，below 只加低於的部分，兩邊都記成正的。signed 高出是正、低於是負。",
-    "volume_height_diff (Region, Image, Reference, 'above', Volume)",
+    "Vizion.volume_height_diff (Region, Image, Reference, 'above', Volume)",
 )
 def volume_height_diff(region, image, reference, mode, *, ctx):
     _area, _mask, _rows, _cols, values, _delta = _diff_area(region, image, reference)
@@ -2259,7 +2396,7 @@ def volume_height_diff(region, image, reference, mode, *, ctx):
     [P("Row", "列"), P("Column", "行"), P("Diff", "該點的差")],
     "找區域裡和參考圖相差最大或最小的像素",
     "差是第一張減去參考圖。一樣大時留列最小、再來行最小的那一點。",
-    "extreme_height_diff (Region, Image, Reference, 'high', Row, Column, Diff)",
+    "Vizion.extreme_height_diff (Region, Image, Reference, 'high', Row, Column, Diff)",
 )
 def extreme_height_diff(region, image, reference, mode, *, ctx):
     _area, _mask, rows, cols, values, _delta = _diff_area(region, image, reference)
@@ -2276,7 +2413,7 @@ def extreme_height_diff(region, image, reference, mode, *, ctx):
     [P("Mean", "每個物件的平均差")],
     "每個物件和參考圖的平均差",
     "不會把物件合併。差是第一張減去參考圖。結果依物件排列，一個物件也是 tuple。",
-    "mean_height_diff_objects (Region, Image, Reference, Mean)",
+    "Vizion.mean_height_diff_objects (Region, Image, Reference, Mean)",
 )
 def mean_height_diff_objects(region, image, reference, *, ctx):
     _area, samples = _diff_objects(region, image, reference)
@@ -2291,7 +2428,7 @@ def mean_height_diff_objects(region, image, reference, *, ctx):
     [P("Row", "每個物件的列"), P("Column", "每個物件的行"), P("Diff", "每個物件的差")],
     "每個物件裡和參考圖相差最大或最小的像素",
     "一樣大時留該物件裡列最小、再來行最小的那一點。三個結果都依物件排列。",
-    "extreme_height_diff_objects (Region, Image, Reference, 'high', Row, Column, Diff)",
+    "Vizion.extreme_height_diff_objects (Region, Image, Reference, 'high', Row, Column, Diff)",
 )
 def extreme_height_diff_objects(region, image, reference, mode, *, ctx):
     _area, samples = _diff_objects(region, image, reference)
@@ -2313,7 +2450,7 @@ def extreme_height_diff_objects(region, image, reference, mode, *, ctx):
     [],
     "用和參考圖的平均差篩選物件",
     "留下平均差在下限和上限之間的物件，兩端都含在內。寫反了會自動對調。沒有符合的就得到空區域。",
-    "select_height_diff (Region, Image, Reference, Selected, -1, 1)",
+    "Vizion.select_height_diff (Region, Image, Reference, Selected, -1, 1)",
 )
 def select_height_diff(region, image, reference, low, high, *, ctx):
     area, samples = _diff_objects(region, image, reference)
@@ -2333,7 +2470,7 @@ def select_height_diff(region, image, reference, low, high, *, ctx):
     [],
     "留下和參考圖相差在範圍內的像素",
     "差是第一張減去參考圖。下限和上限含在內，寫反了會自動對調。區域外面的像素不會留下。",
-    "band_height_diff (Region, Image, Reference, RegionBand, -1, 1)",
+    "Vizion.band_height_diff (Region, Image, Reference, RegionBand, -1, 1)",
 )
 def band_height_diff(region, image, reference, low, high, *, ctx):
     picture, delta, domain = _height_delta(image, reference)
@@ -2409,7 +2546,7 @@ def _rough_objects(region, image, width, height):
     [],
     "減掉局部平均",
     "每個像素減去同尺寸遮罩的平均，再加 128。128 代表和周圍一樣高。高於周圍比較亮，低於周圍比較暗。邊緣用反射邊界。彩色先轉成亮度。定義域不改。",
-    "sub_local_mean (Image, ImageFlat, 3, 3)",
+    "Vizion.sub_local_mean (Image, ImageFlat, 3, 3)",
 )
 def sub_local_mean(image, width, height, *, ctx):
     picture, residual = _local_residual(image, width, height)
@@ -2428,7 +2565,7 @@ def sub_local_mean(image, width, height, *, ctx):
     [P("Ra", "平均絕對偏差")],
     "區域裡的平均粗糙度",
     "先減去局部平均，再取絕對值的平均。平坦是 0。遮罩要是正的奇數。",
-    "roughness_ra (Region, Image, 3, 3, Ra)",
+    "Vizion.roughness_ra (Region, Image, 3, 3, Ra)",
 )
 def roughness_ra(region, image, width, height, *, ctx):
     _picture, _area, _mask, _rows, _cols, values, _residual = _rough_area(region, image, width, height)
@@ -2446,7 +2583,7 @@ def roughness_ra(region, image, width, height, *, ctx):
     [P("Rq", "均方根粗糙度")],
     "區域裡的均方根粗糙度",
     "先減去局部平均，再取平方平均的根號。平坦是 0。",
-    "roughness_rq (Region, Image, 3, 3, Rq)",
+    "Vizion.roughness_rq (Region, Image, 3, 3, Rq)",
 )
 def roughness_rq(region, image, width, height, *, ctx):
     _picture, _area, _mask, _rows, _cols, values, _residual = _rough_area(region, image, width, height)
@@ -2464,7 +2601,7 @@ def roughness_rq(region, image, width, height, *, ctx):
     [P("Rp", "最高過量"), P("Rv", "最低缺口"), P("Rz", "最高減最低")],
     "區域裡的峰谷粗糙度",
     "Rp 是比局部平均高出最多的值，Rv 是低於最多的值，通常是負的。Rz 是 Rp 減 Rv。平坦時三個都是 0。",
-    "roughness_rz (Region, Image, 3, 3, Rp, Rv, Rz)",
+    "Vizion.roughness_rz (Region, Image, 3, 3, Rp, Rv, Rz)",
 )
 def roughness_rz(region, image, width, height, *, ctx):
     _picture, _area, _mask, _rows, _cols, values, _residual = _rough_area(region, image, width, height)
@@ -2484,7 +2621,7 @@ def roughness_rz(region, image, width, height, *, ctx):
     [P("Ra", "每個物件的平均絕對偏差")],
     "每個物件的平均粗糙度",
     "不會把物件合併。平坦的物件是 0。結果依物件排列，一個物件也是 tuple。",
-    "roughness_ra_objects (Region, Image, 3, 3, Ra)",
+    "Vizion.roughness_ra_objects (Region, Image, 3, 3, Ra)",
 )
 def roughness_ra_objects(region, image, width, height, *, ctx):
     _area, samples = _rough_objects(region, image, width, height)
@@ -2504,7 +2641,7 @@ def roughness_ra_objects(region, image, width, height, *, ctx):
     [],
     "用平均粗糙度篩選物件",
     "留下 Ra 在下限和上限之間的物件，兩端都含在內。寫反了會自動對調。沒有符合的就得到空區域。",
-    "select_roughness (Region, Image, Selected, 1, 10, 3, 3)",
+    "Vizion.select_roughness (Region, Image, Selected, 1, 10, 3, 3)",
 )
 def select_roughness(region, image, low, high, width, height, *, ctx):
     area, samples = _rough_objects(region, image, width, height)
@@ -2528,7 +2665,7 @@ def select_roughness(region, image, low, high, width, height, *, ctx):
     [P("Row", "列"), P("Column", "行"), P("Residual", "比局部平均高多少")],
     "找區域裡比局部平均最高或最低的像素",
     "一樣高時留列最小、再來行最小的那一點。",
-    "extreme_roughness (Region, Image, 3, 3, 'high', Row, Column, Residual)",
+    "Vizion.extreme_roughness (Region, Image, 3, 3, 'high', Row, Column, Residual)",
 )
 def extreme_roughness(region, image, width, height, mode, *, ctx):
     _picture, _area, _mask, rows, cols, values, _residual = _rough_area(region, image, width, height)
@@ -2550,7 +2687,7 @@ def extreme_roughness(region, image, width, height, mode, *, ctx):
     [],
     "留下和局部平均相差在範圍內的像素",
     "比較的是灰階減去局部平均。下限和上限含在內，寫反了會自動對調。區域外面的像素不會留下。",
-    "band_roughness (Region, Image, RegionBand, 20, 30, 3, 3)",
+    "Vizion.band_roughness (Region, Image, RegionBand, 20, 30, 3, 3)",
 )
 def band_roughness(region, image, low, high, width, height, *, ctx):
     picture, residual = _local_residual(image, width, height)
@@ -2620,7 +2757,7 @@ def _median_objects(region, image, size):
     [],
     "減掉局部中值",
     "每個像素減去正方形遮罩的中值，再加 128。128 代表和周圍的中值一樣。3 是 3×3，不是半徑。單點凸起不會抹到旁邊。邊緣用複製邊界。彩色先轉成亮度。定義域不改。",
-    "sub_local_median (Image, ImageFlat, 3)",
+    "Vizion.sub_local_median (Image, ImageFlat, 3)",
 )
 def sub_local_median(image, size, *, ctx):
     picture, residual = _median_residual(image, size)
@@ -2636,7 +2773,7 @@ def sub_local_median(image, size, *, ctx):
     [P("Ra", "平均絕對偏差")],
     "區域裡相對中值的平均粗糙度",
     "先減去局部中值，再取絕對值的平均。平坦是 0。邊長要是正的奇數，3 是 3×3。",
-    "roughness_median_ra (Region, Image, 3, Ra)",
+    "Vizion.roughness_median_ra (Region, Image, 3, Ra)",
 )
 def roughness_median_ra(region, image, size, *, ctx):
     _picture, _area, _rows, _cols, values, _residual = _median_area(region, image, size)
@@ -2651,7 +2788,7 @@ def roughness_median_ra(region, image, size, *, ctx):
     [P("Rq", "均方根粗糙度")],
     "區域裡相對中值的均方根粗糙度",
     "先減去局部中值，再取平方平均的根號。平坦是 0。",
-    "roughness_median_rq (Region, Image, 3, Rq)",
+    "Vizion.roughness_median_rq (Region, Image, 3, Rq)",
 )
 def roughness_median_rq(region, image, size, *, ctx):
     _picture, _area, _rows, _cols, values, _residual = _median_area(region, image, size)
@@ -2666,7 +2803,7 @@ def roughness_median_rq(region, image, size, *, ctx):
     [P("Rp", "最高過量"), P("Rv", "最低缺口"), P("Rz", "最高減最低")],
     "區域裡相對中值的峰谷粗糙度",
     "Rp 是比局部中值高出最多的值，Rv 是低於最多的值。Rz 是 Rp 減 Rv。平坦時三個都是 0。",
-    "roughness_median_rz (Region, Image, 3, Rp, Rv, Rz)",
+    "Vizion.roughness_median_rz (Region, Image, 3, Rp, Rv, Rz)",
 )
 def roughness_median_rz(region, image, size, *, ctx):
     _picture, _area, _rows, _cols, values, _residual = _median_area(region, image, size)
@@ -2683,7 +2820,7 @@ def roughness_median_rz(region, image, size, *, ctx):
     [P("Ra", "每個物件的平均絕對偏差")],
     "每個物件相對中值的平均粗糙度",
     "不會把物件合併。平坦的物件是 0。結果依物件排列，一個物件也是 tuple。",
-    "roughness_median_ra_objects (Region, Image, 3, Ra)",
+    "Vizion.roughness_median_ra_objects (Region, Image, 3, Ra)",
 )
 def roughness_median_ra_objects(region, image, size, *, ctx):
     _area, samples = _median_objects(region, image, size)
@@ -2702,7 +2839,7 @@ def roughness_median_ra_objects(region, image, size, *, ctx):
     [],
     "用相對中值的粗糙度篩選物件",
     "留下 Ra 在下限和上限之間的物件，兩端都含在內。寫反了會自動對調。沒有符合的就得到空區域。",
-    "select_median_roughness (Region, Image, Selected, 1, 10, 3)",
+    "Vizion.select_median_roughness (Region, Image, Selected, 1, 10, 3)",
 )
 def select_median_roughness(region, image, low, high, size, *, ctx):
     area, samples = _median_objects(region, image, size)
@@ -2722,7 +2859,7 @@ def select_median_roughness(region, image, low, high, size, *, ctx):
     [P("Row", "列"), P("Column", "行"), P("Residual", "比局部中值高多少")],
     "找區域裡比局部中值最高或最低的像素",
     "一樣高時留列最小、再來行最小的那一點。",
-    "extreme_median_roughness (Region, Image, 3, 'high', Row, Column, Residual)",
+    "Vizion.extreme_median_roughness (Region, Image, 3, 'high', Row, Column, Residual)",
 )
 def extreme_median_roughness(region, image, size, mode, *, ctx):
     _picture, _area, rows, cols, values, _residual = _median_area(region, image, size)
@@ -2743,7 +2880,7 @@ def extreme_median_roughness(region, image, size, mode, *, ctx):
     [],
     "留下和局部中值相差在範圍內的像素",
     "比較的是灰階減去局部中值。下限和上限含在內，寫反了會自動對調。區域外面的像素不會留下。",
-    "band_median_roughness (Region, Image, RegionBand, 20, 40, 3)",
+    "Vizion.band_median_roughness (Region, Image, RegionBand, 20, 40, 3)",
 )
 def band_median_roughness(region, image, low, high, size, *, ctx):
     picture, residual = _median_residual(image, size)
@@ -2817,7 +2954,7 @@ def _spot_objects(region, image, size, mode):
     [],
     "抓比遮罩小的亮點",
     "原圖減去正方形開運算。比遮罩小的亮點會留下，大塊平坦的地方是 0。3 是 3×3。彩色先轉成亮度。定義域不改。",
-    "gray_spot_white (Image, ImageWhite, 3)",
+    "Vizion.gray_spot_white (Image, ImageWhite, 3)",
 )
 def gray_spot_white(image, size, *, ctx):
     picture, _kind, hat = _spot_hat(image, size, "white")
@@ -2832,7 +2969,7 @@ def gray_spot_white(image, size, *, ctx):
     [],
     "抓比遮罩小的暗點",
     "正方形閉運算減去原圖。比遮罩小的暗點會留下，大塊平坦的地方是 0。3 是 3×3。彩色先轉成亮度。定義域不改。",
-    "gray_spot_black (Image, ImageBlack, 3)",
+    "Vizion.gray_spot_black (Image, ImageBlack, 3)",
 )
 def gray_spot_black(image, size, *, ctx):
     picture, _kind, hat = _spot_hat(image, size, "black")
@@ -2850,7 +2987,7 @@ def gray_spot_black(image, size, *, ctx):
     [P("Volume", "亮點或暗點的灰階總和")],
     "區域裡小亮點或小暗點的總量",
     "white 加總比開運算更亮的部分，black 加總比閉運算更暗的部分。平坦是 0。",
-    "spot_volume (Region, Image, 'white', 3, Volume)",
+    "Vizion.spot_volume (Region, Image, 'white', 3, Volume)",
 )
 def spot_volume(region, image, mode, size, *, ctx):
     _picture, _area, _rows, _cols, values, _hat = _spot_area(region, image, size, mode)
@@ -2868,7 +3005,7 @@ def spot_volume(region, image, mode, size, *, ctx):
     [P("Mean", "平均強度")],
     "區域裡小亮點或小暗點的平均",
     "把頂帽或底帽的灰階在區域裡取平均。平坦是 0。",
-    "spot_mean (Region, Image, 'white', 3, Mean)",
+    "Vizion.spot_mean (Region, Image, 'white', 3, Mean)",
 )
 def spot_mean(region, image, mode, size, *, ctx):
     _picture, _area, _rows, _cols, values, _hat = _spot_area(region, image, size, mode)
@@ -2886,7 +3023,7 @@ def spot_mean(region, image, mode, size, *, ctx):
     [P("Volume", "每個物件的灰階總和")],
     "每個物件的小亮點或小暗點總量",
     "不會把物件合併。平坦的物件是 0。結果依物件排列，一個物件也是 tuple。",
-    "spot_volume_objects (Region, Image, 'white', 3, Volume)",
+    "Vizion.spot_volume_objects (Region, Image, 'white', 3, Volume)",
 )
 def spot_volume_objects(region, image, mode, size, *, ctx):
     _area, samples = _spot_objects(region, image, size, mode)
@@ -2906,7 +3043,7 @@ def spot_volume_objects(region, image, mode, size, *, ctx):
     [],
     "用小亮點或小暗點的總量篩選物件",
     "留下總量在下限和上限之間的物件，兩端都含在內。寫反了會自動對調。沒有符合的就得到空區域。",
-    "select_spot (Region, Image, Selected, 1, 100, 'white', 3)",
+    "Vizion.select_spot (Region, Image, Selected, 1, 100, 'white', 3)",
 )
 def select_spot(region, image, low, high, mode, size, *, ctx):
     area, samples = _spot_objects(region, image, size, mode)
@@ -2926,7 +3063,7 @@ def select_spot(region, image, low, high, mode, size, *, ctx):
     [P("Row", "列"), P("Column", "行"), P("Height", "這一點比周圍突出多少")],
     "找區域裡最亮的小亮點或最暗的小暗點",
     "white 找頂帽最高的像素，black 找底帽最高的像素。一樣高時留列最小、再來行最小的那一點。",
-    "extreme_spot (Region, Image, 'white', 3, Row, Column, Height)",
+    "Vizion.extreme_spot (Region, Image, 'white', 3, Row, Column, Height)",
 )
 def extreme_spot(region, image, mode, size, *, ctx):
     _picture, _area, rows, cols, values, _hat = _spot_area(region, image, size, mode)
@@ -2947,7 +3084,7 @@ def extreme_spot(region, image, mode, size, *, ctx):
     [],
     "留下小亮點或小暗點落在範圍內的像素",
     "white 看頂帽，black 看底帽。下限和上限含在內，寫反了會自動對調。區域外面的像素不會留下。",
-    "band_spot (Region, Image, RegionBand, 20, 40, 'white', 3)",
+    "Vizion.band_spot (Region, Image, RegionBand, 20, 40, 'white', 3)",
 )
 def band_spot(region, image, low, high, mode, size, *, ctx):
     picture, _kind, hat = _spot_hat(image, size, mode)
@@ -3023,7 +3160,7 @@ def _gain_values(region, picture, delta: np.ndarray):
     [],
     "正方形開運算",
     "比遮罩細的亮部會消失，不會再沿原圖長回來。比遮罩大的平坦方塊會留下來。3 是 3×3。彩色先轉成亮度。定義域不改。",
-    "gray_opening_rect (Image, ImageOpening, 3)",
+    "Vizion.gray_opening_rect (Image, ImageOpening, 3)",
 )
 def gray_opening_rect(image, size, *, ctx):
     picture, opened, _restored = _opening_pair(image, size)
@@ -3038,7 +3175,7 @@ def gray_opening_rect(image, size, *, ctx):
     [],
     "正方形閉運算",
     "比遮罩細的暗部會被填上，不會再沿原圖長回來。比遮罩大的平坦暗塊會留下來。3 是 3×3。彩色先轉成亮度。定義域不改。",
-    "gray_closing_rect (Image, ImageClosing, 3)",
+    "Vizion.gray_closing_rect (Image, ImageClosing, 3)",
 )
 def gray_closing_rect(image, size, *, ctx):
     picture, closed, _restored = _closing_pair(image, size)
@@ -3053,7 +3190,7 @@ def gray_closing_rect(image, size, *, ctx):
     [],
     "開運算後沿著原圖長回亮部",
     "先用正方形侵蝕，比遮罩細的亮部會消失。再沿著原圖膨脹：還連著留下的大塊的細亮部會長回來。單獨的小點沒有起點，不會回來。彩色先轉成亮度。定義域不改。",
-    "gray_opening_reconstruct (Image, ImageRestored, 3)",
+    "Vizion.gray_opening_reconstruct (Image, ImageRestored, 3)",
 )
 def gray_opening_reconstruct(image, size, *, ctx):
     picture, _opened, restored = _opening_pair(image, size)
@@ -3068,7 +3205,7 @@ def gray_opening_reconstruct(image, size, *, ctx):
     [],
     "閉運算後沿著原圖長回暗部",
     "先用正方形膨脹，比遮罩細的暗部會被填上。再沿著原圖侵蝕：還連著留下的大塊暗區的細暗部會長回來。單獨的小洞沒有起點，會被填上。彩色先轉成亮度。定義域不改。",
-    "gray_closing_reconstruct (Image, ImageRestored, 3)",
+    "Vizion.gray_closing_reconstruct (Image, ImageRestored, 3)",
 )
 def gray_closing_reconstruct(image, size, *, ctx):
     picture, _closed, restored = _closing_pair(image, size)
@@ -3083,7 +3220,7 @@ def gray_closing_reconstruct(image, size, *, ctx):
     [],
     "留下重建比開運算更亮的像素",
     "這些像素被正方形開運算削掉，但因為連著比較大的亮塊，重建時又長了回來。",
-    "region_opening_gain (Image, RegionGain, 3)",
+    "Vizion.region_opening_gain (Image, RegionGain, 3)",
 )
 def region_opening_gain(image, size, *, ctx):
     picture, opened, restored = _opening_pair(image, size)
@@ -3101,7 +3238,7 @@ def region_opening_gain(image, size, *, ctx):
     [],
     "留下閉運算比重建更亮的像素",
     "這些像素被正方形閉運算填亮，但因為連著比較大的暗塊，重建時又回到原來的暗色。",
-    "region_closing_gain (Image, RegionGain, 3)",
+    "Vizion.region_closing_gain (Image, RegionGain, 3)",
 )
 def region_closing_gain(image, size, *, ctx):
     picture, closed, restored = _closing_pair(image, size)
@@ -3119,7 +3256,7 @@ def region_closing_gain(image, size, *, ctx):
     [P("Volume", "長回來的灰階總和")],
     "區域裡重建比開運算多出來的灰階",
     "每個像素是重建減去開運算，再加總。沒有長回來的部分是 0。",
-    "volume_opening_gain (Region, Image, 3, Volume)",
+    "Vizion.volume_opening_gain (Region, Image, 3, Volume)",
 )
 def volume_opening_gain(region, image, size, *, ctx):
     picture, opened, restored = _opening_pair(image, size)
@@ -3135,7 +3272,7 @@ def volume_opening_gain(region, image, size, *, ctx):
     [P("Volume", "被填上的灰階總和")],
     "區域裡閉運算比重建多填上的灰階",
     "每個像素是閉運算減去重建，再加總。細縫若連著大塊暗區，這個差就是被填上的量。",
-    "volume_closing_gain (Region, Image, 3, Volume)",
+    "Vizion.volume_closing_gain (Region, Image, 3, Volume)",
 )
 def volume_closing_gain(region, image, size, *, ctx):
     picture, closed, restored = _closing_pair(image, size)

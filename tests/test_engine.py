@@ -35,20 +35,20 @@ def test_hdevelop_batch1():
     source = """
 T := [10, 20, 30]
 A := T[1]
-tuple_select (T, 0, B)
-tuple_select (T, 1, C)
-tuple_gen_sequence (1, 5, 2, Seq)
-tuple_add (Seq, 10, Plus)
-tuple_sub (Plus, 1, Minus)
-tuple_less_elem (Seq, 4, Less)
-tuple_equal (Seq, [1, 3, 5], Same)
-tuple_find ([4, 8, 4], 4, Found)
-tuple_find ([1, 2], 9, Missing)
-tuple_sort ([3, 1, 2], Sorted)
-tuple_string (12.5, '.1f', Text)
-tuple_regexp_match ('ab12', '[0-9]+', Digits)
-tuple_substr ('HALCON', 0, 2, Head)
-tuple_gen_const (3, 7, Const)
+Vizion.tuple_select (T, 0, B)
+Vizion.tuple_select (T, 1, C)
+Vizion.tuple_gen_sequence (1, 5, 2, Seq)
+Vizion.tuple_add (Seq, 10, Plus)
+Vizion.tuple_sub (Plus, 1, Minus)
+Vizion.tuple_less_elem (Seq, 4, Less)
+Vizion.tuple_equal (Seq, [1, 3, 5], Same)
+Vizion.tuple_find ([4, 8, 4], 4, Found)
+Vizion.tuple_find ([1, 2], 9, Missing)
+Vizion.tuple_sort ([3, 1, 2], Sorted)
+Vizion.tuple_string (12.5, '.1f', Text)
+Vizion.tuple_regexp_match ('ab12', '[0-9]+', Digits)
+Vizion.tuple_substr ('HALCON', 0, 2, Head)
+Vizion.tuple_gen_const (3, 7, Const)
 """
     session = run_source(source)
     assert session.error is None, session.error
@@ -69,7 +69,7 @@ tuple_gen_const (3, 7, Const)
     assert session.vars["Const"] == [7, 7, 7]
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch1.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch1.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["First"] == 11
     gray = sample.vars["Gray"].gray()
@@ -107,7 +107,7 @@ tuple_gen_const (3, 7, Const)
     contour = XLD(20, 20, [[[0, 0], [10, 0], [10, 30], [0, 30]]])
     clipped = REGISTRY["clip_contours_xld"].fn(contour, 0, 0, 20, 20, ctx=None).iconic[0]
     assert clipped.contours and all(point[1] <= 20 for line in clipped.contours for point in line)
-    rounded = run_source("tuple_round ([-1.5, 1.5], Round)\ntuple_split ('a,b', ',', Parts)\n")
+    rounded = run_source("Vizion.tuple_round ([-1.5, 1.5], Round)\ntuple_split ('a,b', ',', Parts)\n")
     assert rounded.error is None, rounded.error
     assert rounded.vars["Round"] == [-2, 2]
     assert rounded.vars["Parts"] == ["a", "b"]
@@ -135,7 +135,7 @@ def test_hdevelop_batch2():
     assert "'none'" in REGISTRY["create_scaled_shape_model"].control_in[7].choices
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch2.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch2.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     columns = [float(item) for item in sample.vars["ColEdge"]]
     assert any(abs(item - 40) < 4 for item in columns), columns
@@ -210,7 +210,7 @@ def test_hdevelop_batch3():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch3.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch3.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(_first(sample.vars["Eye00"])) - 1) < 1e-6
     assert abs(float(_first(sample.vars["Row"])) - 0) < 1e-6
@@ -250,7 +250,7 @@ def test_hdevelop_batch4():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch4.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch4.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     text = sample.vars["Text39"]
     text = text[0] if isinstance(text, list) else text
@@ -263,7 +263,7 @@ def test_hdevelop_batch4():
     assert float(sample.vars["ClassId"]) == 1
     assert float(sample.vars["Score"]) > 0.5
 
-    exhausted = run_source("open_framegrabber ('File', 'samples/code39.png', Acq)\ngrab_image (Image, Acq)\ngrab_image (Image2, Acq)\n")
+    exhausted = run_source("Vizion.open_framegrabber ('File', 'samples/code39.png', Acq)\ngrab_image (Image, Acq)\ngrab_image (Image2, Acq)\n")
     assert exhausted.error and "沒有下一張" in exhausted.error
 
     folder = ROOT / "workspace" / "batch4_frames"
@@ -271,8 +271,8 @@ def test_hdevelop_batch4():
     cv2.imwrite(str(folder / "a.png"), np.full((20, 20), 10, np.uint8))
     cv2.imwrite(str(folder / "b.png"), np.full((20, 20), 200, np.uint8))
     frames = run_source(
-        "open_framegrabber ('File', 'workspace/batch4_frames', 'gray', 0, 0, Acq)\n"
-        "grab_image (A, Acq)\ngrab_image (B, Acq)\nclose_framegrabber (Acq)\n"
+        "Vizion.open_framegrabber ('File', 'workspace/batch4_frames', 'gray', 0, 0, Acq)\n"
+        "Vizion.grab_image (A, Acq)\ngrab_image (B, Acq)\nclose_framegrabber (Acq)\n"
     )
     assert frames.error is None, frames.error
     assert int(frames.vars["A"].gray().mean()) == 10
@@ -352,7 +352,7 @@ def test_hdevelop_batch5():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch5.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch5.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     eroded = sample.vars["Eroded"].gray()
     assert int(eroded[60, 80]) == 200
@@ -389,18 +389,18 @@ def test_hdevelop_batch5():
     assert np.array_equal(rectified.data, expected)
 
     ordered = run_source(
-        "gen_image_const (Image, 'byte', 100, 80)\n"
-        "gen_rectangle1 (Top, 5, 8, 15, 18)\n"
-        "gen_rectangle1 (Bottom, 40, 60, 55, 75)\n"
-        "union2 (Top, Bottom, Both)\n"
-        "connection (Both, Parts)\n"
-        "sort_region (Parts, Sorted, 'character', 'true', 'row')\n"
-        "area_center (Sorted, Area, Row, Column)\n"
-        "shape_trans (Top, Rect, 'rectangle1')\n"
-        "area_center (Rect, Area2, Row2, Column2)\n"
-        "clip_region (Bottom, Clipped, 40, 60, 44, 64)\n"
-        "area_center (Clipped, Area3, Row3, Column3)\n"
-        "gen_rectangle2 (Tilt, 40, 50, 0, 10, 4)\n"
+        "Vizion.gen_image_const (Image, 'byte', 100, 80)\n"
+        "Vizion.gen_rectangle1 (Top, 5, 8, 15, 18)\n"
+        "Vizion.gen_rectangle1 (Bottom, 40, 60, 55, 75)\n"
+        "Vizion.union2 (Top, Bottom, Both)\n"
+        "Vizion.connection (Both, Parts)\n"
+        "Vizion.sort_region (Parts, Sorted, 'character', 'true', 'row')\n"
+        "Vizion.area_center (Sorted, Area, Row, Column)\n"
+        "Vizion.shape_trans (Top, Rect, 'rectangle1')\n"
+        "Vizion.area_center (Rect, Area2, Row2, Column2)\n"
+        "Vizion.clip_region (Bottom, Clipped, 40, 60, 44, 64)\n"
+        "Vizion.area_center (Clipped, Area3, Row3, Column3)\n"
+        "Vizion.gen_rectangle2 (Tilt, 40, 50, 0, 10, 4)\n"
     )
     assert ordered.error is None, ordered.error
     assert float(ordered.vars["Row"][0]) < float(ordered.vars["Row"][1])
@@ -417,7 +417,7 @@ def test_hdevelop_batch6():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch6.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch6.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Width"] == 80 and sample.vars["Height"] == 60
     assert float(sample.vars["Gray"]) == 180
@@ -452,33 +452,33 @@ def test_hdevelop_batch6():
     assert 20 < float(low) < 30 and 70 < float(high) < 80
 
     picked = run_source(
-        "gen_image_const (Image, 'byte', 80, 40)\n"
-        "gen_rectangle1 (Bright, 0, 0, 11, 11)\n"
-        "gen_rectangle1 (Dark, 2, 30, 12, 40)\n"
-        "paint_region (Bright, Image, Mid, 200, 'fill')\n"
-        "paint_region (Dark, Mid, Marked, 20, 'fill')\n"
-        "union2 (Bright, Dark, Both)\n"
-        "connection (Both, Parts)\n"
-        "select_gray (Parts, Marked, Kept, 'mean', 'and', 100, 255)\n"
-        "count_obj (Kept, KeptCount)\n"
-        "partition_rectangle (Bright, Tiles, 6, 6)\n"
-        "count_obj (Tiles, TileCount)\n"
-        "gen_rectangle1 (Wall, 0, 18, 20, 22)\n"
-        "expand_region (Dark, Wall, Grown, 3, 'image')\n"
-        "area_center (Dark, Area0, Row0, Column0)\n"
-        "area_center (Grown, Area1, Row1, Column1)\n"
-        "reduce_domain (Marked, Bright, Reduced)\n"
-        "crop_domain (Reduced, Part)\n"
-        "get_image_size (Part, PartWidth, PartHeight)\n"
-        "full_domain (Reduced, Whole)\n"
-        "get_domain (Whole, Domain)\n"
-        "area_center (Domain, DomainArea, DomainRow, DomainColumn)\n"
-        "gen_region_polygon (Poly, [5, 5, 20], [5, 25, 15])\n"
-        "area_center (Poly, PolyArea, PolyRow, PolyColumn)\n"
-        "change_domain (Marked, Dark, Changed)\n"
-        "reduce_domain (Changed, Bright, Overlap)\n"
-        "get_domain (Overlap, OverlapDomain)\n"
-        "count_obj (OverlapDomain, OverlapCount)\n"
+        "Vizion.gen_image_const (Image, 'byte', 80, 40)\n"
+        "Vizion.gen_rectangle1 (Bright, 0, 0, 11, 11)\n"
+        "Vizion.gen_rectangle1 (Dark, 2, 30, 12, 40)\n"
+        "Vizion.paint_region (Bright, Image, Mid, 200, 'fill')\n"
+        "Vizion.paint_region (Dark, Mid, Marked, 20, 'fill')\n"
+        "Vizion.union2 (Bright, Dark, Both)\n"
+        "Vizion.connection (Both, Parts)\n"
+        "Vizion.select_gray (Parts, Marked, Kept, 'mean', 'and', 100, 255)\n"
+        "Vizion.count_obj (Kept, KeptCount)\n"
+        "Vizion.partition_rectangle (Bright, Tiles, 6, 6)\n"
+        "Vizion.count_obj (Tiles, TileCount)\n"
+        "Vizion.gen_rectangle1 (Wall, 0, 18, 20, 22)\n"
+        "Vizion.expand_region (Dark, Wall, Grown, 3, 'image')\n"
+        "Vizion.area_center (Dark, Area0, Row0, Column0)\n"
+        "Vizion.area_center (Grown, Area1, Row1, Column1)\n"
+        "Vizion.reduce_domain (Marked, Bright, Reduced)\n"
+        "Vizion.crop_domain (Reduced, Part)\n"
+        "Vizion.get_image_size (Part, PartWidth, PartHeight)\n"
+        "Vizion.full_domain (Reduced, Whole)\n"
+        "Vizion.get_domain (Whole, Domain)\n"
+        "Vizion.area_center (Domain, DomainArea, DomainRow, DomainColumn)\n"
+        "Vizion.gen_region_polygon (Poly, [5, 5, 20], [5, 25, 15])\n"
+        "Vizion.area_center (Poly, PolyArea, PolyRow, PolyColumn)\n"
+        "Vizion.change_domain (Marked, Dark, Changed)\n"
+        "Vizion.reduce_domain (Changed, Bright, Overlap)\n"
+        "Vizion.get_domain (Overlap, OverlapDomain)\n"
+        "Vizion.count_obj (OverlapDomain, OverlapCount)\n"
     )
     assert picked.error is None, picked.error
     assert picked.vars["KeptCount"] == 1
@@ -496,7 +496,7 @@ def test_hdevelop_batch7():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch7.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch7.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Gray"] == 20 and sample.vars["CopiedGray"] == 20
     assert sample.vars["BothCount"] == 2 and sample.vars["FirstCount"] == 1
@@ -527,7 +527,7 @@ def test_hdevelop_batch8():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch8.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch8.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert int(sample.vars["Top"]) == 255
     assert 128 < int(sample.vars["Deriv"]) < 160
@@ -570,7 +570,7 @@ def test_hdevelop_batch9():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch9.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch9.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert 10 <= float(sample.vars["DistMin"]) <= 14
     assert float(sample.vars["DistMax"]) > 30
@@ -609,7 +609,7 @@ def test_hdevelop_batch10():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch10.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch10.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert float(sample.vars["Longest"]) > 20
     assert sample.vars["DarkInside"] == 1
@@ -641,7 +641,7 @@ def test_hdevelop_batch11():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch11.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch11.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["RunCount"] == 3
     assert sample.vars["RunTop"] == 10 and sample.vars["RunBot"] == 12
@@ -680,7 +680,7 @@ def test_hdevelop_batch12():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch12.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch12.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert int(_first(sample.vars["InR1"])) == 10 and int(_first(sample.vars["InC1"])) == 10
     assert int(_first(sample.vars["InR2"])) == 40 and int(_first(sample.vars["InC2"])) == 50
@@ -717,7 +717,7 @@ def test_hdevelop_batch13():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch13.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch13.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["DiffIn"] == 1 and sample.vars["DiffOut"] == 0 and sample.vars["DarkIn"] == 0
     assert sample.vars["DotIn"] == 1 and sample.vars["DotOut"] == 0
@@ -745,7 +745,7 @@ def test_hdevelop_batch14():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch14.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch14.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["EmptyCount"] == 0
     assert sample.vars["PickedCount"] == 1
@@ -770,7 +770,7 @@ def test_hdevelop_batch15():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch15.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch15.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["NearIn"] == 0
     assert sample.vars["NearOut"] == 10
@@ -802,7 +802,7 @@ def test_hdevelop_batch16():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch16.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch16.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["GoneCount"] == 0
     assert int(_first(sample.vars["WideArea"])) == 231
@@ -836,7 +836,7 @@ def test_hdevelop_batch17():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch17.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch17.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["RootGray"] == 9 and sample.vars["RootZero"] == 0
     assert sample.vars["LogMid"] == 128 and sample.vars["LogHigh"] == 255 and sample.vars["LogZero"] == 0
@@ -867,7 +867,7 @@ def test_hdevelop_batch18():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch18.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch18.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     gray = [float(item) for item in sample.vars["GrayVals"]]
     assert gray == [10, 19, 14.5]
@@ -889,7 +889,7 @@ def test_hdevelop_batch19():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch19.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch19.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["GammaGray"] == 64
     assert sample.vars["BinFlatGray"] == 100
@@ -916,7 +916,7 @@ def test_hdevelop_batch20():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch20.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch20.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["ExpAtZero"] == 0
     assert sample.vars["ExpAtMid"] == 15
@@ -946,7 +946,7 @@ def test_hdevelop_batch21():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch21.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch21.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["InDomain"] == 200 and sample.vars["OutDomain"] == 10
     assert sample.vars["FlatResp"] == 128 and sample.vars["InsideResp"] == 128
@@ -973,7 +973,7 @@ def test_hdevelop_batch22():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch22.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch22.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["AbsAtZero"] == 128 and sample.vars["AbsAtMid"] == 0 and sample.vars["AbsAtLow"] == 28
     assert sample.vars["RightDir"] == 128 and sample.vars["DownDir"] == 191
@@ -997,7 +997,7 @@ def test_hdevelop_batch23():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch23.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch23.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["PrewittEdge"] == 40 and sample.vars["PrewittFlat"] == 0
     assert sample.vars["KirschEdge"] == 40 and sample.vars["KirschFlat"] == 0
@@ -1020,7 +1020,7 @@ def test_hdevelop_batch24():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch24.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch24.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["FreiEdge"] == 49 and sample.vars["FreiFlat"] == 0
     assert sample.vars["RobinsonEdge"] == 160 and sample.vars["RobinsonFlat"] == 0
@@ -1048,7 +1048,7 @@ def test_hdevelop_batch25():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch25.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch25.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["NotGray"] == 245
     assert sample.vars["AndGray"] == 0 and sample.vars["OrGray"] == 255 and sample.vars["XorGray"] == 255
@@ -1066,7 +1066,7 @@ def test_hdevelop_batch26():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch26.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch26.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["ProfileCount"] == 41
     assert abs(float(sample.vars["ProfileFirst"]) - 30) < 1e-6
@@ -1098,7 +1098,7 @@ def test_hdevelop_batch27():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch27.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch27.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Area"]) - 40) < 1e-6
     assert abs(float(sample.vars["Flat2"])) < 1e-6
@@ -1124,7 +1124,7 @@ def test_hdevelop_batch28():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch28.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch28.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["DcReal"]) - 48000) < 1e-4
     assert abs(float(sample.vars["DcImag"])) < 1e-4
@@ -1149,7 +1149,7 @@ def test_hdevelop_batch29():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch29.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch29.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["ConjReal"]) - 48000) < 1e-4
     assert abs(float(sample.vars["ConjImag"])) < 1e-4
@@ -1174,7 +1174,7 @@ def test_hdevelop_batch30():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch30.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch30.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["LowGray"] == 40 and sample.vars["LowEdge"] == 40
     assert sample.vars["HighDark"] == 0 and sample.vars["HighBright"] == 40
@@ -1201,7 +1201,7 @@ def test_hdevelop_batch31():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch31.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch31.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Nx"])) < 1e-6
     assert abs(float(sample.vars["Ny"])) < 1e-6
@@ -1233,7 +1233,7 @@ def test_hdevelop_batch32():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch32.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch32.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["ScaleX"]) - 6) < 1e-6
     assert abs(float(sample.vars["HeldX"]) - 2) < 1e-6
@@ -1261,7 +1261,7 @@ def test_hdevelop_batch33():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch33.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch33.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["CommonX"]) - 1) < 1e-6
     assert abs(float(sample.vars["CommonY"])) < 1e-6
@@ -1290,7 +1290,7 @@ def test_hdevelop_batch34():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch34.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch34.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["RegionCount"] == 9
     assert abs(float(sample.vars["Rx0"]) - 20) < 1e-6
@@ -1321,7 +1321,7 @@ def test_hdevelop_batch35():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch35.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch35.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Alpha"])) < 1e-6
     assert abs(float(sample.vars["Beta"]) - 1) < 1e-6
@@ -1355,7 +1355,7 @@ def test_hdevelop_batch36():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch36.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch36.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["LevelCorner"] == 128 and sample.vars["LevelMid"] == 128
     assert sample.vars["Shift0"] == 118 and sample.vars["Shift40"] == 158
@@ -1389,7 +1389,7 @@ def test_hdevelop_batch37():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch37.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch37.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Alpha"])) < 1e-6
     assert abs(float(sample.vars["Beta"]) - 1) < 1e-6
@@ -1420,16 +1420,16 @@ def test_hdevelop_batch37():
     poles = next(param for param in REGISTRY["extreme_plane_region"].control_in if param.name == "Mode").choices
     assert "'low'" in poles
     empty = run_source(
-        "gen_image_const (Image, 'byte', 10, 10)\n"
-        "gen_rectangle1 (Box, 1, 1, 4, 4)\n"
-        "difference (Box, Box, Empty)\n"
-        "fit_plane_region (Empty, Image, Alpha, Beta, Gamma)\n"
+        "Vizion.gen_image_const (Image, 'byte', 10, 10)\n"
+        "Vizion.gen_rectangle1 (Box, 1, 1, 4, 4)\n"
+        "Vizion.difference (Box, Box, Empty)\n"
+        "Vizion.fit_plane_region (Empty, Image, Alpha, Beta, Gamma)\n"
     )
     assert empty.error and "區域是空的" in empty.error
     line = run_source(
-        "gen_image_const (Image, 'byte', 10, 10)\n"
-        "gen_region_line (Line, 4, 0, 4, 9)\n"
-        "fit_plane_region (Line, Image, Alpha, Beta, Gamma)\n"
+        "Vizion.gen_image_const (Image, 'byte', 10, 10)\n"
+        "Vizion.gen_region_line (Line, 4, 0, 4, 9)\n"
+        "Vizion.fit_plane_region (Line, Image, Alpha, Beta, Gamma)\n"
     )
     assert line.error and "排不成一個平面" in line.error
 
@@ -1438,7 +1438,7 @@ def test_hdevelop_batch38():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch38.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch38.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Beta1"]) - 1) < 1e-6
     assert abs(float(sample.vars["Beta3"])) < 1e-6
@@ -1467,9 +1467,9 @@ def test_hdevelop_batch38():
     poles = next(param for param in REGISTRY["extreme_plane_objects"].control_in if param.name == "Mode").choices
     assert "'low'" in poles
     line = run_source(
-        "gen_image_const (Image, 'byte', 10, 10)\n"
-        "gen_region_line (Line, 4, 0, 4, 9)\n"
-        "fit_plane_objects (Line, Image, Alpha, Beta, Gamma)\n"
+        "Vizion.gen_image_const (Image, 'byte', 10, 10)\n"
+        "Vizion.gen_region_line (Line, 4, 0, 4, 9)\n"
+        "Vizion.fit_plane_objects (Line, Image, Alpha, Beta, Gamma)\n"
     )
     assert line.error and "第 1 個物件" in line.error and "排不成一個平面" in line.error
 
@@ -1478,7 +1478,7 @@ def test_hdevelop_batch39():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch39.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch39.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["A"])) < 1e-6
     assert abs(float(sample.vars["B"]) - 1) < 1e-6
@@ -1501,15 +1501,15 @@ def test_hdevelop_batch39():
     assert sample.vars["KeptCount"] == 1 and sample.vars["SwapCount"] == 1 and sample.vars["DropCount"] == 0
     assert len(REGISTRY["fit_quad_region"].control_out) == 6
     line = run_source(
-        "gen_image_const (Image, 'byte', 10, 10)\n"
-        "gen_region_line (Line, 4, 0, 4, 9)\n"
-        "fit_quad_region (Line, Image, A, B, C, D, E, F)\n"
+        "Vizion.gen_image_const (Image, 'byte', 10, 10)\n"
+        "Vizion.gen_region_line (Line, 4, 0, 4, 9)\n"
+        "Vizion.fit_quad_region (Line, Image, A, B, C, D, E, F)\n"
     )
     assert line.error and "二次曲面" in line.error
     short = run_source(
-        "gen_image_const (Image, 'byte', 10, 10)\n"
-        "gen_rectangle1 (Tiny, 0, 0, 0, 1)\n"
-        "fit_quad_region (Tiny, Image, A, B, C, D, E, F)\n"
+        "Vizion.gen_image_const (Image, 'byte', 10, 10)\n"
+        "Vizion.gen_rectangle1 (Tiny, 0, 0, 0, 1)\n"
+        "Vizion.fit_quad_region (Tiny, Image, A, B, C, D, E, F)\n"
     )
     assert short.error and "至少要六個像素" in short.error
 
@@ -1518,7 +1518,7 @@ def test_hdevelop_batch40():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch40.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch40.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["UnionMean"]) - (90 / 27)) < 1e-6
     assert abs(float(sample.vars["UnionDev"]) - (1300 / 27) ** 0.5) < 1e-6
@@ -1544,10 +1544,10 @@ def test_hdevelop_batch40():
     poles = next(param for param in REGISTRY["extreme_height_diff"].control_in if param.name == "Mode").choices
     assert "'low'" in poles
     mismatch = run_source(
-        "gen_image_const (Wide, 'byte', 10, 10)\n"
-        "gen_image_const (Narrow, 'byte', 8, 8)\n"
-        "gen_rectangle1 (Box, 0, 0, 1, 1)\n"
-        "mean_height_diff (Box, Wide, Narrow, Mean)\n"
+        "Vizion.gen_image_const (Wide, 'byte', 10, 10)\n"
+        "Vizion.gen_image_const (Narrow, 'byte', 8, 8)\n"
+        "Vizion.gen_rectangle1 (Box, 0, 0, 1, 1)\n"
+        "Vizion.mean_height_diff (Box, Wide, Narrow, Mean)\n"
     )
     assert mismatch.error and "兩張影像的尺寸要相同" in mismatch.error
 
@@ -1556,7 +1556,7 @@ def test_hdevelop_batch41():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch41.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch41.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["CenterGray"] == 155
     assert sample.vars["SideGray"] == 125
@@ -1579,8 +1579,8 @@ def test_hdevelop_batch41():
     poles = next(param for param in REGISTRY["extreme_roughness"].control_in if param.name == "Mode").choices
     assert "'low'" in poles
     even = run_source(
-        "gen_image_const (Image, 'byte', 10, 10)\n"
-        "sub_local_mean (Image, Level, 4, 3)\n"
+        "Vizion.gen_image_const (Image, 'byte', 10, 10)\n"
+        "Vizion.sub_local_mean (Image, Level, 4, 3)\n"
     )
     assert even.error and "奇數" in even.error
 
@@ -1589,7 +1589,7 @@ def test_hdevelop_batch42():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch42.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch42.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["CenterGray"] == 158
     assert sample.vars["SideGray"] == 128
@@ -1614,8 +1614,8 @@ def test_hdevelop_batch42():
     poles = next(param for param in REGISTRY["extreme_median_roughness"].control_in if param.name == "Mode").choices
     assert "'low'" in poles
     even = run_source(
-        "gen_image_const (Image, 'byte', 10, 10)\n"
-        "sub_local_median (Image, Level, 4)\n"
+        "Vizion.gen_image_const (Image, 'byte', 10, 10)\n"
+        "Vizion.sub_local_median (Image, Level, 4)\n"
     )
     assert even.error and "奇數" in even.error
 
@@ -1624,7 +1624,7 @@ def test_hdevelop_batch43():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch43.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch43.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["WhitePeak"] == 30
     assert sample.vars["WhiteSide"] == 0
@@ -1654,8 +1654,8 @@ def test_hdevelop_batch43():
     modes = next(param for param in REGISTRY["spot_volume"].control_in if param.name == "Mode").choices
     assert "'black'" in modes
     even = run_source(
-        "gen_image_const (Image, 'byte', 10, 10)\n"
-        "gray_spot_white (Image, Spots, 4)\n"
+        "Vizion.gen_image_const (Image, 'byte', 10, 10)\n"
+        "Vizion.gray_spot_white (Image, Spots, 4)\n"
     )
     assert even.error and "奇數" in even.error
 
@@ -1664,7 +1664,7 @@ def test_hdevelop_batch44():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch44.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch44.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["OpenSq"] == 200
     assert sample.vars["OpenArm"] == 0
@@ -1686,8 +1686,8 @@ def test_hdevelop_batch44():
     sizes = next(param for param in REGISTRY["gray_opening_rect"].control_in if param.name == "MaskSize").choices
     assert "3" in sizes and "9" in sizes
     even = run_source(
-        "gen_image_const (Image, 'byte', 10, 10)\n"
-        "gray_opening_rect (Image, Opened, 4)\n"
+        "Vizion.gen_image_const (Image, 'byte', 10, 10)\n"
+        "Vizion.gray_opening_rect (Image, Opened, 4)\n"
     )
     assert even.error and "奇數" in even.error
 
@@ -1696,7 +1696,7 @@ def test_hdevelop_batch45():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch45.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch45.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["MaxR1"] == 12 and sample.vars["MaxC1"] == 12 and sample.vars["MaxD1"] == 3
     assert sample.vars["MaxR2"] == 41 and sample.vars["MaxC2"] == 11 and sample.vars["MaxD2"] == 2
@@ -1717,13 +1717,13 @@ def test_hdevelop_batch45():
     assert sample.vars["ViewCore"] == 200 and sample.vars["ViewNeck"] == 80
     modes = next(param for param in REGISTRY["thickness_image"].control_in if param.name == "Metric").choices
     assert "'chessboard'" in modes and "'euclidean'" in modes
-    empty = run_source("gen_rectangle1 (Box, 0, 0, 1, 1)\ndifference (Box, Box, Empty)\nthickness_max (Empty, Row, Column, Distance)\n")
+    empty = run_source("Vizion.gen_rectangle1 (Box, 0, 0, 1, 1)\ndifference (Box, Box, Empty)\nthickness_max (Empty, Row, Column, Distance)\n")
     assert empty.error and "區域是空的" in empty.error
 
 
 def test_hdevelop_batch46():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch46.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch46.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Inter1"] == 50 and sample.vars["Inter2"] == 25
     assert sample.vars["Union1"] == 150 and sample.vars["Union2"] == 121
@@ -1738,27 +1738,27 @@ def test_hdevelop_batch46():
     assert sample.vars["Sym1"] == 100 and sample.vars["Sym2"] == 96
     assert sample.vars["HitGray"] == 255 and sample.vars["MissGray"] == 0
     broadcast = run_source(
-        "gen_image_const (Image, 'byte', 80, 60)\n"
-        "gen_rectangle1 (Big, 0, 0, 20, 20)\n"
-        "gen_rectangle1 (InBox, 2, 2, 4, 4)\n"
-        "gen_rectangle1 (OutBox, 30, 30, 32, 32)\n"
-        "concat_obj (InBox, OutBox, Parts)\n"
-        "region_cover (Parts, Big, Cover)\n"
+        "Vizion.gen_image_const (Image, 'byte', 80, 60)\n"
+        "Vizion.gen_rectangle1 (Big, 0, 0, 20, 20)\n"
+        "Vizion.gen_rectangle1 (InBox, 2, 2, 4, 4)\n"
+        "Vizion.gen_rectangle1 (OutBox, 30, 30, 32, 32)\n"
+        "Vizion.concat_obj (InBox, OutBox, Parts)\n"
+        "Vizion.region_cover (Parts, Big, Cover)\n"
         "CoverIn := Cover[1]\n"
         "CoverOut := Cover[2]\n"
     )
     assert broadcast.error is None, broadcast.error
     assert broadcast.vars["CoverIn"] == 1 and broadcast.vars["CoverOut"] == 0
     bad = run_source(
-        "gen_image_const (Image, 'byte', 40, 40)\n"
-        "gen_rectangle1 (A, 1, 1, 2, 2)\n"
-        "gen_rectangle1 (B, 3, 3, 4, 4)\n"
-        "gen_rectangle1 (C, 5, 5, 6, 6)\n"
-        "gen_rectangle1 (D, 7, 7, 8, 8)\n"
-        "concat_obj (A, B, Pair)\n"
-        "concat_obj (C, D, More)\n"
-        "concat_obj (More, A, Three)\n"
-        "area_intersection (Pair, Three, Area)\n"
+        "Vizion.gen_image_const (Image, 'byte', 40, 40)\n"
+        "Vizion.gen_rectangle1 (A, 1, 1, 2, 2)\n"
+        "Vizion.gen_rectangle1 (B, 3, 3, 4, 4)\n"
+        "Vizion.gen_rectangle1 (C, 5, 5, 6, 6)\n"
+        "Vizion.gen_rectangle1 (D, 7, 7, 8, 8)\n"
+        "Vizion.concat_obj (A, B, Pair)\n"
+        "Vizion.concat_obj (C, D, More)\n"
+        "Vizion.concat_obj (More, A, Three)\n"
+        "Vizion.area_intersection (Pair, Three, Area)\n"
     )
     assert bad.error and "物件數" in bad.error
 
@@ -1767,7 +1767,7 @@ def test_hdevelop_batch47():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch47.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch47.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Min1"] == 11 and sample.vars["Min2"] == 1 and sample.vars["Min3"] == 0
     assert sample.vars["Far1"] == 20 and sample.vars["Far2"] == 5 and sample.vars["Far3"] == 5
@@ -1790,20 +1790,20 @@ def test_hdevelop_batch47():
     modes = next(param for param in REGISTRY["distance_objects"].control_in if param.name == "Metric").choices
     assert "'chessboard'" in modes and "'euclidean'" in modes
     same = run_source(
-        "gen_image_const (Image, 'byte', 80, 60)\n"
-        "gen_rectangle1 (A, 10, 10, 19, 19)\n"
-        "gen_rectangle1 (B, 10, 30, 19, 39)\n"
-        "distance_objects (A, B, 'euclidean', Distance)\n"
+        "Vizion.gen_image_const (Image, 'byte', 80, 60)\n"
+        "Vizion.gen_rectangle1 (A, 10, 10, 19, 19)\n"
+        "Vizion.gen_rectangle1 (B, 10, 30, 19, 39)\n"
+        "Vizion.distance_objects (A, B, 'euclidean', Distance)\n"
     )
     assert same.error is None and abs(float(same.vars["Distance"][0]) - 11) < 1e-6
     bad = run_source(
-        "gen_image_const (Image, 'byte', 40, 40)\n"
-        "gen_rectangle1 (A, 1, 1, 2, 2)\n"
-        "gen_rectangle1 (B, 4, 4, 5, 5)\n"
-        "gen_rectangle1 (C, 8, 8, 9, 9)\n"
-        "concat_obj (A, B, Pair)\n"
-        "concat_obj (Pair, C, Three)\n"
-        "distance_objects (Pair, Three, Distance)\n"
+        "Vizion.gen_image_const (Image, 'byte', 40, 40)\n"
+        "Vizion.gen_rectangle1 (A, 1, 1, 2, 2)\n"
+        "Vizion.gen_rectangle1 (B, 4, 4, 5, 5)\n"
+        "Vizion.gen_rectangle1 (C, 8, 8, 9, 9)\n"
+        "Vizion.concat_obj (A, B, Pair)\n"
+        "Vizion.concat_obj (Pair, C, Three)\n"
+        "Vizion.distance_objects (Pair, Three, Distance)\n"
     )
     assert bad.error and "物件數" in bad.error
 
@@ -1812,7 +1812,7 @@ def test_hdevelop_batch48():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch48.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch48.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Ang1"] == 0 and sample.vars["Ang2"] == 180
     assert sample.vars["Ang3"] == 90 and sample.vars["Ang4"] == 270
@@ -1844,7 +1844,7 @@ def test_hdevelop_batch49():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch49.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch49.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["GrownN"] == 2 and sample.vars["BorderN"] == 2
     assert sample.vars["InsideN"] == 2 and sample.vars["TieCount"] == 1
@@ -1875,23 +1875,23 @@ def test_hdevelop_batch49():
     which = next(param for param in REGISTRY["select_territory"].control_in if param.name == "Which").choices
     assert "'large'" in which and "'small'" in which
     overlap = run_source(
-        "gen_image_const (Image, 'byte', 20, 10)\n"
-        "gen_rectangle1 (A, 0, 0, 9, 9)\n"
-        "gen_rectangle1 (B, 0, 0, 9, 9)\n"
-        "concat_obj (A, B, Both)\n"
-        "partition_area (Both, 'city-block', Area)\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.gen_rectangle1 (A, 0, 0, 9, 9)\n"
+        "Vizion.gen_rectangle1 (B, 0, 0, 9, 9)\n"
+        "Vizion.concat_obj (A, B, Both)\n"
+        "Vizion.partition_area (Both, 'city-block', Area)\n"
         "A1 := Area[1]\n"
         "A2 := Area[2]\n"
-        "partition_nearest (Both, Grown, 'city-block')\n"
-        "count_obj (Grown, N)\n"
+        "Vizion.partition_nearest (Both, Grown, 'city-block')\n"
+        "Vizion.count_obj (Grown, N)\n"
     )
     assert overlap.error is None, overlap.error
     assert overlap.vars["A1"] == 200 and overlap.vars["A2"] == 0 and overlap.vars["N"] == 1
     empty = run_source(
-        "gen_image_const (Image, 'byte', 20, 10)\n"
-        "gen_rectangle1 (Box, 0, 0, 2, 2)\n"
-        "difference (Box, Box, Empty)\n"
-        "partition_nearest (Empty, Grown, 'city-block')\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.gen_rectangle1 (Box, 0, 0, 2, 2)\n"
+        "Vizion.difference (Box, Box, Empty)\n"
+        "Vizion.partition_nearest (Empty, Grown, 'city-block')\n"
     )
     assert empty.error and "空" in empty.error
 
@@ -1900,7 +1900,7 @@ def test_hdevelop_batch50():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch50.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch50.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["D1"] == 100 and sample.vars["D2"] == 48 and sample.vars["D3"] == 16
     assert abs(float(sample.vars["DR"]) - 14.5) < 1e-6
@@ -1937,16 +1937,16 @@ def test_hdevelop_batch50():
     sides = next(param for param in REGISTRY["select_relative"].control_in if param.name == "Side").choices
     assert "'above'" in sides and "'below'" in sides
     too_many = run_source(
-        "gen_image_const (Image, 'byte', 20, 10)\n"
-        "gen_rectangle1 (A, 0, 0, 2, 2)\n"
-        "select_top (A, Top, 3, 'area', 'down')\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.gen_rectangle1 (A, 0, 0, 2, 2)\n"
+        "Vizion.select_top (A, Top, 3, 'area', 'down')\n"
     )
     assert too_many.error and "超出" in too_many.error
     empty = run_source(
-        "gen_image_const (Image, 'byte', 20, 10)\n"
-        "gen_rectangle1 (Box, 0, 0, 2, 2)\n"
-        "difference (Box, Box, Empty)\n"
-        "sort_feature (Empty, Sorted, 'area', 'down')\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.gen_rectangle1 (Box, 0, 0, 2, 2)\n"
+        "Vizion.difference (Box, Box, Empty)\n"
+        "Vizion.sort_feature (Empty, Sorted, 'area', 'down')\n"
     )
     assert empty.error and "空" in empty.error
 
@@ -1955,7 +1955,7 @@ def test_hdevelop_batch51():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch51.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch51.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["BiteN"] == 2 and sample.vars["ChipN"] == 2 and sample.vars["DeepN"] == 1
     assert sample.vars["BA1"] == 100 and sample.vars["BA2"] == 10
@@ -1978,10 +1978,10 @@ def test_hdevelop_batch51():
     metrics = next(param for param in REGISTRY["region_defects"].control_in if param.name == "Metric").choices
     assert "'city-block'" in metrics and "'euclidean'" in metrics
     empty = run_source(
-        "gen_image_const (Image, 'byte', 20, 10)\n"
-        "gen_rectangle1 (Box, 0, 0, 2, 2)\n"
-        "difference (Box, Box, Empty)\n"
-        "region_defects (Empty, Defects, 1, 'city-block')\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.gen_rectangle1 (Box, 0, 0, 2, 2)\n"
+        "Vizion.difference (Box, Box, Empty)\n"
+        "Vizion.region_defects (Empty, Defects, 1, 'city-block')\n"
     )
     assert empty.error and "空" in empty.error
 
@@ -1990,7 +1990,7 @@ def test_hdevelop_batch52():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch52.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch52.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["InnerN"] == 2 and sample.vars["In1"] == 196 and sample.vars["In2"] == 16
     assert sample.vars["OuterN"] == 2 and sample.vars["Out1"] == 1200 and sample.vars["Out2"] == 25
@@ -2009,23 +2009,23 @@ def test_hdevelop_batch52():
     assert sample.vars["LeafGray"] == 255 and sample.vars["FrameGray"] == 0
     assert "select_inner" in REGISTRY and "nesting_depth" in REGISTRY
     same = run_source(
-        "gen_image_const (Image, 'byte', 20, 10)\n"
-        "gen_rectangle1 (A, 0, 0, 4, 4)\n"
-        "gen_rectangle1 (B, 0, 0, 4, 4)\n"
-        "concat_obj (A, B, Parts)\n"
-        "select_inner (Parts, Inner)\n"
-        "count_obj (Inner, N)\n"
-        "container_index (Parts, Holder)\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.gen_rectangle1 (A, 0, 0, 4, 4)\n"
+        "Vizion.gen_rectangle1 (B, 0, 0, 4, 4)\n"
+        "Vizion.concat_obj (A, B, Parts)\n"
+        "Vizion.select_inner (Parts, Inner)\n"
+        "Vizion.count_obj (Inner, N)\n"
+        "Vizion.container_index (Parts, Holder)\n"
         "H1 := Holder[1]\n"
         "H2 := Holder[2]\n"
     )
     assert same.error is None, same.error
     assert same.vars["N"] == 0 and same.vars["H1"] == 0 and same.vars["H2"] == 0
     empty = run_source(
-        "gen_image_const (Image, 'byte', 20, 10)\n"
-        "gen_rectangle1 (Box, 0, 0, 2, 2)\n"
-        "difference (Box, Box, Empty)\n"
-        "select_inner (Empty, Inner)\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.gen_rectangle1 (Box, 0, 0, 2, 2)\n"
+        "Vizion.difference (Box, Box, Empty)\n"
+        "Vizion.select_inner (Empty, Inner)\n"
     )
     assert empty.error and "空" in empty.error
 
@@ -2034,7 +2034,7 @@ def test_hdevelop_batch53():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch53.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch53.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["TouchN"] == 2 and sample.vars["Touch1"] == 100 and sample.vars["Touch2"] == 50
     assert sample.vars["InnerN"] == 2 and sample.vars["Inner1"] == 100 and sample.vars["Inner2"] == 80
@@ -2061,13 +2061,13 @@ def test_hdevelop_batch53():
     sides = next(param for param in REGISTRY["select_border_side"].control_in if param.name == "Side").choices
     assert "'top'" in sides and "'right'" in sides
     corner = run_source(
-        "gen_image_const (Image, 'byte', 30, 20)\n"
-        "gen_rectangle1 (Corner, 0, 0, 3, 3)\n"
-        "border_point (Corner, Row, Col, Side)\n"
+        "Vizion.gen_image_const (Image, 'byte', 30, 20)\n"
+        "Vizion.gen_rectangle1 (Corner, 0, 0, 3, 3)\n"
+        "Vizion.border_point (Corner, Row, Col, Side)\n"
         "R := Row[1]\n"
         "C := Col[1]\n"
         "S := Side[1]\n"
-        "border_gap (Corner, Top, Bottom, Left, Right)\n"
+        "Vizion.border_gap (Corner, Top, Bottom, Left, Right)\n"
         "T := Top[1]\n"
         "L := Left[1]\n"
     )
@@ -2075,9 +2075,9 @@ def test_hdevelop_batch53():
     assert corner.vars["R"] == 0 and corner.vars["C"] == 0 and corner.vars["S"] == "top"
     assert corner.vars["T"] == 0 and corner.vars["L"] == 0
     bad = run_source(
-        "gen_image_const (Image, 'byte', 30, 20)\n"
-        "gen_rectangle1 (Corner, 0, 0, 3, 3)\n"
-        "select_margin (Corner, Kept, -1)\n"
+        "Vizion.gen_image_const (Image, 'byte', 30, 20)\n"
+        "Vizion.gen_rectangle1 (Corner, 0, 0, 3, 3)\n"
+        "Vizion.select_margin (Corner, Kept, -1)\n"
     )
     assert bad.error and "負" in bad.error
 
@@ -2086,7 +2086,7 @@ def test_hdevelop_batch54():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "hdevelop_batch54.hdv").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch54.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["D1"] == 1 and sample.vars["D2"] == 1
     assert sample.vars["D3"] == 1 and sample.vars["D4"] == 16
@@ -2113,21 +2113,1068 @@ def test_hdevelop_batch54():
     metrics = next(param for param in REGISTRY["neighbor_distance"].control_in if param.name == "Metric").choices
     assert "'chessboard'" in metrics and "'city-block'" in metrics
     apart = run_source(
-        "gen_image_const (Image, 'byte', 40, 30)\n"
-        "gen_rectangle1 (A, 0, 0, 4, 4)\n"
-        "gen_rectangle1 (B, 0, 6, 4, 10)\n"
-        "concat_obj (A, B, Parts)\n"
-        "select_touching (Parts, Touched, 0, 'chessboard')\n"
-        "count_obj (Touched, N)\n"
+        "Vizion.gen_image_const (Image, 'byte', 40, 30)\n"
+        "Vizion.gen_rectangle1 (A, 0, 0, 4, 4)\n"
+        "Vizion.gen_rectangle1 (B, 0, 6, 4, 10)\n"
+        "Vizion.concat_obj (A, B, Parts)\n"
+        "Vizion.select_touching (Parts, Touched, 0, 'chessboard')\n"
+        "Vizion.count_obj (Touched, N)\n"
     )
     assert apart.error is None, apart.error
     assert apart.vars["N"] == 0
     single = run_source(
-        "gen_image_const (Image, 'byte', 20, 10)\n"
-        "gen_rectangle1 (A, 0, 0, 2, 2)\n"
-        "neighbor_distance (A, 'chessboard', Distance)\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.gen_rectangle1 (A, 0, 0, 2, 2)\n"
+        "Vizion.neighbor_distance (A, 'chessboard', Distance)\n"
     )
     assert single.error and "兩個" in single.error
+
+
+def test_hdevelop_batch55():
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch55.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["S1"] == 0
+    assert abs(float(sample.vars["S2"])) < 1e-12
+    assert abs(float(sample.vars["S3"]) - 0.001793327482459972) < 1e-9
+    assert abs(float(sample.vars["S4"]) - 3.461924208773209) < 1e-9
+    assert sample.vars["BestN"] == 100
+    assert abs(float(sample.vars["BestR"]) - 14.5) < 1e-6
+    assert abs(float(sample.vars["BestC"]) - 44.5) < 1e-6
+    assert sample.vars["WorstN"] == 150
+    assert abs(float(sample.vars["WorstR"]) - 32) < 1e-6
+    assert abs(float(sample.vars["WorstC"]) - 24.5) < 1e-6
+    assert sample.vars["Near1"] == 100 and sample.vars["Near2"] == 225
+    assert abs(float(sample.vars["NearC"]) - 44.5) < 1e-6
+    assert sample.vars["Far1"] == 150 and abs(float(sample.vars["FarR"]) - 32) < 1e-6
+    assert sample.vars["R1"] == 1 and sample.vars["R2"] == 2
+    assert sample.vars["R3"] == 3 and sample.vars["R4"] == 4
+    assert sample.vars["I1"] == 1 and sample.vars["I2"] == 2
+    assert sample.vars["I3"] == 3 and sample.vars["I4"] == 4
+    assert sample.vars["KeepN"] == 3
+    assert sample.vars["Keep1"] == 100 and sample.vars["Keep2"] == 225 and sample.vars["Keep3"] == 185
+    assert abs(float(sample.vars["H1"]) - (1 / 6)) < 1e-9
+    assert abs(float(sample.vars["SameH"]) - float(sample.vars["H1"])) < 1e-12
+    assert sample.vars["LikeGray"] == 255 and sample.vars["BarGray"] == 0
+    methods = next(param for param in REGISTRY["shape_score"].control_in if param.name == "Method").choices
+    assert "'i1'" in methods and "'i3'" in methods
+    orders = next(param for param in REGISTRY["sort_shape"].control_in if param.name == "Order").choices
+    assert "'near'" in orders and "'far'" in orders
+    bad = run_source(
+        "Vizion.gen_image_const (Image, 'byte', 40, 20)\n"
+        "Vizion.gen_rectangle1 (A, 0, 0, 4, 4)\n"
+        "Vizion.gen_rectangle1 (B, 0, 8, 4, 12)\n"
+        "Vizion.gen_rectangle1 (C, 8, 0, 12, 4)\n"
+        "Vizion.concat_obj (A, B, Two)\n"
+        "Vizion.concat_obj (Two, C, Three)\n"
+        "Vizion.shape_score (Three, Two, 'i1', Score)\n"
+    )
+    assert bad.error and "範本" in bad.error
+
+
+def test_hdevelop_batch56():
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch56.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["DR1"] == 0 and sample.vars["DC1"] == -30
+    assert sample.vars["DR2"] == -28 and sample.vars["DC2"] == -28
+    assert abs(float(sample.vars["DR3"]) + 17.5) < 1e-6
+    assert sample.vars["DC3"] == -45
+    assert sample.vars["O1"] == 100 and sample.vars["O2"] == 36 and sample.vars["O3"] == 50
+    assert sample.vars["C1"] == 1 and abs(float(sample.vars["C2"]) - 0.36) < 1e-6
+    assert abs(float(sample.vars["C3"]) - 0.5) < 1e-6
+    assert sample.vars["MA1"] == 0 and sample.vars["MA2"] == 64 and sample.vars["MA3"] == 100
+    assert sample.vars["MissN"] == 2 and sample.vars["MissA1"] == 64 and sample.vars["MissA2"] == 100
+    assert sample.vars["KeepN"] == 1 and sample.vars["KeepA"] == 100
+    assert abs(float(sample.vars["KeepC"]) - 44.5) < 1e-6
+    assert sample.vars["Move1"] == 100
+    assert abs(float(sample.vars["MoveR"]) - 14.5) < 1e-6
+    assert abs(float(sample.vars["MoveC"]) - 14.5) < 1e-6
+    assert abs(float(sample.vars["Phi"]) + 1.5707963267948966) < 1e-6
+    assert sample.vars["CrossN"] == 25 and sample.vars["TurnN"] == 100
+    assert sample.vars["TurnA"] == 100
+    assert abs(float(sample.vars["TurnR"]) - 52) < 1e-6
+    assert abs(float(sample.vars["TurnC"]) - 19.5) < 1e-6
+    assert sample.vars["OnGray"] == 255 and sample.vars["OffGray"] == 0
+    modes = next(param for param in REGISTRY["align_region"].control_in if param.name == "Mode").choices
+    assert "'center'" in modes and "'rigid'" in modes
+    bad = run_source(
+        "Vizion.gen_image_const (Image, 'byte', 40, 20)\n"
+        "Vizion.gen_rectangle1 (A, 0, 0, 3, 3)\n"
+        "Vizion.gen_rectangle1 (B, 0, 8, 3, 11)\n"
+        "Vizion.gen_rectangle1 (C, 8, 0, 11, 3)\n"
+        "Vizion.concat_obj (A, B, Two)\n"
+        "Vizion.concat_obj (Two, C, Three)\n"
+        "Vizion.align_delta (Three, Two, DRow, DColumn)\n"
+    )
+    assert bad.error and "範本" in bad.error
+
+
+def test_hdevelop_batch57():
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch57.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["GridRows"] == 2 and sample.vars["GridCols"] == 3
+    assert sample.vars["RowPitch"] == 20 and sample.vars["ColPitch"] == 20
+    assert [sample.vars[name] for name in ("R1", "R4", "R5")] == [1, 2, 2]
+    assert [sample.vars[name] for name in ("K1", "K2", "K3", "K4", "K5")] == [1, 2, 3, 1, 3]
+    assert abs(float(sample.vars["S1C"]) - 11.5) < 1e-6
+    assert abs(float(sample.vars["S3C"]) - 51.5) < 1e-6
+    assert abs(float(sample.vars["S4C"]) - 11.5) < 1e-6
+    assert abs(float(sample.vars["S5R"]) - 31.5) < 1e-6
+    assert sample.vars["MissN"] == 1 and sample.vars["MissA"] == 16
+    assert abs(float(sample.vars["MissR"]) - 31.5) < 1e-6
+    assert abs(float(sample.vars["MissC"]) - 31.5) < 1e-6
+    assert sample.vars["CellA"] == 16
+    assert abs(float(sample.vars["CellR"]) - 31.5) < 1e-6
+    assert abs(float(sample.vars["CellC"]) - 51.5) < 1e-6
+    assert abs(float(sample.vars["HoleR"]) - 31.5) < 1e-6
+    assert abs(float(sample.vars["HoleC"]) - 31.5) < 1e-6
+    assert [sample.vars[name] for name in ("G1", "G2", "G3", "G0")] == [1, 2, 3, 0]
+    gap = next(param for param in REGISTRY["grid_index"].control_in if param.name == "Gap")
+    assert gap.default == "0"
+    empty = run_source(
+        "Vizion.gen_image_const (Image, 'byte', 80, 60)\n"
+        "Vizion.gen_rectangle1 (A, 10, 10, 13, 13)\n"
+        "Vizion.gen_rectangle1 (B, 10, 30, 13, 33)\n"
+        "Vizion.gen_rectangle1 (C, 10, 50, 13, 53)\n"
+        "Vizion.gen_rectangle1 (D, 30, 10, 33, 13)\n"
+        "Vizion.gen_rectangle1 (E, 30, 50, 33, 53)\n"
+        "Vizion.concat_obj (A, B, Pair)\n"
+        "Vizion.concat_obj (Pair, C, Three)\n"
+        "Vizion.concat_obj (Three, D, Four)\n"
+        "Vizion.concat_obj (Four, E, Parts)\n"
+        "Vizion.select_grid (Parts, Hole, 2, 2)\n"
+    )
+    assert empty.error and "沒有物件" in empty.error
+
+
+def test_hdevelop_batch58():
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch58.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["DR1"] == 0 and sample.vars["DC1"] == 3
+    assert sample.vars["DR2"] == 0 and sample.vars["DC2"] == 0
+    assert sample.vars["DR3"] == -3 and sample.vars["DC3"] == 0
+    assert sample.vars["S1"] == 3 and sample.vars["S2"] == 0 and sample.vars["S3"] == 3
+    assert sample.vars["P1"] == 0 and sample.vars["P2"] == 0 and sample.vars["P3"] == 270
+    assert sample.vars["Side1"] == "right" and sample.vars["Side2"] == "center" and sample.vars["Side3"] == "above"
+    balance = 1.0 - 3.0 / 9.5
+    assert abs(float(sample.vars["B1"]) - balance) < 1e-6
+    assert sample.vars["B2"] == 1
+    assert abs(float(sample.vars["B3"]) - balance) < 1e-6
+    assert sample.vars["BA"] == 200 and sample.vars["DA"] == 200
+    assert abs(float(sample.vars["BR"]) - 19.5) < 1e-6 and abs(float(sample.vars["BC"]) - 24.5) < 1e-6
+    assert abs(float(sample.vars["DR"]) - 19.5) < 1e-6 and abs(float(sample.vars["DC"]) - 14.5) < 1e-6
+    assert sample.vars["KeepN"] == 1 and sample.vars["KeepA"] == 400
+    assert abs(float(sample.vars["KeepC"]) - 19.5) < 1e-6
+    assert sample.vars["MidN"] == 1 and sample.vars["MidA"] == 200
+    assert abs(float(sample.vars["MidC"]) - 49.5) < 1e-6
+    assert sample.vars["LeftGray"] == 50 and sample.vars["RightGray"] == 200
+    sides = next(param for param in REGISTRY["select_bright"].control_in if param.name == "Side").choices
+    assert "'right'" in sides and "'center'" in sides
+    bad = run_source(
+        "Vizion.gen_rectangle1 (Region, 0, 0, 3, 3)\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.gray_offset (Region, Image, DRow, DColumn)\n"
+    )
+    assert bad.error and "尺寸" in bad.error
+
+
+def test_hdevelop_batch59():
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch59.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["C1"] == 200 and sample.vars["C2"] == 0 and sample.vars["C3"] == -160
+    assert sample.vars["A1"] == 200 and sample.vars["A2"] == 0 and sample.vars["A3"] == 160
+    assert sample.vars["I1"] == 200 and sample.vars["I2"] == 100 and sample.vars["I3"] == 20
+    assert sample.vars["O1"] == 0 and sample.vars["O2"] == 100 and sample.vars["O3"] == 180
+    assert sample.vars["KeepN"] == 2
+    assert abs(float(sample.vars["Keep1"]) - 19.5) < 1e-6
+    assert abs(float(sample.vars["Keep2"]) - 49.5) < 1e-6
+    assert sample.vars["SoftN"] == 1 and sample.vars["SoftA"] == 400
+    assert abs(float(sample.vars["SoftC"]) - 49.5) < 1e-6
+    assert sample.vars["BestA"] == 400 and abs(float(sample.vars["BestR"]) - 19.5) < 1e-6
+    assert sample.vars["InnerA"] == 76
+    assert abs(float(sample.vars["InnerR"]) - 19.5) < 1e-6
+    assert abs(float(sample.vars["InnerC"]) - 19.5) < 1e-6
+    assert sample.vars["OuterA"] == 84
+    assert [sample.vars[name] for name in ("SharpGray", "OutsideGray", "DarkGray", "HaloGray")] == [200, 0, 20, 180]
+    rings = next(param for param in REGISTRY["edge_ring"].control_in if param.name == "Which").choices
+    assert "'inner'" in rings and "'outer'" in rings
+    bad = run_source(
+        "Vizion.gen_rectangle1 (Region, 0, 0, 3, 3)\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.edge_contrast (Region, Image, Contrast)\n"
+    )
+    assert bad.error and "尺寸" in bad.error
+
+
+def test_hdevelop_batch60():
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch60.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["M1"] == -10 and sample.vars["M2"] == 200 and sample.vars["M3"] == 0
+    assert sample.vars["F1"] == 10 and sample.vars["F2"] == 200 and sample.vars["F3"] == 0
+    assert sample.vars["MR1"] == 20 and sample.vars["MC1"] == 34
+    assert sample.vars["MR2"] == 15 and sample.vars["MC2"] == 50
+    assert sample.vars["MR3"] == 38 and sample.vars["MC3"] == 8
+    assert sample.vars["Side1"] == "right" and sample.vars["Side2"] == "above" and sample.vars["Side3"] == "above"
+    assert sample.vars["N1"] == 5 and sample.vars["N2"] == 0 and sample.vars["N3"] == 76
+    assert sample.vars["WeakObj"] == 2 and sample.vars["WA1"] == 5 and sample.vars["WA2"] == 76
+    assert sample.vars["WR1"] == 22 and sample.vars["WC1"] == 34
+    assert sample.vars["ClosedN"] == 1 and sample.vars["ClosedA"] == 400
+    assert abs(float(sample.vars["ClosedR"]) - 24.5) < 1e-6
+    assert abs(float(sample.vars["ClosedC"]) - 59.5) < 1e-6
+    assert sample.vars["BrokenN"] == 2
+    assert abs(float(sample.vars["BR1"]) - 24.5) < 1e-6
+    assert abs(float(sample.vars["BR2"]) - 47.5) < 1e-6
+    assert sample.vars["EdgeGray"] == 200 and sample.vars["LeakGray"] == 210
+    bad = run_source(
+        "Vizion.gen_rectangle1 (Region, 0, 0, 3, 3)\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.edge_min (Region, Image, Contrast)\n"
+    )
+    assert bad.error and "尺寸" in bad.error
+    assert REGISTRY["weak_count"].control_in[0].default == "30"
+
+
+def test_hdevelop_batch61():
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch61.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert [sample.vars[name] for name in ("N1", "N2", "N3", "S1")] == [100, 100, 4, 100]
+    assert abs(float(sample.vars["R1"]) - 0.5) < 1e-9
+    assert sample.vars["R2"] == 1 and abs(float(sample.vars["R3"]) - 0.02) < 1e-9
+    assert sample.vars["BA1"] == 100 and abs(float(sample.vars["BandC"]) - 24.5) < 1e-6
+    assert sample.vars["BA3"] == 4
+    assert sample.vars["KeepN"] == 1 and sample.vars["KeepA"] == 100
+    assert abs(float(sample.vars["KeepR"]) - 34.5) < 1e-6
+    assert abs(float(sample.vars["KeepC"]) - 14.5) < 1e-6
+    assert sample.vars["BR1"] == 10 and sample.vars["BC1"] == 20 and sample.vars["BG1"] == 180
+    assert sample.vars["BR3"] == 30 and sample.vars["BC3"] == 40 and sample.vars["BG3"] == 255
+    assert sample.vars["DR1"] == 10 and sample.vars["DC1"] == 10 and sample.vars["DG1"] == 40
+    assert sample.vars["DR2"] == 30 and sample.vars["DG2"] == 200
+    assert sample.vars["DR3"] == 30 and sample.vars["DC3"] == 42 and sample.vars["DG3"] == 20
+    assert sample.vars["PA"] == 4
+    assert abs(float(sample.vars["PR"]) - 30.5) < 1e-6
+    assert abs(float(sample.vars["PC"]) - 40.5) < 1e-6
+    assert sample.vars["FlatN"] == 1 and sample.vars["FlatA"] == 100
+    assert [sample.vars[name] for name in ("DimGray", "LitGray", "HotGray")] == [40, 180, 255]
+    assert REGISTRY["select_band"].control_in[-1].default == "0.5"
+    bad = run_source(
+        "Vizion.gen_rectangle1 (Region, 0, 0, 3, 3)\n"
+        "Vizion.gen_image_const (Image, 'byte', 20, 10)\n"
+        "Vizion.band_count (Region, Image, 0, 10, Count)\n"
+    )
+    assert bad.error and "尺寸" in bad.error
+
+
+def test_hdevelop_batch62():
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch62.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert [sample.vars[name] for name in ("G1", "G2", "G3")] == [40, 200, 20]
+    assert [sample.vars[name] for name in ("C1", "C2", "C3")] == [100, 100, 196]
+    assert abs(float(sample.vars["R1"]) - 0.5) < 1e-9
+    assert sample.vars["R2"] == 1 and abs(float(sample.vars["R3"]) - 0.98) < 1e-9
+    assert [sample.vars[name] for name in ("H1", "H2", "H3")] == [180, 200, 255]
+    assert [sample.vars[name] for name in ("S1", "S2", "S3")] == [100, 0, 4]
+    assert [sample.vars[name] for name in ("D1", "D2", "D3")] == [140, 0, 235]
+    assert sample.vars["MA1"] == 100
+    assert abs(float(sample.vars["MR1"]) - 14.5) < 1e-6
+    assert abs(float(sample.vars["MC1"]) - 14.5) < 1e-6
+    assert sample.vars["MA3"] == 196
+    assert abs(float(sample.vars["MR3"]) - (6778 / 196)) < 1e-6
+    assert abs(float(sample.vars["MC3"]) - (9738 / 196)) < 1e-6
+    assert sample.vars["KeepN"] == 1 and sample.vars["KeepA"] == 100 and sample.vars["SwapN"] == 1
+    assert abs(float(sample.vars["KeepR"]) - 34.5) < 1e-6
+    assert abs(float(sample.vars["KeepC"]) - 14.5) < 1e-6
+    assert sample.vars["MixN"] == 1 and sample.vars["MixA"] == 200
+    assert abs(float(sample.vars["MixR"]) - 14.5) < 1e-6
+    assert abs(float(sample.vars["MixC"]) - 19.5) < 1e-6
+    assert REGISTRY["select_mixed"].control_in[0].default == "1"
+
+
+def test_hdevelop_batch63():
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch63.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert [sample.vars[name] for name in ("RN1", "RN2", "RN3")] == [3, 1, 1]
+    assert [sample.vars[name] for name in ("CN1", "CN2", "CN3")] == [1, 3, 1]
+    assert [sample.vars[name] for name in ("RL1", "RL2", "RL3")] == [6, 15, 10]
+    assert [sample.vars[name] for name in ("CL1", "CL2", "CL3")] == [20, 6, 10]
+    assert sample.vars["RG1"] == 2 and sample.vars["RG2"] == 0
+    assert sample.vars["CG2"] == 2 and sample.vars["CG3"] == 0
+    assert sample.vars["RowKeep"] == 1 and sample.vars["RowA"] == 240
+    assert abs(float(sample.vars["RowR"]) - 20.5) < 1e-6
+    assert abs(float(sample.vars["RowC"]) - 19.5) < 1e-6
+    assert sample.vars["ColKeep"] == 1 and sample.vars["ColA"] == 210
+    assert sample.vars["ColR"] == 47
+    assert abs(float(sample.vars["ColC"]) - (4185 / 210)) < 1e-6
+    assert sample.vars["TA"] == 120
+    assert abs(float(sample.vars["TR"]) - 26.5) < 1e-6
+    assert abs(float(sample.vars["TC"]) - 19.5) < 1e-6
+    assert sample.vars["WA"] == 90 and sample.vars["WR"] == 47
+    assert abs(float(sample.vars["WC"]) - 26.5) < 1e-6
+    directions = next(param for param in REGISTRY["select_stripes"].control_in if param.name == "Direction").choices
+    assert "'row'" in directions and "'column'" in directions
+
+
+def test_hdevelop_batch64():
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch64.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(float(sample.vars["HC1"]) - (368 / 384)) < 1e-9
+    assert sample.vars["HC2"] == 1 and sample.vars["HR1"] == 1 and sample.vars["HR2"] == 1
+    assert abs(float(sample.vars["HB1"]) - (368 / 384)) < 1e-9
+    assert sample.vars["MC1"] == 16 and sample.vars["MC2"] == 0 and sample.vars["MR1"] == 0
+    assert abs(float(sample.vars["CR1"]) - 19.5) < 1e-6 and abs(float(sample.vars["CC1"]) - 19.5) < 1e-6
+    assert abs(float(sample.vars["CR2"]) - 14.5) < 1e-6 and abs(float(sample.vars["CC2"]) - 54.5) < 1e-6
+    assert sample.vars["AsymN"] == 1 and sample.vars["AA"] == 16
+    assert abs(float(sample.vars["AR"]) - 19.5) < 1e-6 and abs(float(sample.vars["AC"]) - 11.5) < 1e-6
+    assert sample.vars["CA"] == 368
+    assert sample.vars["KeepN"] == 1 and sample.vars["KeepA"] == 100
+    assert abs(float(sample.vars["KeepR"]) - 14.5) < 1e-6 and abs(float(sample.vars["KeepC"]) - 54.5) < 1e-6
+    assert sample.vars["OddN"] == 1 and sample.vars["OddA"] == 384
+    assert abs(float(sample.vars["OddR"]) - 19.5) < 1e-6
+    assert abs(float(sample.vars["OddC"]) - (7360 / 384)) < 1e-6
+    assert sample.vars["FlipGray"] == 255 and sample.vars["GoneGray"] == 0
+    axes = next(param for param in REGISTRY["symmetry_score"].control_in if param.name == "Axis").choices
+    assert "'column'" in axes and "'row'" in axes and "'both'" in axes
+
+
+def test_hdevelop_batch65():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch65.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["TR1"] == 10 and sample.vars["TC1"] == 10
+    assert sample.vars["TR2"] == 30 and sample.vars["TC2"] == 41
+    assert sample.vars["BR1"] == 19 and sample.vars["BC1"] == 10
+    assert sample.vars["LR1"] == 10 and sample.vars["LC1"] == 10
+    assert sample.vars["LR2"] == 31 and sample.vars["LC2"] == 40
+    assert sample.vars["RR1"] == 10 and sample.vars["RC1"] == 29
+    assert sample.vars["RR2"] == 30 and sample.vars["RC2"] == 49
+    assert sample.vars["TA1"] == 20 and sample.vars["TER1"] == 10
+    assert abs(float(sample.vars["TEC1"]) - 19.5) < 1e-6
+    assert sample.vars["TA2"] == 9 and abs(float(sample.vars["TEC2"]) - 45) < 1e-6
+    assert sample.vars["LA"] == 9 and sample.vars["LER"] == 35 and sample.vars["LEC"] == 40
+    assert sample.vars["RA"] == 10
+    assert abs(float(sample.vars["RER"]) - 14.5) < 1e-6 and sample.vars["REC"] == 29
+    assert sample.vars["EdgeGray"] == 255 and sample.vars["BelowGray"] == 0
+
+
+def test_hdevelop_batch66():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch66.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["C1"] == 1 and sample.vars["C2"] == 0 and sample.vars["C3"] == 2
+    assert sample.vars["OC"] == 0
+    assert abs(float(sample.vars["R1"]) - (100 / 900)) < 1e-9
+    assert sample.vars["R2"] == 0
+    assert abs(float(sample.vars["R3"]) - (125 / 1200)) < 1e-9
+    assert sample.vars["HoleN"] == 3
+    assert sample.vars["FA"] == 100
+    assert abs(float(sample.vars["FR"]) - 24.5) < 1e-6 and abs(float(sample.vars["FC"]) - 24.5) < 1e-6
+    assert sample.vars["SA"] == 25 and sample.vars["SR"] == 32 and sample.vars["SC"] == 62
+    assert sample.vars["BigN"] == 2 and sample.vars["BA"] == 100
+    assert abs(float(sample.vars["BR"]) - 19.5) < 1e-6 and abs(float(sample.vars["BC"]) - 59.5) < 1e-6
+    assert sample.vars["HoledN"] == 1 and sample.vars["HA"] == 1075
+    assert abs(float(sample.vars["HRow"]) - (32650 / 1075)) < 1e-6
+    assert abs(float(sample.vars["HCol"]) - (69900 / 1075)) < 1e-6
+    assert sample.vars["SolidN"] == 1 and sample.vars["SolidA"] == 100
+    assert abs(float(sample.vars["SolidR"]) - 46.5) < 1e-6 and abs(float(sample.vars["SolidC"]) - 14.5) < 1e-6
+    assert sample.vars["HollowN"] == 1 and sample.vars["HollowA"] == 800
+    assert abs(float(sample.vars["HollowR"]) - 24.5) < 1e-6
+    assert sample.vars["FillA"] == 900 and abs(float(sample.vars["FillR"]) - 24.5) < 1e-6
+    assert sample.vars["OA"] == 230 and sample.vars["OFA"] == 230
+    assert sample.vars["HoleGray"] == 255 and sample.vars["WallGray"] == 0
+
+
+def test_hdevelop_batch67():
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch67.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["IA1"] == 100 and sample.vars["IA2"] == 100 and sample.vars["IA3"] == 0
+    assert sample.vars["OA1"] == 0 and sample.vars["OA2"] == 100 and sample.vars["OA3"] == 100
+    assert sample.vars["R1"] == 1 and abs(float(sample.vars["R2"]) - 0.5) < 1e-9 and sample.vars["R3"] == 0
+    assert sample.vars["D1"] == 0 and sample.vars["D2"] == 10 and sample.vars["D3"] == 15
+    assert sample.vars["CD2"] == 10 and sample.vars["CD3"] == 30
+    assert sample.vars["OverN"] == 2 and sample.vars["OVA1"] == 100 and sample.vars["OVA2"] == 100
+    assert abs(float(sample.vars["OVR1"]) - 14.5) < 1e-6 and abs(float(sample.vars["OVC1"]) - 34.5) < 1e-6
+    assert abs(float(sample.vars["OVR2"]) - 49.5) < 1e-6
+    assert sample.vars["InsideN"] == 1 and sample.vars["InA"] == 100
+    assert abs(float(sample.vars["InR"]) - 26.5) < 1e-6 and abs(float(sample.vars["InC"]) - 26.5) < 1e-6
+    assert sample.vars["OutsideN"] == 1 and sample.vars["OutA"] == 100
+    assert abs(float(sample.vars["OutR"]) - 49.5) < 1e-6
+    assert sample.vars["CrossN"] == 1 and sample.vars["CA"] == 200
+    assert abs(float(sample.vars["CR"]) - 19.5) < 1e-6 and abs(float(sample.vars["CC"]) - 34.5) < 1e-6
+    assert sample.vars["OutGray"] == 255 and sample.vars["InGray"] == 0
+    metric = next(param for param in REGISTRY["window_depth"].control_in if param.name == "Metric").choices
+    assert "'chessboard'" in metric and "'city-block'" in metric
+
+
+def test_hdevelop_batch68():
+    import math
+
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch68.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["P1"] == 0 and abs(float(sample.vars["P2"]) - math.pi / 2) < 1e-9
+    assert sample.vars["P3"] == 0
+    assert abs(float(sample.vars["P4"]) - 0.517887199575716) < 1e-9
+    assert sample.vars["L1"] == 20 and sample.vars["L2"] == 20 and sample.vars["L3"] == 10
+    assert abs(float(sample.vars["L4"]) - 26.298069033812887) < 1e-6
+    assert sample.vars["M1"] == 5 and abs(float(sample.vars["M4"]) - 8.456131597523353) < 1e-6
+    assert sample.vars["R1"] == 4 and sample.vars["R3"] == 1
+    assert abs(float(sample.vars["R4"]) - 3.109940843578536) < 1e-6
+    assert sample.vars["ER1"] == 12 and sample.vars["EC1"] == 10
+    assert sample.vars["ER2"] == 12 and sample.vars["EC2"] == 29
+    assert sample.vars["VR1"] == 10 and sample.vars["VC1"] == 52
+    assert sample.vars["VR2"] == 29 and sample.vars["VC2"] == 52
+    assert sample.vars["TR1"] == 22 and sample.vars["TC1"] == 50
+    assert sample.vars["TR2"] == 38 and sample.vars["TC2"] == 70
+    assert sample.vars["LevelN"] == 2
+    assert sample.vars["UprightN"] == 1 and sample.vars["UA"] == 100
+    assert abs(float(sample.vars["UR"]) - 19.5) < 1e-6 and sample.vars["UC"] == 52
+    assert sample.vars["SlantN"] == 1 and sample.vars["SA"] == 193
+    assert abs(float(sample.vars["SR"]) - 30) < 1e-6 and abs(float(sample.vars["SC"]) - 60) < 1e-6
+    assert sample.vars["LooseN"] == 3
+    assert sample.vars["LongN"] == 3 and sample.vars["LA"] == 193
+    assert abs(float(sample.vars["LR"]) - 30) < 1e-6
+    assert sample.vars["SpineA"] == 20 and sample.vars["SpineR"] == 12
+    assert abs(float(sample.vars["SpineC"]) - 19.5) < 1e-6
+    assert sample.vars["AxisGray"] == 255 and sample.vars["OffGray"] == 0
+    directions = next(param for param in REGISTRY["select_axis"].control_in if param.name == "Direction").choices
+    assert "'horizontal'" in directions and "'vertical'" in directions and "'diagonal'" in directions
+
+
+def test_hdevelop_batch69():
+    import numpy as np
+
+    from app.engine.objects import Image
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch69.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Flat"] == 100 and sample.vars["DarkSharp"] == 73 and sample.vars["BrightSharp"] == 207
+    assert sample.vars["SpikeGate"] == 106 and sample.vars["SpikeOpen"] == 111 and sample.vars["SpikeBox"] == 112
+    assert sample.vars["DarkCap"] == 88 and sample.vars["BrightCap"] == 192
+    assert sample.vars["BandFlat"] == 100 and sample.vars["DarkBand"] == 87 and sample.vars["BrightBand"] == 193
+    assert sample.vars["MaskFlat"] == 100 and sample.vars["DarkMask"] == 73
+    assert sample.vars["SpikeKept"] == 101 and sample.vars["EdgeKept"] == 180
+    assert sample.vars["ResFlat"] == 128 and sample.vars["ResDark"] == 101 and sample.vars["MapBright"] == 155
+    assert abs(float(sample.vars["MeanS"]) - 0.675) < 1e-6 and sample.vars["MaxS"] == 27
+    assert abs(float(sample.vars["MeanB"]) - 1.3) < 1e-6 and sample.vars["MaxB"] == 19
+    assert sample.vars["HotN"] == 1 and sample.vars["HotA"] == 120
+    assert abs(float(sample.vars["HotR"]) - 29.5) < 1e-6 and abs(float(sample.vars["HotC"]) - 39.5) < 1e-6
+    defaults = [param.default for param in REGISTRY["edge_enhance"].control_in]
+    assert defaults == ["1.2", "1", "2", "0"]
+    flat = np.zeros((16, 16, 3), np.uint8)
+    flat[:, :] = (20, 40, 90)
+    same = REGISTRY["edge_enhance"].fn(Image(flat), 1.2, 1, 2, 0, ctx=None).iconic[0]
+    assert np.array_equal(same.data, flat)
+    color = flat.copy()
+    color[:, 8:] = (20, 40, 200)
+    edged = REGISTRY["edge_enhance"].fn(Image(color), 1.2, 1, 8, 0, ctx=None).iconic[0]
+    assert np.array_equal(edged.data[:, 0], color[:, 0])
+    assert np.array_equal(edged.data[:, -1], color[:, -1])
+    assert not np.array_equal(edged.data[:, 7], color[:, 7])
+
+
+def test_csharp_region_tuple():
+    from app.engine.objects import Region
+
+    source = """
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (ho_A, 10, 10, 19, 19)
+Vizion.gen_rectangle1 (ho_B, 30, 30, 39, 49)
+ho_Regions := [ho_A, ho_B]
+Vizion.count_obj (ho_Regions, hv_Count)
+Vizion.area_center (ho_Regions, Area, Row, Column)
+hv_Area := Area
+A1 := Area[1]
+A2 := Area[2]
+Z := hv_Area[0]
+N := hv_Area[1]
+ho_One := ho_Regions[1]
+ho_Two := ho_Regions[2]
+Vizion.area_center (ho_One, OneArea, OneRow, OneCol)
+Vizion.area_center (ho_Two, TwoArea, TwoRow, TwoCol)
+Vizion.dev_display (ho_Regions)
+"""
+    sample = run_source(source)
+    assert sample.error is None, sample.error
+    assert sample.vars["hv_Count"] == 2
+    assert isinstance(sample.vars["ho_Regions"], Region)
+    assert sample.vars["ho_Regions"].count() == 2
+    assert sample.vars["A1"] == 100 and sample.vars["A2"] == 200
+    assert sample.vars["Z"] == 100 and sample.vars["N"] == 200
+    assert sample.vars["OneArea"] == [100]
+    assert abs(float(sample.vars["OneRow"][0]) - 14.5) < 1e-6
+    assert sample.vars["TwoArea"] == [200]
+    assert abs(float(sample.vars["TwoRow"][0]) - 34.5) < 1e-6
+    assert abs(float(sample.vars["TwoCol"][0]) - 39.5) < 1e-6
+    state = sample.public_state()
+    iconic = next(item for item in state["iconic"] if item["name"] == "ho_Regions")
+    assert iconic["kind"] == "region" and "2 個物件" in iconic["info"]
+    objects = {shape.get("object") for shape in state["display"]["shapes"] if shape.get("kind") == "region"}
+    assert objects >= {0, 1}
+    colors = {shape.get("color") for shape in state["display"]["shapes"] if shape.get("kind") == "region"}
+    assert len(colors) >= 2
+
+
+def test_csharp_xld_tuple():
+    from app.engine.objects import XLD
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch104.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert isinstance(sample.vars["ho_XLDs"], XLD)
+    assert len(sample.vars["ho_XLDs"].contours) == 2
+    assert sample.vars["ho_XLDs"].multi_color
+    assert sample.vars["hv_Count"] == 2
+    assert sample.vars["First"] == 60
+    assert sample.vars["Length"][1] == 50
+    assert sample.vars["OneN"] == 1
+    assert isinstance(sample.vars["ho_Kept"], XLD)
+    assert len(sample.vars["ho_Kept"].contours) == 1
+    state = sample.public_state()
+    iconic = next(item for item in state["iconic"] if item["name"] == "ho_XLDs")
+    assert iconic["role"] == "HObject" and iconic["kind"] == "xld" and "2 條輪廓" in iconic["info"]
+    shapes = [shape for shape in state["display"]["shapes"] if shape.get("kind") == "xld"]
+    assert {shape.get("object") for shape in shapes} >= {0, 1}
+    assert len({shape.get("color") for shape in shapes}) >= 2
+    preview = sample.view_object("ho_XLDs")
+    preview_shapes = [shape for shape in preview["display"]["shapes"] if shape.get("kind") == "xld"]
+    assert len({shape.get("color") for shape in preview_shapes}) >= 2
+
+
+def test_hdevelop_batch70():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch70.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Area"] == [400]
+    assert abs(float(sample.vars["Row"][0]) - 19.5) < 1e-6
+    assert abs(float(sample.vars["Column"][0]) - 19.5) < 1e-6
+    assert sample.vars["Answer"] == 42
+    assert sample.vars["Temp"] == 9
+    assert sample.vars["Safe"] == 1
+    assert sample.vars["Kept"] == 43
+    assert "Missing" in sample.vars["Exception"]
+    early = run_source("early (4, Out)\nprocedure early (: : Value : Result)\n    Result := Value + 1\nendprocedure\n")
+    assert early.error is None, early.error
+    assert early.vars["Out"] == 5
+    skipped = run_source("try\n    Seen := 3\ncatch (Exception)\n    Seen := 9\nendtry\n")
+    assert skipped.error is None, skipped.error
+    assert skipped.vars["Seen"] == 3 and "Exception" not in skipped.vars
+    bare = run_source("Bad := Missing\n")
+    assert bare.error and bare.vars.get("Bad") is None
+
+
+def test_hdevelop_batch71():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch71.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Area"] == [100]
+    assert abs(float(sample.vars["Row"][0]) - 14.5) < 1e-6
+    assert abs(float(sample.vars["Column"][0]) - 14.5) < 1e-6
+    assert sample.vars["Maximum"] == 80
+    assert abs(float(sample.vars["Mean"]) - (8010 / 4800)) < 1e-9
+    negative = run_source(
+        "Vizion.gen_image_const (A, 'byte', 8, 8)\ngen_image_proto (A, B, 1)\ndiff_region (A, B, D, -1)\n"
+    )
+    assert "不能是負的" in (negative.error or "")
+
+
+def test_hdevelop_batch72():
+    import cv2
+
+    from app.engine.chapters.code_ops import _decode_qr
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch72.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Text"] == "VISDEV"
+    assert len(sample.vars["Symbol"].contours) == 1
+    raw = cv2.QRCodeEncoder.create().encode("VISDEV")
+    hits = _decode_qr(raw)
+    assert hits and hits[0][0] == "VISDEV"
+
+
+def test_var_roles():
+    sample = run_source(
+        "Vizion.gen_image_const (Base, 'byte', 20, 20)\n"
+        "Vizion.gen_rectangle1 (Box, 0, 0, 4, 4)\n"
+        "ho_Box := Box\n"
+        "hv_N := 3\n"
+        "Vizion.dev_display (ho_Box)\n"
+    )
+    assert sample.error is None, sample.error
+    state = sample.public_state()
+    ho = next(item for item in state["iconic"] if item["name"] == "ho_Box")
+    box = next(item for item in state["iconic"] if item["name"] == "Box")
+    hv = next(item for item in state["control"] if item["name"] == "hv_N")
+    assert ho["role"] == "HObject" and ho["kind"] == "region"
+    assert box["role"] == "region"
+    assert hv["type"] == "HTuple"
+
+
+def test_hdevelop_batch73():
+    import math
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch73.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Area"] == [40]
+    assert abs(float(sample.vars["Row"][0]) - 29.5) < 1e-6
+    assert abs(float(sample.vars["Column"][0]) - 40) < 1e-6
+    assert int(sample.vars["Peak"]) == 56 and int(sample.vars["Side"]) == 0
+    assert sample.vars["Count"] == 1
+    assert abs(float(sample.vars["Length"]) - 39) < 1e-6
+    assert abs(float(sample.vars["Phi"]) - math.pi / 2) < 1e-9
+    assert abs(float(sample.vars["CenterRow"]) - 29.5) < 1e-6
+    assert abs(float(sample.vars["CenterCol"]) - 40) < 1e-4
+    assert sample.vars["WrongCount"] == 0 and sample.vars["FlatCount"] == 0
+    assert sample.vars["LightArea"] == [69]
+    assert abs(float(sample.vars["LightRow"][0]) - 30) < 1e-6
+    assert abs(float(sample.vars["LightCol"][0]) - 40) < 1e-6
+    assert 60 < float(sample.vars["Longest"]) < 70
+    assert sample.vars["BlockCount"] == 0
+    negative = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nridge_region (A, R, 1, -1, 'dark')\n")
+    assert "不能是負的" in (negative.error or "")
+
+
+def test_hdevelop_batch74():
+    import math
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch74.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Area"] == [60]
+    assert abs(float(sample.vars["Row"][0]) - 29.5) < 1e-6
+    assert abs(float(sample.vars["Column"][0]) - 40) < 1e-6
+    assert int(sample.vars["Peak"]) == 58 and int(sample.vars["Side"]) == 0
+    assert sample.vars["Count"] == 1
+    assert abs(float(sample.vars["Length"]) - 59) < 1e-6
+    assert abs(float(sample.vars["Phi"]) - math.pi / 2) < 1e-9
+    assert abs(float(sample.vars["CenterRow"]) - 29.5) < 1e-6
+    assert abs(float(sample.vars["CenterCol"]) - 39.5) < 1e-6
+    assert abs(float(sample.vars["Longest"]) - 59) < 1e-6
+    assert sample.vars["AcrossCount"] == 1
+    assert abs(float(sample.vars["AcrossLength"]) - 79) < 1e-6
+    assert abs(float(sample.vars["AcrossPhi"])) < 1e-9
+    assert abs(float(sample.vars["AcrossRow"]) - 29.5) < 1e-6
+    assert abs(float(sample.vars["AcrossCol"]) - 39.5) < 1e-4
+    assert sample.vars["SoftCount"] == 0 and sample.vars["FlatCount"] == 0
+    negative = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nedge_region (A, R, 1, -1)\n")
+    assert "不能是負的" in (negative.error or "")
+
+
+def test_hdevelop_batch75():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch75.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(float(sample.vars["Row"]) - 1.5) < 0.02
+    assert sample.vars["Column"] == 0
+    assert abs(float(sample.vars["SideCol"]) - 1.5) < 0.02
+    assert sample.vars["SideRow"] == 0
+    assert sample.vars["FarRow"] == 3 and sample.vars["FarCol"] == 4
+    assert sample.vars["SameRow"] == 0 and sample.vars["SameCol"] == 0
+    assert float(sample.vars["SameScore"]) > 0.9
+    assert abs(float(sample.vars["BackRow"]) - float(sample.vars["Row"])) < 1e-9
+    assert int(sample.vars["Orig"]) == 200 and int(sample.vars["Restored"]) == 200
+    mismatch = run_source(
+        "Vizion.gen_image_const (A, 'byte', 16, 16)\nVizion.gen_image_const (B, 'byte', 20, 16)\n"
+        "Vizion.phase_correlation (A, B, Row, Column, Score)\n"
+    )
+    assert "尺寸要相同" in (mismatch.error or "")
+
+
+def test_hdevelop_batch76():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch76.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(float(sample.vars["Row1"][0]) - 10) < 1e-6
+    assert abs(float(sample.vars["Row2"][0]) - 10) < 1e-6
+    columns = sorted(float(item) for item in (sample.vars["Col1"][0], sample.vars["Col2"][0]))
+    assert abs(columns[0]) < 1e-6 and abs(columns[1] - 30) < 1e-6
+    ends = sorted(
+        (float(sample.vars[row][0]), float(sample.vars[col][0]))
+        for row, col in (("D1", "C1"), ("D2", "C2"))
+    )
+    assert abs(ends[0][0]) < 1e-6 and abs(ends[0][1]) < 1e-6
+    assert abs(ends[1][0] - 30) < 1e-6 and abs(ends[1][1] - 30) < 1e-6
+
+
+def test_hdevelop_batch77():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch77.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(float(sample.vars["Row"][0]) - 80) < 1e-4
+    assert abs(float(sample.vars["Column"][0]) - 90) < 1e-4
+    assert abs(float(sample.vars["Radius"][0]) - 40) < 1e-4
+    flat = run_source(
+        "Vizion.gen_contour_polygon_xld (Flat, [0, 1, 2], [0, 1, 2])\n"
+        "Vizion.fit_circle_contour_xld (Flat, Miss, MRow, MCol, MRad)\n"
+    )
+    assert "沒有可以擬合圓" in (flat.error or "")
+
+
+def test_hdevelop_batch78():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch78.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["CenterCount"] == 1
+    assert sample.vars["RowMin"] == 9.5 and sample.vars["ColMin"] == 9.5
+    assert sample.vars["RowMax"] == 29.5 and sample.vars["ColMax"] == 29.5
+    assert sample.vars["BorderMin"] == 10 and sample.vars["BorderMax"] == 29
+    assert sample.vars["FrameCount"] == 1
+    assert sample.vars["FrameMin"] == 9.5 and sample.vars["FrameMax"] == 40.5
+    center_radius = float(sample.vars["CRad"][0])
+    border_radius = float(sample.vars["BRad"][0])
+    assert abs(center_radius - 15) < 0.15
+    assert abs(border_radius - 14.56) < 0.02
+    assert abs(center_radius - 15) < abs(border_radius - 15)
+
+
+def test_hdevelop_batch79():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch79.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["RowMin"] == 10 and sample.vars["RowMax"] == 10
+    assert sample.vars["ColMin"] == 0 and sample.vars["ColMax"] == 30
+    assert abs(float(sample.vars["PlainMean"]) - 12.4) < 1e-6
+    assert sample.vars["CleanMin"] == 10 and sample.vars["CleanMax"] == 10
+
+
+def test_hdevelop_batch80():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch80.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert int(sample.vars["Deriv"]) == 129 and int(sample.vars["ZeroY"]) == 128
+    assert int(sample.vars["Deriv2"]) == 128 and int(sample.vars["Amp"]) == 1
+    assert int(sample.vars["DerivY"]) == 129 and int(sample.vars["ZeroX"]) == 128
+    bad = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nVizion.derivate_gauss (A, D, 0, 'x')\n")
+    assert "必須大於 0" in (bad.error or "")
+
+
+def test_hdevelop_batch81():
+    import numpy as np
+
+    from app.engine.chapters.measure_ops import _gather
+    from app.engine.gauge import sample_bicubic
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch81.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["OnPixel"] == 200
+    assert sample.vars["Cubic"] == 112.5
+    assert sample.vars["Linear"] == 100
+    assert sample.vars["Near"] == 0
+    gray = np.zeros((32, 32), np.uint8)
+    gray[10, 10] = 200
+    cubic = _gather(gray, None, np.array([10.5]), np.array([10.0]), "bicubic")
+    linear = _gather(gray, None, np.array([10.5]), np.array([10.0]), "bilinear")
+    assert abs(float(cubic[0]) - 112.5) < 1e-9
+    assert abs(float(linear[0]) - 100) < 1e-9
+    color = np.zeros((8, 8, 3), np.uint8)
+    color[3, 3] = (10, 20, 30)
+    got = sample_bicubic(color, np.array([3.0]), np.array([3.0]))
+    assert list(got[0]) == [10, 20, 30]
+    bad = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nget_grayval_interpolated (A, 1, 1, 'cubic', G)\n")
+    assert "只能是" in (bad.error or "")
+
+
+def test_hdevelop_batch82():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch82.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    truth = 59.9
+    interpolated = float(sample.vars["ICol"][0])
+    fitted = float(sample.vars["LCol"][0])
+    assert abs(fitted - truth) < 0.1
+    assert abs(fitted - truth) < abs(interpolated - truth)
+    assert abs(float(sample.vars["LRow"][0]) - 44.5) < 0.05
+    assert abs(float(sample.vars["LAng"][0])) < 1e-3
+
+
+def test_hdevelop_batch83():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch83.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    truth_row = 39.25
+    truth_col = 47.85
+    fitted_row = float(sample.vars["LRow"][0])
+    fitted_col = float(sample.vars["LCol"][0])
+    assert abs(fitted_row - truth_row) < 0.1
+    assert abs(float(sample.vars["IRow"][0]) - 39.23) < 1e-9
+    assert abs(fitted_row - truth_row) < abs(float(sample.vars["IRow"][0]) - truth_row)
+    assert abs(fitted_col - truth_col) < 0.15
+    assert float(sample.vars["IScore"][0]) > float(sample.vars["LScore"][0])
+    assert abs(float(sample.vars["LAng"][0])) < 1e-6
+
+
+def test_hdevelop_batch84():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch84.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert float(sample.vars["ThinBegin"][0]) == 45.5
+    assert float(sample.vars["ThinEnd"][0]) == 45.5
+    assert float(sample.vars["WideBegin"][0]) == 39.5
+    assert float(sample.vars["WideEnd"][0]) == 39.5
+
+
+def test_hdevelop_batch85():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch85.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+
+    def one(value):
+        if isinstance(value, (list, tuple)):
+            return float(value[0])
+        return float(value)
+
+    still_row = one(sample.vars["StillRow"])
+    still_col = one(sample.vars["StillCol"])
+    corner_row = one(sample.vars["CornerRow"])
+    corner_col = one(sample.vars["CornerCol"])
+    truth_row = still_row + 0.4
+    truth_col = still_col + 0.35
+    assert abs(still_row - 24.13) < 0.05
+    assert abs(still_col - 36.13) < 0.05
+    assert abs(corner_row - truth_row) < 0.2
+    assert abs(corner_col - truth_col) < 0.2
+    assert abs(corner_row - truth_row) < abs(25 - truth_row)
+    assert abs(corner_col - truth_col) < abs(37 - truth_col)
+
+
+def test_hdevelop_batch86():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch86.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Affine"] == [1, 0, 2, 0, 1, 5]
+    assert sample.vars["Row0"] == 2 and sample.vars["Col0"] == 5
+    assert sample.vars["Row1"] == 12 and sample.vars["Col1"] == 20
+
+
+def test_hdevelop_batch87():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch87.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Row0"] == 3 and sample.vars["Col0"] == 4
+    assert sample.vars["Row1"] == 13 and sample.vars["Col1"] == 14
+
+
+def test_hdevelop_batch88():
+    import math
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch88.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(float(sample.vars["BRow"][0]) - 80) < 0.02
+    assert abs(float(sample.vars["BCol"][0]) - 90) < 0.02
+    assert abs(float(sample.vars["BR1"][0]) - 40) < 0.02
+    assert abs(float(sample.vars["BR2"][0]) - 18) < 0.02
+    delta = abs(float(sample.vars["BPhi"][0]) - 0.4) % math.pi
+    assert min(delta, math.pi - delta) < 0.02
+
+
+def test_hdevelop_batch89():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch89.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["FRow"][0] == 50 and sample.vars["FCol"][0] == 80
+    assert sample.vars["FPhi"][0] == 0
+    assert sample.vars["FL1"][0] == 36 and sample.vars["FL2"][0] == 18
+    assert sample.vars["SRow"][0] == 43 and sample.vars["SL2"][0] == 25
+
+
+def test_hdevelop_batch90():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch90.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(float(sample.vars["Alpha"])) < 1e-9
+    assert abs(float(sample.vars["Beta"])) < 1e-9
+    assert abs(float(sample.vars["Gamma"])) < 1e-9
+    assert abs(float(sample.vars["RawA"]) + 20.0 / 3.0) < 1e-6
+    assert abs(float(sample.vars["RawB"]) + 20.0 / 3.0) < 1e-6
+    assert abs(float(sample.vars["RawG"]) - 460.0 / 9.0) < 1e-6
+
+
+def test_hdevelop_batch91():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch91.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(float(sample.vars["Nx"])) < 1e-9
+    assert abs(float(sample.vars["Ny"])) < 1e-9
+    assert abs(float(sample.vars["Nz"]) - 1) < 1e-9
+    assert abs(float(sample.vars["Dist"])) < 1e-9
+
+
+def test_hdevelop_batch92():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch92.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(float(sample.vars["Ax"]) - 1) < 1e-9
+    assert abs(float(sample.vars["Ay"])) < 1e-9
+    assert abs(float(sample.vars["Az"])) < 1e-9
+
+
+def test_hdevelop_batch93():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch93.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(float(sample.vars["LCol"][1]) - 28.85060845773462) < 1e-6
+    assert abs(float(sample.vars["LCol"][3]) - 71.14939154226538) < 1e-6
+    assert sample.vars["RCol"][1] == 30 and sample.vars["RCol"][3] == 70
+    assert sample.vars["RRow"][1] == 44 and sample.vars["RRow"][2] == 56
+
+
+def test_hdevelop_batch94():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch94.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["StillIRow"] == 25 and sample.vars["StillICol"] == 37
+    assert sample.vars["MoveIRow"] == 25 and sample.vars["MoveICol"] == 37
+    still_row = float(sample.vars["StillRow"])
+    still_col = float(sample.vars["StillCol"])
+    corner_row = float(sample.vars["CornerRow"])
+    corner_col = float(sample.vars["CornerCol"])
+    truth_row = still_row + 0.4
+    truth_col = still_col + 0.35
+    assert abs(still_row - 24.13157) < 0.01
+    assert abs(still_col - 36.13157) < 0.01
+    assert abs(corner_row - truth_row) < abs(25 - truth_row)
+    assert abs(corner_col - truth_col) < abs(37 - truth_col)
+    assert abs(corner_row - truth_row) < 0.2
+    assert abs(corner_col - truth_col) < 0.2
+
+
+def test_hdevelop_batch95():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch95.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert all(abs(float(item) - 10) < 1e-6 for item in sample.vars["Row"])
+    assert [abs(float(item) - expected) < 1e-6 for item, expected in zip(sample.vars["Col"], [0, 10, 20, 30, 40])] == [True] * 5
+
+
+def test_hdevelop_batch96():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch96.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Mid"] == 112
+    assert sample.vars["Average"] == 100
+    assert sample.vars["Kept"] == 200
+
+
+def test_hdevelop_batch97():
+    import math
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch97.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["WideP"] == 0 and sample.vars["WideA"] == 0
+    assert abs(float(sample.vars["TallP"]) - math.pi / 2) < 1e-12
+    assert abs(float(sample.vars["TallA"]) - math.pi / 2) < 1e-12
+    assert abs(float(sample.vars["WRa"]) - math.sqrt(133)) < 1e-9
+    assert abs(float(sample.vars["WRb"]) - math.sqrt(8)) < 1e-9
+
+
+def test_hdevelop_batch98():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch98.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Mid"] == 112
+    assert sample.vars["Average"] == 100
+    assert sample.vars["Pulled"] == 112
+    assert sample.vars["Row"] == 0
+    assert abs(float(sample.vars["Column"]) - 0.5) < 1e-9
+
+
+def test_hdevelop_batch99():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch99.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    center = 30 + 1 / 3
+    assert sample.vars["FRow"] == 20 and sample.vars["GRow"] == 20
+    assert abs(float(sample.vars["FCol"]) - (30 + 1 / 6)) < 1e-9
+    assert abs(float(sample.vars["GCol"]) - 30.33298435807228) < 1e-9
+    assert abs(float(sample.vars["GCol"]) - center) < abs(float(sample.vars["FCol"]) - center)
+
+
+def test_hdevelop_batch100():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch100.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(float(sample.vars["BRow"]) - 24.094262617339446) < 1e-9
+    assert abs(float(sample.vars["BCol"]) - 36.094262648985456) < 1e-9
+
+
+def test_hdevelop_batch101():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch101.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    refined = float(sample.vars["S"])
+    still = float(sample.vars["Still"])
+    assert still == 1.0
+    assert abs(refined - 1.07505) < 1e-5
+    assert abs(refined - 1.1) < abs(still - 1.1)
+
+
+def test_hdevelop_batch102():
+    import numpy as np
+
+    from app.engine.ncc_model import _keys_peak
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch102.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert float(sample.vars["Still"]) == 40
+    assert abs(float(sample.vars["SRow"]) - 39.23) < 1e-9
+    assert abs(float(sample.vars["SCol"]) - 47.86) < 1e-9
+    assert abs(39.23 - 39.25) < abs(40 - 39.25)
+    assert _keys_peak(np.array([1.0, 1.0, 1.0, 1.0, 1.0])) == 0.0
+    assert _keys_peak(np.array([0.97, 0.9999, 1.0, 0.99, 0.97])) == 0.0
+
+
+def test_hdevelop_batch103():
+    from app.engine.datamatrix import decode_image, encode_modules
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch103.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Text"] == "VISDEV"
+    assert len(sample.vars["Symbol"].contours) == 1
+    assert "'Data Matrix'" in REGISTRY["create_data_code_2d_model"].control_in[0].choices
+    modules = encode_modules("12AB")
+    assert decode_image(modules)[0][0] == "12AB"
 
 
 def np_degrees_diag():
@@ -2335,20 +3382,20 @@ def test_threshold_histogram_and_morphology():
 
     ensure_samples(ROOT)
     source = """
-read_image (Image, 'samples/parts.png')
-threshold (Image, Region, 60, 255)
-dev_set_color ('#ff3b30')
-dev_display (Image)
-dev_display (Region)
-erosion_rectangle1 (Region, Eroded, 5, 5)
-dilation_rectangle1 (Region, Dilated, 5, 5)
-opening_rectangle1 (Region, Opened, 5, 5)
-closing_rectangle1 (Region, Closed, 5, 5)
-opening_circle (Region, CircleOpen, 3.5)
-boundary (Region, Border, 'inner')
-connection (Region, Parts)
-dev_set_colored (6)
-dev_display (Parts)
+Vizion.read_image (Image, 'samples/parts.png')
+Vizion.threshold (Image, Region, 60, 255)
+Vizion.dev_set_color ('#ff3b30')
+Vizion.dev_display (Image)
+Vizion.dev_display (Region)
+Vizion.erosion_rectangle1 (Region, Eroded, 5, 5)
+Vizion.dilation_rectangle1 (Region, Dilated, 5, 5)
+Vizion.opening_rectangle1 (Region, Opened, 5, 5)
+Vizion.closing_rectangle1 (Region, Closed, 5, 5)
+Vizion.opening_circle (Region, CircleOpen, 3.5)
+Vizion.boundary (Region, Border, 'inner')
+Vizion.connection (Region, Parts)
+Vizion.dev_set_colored (6)
+Vizion.dev_display (Parts)
 """
     session = run_source(source)
     assert session.error is None, session.error
@@ -2372,8 +3419,8 @@ dev_display (Parts)
     assert len(colors) >= 2
 
     binary = run_source("""
-read_image (Image, 'samples/parts.png')
-binary_threshold (Image, Region, 'max_separability', 'light', Used)
+Vizion.read_image (Image, 'samples/parts.png')
+Vizion.binary_threshold (Image, Region, 'max_separability', 'light', Used)
 """)
     assert binary.error is None, binary.error
     otsu = binary.public_state()["histogram"]
@@ -2576,8 +3623,8 @@ def test_connection_distance():
     diagonal[0, 1] = 255
     diagonal[1, 0] = 255
     assert connection(Region(3, 3, [diagonal]), 1, ctx=Ctx()).iconic[0].count() == 1
-    omitted = parse_program("connection (Region, Parts)\n")
-    given = parse_program("connection (Region, Parts, 4.5)\n")
+    omitted = parse_program("Vizion.connection (Region, Parts)\n")
+    given = parse_program("Vizion.connection (Region, Parts, 4.5)\n")
     assert omitted.stmts[0].control_in == ["1"]
     assert given.stmts[0].control_in == ["4.5"]
 
@@ -2606,16 +3653,16 @@ def test_connection_halcon_and_opencv():
 
     ensure_samples(ROOT)
     source = """
-read_image (Image, 'samples/parts.png')
-threshold (Image, Region, 60, 255)
-connection (Region, Parts)
-dev_display (Image)
-dev_set_draw ('margin')
-dev_display (Parts)
-opencv_threshold (Image, OpenCVRegion, 60, 'binary')
-opencv_connection (OpenCVRegion, OpenCVParts, 4)
-count_obj (Parts, HalconCount)
-count_obj (OpenCVParts, OpenCVCount)
+Vizion.read_image (Image, 'samples/parts.png')
+Vizion.threshold (Image, Region, 60, 255)
+Vizion.connection (Region, Parts)
+Vizion.dev_display (Image)
+Vizion.dev_set_draw ('margin')
+Vizion.dev_display (Parts)
+Vizion.opencv_threshold (Image, OpenCVRegion, 60, 'binary')
+Vizion.opencv_connection (OpenCVRegion, OpenCVParts, 4)
+Vizion.count_obj (Parts, HalconCount)
+Vizion.count_obj (OpenCVParts, OpenCVCount)
 """
     session = run_source(source)
     assert session.error is None, session.error
@@ -2651,23 +3698,23 @@ def test_move_program_arrow():
 
 def test_xld_contour_tools():
     session = run_source("""
-gen_contour_polygon_xld (Diag, [0, 20], [0, 20])
-fit_line_contour_xld (Diag, Line, Row1, Col1, Row2, Col2)
-gen_contour_polygon_xld (Box, [10, 10, 40, 40, 10], [10, 40, 40, 10, 10])
-gen_region_contour_xld (Box, Region, 'filled')
-area_center (Region, Area, CenterRow, CenterCol)
-segment_contours_xld (Box, Sides, 'lines', 1)
-count_obj (Sides, SideCount)
-select_obj (Sides, FirstSide, 1)
-get_contour_xld (FirstSide, SideRow, SideCol)
-select_contours_xld (Sides, LongSides, 'contlength', 20, 40)
-segment_contours_xld (Box, Corners, 'angle', 0.5)
-gen_contour_polygon_xld (Arc, [60, 100, 140, 100], [100, 140, 100, 60])
-fit_circle_contour_xld (Arc, Circle, CRow, CCol, Radius)
-fit_rectangle2_contour_xld (Box, Rect, RRow, RCol, Phi, Len1, Len2)
-close_contours_xld (Diag, Closed)
-smooth_contours_xld (Box, SmoothBox, 5)
-length_xld (Diag, DiagLength)
+Vizion.gen_contour_polygon_xld (Diag, [0, 20], [0, 20])
+Vizion.fit_line_contour_xld (Diag, Line, Row1, Col1, Row2, Col2)
+Vizion.gen_contour_polygon_xld (Box, [10, 10, 40, 40, 10], [10, 40, 40, 10, 10])
+Vizion.gen_region_contour_xld (Box, Region, 'filled')
+Vizion.area_center (Region, Area, CenterRow, CenterCol)
+Vizion.segment_contours_xld (Box, Sides, 'lines', 1)
+Vizion.count_obj (Sides, SideCount)
+Vizion.select_obj (Sides, FirstSide, 1)
+Vizion.get_contour_xld (FirstSide, SideRow, SideCol)
+Vizion.select_contours_xld (Sides, LongSides, 'contlength', 20, 40)
+Vizion.segment_contours_xld (Box, Corners, 'angle', 0.5)
+Vizion.gen_contour_polygon_xld (Arc, [60, 100, 140, 100], [100, 140, 100, 60])
+Vizion.fit_circle_contour_xld (Arc, Circle, CRow, CCol, Radius)
+Vizion.fit_rectangle2_contour_xld (Box, Rect, RRow, RCol, Phi, Len1, Len2)
+Vizion.close_contours_xld (Diag, Closed)
+Vizion.smooth_contours_xld (Box, SmoothBox, 5)
+Vizion.length_xld (Diag, DiagLength)
 """)
     assert session.error is None, session.error
     ends = {(round(session.vars["Row1"][0], 1), round(session.vars["Col1"][0], 1)), (round(session.vars["Row2"][0], 1), round(session.vars["Col2"][0], 1))}
@@ -2733,12 +3780,12 @@ def test_ocr_page():
     path = ROOT / "workspace" / "_ocr_page.png"
     path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(path), image)
-    session = run_source("read_image (Image, 'workspace/_ocr_page.png')\nocr_find (Image, Words, 'auto', Text, Row, Column, Score)\n")
+    session = run_source("Vizion.read_image (Image, 'workspace/_ocr_page.png')\nocr_find (Image, Words, 'auto', Text, Row, Column, Score)\n")
     assert session.error is None, session.error
     found = " ".join(str(item) for item in session.vars["Text"])
     assert "VISDEV" in found and "168" in found, found
     assert len(session.vars["Words"].contours) == len(session.vars["Text"])
-    outside = run_source("read_image (Image, 'workspace/_ocr_page.png')\nocr_find (Image, Words, 'auto', 0, 0, 20, 20, Text, Row, Column, Score)\n")
+    outside = run_source("Vizion.read_image (Image, 'workspace/_ocr_page.png')\nocr_find (Image, Words, 'auto', 0, 0, 20, 20, Text, Row, Column, Score)\n")
     path.unlink(missing_ok=True)
     assert outside.error is None, outside.error
     missed = " ".join(str(item) for item in outside.vars["Text"])
@@ -2818,13 +3865,13 @@ def test_gauge():
     assert session.vars["LUsed"] >= 8
     assert not problems, "；".join(problems)
     short = run_source(
-        "read_image (Image, 'samples/gauge.png')\n"
-        "gauge_point (Image, Mark2, 110, 80, 110, 220, PRow2, PCol2, Amp2, Dist2)\n"
+        "Vizion.read_image (Image, 'samples/gauge.png')\n"
+        "Vizion.gauge_point (Image, Mark2, 110, 80, 110, 220, PRow2, PCol2, Amp2, Dist2)\n"
     )
     assert short.error is None, short.error
     picked = float(short.vars["PCol2"][0] if isinstance(short.vars["PCol2"], list) else short.vars["PCol2"])
     assert abs(picked - 107.5) < 0.6 or abs(picked - 192.5) < 0.6, picked
-    parallel = run_source("intersection_ll (0, 0, 0, 10, 2, 0, 2, 10, Row, Column)\n")
+    parallel = run_source("Vizion.intersection_ll (0, 0, 0, 10, 2, 0, 2, 10, Row, Column)\n")
     assert parallel.error and "平行" in parallel.error
 
 
@@ -2874,8 +3921,15 @@ def test_parse_error():
         parse_program("not_an_operator (A, B)\n")
     except ParseError as exc:
         assert exc.line == 1
-        return
-    raise AssertionError("應該要拒絕未知算子")
+    else:
+        raise AssertionError("應該要拒絕未知算子")
+    try:
+        parse_program("gen_rectangle1 (A, 0, 0, 1, 1)\n")
+    except ParseError as exc:
+        assert "Vizion.gen_rectangle1" in str(exc)
+    else:
+        raise AssertionError("沒有前綴的算子應該被拒絕")
+    parse_program("Vizion.gen_rectangle1 (A, 0, 0, 1, 1)\n")
 
 
 if __name__ == "__main__":

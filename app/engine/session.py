@@ -10,9 +10,12 @@ from pathlib import Path
 import numpy as np
 
 from .evalexpr import ExprError, eval_expr, truthy
-from .objects import Image, Region, StopSignal, XLD
-from .operators import REGISTRY
-from .parser import Assign, Call, Comment, Blank, ElseStmt, EndForStmt, EndIfStmt, EndWhileStmt, ForStmt, IfStmt, ParseError, WhileStmt, parse_program
+from .objects import Image, Region, StopSignal, XLD, coerce_iconic
+from .operators import REGISTRY, operator_bare
+from .parser import (
+    Assign, Call, CatchStmt, Comment, Blank, ElseStmt, EndForStmt, EndIfStmt, EndProcedureStmt,
+    EndTryStmt, EndWhileStmt, ForStmt, IfStmt, ParseError, ProcedureStmt, TryStmt, WhileStmt, parse_program,
+)
 from .render import apply_domain_dim, compose_display, jpeg_thumb, region_thumb, xld_thumb
 from .ncc_model import NccModel
 from .shape_model import MATCH_COLORS, ShapeModel
@@ -72,6 +75,12 @@ def fmt_num(value) -> str:
 
 
 def fmt_value(value) -> str:
+    if isinstance(value, Region):
+        return f"{value.count()} 個區域"
+    if isinstance(value, XLD):
+        return f"{len(value.contours)} 條輪廓"
+    if isinstance(value, Image):
+        return f"影像 {value.width}×{value.height}"
     value = pythonize(value)
     if isinstance(value, list):
         shown = [fmt_num(item) for item in value[:12]]
@@ -92,6 +101,15 @@ def full_value(value) -> str:
     return fmt_num(value)
 
 
+def _var_role(name: str, kind: str, iconic: bool) -> str:
+    low = name.lower()
+    if iconic and low.startswith("ho_"):
+        return "HObject"
+    if (not iconic) and low.startswith("hv_"):
+        return "HTuple"
+    return kind
+
+
 class Session:
     def __init__(self, source: str, root: Path):
         self.id = uuid.uuid4().hex[:12]
@@ -105,6 +123,10 @@ class Session:
         self.end_for = program.end_for
         self.while_end = program.while_end
         self.end_while = program.end_while
+        self.proc_end = program.proc_end
+        self.procs = program.procs
+        self.try_catch = program.try_catch
+        self.catch_end = program.catch_end
         self.lock = threading.Lock()
         self.breakpoints: set[int] = set()
         self.trace = False
@@ -125,6 +147,8 @@ class Session:
         self.log: list[str] = []
         self.display = Display()
         self.loops: dict = {}
+        self.try_stack: list = []
+        self.proc_depth = 0
         self.cancel = False
         self.break_skip = None
         self.arrow_line = None
@@ -195,6 +219,9 @@ class Session:
 
     def display_obj(self, obj, provisional: bool = False, name: str | None = None):
         source = name if name is not None else getattr(self, "pending_display_name", None)
+        obj = coerce_iconic(obj)
+        if isinstance(obj, list) and obj and all(isinstance(item, Image) for item in obj):
+            obj = obj[-1]
         if isinstance(obj, Image):
             self.display.base = obj
             self.display.base_provisional = provisional
@@ -336,25 +363,59 @@ class Session:
             self._execute(stmt, index)
         except StopSignal:
             self.paused = "stop"
-            self.log.append(f"stop() 於第 {stmt.line} 行")
+            self.log.append(f"Vizion.stop() 於第 {stmt.line} 行")
         except (ExprError, ParseError, Exception) as exc:
-            self.error = str(exc)
-            self.error_line = stmt.line
-            self.log.append(f"錯誤 第 {stmt.line} 行：{exc}")
+            frame = self.try_stack[-1] if self.try_stack and self.try_stack[-1][2] == self.proc_depth else None
+            if frame is not None:
+                self.try_stack.pop()
+                catch_index, var, _depth = frame
+                self.vars[var] = str(exc)
+                self.pc = catch_index + 1
+                self.log.append(f"catch {var} 第 {stmt.line} 行：{exc}")
+            elif self.proc_depth:
+                self.error = f"程序第 {stmt.line} 行：{exc}"
+                self.error_line = stmt.line
+            else:
+                self.error = str(exc)
+                self.error_line = stmt.line
+                self.log.append(f"錯誤 第 {stmt.line} 行：{exc}")
         finally:
             self._note_time(stmt, time.perf_counter() - started)
 
     def _execute(self, stmt, index: int):
         if isinstance(stmt, Assign):
-            self.vars[stmt.name] = pythonize(eval_expr(stmt.expr, self.vars))
+            self.vars[stmt.name] = coerce_iconic(pythonize(eval_expr(stmt.expr, self.vars)))
             self.pc = index + 1
             self.trace_line(stmt, f"{stmt.name} := {fmt_value(self.vars[stmt.name])}")
             return
         if isinstance(stmt, Call):
-            if stmt.name == "stop":
+            if operator_bare(stmt.name) == "stop":
                 self.pc = index + 1
                 raise StopSignal()
-            self._call(stmt)
+            if stmt.name in self.procs:
+                self._call_proc(stmt, self.procs[stmt.name])
+            else:
+                self._call(stmt)
+            self.pc = index + 1
+            return
+        if isinstance(stmt, ProcedureStmt):
+            self.pc = self.proc_end[index] + 1
+            return
+        if isinstance(stmt, EndProcedureStmt):
+            self.pc = index + 1
+            return
+        if isinstance(stmt, TryStmt):
+            catch_index = self.try_catch[index]
+            var = self.stmts[catch_index].var
+            self.try_stack.append((catch_index, var, self.proc_depth))
+            self.pc = index + 1
+            return
+        if isinstance(stmt, CatchStmt):
+            if self.try_stack and self.try_stack[-1][0] == index and self.try_stack[-1][2] == self.proc_depth:
+                self.try_stack.pop()
+            self.pc = self.catch_end[index]
+            return
+        if isinstance(stmt, EndTryStmt):
             self.pc = index + 1
             return
         if isinstance(stmt, IfStmt):
@@ -412,35 +473,88 @@ class Session:
             self.loops.pop(for_index, None)
             self.pc = index + 1
 
+    def _call_proc(self, stmt: Call, proc_index: int):
+        if self.proc_depth >= 32:
+            raise RuntimeError("程序遞迴超過 32 層")
+        proc = self.stmts[proc_index]
+        outer = self.vars
+        local = {}
+        for name, src in zip(proc.iconic_in, stmt.iconic_in):
+            if src not in outer:
+                raise RuntimeError(f"變數 {src} 還沒有值")
+            local[name] = coerce_iconic(outer[src])
+        for name, expr in zip(proc.control_in, stmt.control_in):
+            local[name] = pythonize(eval_expr(expr, outer))
+        saved_pc = self.pc
+        self.proc_depth += 1
+        self.vars = local
+        self.pc = proc_index + 1
+        end = self.proc_end[proc_index]
+        guard = None
+        try:
+            steps = 0
+            while self.pc < end and not self.error and self.paused not in ("stop", "breakpoint", "stopped"):
+                self._execute_current()
+                steps += 1
+                if steps > 100000:
+                    guard = "程序超過 100000 步"
+                    break
+        finally:
+            local = self.vars
+            self.vars = outer
+            self.pc = saved_pc
+            self.proc_depth -= 1
+        if guard:
+            raise RuntimeError(guard)
+        if self.error:
+            message = self.error
+            self.error = None
+            self.error_line = None
+            raise RuntimeError(message)
+        for name, src in zip(stmt.iconic_out, proc.iconic_out):
+            if src not in local:
+                raise RuntimeError(f"程序 {proc.name} 沒有設定輸出 {src}")
+            value = coerce_iconic(local[src])
+            outer[name] = value
+            if isinstance(value, Image):
+                self.ref_shape = (value.height, value.width)
+        for name, src in zip(stmt.control_out, proc.control_out):
+            if src not in local:
+                raise RuntimeError(f"程序 {proc.name} 沒有設定輸出 {src}")
+            outer[name] = pythonize(local[src])
+        self.trace_line(stmt, stmt.name)
+
     def _call(self, stmt: Call):
-        op = REGISTRY[stmt.name]
+        bare = operator_bare(stmt.name)
+        op = REGISTRY[bare]
         iconic = []
         for name in stmt.iconic_in:
             if name not in self.vars:
                 raise RuntimeError(f"變數 {name} 還沒有值")
-            iconic.append(self.vars[name])
+            iconic.append(coerce_iconic(self.vars[name]))
         controls = [pythonize(eval_expr(expr, self.vars)) for expr in stmt.control_in]
-        self.pending_display_name = stmt.iconic_in[0] if stmt.name == "dev_display" and stmt.iconic_in else None
+        self.pending_display_name = stmt.iconic_in[0] if bare == "dev_display" and stmt.iconic_in else None
         result = op.fn(*iconic, *controls, ctx=self)
         if len(result.iconic) != len(stmt.iconic_out) or len(result.control) != len(stmt.control_out):
             raise RuntimeError(f"{stmt.name} 的輸出數量和呼叫不一致")
         for name, value in zip(stmt.iconic_out, result.iconic):
+            value = coerce_iconic(value)
             self.vars[name] = value
             if isinstance(value, Image):
                 self.ref_shape = (value.height, value.width)
         for name, value in zip(stmt.control_out, result.control):
             self.vars[name] = pythonize(value)
-        if stmt.iconic_out and not stmt.name.startswith("dev_"):
+        if stmt.iconic_out and not bare.startswith("dev_"):
             self.display_obj(self.vars[stmt.iconic_out[-1]], provisional=True, name=stmt.iconic_out[-1])
-        if stmt.name in ("threshold", "binary_threshold", "opencv_threshold", "threshold_sub_pix") and self.histogram is not None:
+        if bare in ("threshold", "binary_threshold", "opencv_threshold", "threshold_sub_pix") and self.histogram is not None:
             self.histogram["line"] = stmt.line
-            if stmt.name == "threshold":
+            if bare == "threshold":
                 numeric = len(stmt.control_in) >= 2 and all(_num_literal(item) for item in stmt.control_in[:2])
                 self.histogram["literal"] = numeric and len(stmt.lines) == 1
-            elif stmt.name == "opencv_threshold":
+            elif bare == "opencv_threshold":
                 numeric = len(stmt.control_in) >= 1 and _num_literal(stmt.control_in[0])
                 self.histogram["literal"] = numeric and len(stmt.lines) == 1
-            elif stmt.name == "threshold_sub_pix":
+            elif bare == "threshold_sub_pix":
                 numeric = len(stmt.control_in) >= 1 and _num_literal(stmt.control_in[0])
                 self.histogram["literal"] = numeric and len(stmt.lines) == 1
         outputs = stmt.iconic_out + stmt.control_out
@@ -451,9 +565,18 @@ class Session:
         iconic = []
         control = []
         for name, value in self.vars.items():
-            if isinstance(value, (Image, Region, XLD)):
+            if isinstance(value, list) and value and all(isinstance(item, Image) for item in value):
+                kind, info, thumb = describe_iconic(value[-1])
+                iconic.append({
+                    "name": name, "kind": kind, "role": _var_role(name, kind, True),
+                    "info": f"{len(value)} 張  {info}", "thumb": thumb,
+                })
+            elif isinstance(value, (Image, Region, XLD)):
                 kind, info, thumb = describe_iconic(value)
-                iconic.append({"name": name, "kind": kind, "info": info, "thumb": thumb})
+                iconic.append({
+                    "name": name, "kind": kind, "role": _var_role(name, kind, True),
+                    "info": info, "thumb": thumb,
+                })
             elif isinstance(value, ShapeModel):
                 control.append({"name": name, "type": "shape_model", "text": value.summary(), "full": value.summary()})
             elif isinstance(value, NccModel):
@@ -463,7 +586,8 @@ class Session:
                 control.append({"name": name, "type": "model", "text": text, "full": text})
             else:
                 kind = "tuple" if isinstance(value, list) else "string" if isinstance(value, str) else "real" if isinstance(value, float) else "integer"
-                control.append({"name": name, "type": kind, "text": fmt_value(value), "full": full_value(value)})
+                role = _var_role(name, kind, False)
+                control.append({"name": name, "type": role, "text": fmt_value(value), "full": full_value(value)})
         histogram = None
         if self.histogram is not None:
             histogram = dict(self.histogram)
@@ -537,6 +661,8 @@ class Session:
 
     def view_object(self, name: str) -> dict:
         value = self.vars[name]
+        if isinstance(value, list) and value and all(isinstance(item, Image) for item in value):
+            value = value[-1]
         if isinstance(value, Image):
             display = compose_display(value, [])
             kind = "image"
@@ -550,7 +676,16 @@ class Session:
             )
             kind = "region"
         elif isinstance(value, XLD):
-            display = compose_display(None, [{"kind": "xld", "xld": value, "color": "#ffe14a", "width": 2}])
+            groups = getattr(value, "groups", None) or []
+            grouped = len(groups) == len(value.contours) and len(value.contours) > 0
+            color_count = (max(groups) + 1) if grouped else len(value.contours)
+            colors = None
+            if value.multi_color and color_count > 1:
+                colors = [MATCH_COLORS[index % 16] for index in range(color_count)]
+            display = compose_display(
+                None,
+                [{"kind": "xld", "xld": value, "color": "#ffe14a", "colors": colors, "width": 2}],
+            )
             kind = "xld"
         else:
             raise TypeError("這不是圖像變數")

@@ -13,12 +13,33 @@ import cv2
 import numpy as np
 
 from . import gauge
-from .objects import Image, Region, Result, StopSignal, XLD
+from .objects import Image, Region, Result, StopSignal, XLD, coerce_iconic
 from .ocr import describe_catalog, method_choices, read_text
 from .render import normalize_color, read_cv_image, to_uint8, write_cv_image
 
 REGISTRY: dict[str, "Operator"] = {}
 _ORDER = 0
+# 程式裡的呼叫是 Vizion.算子名 (...)。C# 以後用 using Vizion.*，名稱對得上這一個前綴。
+CALL_PREFIX = "Vizion."
+
+
+def operator_bare(name: str) -> str:
+    if name.lower().startswith(CALL_PREFIX.lower()):
+        return name.split(".", 1)[1]
+    return name
+
+
+def _prefix_example(bare: str, example: str) -> str:
+    public = CALL_PREFIX + bare
+    if example.startswith(public):
+        return example
+    head = example.lstrip()
+    if not head.startswith(bare):
+        return example
+    rest = head[len(bare):]
+    if rest[:1].isspace() or rest.startswith("("):
+        return example[: len(example) - len(head)] + public + rest
+    return example
 
 
 @dataclass
@@ -70,6 +91,9 @@ class Operator:
             "group": self.group,
             "short": self.short,
             "detail": self.detail,
+            "purpose": self.short,
+            "principle": self.principle(),
+            "setup": self.setup_text(),
             "prototype": self.prototype(),
             "example": self.example,
             "order": self.order,
@@ -78,6 +102,38 @@ class Operator:
             + pack(self.control_in, "控制輸入")
             + pack(self.control_out, "控制輸出"),
         }
+
+    def principle(self) -> str:
+        head = GROUP_PRINCIPLE.get(self.group, "")
+        body = self.detail.strip()
+        if head and body:
+            return head + "\n" + body
+        return head or body
+
+    def setup_text(self) -> str:
+        blocks = (
+            ("圖像輸入", self.iconic_in, "填已經有的影像、區域或輪廓變數名稱。"),
+            ("圖像輸出", self.iconic_out, "填新變數名稱，執行後結果放在這裡。"),
+            ("控制輸入", self.control_in, "可寫數字、變數或算式。字串要加引號。"),
+            ("控制輸出", self.control_out, "填新變數名稱，數值或字串會放在這裡。"),
+        )
+        filled = [(title, params, intro) for title, params, intro in blocks if params]
+        if not filled:
+            return "這個算子沒有參數，照範例呼叫即可。"
+        lines = []
+        for title, params, intro in filled:
+            lines.append(f"{title}：{intro}")
+            for item in params:
+                line = f"{item.name}：{item.desc}"
+                if item.default is not None:
+                    line += f"。沒填時用 {item.default}"
+                if item.choices:
+                    shown = "、".join(choice.strip("'\"") for choice in item.choices[:8])
+                    if len(item.choices) > 8:
+                        shown += f" 等 {len(item.choices)} 項"
+                    line += f"。可選 {shown}"
+                lines.append(line)
+        return "\n".join(lines)
 
 
 def P(name: str, desc: str, default: str | None = None, choices: list[str] | None = None) -> Param:
@@ -89,7 +145,7 @@ def operator(group, iconic_in, iconic_out, control_in, control_out, short, detai
         global _ORDER
         _ORDER += 1
         op = Operator(
-            fn.__name__,
+            CALL_PREFIX + fn.__name__,
             group,
             iconic_in,
             iconic_out,
@@ -97,7 +153,7 @@ def operator(group, iconic_in, iconic_out, control_in, control_out, short, detai
             control_out,
             short,
             detail,
-            example,
+            _prefix_example(fn.__name__, example),
             fn,
             _ORDER,
         )
@@ -114,6 +170,8 @@ def expect_image(value, name: str) -> Image:
 
 
 def expect_region(value, name: str) -> Region:
+    if isinstance(value, list):
+        value = coerce_iconic(value)
     if not isinstance(value, Region):
         raise TypeError(f"{name} 必須是區域")
     return value
@@ -296,6 +354,24 @@ def _sample_gray(gray: np.ndarray, x: float, y: float) -> float:
     return top * (1 - dy) + bottom * dy
 
 
+def equivalent_ellipse(moments: dict) -> tuple[float, float, float]:
+    """Radii and major-axis angle of the equal-moment ellipse. Not a contour fit."""
+    area = float(moments["m00"])
+    if area <= 0:
+        return 0.0, 0.0, 0.0
+    mu20 = float(moments["mu20"])
+    mu02 = float(moments["mu02"])
+    mu11 = float(moments["mu11"])
+    spread = math.hypot(mu20 - mu02, 2.0 * mu11)
+    major = max(0.0, (mu20 + mu02 + spread) / area)
+    minor = max(0.0, (mu20 + mu02 - spread) / area)
+    if mu20 + mu02 < 1e-6:
+        phi = 0.0
+    else:
+        phi = 0.5 * math.atan2(2.0 * mu11, mu20 - mu02)
+    return math.sqrt(2.0 * major), math.sqrt(2.0 * minor), phi
+
+
 def _axes(contour) -> tuple[float, float, float, float, float, float]:
     if contour is None or len(contour) < 3:
         return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
@@ -340,11 +416,15 @@ def region_measures(mask: np.ndarray) -> dict[str, float]:
     peri = float(cv2.arcLength(contour, True)) if contour is not None else 0.0
     circularity = 0.0 if peri <= 0 or area <= 0 else float(min(1.0, (4 * math.pi * area) / (peri * peri)))
     compactness = 0.0 if area <= 0 else float((peri * peri) / (4 * math.pi * area))
-    ra, rb, phi, rect_len1, rect_len2, rect_phi = _axes(contour)
+    ra, rb, phi = equivalent_ellipse(moments)
+    rect_len1 = rect_len2 = rect_phi = 0.0
     rect_area = 0.0
-    if contour is not None:
-        _center, (rw, rh), _angle = cv2.minAreaRect(contour)
+    if contour is not None and len(contour) >= 3:
+        _center, (rw, rh), angle = cv2.minAreaRect(contour)
         rect_area = float(rw * rh)
+        rect_len1 = float(max(rw, rh) / 2)
+        rect_len2 = float(min(rw, rh) / 2)
+        rect_phi = float(math.radians(angle))
     rectangularity = float(area) / rect_area if rect_area > 0 else 0.0
     hull_area = float(cv2.contourArea(cv2.convexHull(contour))) if contour is not None else 0.0
     convexity = float(area) / hull_area if hull_area > 0 else 0.0
@@ -597,7 +677,7 @@ def numbers_of(value) -> list[float]:
     [],
     "讀取影像",
     "讀取灰階或彩色圖。相對路徑會依專案、samples、workspace 的順序尋找。路徑請用斜線，例如 samples/parts.png。",
-    "read_image (Image, 'samples/parts.png')",
+    "Vizion.read_image (Image, 'samples/parts.png')",
 )
 def read_image(filename, *, ctx):
     path = ctx.resolve_read_path(text(filename, "FileName"))
@@ -625,7 +705,7 @@ def read_image(filename, *, ctx):
     [],
     "儲存影像",
     "把影像寫到磁碟。相對路徑以專案目錄為起點。這版不使用 HALCON 的 Format 與 FillColor 參數。",
-    "write_image (Image, 'workspace/out.png')",
+    "Vizion.write_image (Image, 'workspace/out.png')",
 )
 def write_image(image, filename, *, ctx):
     image = expect_image(image, "Image")
@@ -644,7 +724,7 @@ def write_image(image, filename, *, ctx):
     [],
     "轉成灰階",
     "彩色影像轉成單通道。已經是灰階就直接複製。",
-    "rgb1_to_gray (Image, Gray)",
+    "Vizion.rgb1_to_gray (Image, Gray)",
 )
 def rgb1_to_gray(image, *, ctx):
     image = expect_image(image, "RGBImage")
@@ -659,7 +739,7 @@ def rgb1_to_gray(image, *, ctx):
     [],
     "灰階反相",
     "每個像素變成 255 減去原值。",
-    "invert_image (Image, Inverted)",
+    "Vizion.invert_image (Image, Inverted)",
 )
 def invert_image(image, *, ctx):
     image = expect_image(image, "Image")
@@ -674,7 +754,7 @@ def invert_image(image, *, ctx):
     [],
     "線性縮放灰階",
     "輸出 = 輸入 × Mult + Add，超過 0 到 255 的值會被截斷。",
-    "scale_image (Image, Scaled, 1.2, 0)",
+    "Vizion.scale_image (Image, Scaled, 1.2, 0)",
 )
 def scale_image(image, mult, add, *, ctx):
     image = expect_image(image, "Image")
@@ -690,7 +770,7 @@ def scale_image(image, mult, add, *, ctx):
     [],
     "高斯平滑",
     "Size 必須是大於等於 3 的奇數。",
-    "gauss_image (Image, Smooth, 5)",
+    "Vizion.gauss_image (Image, Smooth, 5)",
 )
 def gauss_image(image, size, *, ctx):
     image = expect_image(image, "Image")
@@ -708,7 +788,7 @@ def gauss_image(image, size, *, ctx):
     [],
     "中值濾波",
     "這版只收半徑。HALCON 的 MaskType 與 Margin 先省略。",
-    "median_image (Image, Median, 2)",
+    "Vizion.median_image (Image, Median, 2)",
 )
 def median_image(image, radius, *, ctx):
     image = expect_image(image, "Image")
@@ -726,7 +806,7 @@ def median_image(image, radius, *, ctx):
     [],
     "均值濾波",
     "以矩形遮罩做平均。",
-    "mean_image (Image, MeanImage, 5, 5)",
+    "Vizion.mean_image (Image, MeanImage, 5, 5)",
 )
 def mean_image(image, mask_width, mask_height, *, ctx):
     image = expect_image(image, "Image")
@@ -743,7 +823,7 @@ def mean_image(image, mask_width, mask_height, *, ctx):
     [],
     "強化邊緣對比",
     "輸出 = 原圖 + (原圖 − 局部平均) × Factor。",
-    "emphasize (Image, Sharp, 7, 7, 1)",
+    "Vizion.emphasize (Image, Sharp, 7, 7, 1)",
 )
 def emphasize(image, mask_width, mask_height, factor, *, ctx):
     image = expect_image(image, "Image")
@@ -763,7 +843,7 @@ def emphasize(image, mask_width, mask_height, factor, *, ctx):
     [],
     "直方圖等化",
     "灰階直接等化。彩色影像只等化亮度通道。",
-    "equ_histo_image (Image, Equ)",
+    "Vizion.equ_histo_image (Image, Equ)",
 )
 def equ_histo_image(image, *, ctx):
     image = expect_image(image, "Image")
@@ -784,7 +864,7 @@ def equ_histo_image(image, *, ctx):
     [],
     "HALCON 區間門檻",
     "這是 HALCON 的 threshold：灰階落在 MinGray 到 MaxGray（含兩端）才留下，結果是還沒拆開的單一區域。彩色影像會先轉灰階。有 domain 時只處理 domain 裡面的像素。執行後顯示灰階統計圖；兩端若是數字可以直接拖曳。拆物件請用 connection，可再設連通距離。",
-    "threshold (Image, Region, 128, 255)",
+    "Vizion.threshold (Image, Region, 128, 255)",
 )
 def threshold(image, min_gray, max_gray, *, ctx):
     image = expect_image(image, "Image")
@@ -825,7 +905,7 @@ def smooth_histo_level(gray: np.ndarray) -> int:
     [P("UsedThreshold", "實際使用的門檻")],
     "自動門檻",
     "method 可以是 max_separability、smooth_histo、triangle、local_mean、local_gauss。light 保留亮處，dark 保留暗處。前三種會在統計圖標出門檻，局部方法用鄰域比較。",
-    "binary_threshold (Image, Region, 'max_separability', 'light', UsedThreshold)",
+    "Vizion.binary_threshold (Image, Region, 'max_separability', 'light', UsedThreshold)",
 )
 def binary_threshold(image, method, light_dark, *, ctx):
     image = expect_image(image, "Image")
@@ -878,7 +958,7 @@ def binary_threshold(image, method, light_dark, *, ctx):
     [],
     "OpenCV 二值化",
     "對應 cv2.threshold。binary 留下大於 Threshold 的像素，binary_inv 留下小於等於 Threshold 的像素。等於門檻的像素在 binary 不會留下。二值化結果會保留 OpenCV 的輪廓鏈表：外輪廓用 next/prev 串起來，孔洞用 child 掛在外輪廓下面。",
-    "opencv_threshold (Image, Region, 128, 'binary')",
+    "Vizion.opencv_threshold (Image, Region, 128, 'binary')",
 )
 def opencv_threshold(image, thresh, method, *, ctx):
     image = expect_image(image, "Image")
@@ -929,7 +1009,7 @@ def subpix_contours(gray: np.ndarray, level: float, domain: np.ndarray | None = 
     [],
     "次像素二值化",
     "沿著灰階等於 Threshold 的位置取出次像素輪廓，亮處留在輪廓內。結果是 XLD。會自動用八連通拆開，每個物件一種顏色，點一個只框那一個，和 connection 距離 1 一樣。門檻若是數字，可以在統計圖拖曳，也可以用次像素視窗調，那個視窗不會擋住主視窗。",
-    "threshold_sub_pix (Image, Border, 128)",
+    "Vizion.threshold_sub_pix (Image, Border, 128)",
 )
 def threshold_sub_pix(image, threshold, *, ctx):
     image = expect_image(image, "Image")
@@ -1124,7 +1204,7 @@ def connected_region(region: Region, objects: list[np.ndarray]) -> Result:
     [],
     "依距離連通",
     "先做八連通，斜角相接一定算同一個物件，不會拆得更碎。Distance 再用前景像素的最近距離：1 維持八連通，5 代表最近像素距離在 5 以內的物件併成一個。沒寫 Distance 時當作 1。每個物件一種顏色，16 色循環。",
-    "connection (Region, ConnectedRegions, 1)",
+    "Vizion.connection (Region, ConnectedRegions, 1)",
 )
 def connection(region, distance=1, *, ctx):
     region = expect_region(region, "Region")
@@ -1143,7 +1223,7 @@ def connection(region, distance=1, *, ctx):
     [],
     "OpenCV 連通",
     "對應 cv2.connectedComponents。4 只算上下左右，8 連斜角也算。Distance 再把最近前景像素落在這個距離內的物件合併，1 表示不額外合併。每個物件保留自己的 OpenCV 輪廓鏈表。顯示時用 16 色。",
-    "opencv_connection (Region, ConnectedRegions, 8, 1)",
+    "Vizion.opencv_connection (Region, ConnectedRegions, 8, 1)",
 )
 def opencv_connection(region, connectivity, distance=1, *, ctx):
     region = expect_region(region, "Region")
@@ -1171,7 +1251,7 @@ def opencv_connection(region, connectivity, distance=1, *, ctx):
     [],
     "用形狀特徵篩選",
     "可用特徵和圖形視窗的勾選清單相同，包含 area、circularity、ra、rb、holes_num、euler_number 等。多個特徵時 Min/Max 也要是等長 tuple。",
-    "select_shape (Regions, SelectedRegions, 'area', 'and', 150, 99999)",
+    "Vizion.select_shape (Regions, SelectedRegions, 'area', 'and', 150, 99999)",
 )
 def select_shape(region, features, operation, min_value, max_value, *, ctx):
     region = expect_region(region, "Regions")
@@ -1204,7 +1284,7 @@ def select_shape(region, features, operation, min_value, max_value, *, ctx):
     [],
     "按索引取物件",
     "索引從 1 開始。區域取出物件，輪廓取出其中一條。可以傳 tuple 一次取多條。",
-    "select_obj (Objects, ObjectSelected, 1)",
+    "Vizion.select_obj (Objects, ObjectSelected, 1)",
 )
 def select_obj(obj, index, *, ctx):
     if isinstance(obj, XLD):
@@ -1243,7 +1323,7 @@ def _same_links(region: Region):
     [],
     "把兩組物件接起來",
     "兩邊都要是區域，或都要是輪廓。區域的寬高必須相同。原來的物件不會被合併成一塊。",
-    "concat_obj (Objects1, Objects2, ObjectsConcat)",
+    "Vizion.concat_obj (Objects1, Objects2, ObjectsConcat)",
 )
 def concat_obj(first, second, *, ctx):
     if isinstance(first, Region) and isinstance(second, Region):
@@ -1268,7 +1348,7 @@ def concat_obj(first, second, *, ctx):
     [],
     "複製連續的幾個物件",
     "索引從 1 開始。區域和輪廓都可以。超出範圍會失敗。",
-    "copy_obj (Objects, CopiedObjects, 1, 1)",
+    "Vizion.copy_obj (Objects, CopiedObjects, 1, 1)",
 )
 def copy_obj(obj, index, number, *, ctx):
     start = whole(index, "Index")
@@ -1299,7 +1379,7 @@ def copy_obj(obj, index, number, *, ctx):
     [],
     "填滿孔洞",
     "填上區域內部的洞。結果是單一區域，要再拆開請呼叫 connection。",
-    "fill_up (Region, RegionFillUp)",
+    "Vizion.fill_up (Region, RegionFillUp)",
 )
 def fill_up(region, *, ctx):
     region = expect_region(region, "Region")
@@ -1320,7 +1400,7 @@ def fill_up(region, *, ctx):
     [],
     "圓形開運算",
     "作用在區域聯集上。結果是單一區域。",
-    "opening_circle (Region, RegionOpening, 3.5)",
+    "Vizion.opening_circle (Region, RegionOpening, 3.5)",
 )
 def opening_circle(region, radius, *, ctx):
     return morph(expect_region(region, "Region"), disk(scalar(radius, "Radius")), "open")
@@ -1334,7 +1414,7 @@ def opening_circle(region, radius, *, ctx):
     [],
     "圓形閉運算",
     "作用在區域聯集上。結果是單一區域。",
-    "closing_circle (Region, RegionClosing, 3.5)",
+    "Vizion.closing_circle (Region, RegionClosing, 3.5)",
 )
 def closing_circle(region, radius, *, ctx):
     return morph(expect_region(region, "Region"), disk(scalar(radius, "Radius")), "close")
@@ -1348,7 +1428,7 @@ def closing_circle(region, radius, *, ctx):
     [],
     "圓形侵蝕",
     "作用在區域聯集上。結果是單一區域。",
-    "erosion_circle (Region, RegionErosion, 2.5)",
+    "Vizion.erosion_circle (Region, RegionErosion, 2.5)",
 )
 def erosion_circle(region, radius, *, ctx):
     return morph(expect_region(region, "Region"), disk(scalar(radius, "Radius")), "erode")
@@ -1362,7 +1442,7 @@ def erosion_circle(region, radius, *, ctx):
     [],
     "圓形膨脹",
     "作用在區域聯集上。結果是單一區域。",
-    "dilation_circle (Region, RegionDilation, 2.5)",
+    "Vizion.dilation_circle (Region, RegionDilation, 2.5)",
 )
 def dilation_circle(region, radius, *, ctx):
     return morph(expect_region(region, "Region"), disk(scalar(radius, "Radius")), "dilate")
@@ -1381,7 +1461,7 @@ def morph_rect(region, width, height, mode: str) -> Result:
     [],
     "矩形侵蝕",
     "結構元素是實心矩形。偶數寬高會加 1，讓中心對齊像素。作用在區域聯集上，結果是單一區域。",
-    "erosion_rectangle1 (Region, RegionErosion, 5, 5)",
+    "Vizion.erosion_rectangle1 (Region, RegionErosion, 5, 5)",
 )
 def erosion_rectangle1(region, width, height, *, ctx):
     return morph_rect(region, width, height, "erode")
@@ -1395,7 +1475,7 @@ def erosion_rectangle1(region, width, height, *, ctx):
     [],
     "矩形膨脹",
     "結構元素是實心矩形。偶數寬高會加 1。作用在區域聯集上，結果是單一區域。",
-    "dilation_rectangle1 (Region, RegionDilation, 5, 5)",
+    "Vizion.dilation_rectangle1 (Region, RegionDilation, 5, 5)",
 )
 def dilation_rectangle1(region, width, height, *, ctx):
     return morph_rect(region, width, height, "dilate")
@@ -1409,7 +1489,7 @@ def dilation_rectangle1(region, width, height, *, ctx):
     [],
     "矩形開運算",
     "先侵蝕再膨脹。作用在區域聯集上，結果是單一區域。",
-    "opening_rectangle1 (Region, RegionOpening, 5, 5)",
+    "Vizion.opening_rectangle1 (Region, RegionOpening, 5, 5)",
 )
 def opening_rectangle1(region, width, height, *, ctx):
     return morph_rect(region, width, height, "open")
@@ -1423,7 +1503,7 @@ def opening_rectangle1(region, width, height, *, ctx):
     [],
     "矩形閉運算",
     "先膨脹再侵蝕。作用在區域聯集上，結果是單一區域。",
-    "closing_rectangle1 (Region, RegionClosing, 5, 5)",
+    "Vizion.closing_rectangle1 (Region, RegionClosing, 5, 5)",
 )
 def closing_rectangle1(region, width, height, *, ctx):
     return morph_rect(region, width, height, "close")
@@ -1437,7 +1517,7 @@ def closing_rectangle1(region, width, height, *, ctx):
     [],
     "區域邊界",
     "inner 是原區域減去侵蝕一圈，outer 是膨脹一圈再減去原區域。",
-    "boundary (Region, RegionBorder, 'inner')",
+    "Vizion.boundary (Region, RegionBorder, 'inner')",
 )
 def boundary(region, boundary_type, *, ctx):
     region = expect_region(region, "Region")
@@ -1461,7 +1541,7 @@ def boundary(region, boundary_type, *, ctx):
     [],
     "區域相減",
     "留下只在第一個區域、不在第二個區域的像素。",
-    "difference (Region, Sub, RegionDifference)",
+    "Vizion.difference (Region, Sub, RegionDifference)",
 )
 def difference(region, sub, *, ctx):
     region = expect_region(region, "Region")
@@ -1479,7 +1559,7 @@ def difference(region, sub, *, ctx):
     [],
     "區域交集",
     "留下兩個區域都有的像素。",
-    "intersection (Region1, Region2, RegionIntersection)",
+    "Vizion.intersection (Region1, Region2, RegionIntersection)",
 )
 def intersection(region1, region2, *, ctx):
     region1 = expect_region(region1, "Region1")
@@ -1497,7 +1577,7 @@ def intersection(region1, region2, *, ctx):
     [],
     "兩個區域的聯集",
     "結果是單一區域。",
-    "union2 (Region1, Region2, RegionUnion)",
+    "Vizion.union2 (Region1, Region2, RegionUnion)",
 )
 def union2(region1, region2, *, ctx):
     region1 = expect_region(region1, "Region1")
@@ -1515,7 +1595,7 @@ def union2(region1, region2, *, ctx):
     [],
     "合併全部物件",
     "把 connection 拆開的物件合成一個區域。",
-    "union1 (Region, RegionUnion)",
+    "Vizion.union1 (Region, RegionUnion)",
 )
 def union1(region, *, ctx):
     region = expect_region(region, "Region")
@@ -1530,7 +1610,7 @@ def union1(region, *, ctx):
     [],
     "區域補集",
     "在同一張畫布上，把有像素和沒像素的地方對調。",
-    "complement (Region, RegionComplement)",
+    "Vizion.complement (Region, RegionComplement)",
 )
 def complement(region, *, ctx):
     region = expect_region(region, "Region")
@@ -1545,7 +1625,7 @@ def complement(region, *, ctx):
     [],
     "用區域限制影像",
     "像素不會被裁掉。已經有定義域時會和這個區域取交集；change_domain 才是整段換掉。定義域以外之後不會被 threshold 使用，顯示時也會變暗。",
-    "reduce_domain (Image, Region, ImageReduced)",
+    "Vizion.reduce_domain (Image, Region, ImageReduced)",
 )
 def reduce_domain(image, region, *, ctx):
     image = expect_image(image, "Image")
@@ -1568,7 +1648,7 @@ def reduce_domain(image, region, *, ctx):
     [],
     "取得 domain",
     "沒有做過 reduce_domain 時，domain 就是整張影像。",
-    "get_domain (Image, Domain)",
+    "Vizion.get_domain (Image, Domain)",
 )
 def get_domain(image, *, ctx):
     image = expect_image(image, "Image")
@@ -1592,7 +1672,7 @@ def get_domain(image, *, ctx):
     [],
     "用矩形裁切",
     "座標和 HALCON 一樣含頭含尾。超出影像的部分會被夾住。",
-    "crop_rectangle1 (Image, ImagePart, 0, 0, 100, 100)",
+    "Vizion.crop_rectangle1 (Image, ImagePart, 0, 0, 100, 100)",
 )
 def crop_rectangle1(image, row1, column1, row2, column2, *, ctx):
     image = expect_image(image, "Image")
@@ -1620,7 +1700,7 @@ def crop_rectangle1(image, row1, column1, row2, column2, *, ctx):
     [],
     "產生矩形區域",
     "尺寸對齊最近一張影像。請先 read_image，否則使用 480×640。",
-    "gen_rectangle1 (Rectangle, 40, 40, 200, 300)",
+    "Vizion.gen_rectangle1 (Rectangle, 40, 40, 200, 300)",
 )
 def gen_rectangle1(row1, column1, row2, column2, *, ctx):
     height, width = ctx.canvas_size()
@@ -1651,7 +1731,7 @@ def gen_rectangle1(row1, column1, row2, column2, *, ctx):
     [],
     "產生圓形區域",
     "尺寸對齊最近一張影像。請先 read_image。",
-    "gen_circle (Circle, 120, 160, 40)",
+    "Vizion.gen_circle (Circle, 120, 160, 40)",
 )
 def gen_circle(row, column, radius, *, ctx):
     height, width = ctx.canvas_size()
@@ -1669,7 +1749,7 @@ def gen_circle(row, column, radius, *, ctx):
     [P("Area", "面積"), P("Row", "中心列"), P("Column", "中心行")],
     "面積與重心",
     "每個物件各得到一個值，所以 Area、Row、Column 都是 tuple。索引從 1 開始。",
-    "area_center (Regions, Area, Row, Column)",
+    "Vizion.area_center (Regions, Area, Row, Column)",
 )
 def area_center(region, *, ctx):
     region = expect_region(region, "Regions")
@@ -1698,7 +1778,7 @@ def area_center(region, *, ctx):
     ],
     "最小軸對齊外接矩形",
     "每個物件一組座標，四個輸出都是 tuple。",
-    "smallest_rectangle1 (Regions, Row1, Column1, Row2, Column2)",
+    "Vizion.smallest_rectangle1 (Regions, Row1, Column1, Row2, Column2)",
 )
 def smallest_rectangle1(region, *, ctx):
     region = expect_region(region, "Regions")
@@ -1745,7 +1825,7 @@ def _oriented_rect(mask: np.ndarray):
     ],
     "最小外接旋轉矩形",
     "Length1、Length2 是半長，和 HALCON 一樣。Phi 是長邊方向。",
-    "smallest_rectangle2 (Regions, Row, Column, Phi, Length1, Length2)",
+    "Vizion.smallest_rectangle2 (Regions, Row, Column, Phi, Length1, Length2)",
 )
 def smallest_rectangle2(region, *, ctx):
     region = expect_region(region, "Regions")
@@ -1770,7 +1850,7 @@ def smallest_rectangle2(region, *, ctx):
     [P("Row", "圓心列"), P("Column", "圓心行"), P("Radius", "半徑")],
     "最小外接圓",
     "每個物件一組圓心與半徑。",
-    "smallest_circle (Regions, Row, Column, Radius)",
+    "Vizion.smallest_circle (Regions, Row, Column, Radius)",
 )
 def smallest_circle(region, *, ctx):
     region = expect_region(region, "Regions")
@@ -1796,7 +1876,7 @@ def smallest_circle(region, *, ctx):
     [P("Mean", "平均灰階"), P("Deviation", "標準差")],
     "區域灰階統計",
     "每個物件的平均亮度與標準差。",
-    "intensity (Regions, Image, Mean, Deviation)",
+    "Vizion.intensity (Regions, Image, Mean, Deviation)",
 )
 def intensity(region, image, *, ctx):
     region = expect_region(region, "Regions")
@@ -1840,7 +1920,7 @@ def _gray_feature(values: np.ndarray, name: str) -> float:
     [P("Value", "特徵值")],
     "讀取灰階特徵",
     "可選 gray_min、gray_max、gray_mean、gray_deviation、gray_median。單一特徵時依物件排列。多個特徵時先排完第一個特徵的全部物件。標準差和 intensity 一樣。彩色先轉成亮度。",
-    "gray_features (Regions, Image, 'gray_mean', Value)",
+    "Vizion.gray_features (Regions, Image, 'gray_mean', Value)",
 )
 def gray_features(region, image, features, *, ctx):
     source = expect_region(region, "Regions")
@@ -1866,7 +1946,7 @@ def gray_features(region, image, features, *, ctx):
     [P("Number", "物件數")],
     "物件數量",
     "區域回傳物件數，輪廓回傳輪廓數。結果是單一整數。",
-    "count_obj (Objects, Number)",
+    "Vizion.count_obj (Objects, Number)",
 )
 def count_obj(obj, *, ctx):
     if isinstance(obj, XLD):
@@ -1883,7 +1963,7 @@ def count_obj(obj, *, ctx):
     [P("Value", "特徵值 tuple")],
     "讀取區域特徵",
     "單一特徵時，Value 依物件排列。多個特徵時，先排完第一個特徵的全部物件，再排下一個。",
-    "region_features (Regions, 'area', Value)",
+    "Vizion.region_features (Regions, 'area', Value)",
 )
 def region_features(region, features, *, ctx):
     region = expect_region(region, "Regions")
@@ -1902,7 +1982,7 @@ def region_features(region, features, *, ctx):
     [],
     "Sobel 振幅",
     "輸出是 8-bit。超過 255 的振幅會被截斷，所以後面的 threshold 要用 0 到 255 的門檻。",
-    "sobel_amp (Image, EdgeAmplitude, 'sum_abs', 3)",
+    "Vizion.sobel_amp (Image, EdgeAmplitude, 'sum_abs', 3)",
 )
 def sobel_amp(image, filter_type, size, *, ctx):
     image = expect_image(image, "Image")
@@ -1920,37 +2000,52 @@ def sobel_amp(image, filter_type, size, *, ctx):
     return image_out(image, np.clip(mag, 0, 255).astype(np.uint8))
 
 
-@operator(
-    "輪廓",
-    [P("Image", "輸入影像")],
-    [P("Edges", "邊緣輪廓")],
-    [
-        P("Filter", "這版用 Canny", "'canny'", ["'canny'"]),
-        P("Alpha", "平滑程度"),
-        P("Low", "低門檻"),
-        P("High", "高門檻"),
-    ],
-    [],
-    "萃取邊緣輪廓",
-    "這是 Canny 近似，不是 HALCON 的次像素 edges_sub_pix。輪廓是 XLD，可用 dev_display 畫出。",
-    "edges_sub_pix (Image, Edges, 'canny', 1.0, 20, 40)",
-)
-def edges_sub_pix(image, _filter, alpha, low, high, *, ctx):
-    image = expect_image(image, "Image")
-    sigma = max(0.4, scalar(alpha, "Alpha"))
-    kernel = max(3, int(round(sigma * 6)) | 1)
-    blur = cv2.GaussianBlur(image.gray(), (kernel, kernel), sigma)
-    edges = cv2.Canny(blur, scalar(low, "Low"), scalar(high, "High"))
-    if image.domain is not None:
-        edges = cv2.bitwise_and(edges, image.domain)
-    found = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-    contours = found[0] if len(found) == 2 else found[1]
-    polylines = []
-    for contour in contours:
-        if len(contour) < 2:
+def _boundary_center_lines(mask: np.ndarray) -> list:
+    """Outer contour on the edges between region pixels and the background."""
+    foreground = np.asarray(mask) > 0
+    if not np.any(foreground):
+        return []
+    padded = np.pad(foreground, 1)
+    core = padded[1:-1, 1:-1]
+    sides = (
+        (core & ~padded[1:-1, :-2], (-0.5, 0.5, -0.5, -0.5)),
+        (core & ~padded[:-2, 1:-1], (-0.5, -0.5, 0.5, -0.5)),
+        (core & ~padded[1:-1, 2:], (0.5, -0.5, 0.5, 0.5)),
+        (core & ~padded[2:, 1:-1], (0.5, 0.5, -0.5, 0.5)),
+    )
+    links: dict[tuple[int, int], list[tuple[int, int]]] = {}
+    for selected, (col0, row0, col1, row1) in sides:
+        rows, cols = np.nonzero(selected)
+        for row, col in zip(rows.tolist(), cols.tolist()):
+            start = (int(round((col + col0) * 2)), int(round((row + row0) * 2)))
+            end = (int(round((col + col1) * 2)), int(round((row + row1) * 2)))
+            links.setdefault(start, []).append(end)
+    lines = []
+    while links:
+        start = min(links)
+        ends = links[start]
+        nxt = min(ends)
+        ends.remove(nxt)
+        if not ends:
+            del links[start]
+        loop = [start, nxt]
+        while nxt != start and nxt in links:
+            here = nxt
+            ends = links[here]
+            nxt = min(ends)
+            ends.remove(nxt)
+            if not ends:
+                del links[here]
+            loop.append(nxt)
+        if loop[-1] != start or len(loop) < 5:
             continue
-        polylines.append([[float(point[0][0]), float(point[0][1])] for point in contour])
-    return Result([XLD(image.width, image.height, polylines, multi_color=len(polylines) > 1)], [])
+        area = 0.0
+        for left, right in zip(loop, loop[1:]):
+            area += left[0] * right[1] - right[0] * left[1]
+        if area <= 0:
+            continue
+        lines.append([[point[0] / 2, point[1] / 2] for point in loop])
+    return lines
 
 
 @operator(
@@ -1960,19 +2055,21 @@ def edges_sub_pix(image, _filter, alpha, low, high, *, ctx):
     [P("Mode", "border、border_holes 或 center", "'border'", ["'border'", "'border_holes'", "'center'"])],
     [],
     "區域轉成輪廓",
-    "border 只要外輪廓。border_holes 連孔洞一起。center 這版和外輪廓相同，還沒有做到次像素的邊界中心。",
-    "gen_contour_region_xld (Regions, Contours, 'border')",
+    "border 只要外輪廓，點在區域最外圈的整數像素上。border_holes 連孔洞一起。center 走在區域和外面之間的邊上，座標帶 .5，方塊會比整數外框再出去半個像素。center 不畫孔洞。",
+    "Vizion.gen_contour_region_xld (Regions, Contours, 'border')",
 )
 def gen_contour_region_xld(region, mode, *, ctx):
     region = expect_region(region, "Regions")
     kind = text(mode, "Mode").lower()
     if kind not in ("border", "border_holes", "center"):
         raise ValueError("Mode 只能是 border、border_holes 或 center")
-    retrieval = cv2.RETR_CCOMP if kind == "border_holes" else cv2.RETR_EXTERNAL
     polylines = []
+    retrieval = cv2.RETR_CCOMP if kind == "border_holes" else cv2.RETR_EXTERNAL
     for mask in region.objects:
-        for line in _contour_lines(mask, retrieval):
-            polylines.append(line)
+        if kind == "center":
+            polylines.extend(_boundary_center_lines(mask))
+        else:
+            polylines.extend(_contour_lines(mask, retrieval))
     return Result([XLD(region.width, region.height, polylines, multi_color=len(polylines) > 1)], [])
 
 
@@ -1988,6 +2085,8 @@ def _contour_lines(mask: np.ndarray, retrieval=cv2.RETR_EXTERNAL):
 
 
 def expect_xld(value, name: str) -> XLD:
+    if isinstance(value, list):
+        value = coerce_iconic(value)
     if not isinstance(value, XLD):
         raise TypeError(f"{name} 必須是輪廓")
     return value
@@ -2040,30 +2139,110 @@ def _fit_line(points: list) -> tuple[list[float], list[float]]:
     pts = np.asarray(points, np.float64).reshape(-1, 2)
     if len(pts) < 2:
         raise ValueError("直線擬合至少要 2 個點")
+    weights = np.ones(len(pts), np.float64)
     center = pts.mean(axis=0)
-    _, _, vt = np.linalg.svd(pts - center, full_matrices=False)
+    _u, _s, vt = np.linalg.svd(pts - center, full_matrices=False)
     direction = vt[0]
-    proj = (pts - center) @ direction
-    start = center + direction * float(proj.min())
-    end = center + direction * float(proj.max())
+    for _step in range(4):
+        normal = np.array([-direction[1], direction[0]])
+        distance = np.abs((pts - center) @ normal)
+        typical = float(np.median(distance))
+        if typical < 1e-8 and float(distance.max()) < 1e-6:
+            break
+        limit = 2.5 * typical if typical > 0.4 else 1.0
+        weights = (distance <= limit).astype(np.float64)
+        if float(weights.sum()) < 2:
+            break
+        center = (weights[:, None] * pts).sum(axis=0) / float(weights.sum())
+        shifted = (pts - center) * np.sqrt(weights)[:, None]
+        _u, _s, vt = np.linalg.svd(shifted, full_matrices=False)
+        direction = vt[0]
+    keep = weights > 0.05
+    if int(np.count_nonzero(keep)) < 2:
+        keep = np.ones(len(pts), dtype=bool)
+    projection = (pts[keep] - center) @ direction
+    start = center + direction * float(projection.min())
+    end = center + direction * float(projection.max())
     return [float(start[0]), float(start[1])], [float(end[0]), float(end[1])]
+
+
+def _pratt_circle(pts: np.ndarray) -> tuple[float, float, float]:
+    count = len(pts)
+    centroid = pts.mean(axis=0)
+    shifted_col = pts[:, 0] - centroid[0]
+    shifted_row = pts[:, 1] - centroid[1]
+    square = shifted_col * shifted_col + shifted_row * shifted_row
+    moment_col = float(np.dot(shifted_col, shifted_col) / count)
+    moment_row = float(np.dot(shifted_row, shifted_row) / count)
+    moment_cross = float(np.dot(shifted_col, shifted_row) / count)
+    moment_col_sq = float(np.dot(shifted_col, square) / count)
+    moment_row_sq = float(np.dot(shifted_row, square) / count)
+    moment_sq = float(np.dot(square, square) / count)
+    moment_sum = moment_col + moment_row
+    covariance = moment_col * moment_row - moment_cross * moment_cross
+    cubic = 4 * moment_sum
+    quad = -3 * moment_sum * moment_sum - moment_sq
+    linear = (
+        moment_sq * moment_sum
+        + 4 * covariance * moment_sum
+        - moment_col_sq * moment_col_sq
+        - moment_row_sq * moment_row_sq
+        - moment_sum ** 3
+    )
+    constant = (
+        moment_col_sq * moment_col_sq * moment_row
+        + moment_row_sq * moment_row_sq * moment_col
+        - moment_sq * covariance
+        - 2 * moment_col_sq * moment_row_sq * moment_cross
+        + moment_sum * moment_sum * covariance
+    )
+    root = 0.0
+    value = 1e20
+    for _step in range(20):
+        previous = value
+        value = constant + root * (linear + root * (quad + root * cubic))
+        if abs(value) > abs(previous):
+            root = 0.0
+            break
+        slope = linear + root * (2 * quad + 3 * root * cubic)
+        if abs(slope) < 1e-18:
+            break
+        updated = root - value / slope
+        if updated < 0:
+            root = 0.0
+            break
+        if abs(updated) > 1e-12 and abs((updated - root) / updated) < 1e-12:
+            root = updated
+            break
+        root = updated
+    determinant = root * root - root * moment_sum + covariance
+    if abs(determinant) < 1e-15:
+        raise ValueError("這些點擬合不出圓")
+    center_col = (moment_col_sq * (moment_row - root) - moment_row_sq * moment_cross) / determinant / 2
+    center_row = (moment_row_sq * (moment_col - root) - moment_col_sq * moment_cross) / determinant / 2
+    radius2 = center_col * center_col + center_row * center_row + moment_sum + 2 * root
+    if radius2 <= 1e-8:
+        raise ValueError("這些點擬合不出圓")
+    return float(center_row + centroid[1]), float(center_col + centroid[0]), math.sqrt(radius2)
 
 
 def _fit_circle(points: list) -> tuple[float, float, float]:
     pts = np.asarray(points, np.float64).reshape(-1, 2)
     if len(pts) < 3:
         raise ValueError("圓擬合至少要 3 個點")
-    col = pts[:, 0]
-    row = pts[:, 1]
-    design = np.column_stack([col, row, np.ones(len(pts))])
-    target = -(col * col + row * row)
-    solved, *_rest = np.linalg.lstsq(design, target, rcond=None)
-    center_col = float(-solved[0] / 2)
-    center_row = float(-solved[1] / 2)
-    radius2 = center_col * center_col + center_row * center_row - float(solved[2])
-    if radius2 <= 1e-8:
-        raise ValueError("這些點擬合不出圓")
-    return center_row, center_col, math.sqrt(radius2)
+    row, col, radius = _pratt_circle(pts)
+    keep = np.ones(len(pts), dtype=bool)
+    for _step in range(4):
+        distance = np.abs(np.hypot(pts[:, 0] - col, pts[:, 1] - row) - radius)
+        typical = float(np.median(distance))
+        if typical < 1e-8 and float(distance.max()) < 1e-6:
+            break
+        limit = 2.5 * typical if typical > 0.4 else 1.0
+        keep = distance <= limit
+        if int(np.count_nonzero(keep)) < 3:
+            break
+        row, col, radius = _pratt_circle(pts[keep])
+    return row, col, radius
 
 
 def _sample_circle(row: float, col: float, radius: float, count: int = 72) -> list[list[float]]:
@@ -2074,22 +2253,79 @@ def _sample_circle(row: float, col: float, radius: float, count: int = 72) -> li
     return points
 
 
-def _fit_ellipse(points: list) -> tuple[float, float, float, float, float]:
-    pts = np.asarray(points, np.float64).reshape(-1, 1, 2)
-    if len(pts) < 5:
-        raise ValueError("橢圓擬合至少要 5 個點")
+def _raw_ellipse(points: np.ndarray):
     try:
-        (col, row), (width, height), angle = cv2.fitEllipse(pts.astype(np.float32))
+        (col, row), (width, height), angle = cv2.fitEllipse(points.astype(np.float32).reshape(-1, 1, 2))
     except cv2.error as exc:
         raise ValueError("這些點擬合不出橢圓") from exc
+    return float(col), float(row), float(width), float(height), float(angle)
+
+
+def _ellipse_ray_error(points: np.ndarray, ellipse) -> np.ndarray:
+    center_col, center_row, width, height, angle = ellipse
+    major = max(width / 2.0, 1e-6)
+    minor = max(height / 2.0, 1e-6)
+    radians = math.radians(angle)
+    cosine = math.cos(radians)
+    sine = math.sin(radians)
+    dx = points[:, 0] - center_col
+    dy = points[:, 1] - center_row
+    along = dx * cosine + dy * sine
+    across = -dx * sine + dy * cosine
+    radius = np.hypot(along, across)
+    span = np.hypot(minor * along, major * across)
+    on_ellipse = np.full(radius.shape, min(major, minor), dtype=np.float64)
+    usable = span > 1e-9
+    on_ellipse[usable] = (major * minor) * radius[usable] / span[usable]
+    return np.abs(radius - on_ellipse)
+
+
+def _robust_ellipse(points: np.ndarray):
+    base = _raw_ellipse(points)
+    if len(points) < 6:
+        return base
+    error = _ellipse_ray_error(points, base)
+    if float(np.max(error)) <= 1.0:
+        return base
+    generator = np.random.default_rng(0)
+    best = base
+    best_error = error
+    best_score = float(np.median(error))
+    for _turn in range(48):
+        index = generator.choice(len(points), 6, replace=False)
+        try:
+            trial = _raw_ellipse(points[index])
+        except ValueError:
+            continue
+        trial_error = _ellipse_ray_error(points, trial)
+        score = float(np.median(trial_error))
+        if score < best_score:
+            best = trial
+            best_error = trial_error
+            best_score = score
+    limit = 2.5 * best_score if best_score > 0.4 else 1.0
+    keep = best_error <= limit + 1e-9
+    if int(np.count_nonzero(keep)) >= 5 and not bool(np.all(keep)):
+        try:
+            return _raw_ellipse(points[keep])
+        except ValueError:
+            return best
+    return best
+
+
+def _fit_ellipse(points: list) -> tuple[float, float, float, float, float]:
+    cloud = np.asarray(points, np.float64).reshape(-1, 2)
+    if len(cloud) < 5:
+        raise ValueError("橢圓擬合至少要 5 個點")
+    col, row, width, height, angle = _robust_ellipse(cloud)
     if width >= height:
-        phi = math.radians(float(angle))
-        radius1 = float(width) / 2
-        radius2 = float(height) / 2
+        phi = math.radians(angle)
+        radius1 = width / 2.0
+        radius2 = height / 2.0
     else:
-        phi = math.radians(float(angle) + 90)
-        radius1 = float(height) / 2
-        radius2 = float(width) / 2
+        phi = math.radians(angle + 90.0)
+        radius1 = height / 2.0
+        radius2 = width / 2.0
     return float(row), float(col), phi, radius1, radius2
 
 
@@ -2245,20 +2481,34 @@ def _smooth_poly(points: list, width: int) -> list:
     count = len(src)
     if count < 3:
         return points
+    sigma = max(half / 2.0, 1e-6)
+    offsets = list(range(-half, half + 1))
+    weights = [math.exp(-0.5 * (offset / sigma) ** 2) for offset in offsets]
+
+    def extended(pos: int) -> list[float]:
+        if closed:
+            return src[pos % count]
+        if pos < 0:
+            mirror = min(-pos, count - 1)
+            origin = src[0]
+            other = src[mirror]
+            return [2 * origin[0] - other[0], 2 * origin[1] - other[1]]
+        if pos >= count:
+            mirror = max(2 * (count - 1) - pos, 0)
+            origin = src[-1]
+            other = src[mirror]
+            return [2 * origin[0] - other[0], 2 * origin[1] - other[1]]
+        return src[pos]
+
     smoothed = []
     for index in range(count):
-        acc_col = acc_row = 0.0
-        used = 0
-        for offset in range(-half, half + 1):
-            pos = index + offset
-            if closed:
-                pos %= count
-            elif pos < 0 or pos >= count:
-                continue
-            acc_col += src[pos][0]
-            acc_row += src[pos][1]
-            used += 1
-        smoothed.append([acc_col / used, acc_row / used])
+        acc_col = acc_row = acc_weight = 0.0
+        for offset, weight in zip(offsets, weights):
+            col_value, row_value = extended(index + offset)
+            acc_col += weight * col_value
+            acc_row += weight * row_value
+            acc_weight += weight
+        smoothed.append([acc_col / acc_weight, acc_row / acc_weight])
     if closed:
         smoothed.append(smoothed[0][:])
     return smoothed
@@ -2282,7 +2532,7 @@ def _xld_feature_name(feature: str) -> str:
     [],
     "用點產生輪廓",
     "Row 與 Col 等長。點的順序就是輪廓方向。",
-    "gen_contour_polygon_xld (Contour, [10, 10, 40], [10, 40, 40])",
+    "Vizion.gen_contour_polygon_xld (Contour, [10, 10, 40], [10, 40, 40])",
 )
 def gen_contour_polygon_xld(row, col, *, ctx):
     rows, cols = _pair(row, col)
@@ -2304,7 +2554,7 @@ def gen_contour_polygon_xld(row, col, *, ctx):
     [P("Row", "列座標"), P("Col", "行座標")],
     "讀出輪廓點",
     "這條 XLD 只能有一條輪廓。多條時先用 select_obj 取出。",
-    "get_contour_xld (Contour, Row, Col)",
+    "Vizion.get_contour_xld (Contour, Row, Col)",
 )
 def get_contour_xld(contour, *, ctx):
     xld = expect_xld(contour, "Contour")
@@ -2326,8 +2576,8 @@ def get_contour_xld(contour, *, ctx):
         P("ColEnd", "終點行"),
     ],
     "輪廓擬合直線",
-    "每條輪廓用最小二乘擬合一條直線，並把線段畫成新的 XLD。點不夠的輪廓會跳過。",
-    "fit_line_contour_xld (Contours, Lines, RowBegin, ColBegin, RowEnd, ColEnd)",
+    "每條輪廓先擬合，再丟掉離直線超過門檻的飛點，重擬到方向穩定。線段只覆蓋留下來的點，不會被飛點拉長。點都在直線上時，結果和最小二乘一樣。點不夠的輪廓會跳過。",
+    "Vizion.fit_line_contour_xld (Contours, Lines, RowBegin, ColBegin, RowEnd, ColEnd)",
 )
 def fit_line_contour_xld(contours, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2355,8 +2605,8 @@ def fit_line_contour_xld(contours, *, ctx):
     [],
     [P("Row", "圓心列"), P("Column", "圓心行"), P("Radius", "半徑")],
     "輪廓擬合圓",
-    "每條至少 3 點的輪廓擬合一個圓，輸出整圓輪廓和圓心、半徑。",
-    "fit_circle_contour_xld (Contours, Circles, Row, Column, Radius)",
+    "每條至少 3 點的輪廓用 Pratt 擬合圓，短圓弧不會把半徑縮太小。離圓超過約 1 像素的飛點會丟掉再擬一次，圓心不會被拉走。點都在圓上時，圓心和半徑不變。點不夠或排成直線的輪廓會跳過。",
+    "Vizion.fit_circle_contour_xld (Contours, Circles, Row, Column, Radius)",
 )
 def fit_circle_contour_xld(contours, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2366,7 +2616,10 @@ def fit_circle_contour_xld(contours, *, ctx):
         points = _points(contour)
         if len(points) < 3:
             continue
-        row, col, radius = _fit_circle(points)
+        try:
+            row, col, radius = _fit_circle(points)
+        except ValueError:
+            continue
         circles.append(_sample_circle(row, col, radius))
         rows.append(row)
         cols.append(col)
@@ -2389,8 +2642,8 @@ def fit_circle_contour_xld(contours, *, ctx):
         P("Radius2", "短軸半徑"),
     ],
     "輪廓擬合橢圓",
-    "每條至少 5 點的輪廓擬合一個橢圓。Phi 是長軸方向。",
-    "fit_ellipse_contour_xld (Contours, Ellipses, Row, Column, Phi, Radius1, Radius2)",
+    "每條至少 5 點的輪廓擬合一個橢圓。點比較多、而且有一個離弧線很遠時，會先找中位誤差小的橢圓，再丟掉那個飛點重擬合。Phi 是長軸方向。",
+    "Vizion.fit_ellipse_contour_xld (Contours, Ellipses, Row, Column, Phi, Radius1, Radius2)",
 )
 def fit_ellipse_contour_xld(contours, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2412,6 +2665,67 @@ def fit_ellipse_contour_xld(contours, *, ctx):
     return Result([_pack_xld(xld.width, xld.height, ellipses)], [rows, cols, phis, radius1, radius2])
 
 
+def _rectangle_of(points: np.ndarray):
+    (col, row), (width, height), angle = cv2.minAreaRect(points.astype(np.float32).reshape(-1, 1, 2))
+    if width >= height:
+        phi = math.radians(float(angle))
+        half1 = float(width) / 2.0
+        half2 = float(height) / 2.0
+    else:
+        phi = math.radians(float(angle) + 90.0)
+        half1 = float(height) / 2.0
+        half2 = float(width) / 2.0
+    return float(row), float(col), phi, half1, half2
+
+
+def _rectangle_boundary_error(points: np.ndarray, rectangle) -> np.ndarray:
+    row, col, phi, half1, half2 = rectangle
+    cosine = math.cos(phi)
+    sine = math.sin(phi)
+    dx = points[:, 0] - col
+    dy = points[:, 1] - row
+    along = dx * cosine + dy * sine
+    across = -dx * sine + dy * cosine
+    outside_along = np.abs(along) - max(half1, 0.0)
+    outside_across = np.abs(across) - max(half2, 0.0)
+    outside = np.hypot(np.maximum(outside_along, 0.0), np.maximum(outside_across, 0.0))
+    inside = np.minimum(np.maximum(outside_along, outside_across), 0.0)
+    return np.abs(outside + inside)
+
+
+def _robust_rectangle(points: list):
+    cloud = np.asarray(points, np.float64).reshape(-1, 2)
+    base = _rectangle_of(cloud)
+    if len(cloud) < 8:
+        return base
+    error = _rectangle_boundary_error(cloud, base)
+    if float(np.max(error)) <= 1.0:
+        return base
+    generator = np.random.default_rng(0)
+    best = base
+    best_error = error
+    best_score = float(np.median(error))
+    best_total = float(np.sum(error))
+    for _turn in range(48):
+        index = generator.choice(len(cloud), 8, replace=False)
+        trial = _rectangle_of(cloud[index])
+        if trial[3] < 1.0 or trial[4] < 1.0:
+            continue
+        trial_error = _rectangle_boundary_error(cloud, trial)
+        score = float(np.median(trial_error))
+        total = float(np.sum(trial_error))
+        if score < best_score - 1e-9 or (abs(score - best_score) <= 1e-9 and total < best_total - 1e-6):
+            best = trial
+            best_error = trial_error
+            best_score = score
+            best_total = total
+    limit = 2.5 * best_score if best_score > 0.4 else 1.0
+    keep = best_error <= limit + 1e-9
+    if int(np.count_nonzero(keep)) >= 3 and not bool(np.all(keep)):
+        return _rectangle_of(cloud[keep])
+    return best
+
+
 @operator(
     "輪廓",
     [P("Contours", "輸入輪廓")],
@@ -2425,8 +2739,8 @@ def fit_ellipse_contour_xld(contours, *, ctx):
         P("Length2", "半寬"),
     ],
     "輪廓擬合旋轉矩形",
-    "用最小外接旋轉矩形包住每一條輪廓，並把矩形四邊畫成閉合 XLD。",
-    "fit_rectangle2_contour_xld (Contours, Rectangles, Row, Column, Phi, Length1, Length2)",
+    "點比較多、而且有一個離開矩形邊時，會先找中位誤差小的矩形，再丟掉那個飛點重擬合。點很少時仍是最小外接矩形。Phi 是長邊方向。",
+    "Vizion.fit_rectangle2_contour_xld (Contours, Rectangles, Row, Column, Phi, Length1, Length2)",
 )
 def fit_rectangle2_contour_xld(contours, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2436,19 +2750,10 @@ def fit_rectangle2_contour_xld(contours, *, ctx):
         points = _points(contour)
         if len(points) < 3:
             continue
-        contour_i = np.asarray(points, np.float32).reshape(-1, 1, 2)
-        (col, row), (width, height), angle = cv2.minAreaRect(contour_i)
-        if width >= height:
-            phi = math.radians(float(angle))
-            half1 = float(width) / 2
-            half2 = float(height) / 2
-        else:
-            phi = math.radians(float(angle) + 90)
-            half1 = float(height) / 2
-            half2 = float(width) / 2
-        rectangles.append(_sample_rectangle(float(row), float(col), phi, half1, half2))
-        rows.append(float(row))
-        cols.append(float(col))
+        row, col, phi, half1, half2 = _robust_rectangle(points)
+        rectangles.append(_sample_rectangle(row, col, phi, half1, half2))
+        rows.append(row)
+        cols.append(col)
         phis.append(phi)
         length1.append(half1)
         length2.append(half2)
@@ -2465,7 +2770,7 @@ def fit_rectangle2_contour_xld(contours, *, ctx):
     [],
     "把靠近的輪廓接起來",
     "端點距離在 MaxDist 以內、而且方向差不超過 MaxAngle，就接成同一條。已經閉合的輪廓不會被接走。",
-    "union_adjacent_contours_xld (Contours, UnionContours, 10, 0.5)",
+    "Vizion.union_adjacent_contours_xld (Contours, UnionContours, 10, 0.5)",
 )
 def union_adjacent_contours_xld(contours, max_dist=10, max_angle=0.5, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2481,7 +2786,7 @@ def union_adjacent_contours_xld(contours, max_dist=10, max_angle=0.5, *, ctx):
     [],
     "把共線的輪廓接起來",
     "除了端點靠近，中間空隙也要和兩條輪廓的方向一致，才會接成一條直線。",
-    "union_collinear_contours_xld (Contours, UnionContours, 30, 0.26)",
+    "Vizion.union_collinear_contours_xld (Contours, UnionContours, 30, 0.26)",
 )
 def union_collinear_contours_xld(contours, max_dist=30, max_angle=0.26, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2497,7 +2802,7 @@ def union_collinear_contours_xld(contours, max_dist=30, max_angle=0.26, *, ctx):
     [],
     "把輪廓截成多段",
     "lines 用多邊形近似，每一邊變成獨立線段。angle 在轉角超過門檻的地方切開，轉角點會同時屬於前後兩段。",
-    "segment_contours_xld (Contours, ContoursSplit, 'lines', 2)",
+    "Vizion.segment_contours_xld (Contours, ContoursSplit, 'lines', 2)",
 )
 def segment_contours_xld(contours, mode="'lines'", max_dist=2, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2523,7 +2828,7 @@ def segment_contours_xld(contours, mode="'lines'", max_dist=2, *, ctx):
     [],
     "用特徵篩選輪廓",
     "特徵名稱和特徵視窗的 XLD 清單相同，例如 contlength、circularity、row。contour_length 也接受。",
-    "select_contours_xld (Contours, SelectedContours, 'contlength', 20, 99999)",
+    "Vizion.select_contours_xld (Contours, SelectedContours, 'contlength', 20, 99999)",
 )
 def select_contours_xld(contours, feature, min_value, max_value, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2545,8 +2850,8 @@ def select_contours_xld(contours, feature, min_value, max_value, *, ctx):
     [P("NumPoints", "平滑點數，奇數", "5")],
     [],
     "平滑輪廓",
-    "用左右各半個點的平均把鋸齒抹平。閉合輪廓會維持閉合。",
-    "smooth_contours_xld (Contours, SmoothedContours, 5)",
+    "沿輪廓用高斯權重平滑。開放輪廓在端點做奇數延拓，直線的端點不會往裡縮。閉合輪廓維持閉合。NumPoints 是奇數窗寬。",
+    "Vizion.smooth_contours_xld (Contours, SmoothedContours, 5)",
 )
 def smooth_contours_xld(contours, num_points=5, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2562,7 +2867,7 @@ def smooth_contours_xld(contours, num_points=5, *, ctx):
     [],
     "閉合輪廓",
     "還沒接回起點的輪廓，會把第一個點補到最後。",
-    "close_contours_xld (Contours, ClosedContours)",
+    "Vizion.close_contours_xld (Contours, ClosedContours)",
 )
 def close_contours_xld(contours, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2587,7 +2892,7 @@ def close_contours_xld(contours, *, ctx):
     [],
     "排序輪廓",
     "character 先依列再依行。upper_left 只看 RowOrCol 指定的那一軸。順序用每條輪廓的中心。",
-    "sort_contours_xld (Contours, SortedContours, 'character', 'true', 'row')",
+    "Vizion.sort_contours_xld (Contours, SortedContours, 'character', 'true', 'row')",
 )
 def sort_contours_xld(contours, sort_mode="'character'", order="'true'", row_or_col="'row'", *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2621,7 +2926,7 @@ def sort_contours_xld(contours, sort_mode="'character'", order="'true'", row_or_
     [],
     "輪廓轉成區域",
     "filled 把輪廓內部填滿。margin 只留下輪廓線。每一條輪廓變成一個區域物件。",
-    "gen_region_contour_xld (Contour, Region, 'filled')",
+    "Vizion.gen_region_contour_xld (Contour, Region, 'filled')",
 )
 def gen_region_contour_xld(contour, mode="'filled'", *, ctx):
     xld = expect_xld(contour, "Contour")
@@ -2656,7 +2961,7 @@ def gen_region_contour_xld(contour, mode="'filled'", *, ctx):
     [P("Length", "每條輪廓的長度")],
     "輪廓長度",
     "每一條輪廓一個長度，結果是 tuple。",
-    "length_xld (Contours, Length)",
+    "Vizion.length_xld (Contours, Length)",
 )
 def length_xld(contours, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2678,7 +2983,7 @@ def length_xld(contours, *, ctx):
     [P("Area", "圍成的面積"), P("Row", "中心列"), P("Column", "中心行")],
     "輪廓面積與中心",
     "用輪廓圍成的多邊形計算。開放輪廓會先看成接到起點。每一條一個值。",
-    "area_center_xld (Contours, Area, Row, Column)",
+    "Vizion.area_center_xld (Contours, Area, Row, Column)",
 )
 def area_center_xld(contours, *, ctx):
     xld = expect_xld(contours, "Contours")
@@ -2716,7 +3021,7 @@ def _pair(rows, cols):
     [],
     "產生十字標記",
     "用來標重心。Row、Column 通常直接接 area_center 的輸出。",
-    "gen_cross_contour_xld (Cross, Row, Column, 16, 0)",
+    "Vizion.gen_cross_contour_xld (Cross, Row, Column, 16, 0)",
 )
 def gen_cross_contour_xld(row, column, size, angle, *, ctx):
     rows, cols = _pair(row, column)
@@ -2740,7 +3045,7 @@ def gen_cross_contour_xld(row, column, size, angle, *, ctx):
     [],
     "顯示到圖形視窗",
     "顯示影像會清掉舊的疊加。顯示區域或輪廓會疊在目前影像上。",
-    "dev_display (Object)",
+    "Vizion.dev_display (Object)",
 )
 def dev_display(obj, *, ctx):
     ctx.display_obj(obj)
@@ -2755,7 +3060,7 @@ def dev_display(obj, *, ctx):
     [],
     "清空圖形視窗",
     "清掉目前的影像和疊加。",
-    "dev_clear_window ()",
+    "Vizion.dev_clear_window ()",
 )
 def dev_clear_window(*, ctx):
     ctx.display.clear()
@@ -2770,7 +3075,7 @@ def dev_clear_window(*, ctx):
     [],
     "設定繪圖顏色",
     "可用 red、green、blue、yellow、cyan、magenta、white、orange，或 #RRGGBB。",
-    "dev_set_color ('green')",
+    "Vizion.dev_set_color ('green')",
 )
 def dev_set_color(color, *, ctx):
     ctx.display.color = normalize_color(text(color, "Color"))
@@ -2785,7 +3090,7 @@ def dev_set_color(color, *, ctx):
     [],
     "設定區域畫法",
     "margin 畫輪廓，fill 填色。",
-    "dev_set_draw ('margin')",
+    "Vizion.dev_set_draw ('margin')",
 )
 def dev_set_draw(draw_mode, *, ctx):
     mode = text(draw_mode, "DrawMode").lower()
@@ -2803,7 +3108,7 @@ def dev_set_draw(draw_mode, *, ctx):
     [],
     "設定線寬",
     "輪廓線寬是 1 到 10 的螢幕像素，放大影像時不會跟著變粗。",
-    "dev_set_line_width (2)",
+    "Vizion.dev_set_line_width (2)",
 )
 def dev_set_line_width(width, *, ctx):
     value = whole(width, "Width")
@@ -2821,7 +3126,7 @@ def dev_set_line_width(width, *, ctx):
     [],
     "在圖上寫字",
     "VisDev 擴充。HDevelop 要透過視窗 handle，這裡直接寫進目前的圖形視窗。",
-    "dev_disp_text ('ok', 24, 12)",
+    "Vizion.dev_disp_text ('ok', 24, 12)",
 )
 def dev_disp_text(message, row, column, *, ctx):
     ctx.display.overlays.append(
@@ -2903,7 +3208,7 @@ def _ocr_domain(image: Image, row1, column1, row2, column2, row, column, radius,
     [P("Text", "讀到的字"), P("Row", "字塊中心列"), P("Column", "字塊中心行"), P("Score", "信心，0 到 1")],
     "讀出影像上的文字",
     "搜尋範圍可以空白，表示整張圖。參數窗開著時，在圖上按右鍵拉矩形、圓或橢圓，確認後填進這個範圍，只讀範圍裡的字。座標仍是整張圖的列、行。" + describe_catalog(),
-    "ocr_find (Image, Words, 'auto', Text, Row, Column, Score)",
+    "Vizion.ocr_find (Image, Words, 'auto', Text, Row, Column, Score)",
 )
 def ocr_find(image, method, row1, column1, row2, column2, row, column, radius, radius1, radius2, phi, *, ctx):
     image = expect_image(image, "Image")
@@ -2947,7 +3252,7 @@ def ocr_find(image, method, row1, column1, row2, column2, row, column, radius, r
     [],
     "暫停執行",
     "停在下一行，和中斷點一樣，可以再按執行或單步繼續。",
-    "stop ()",
+    "Vizion.stop ()",
 )
 def stop(*, ctx):
     raise StopSignal()
@@ -2961,7 +3266,7 @@ def stop(*, ctx):
     [P("Length", "長度")],
     "tuple 長度",
     "單一數值的長度是 1。程式裡也可以寫 |Tuple|。",
-    "tuple_length (Tuple, Length)",
+    "Vizion.tuple_length (Tuple, Length)",
 )
 def tuple_length(value, *, ctx):
     return Result([], [len(value) if isinstance(value, list) else 1])
@@ -2975,7 +3280,7 @@ def tuple_length(value, *, ctx):
     [P("Min", "最小值")],
     "tuple 最小值",
     "回傳單一數值。",
-    "tuple_min (Tuple, Min)",
+    "Vizion.tuple_min (Tuple, Min)",
 )
 def tuple_min(value, *, ctx):
     return Result([], [min(numbers_of(value))])
@@ -2989,7 +3294,7 @@ def tuple_min(value, *, ctx):
     [P("Max", "最大值")],
     "tuple 最大值",
     "回傳單一數值。",
-    "tuple_max (Tuple, Max)",
+    "Vizion.tuple_max (Tuple, Max)",
 )
 def tuple_max(value, *, ctx):
     return Result([], [max(numbers_of(value))])
@@ -3003,7 +3308,7 @@ def tuple_max(value, *, ctx):
     [P("Sum", "總和")],
     "tuple 總和",
     "回傳單一數值。",
-    "tuple_sum (Tuple, Sum)",
+    "Vizion.tuple_sum (Tuple, Sum)",
 )
 def tuple_sum(value, *, ctx):
     return Result([], [sum(numbers_of(value))])
@@ -3017,7 +3322,7 @@ def tuple_sum(value, *, ctx):
     [P("Mean", "平均")],
     "tuple 平均",
     "回傳單一數值。",
-    "tuple_mean (Tuple, Mean)",
+    "Vizion.tuple_mean (Tuple, Mean)",
 )
 def tuple_mean(value, *, ctx):
     nums = numbers_of(value)
@@ -3102,7 +3407,7 @@ def _expect_model(value):
     [P("ModelID", "形狀模型")],
     "建立形狀模型",
     "建立時抽出邊緣點，做成金字塔，並依角度步進預先轉好每一層。原點是 domain 重心；沒有 domain 時用影像中心。",
-    "create_shape_model (Template, 0, rad(-180), rad(360), 0, 'use_polarity', 'auto', 'auto', ModelID)",
+    "Vizion.create_shape_model (Template, 0, rad(-180), rad(360), 0, 'use_polarity', 'auto', 'auto', ModelID)",
 )
 def create_shape_model(template, num_levels, angle_start, angle_extent, angle_step, metric, contrast, min_contrast, *, ctx):
     from .shape_model import create_shape_model as build_model
@@ -3144,7 +3449,7 @@ def create_shape_model(template, num_levels, angle_start, angle_extent, angle_st
     [P("ModelID", "形狀模型")],
     "教導形狀模型",
     "用矩形框出要記的圖案。模型原點是教導框中心，定位時的 Row、Column 就是這個中心。",
-    "teach_shape_model (Image, 15, 15, 164, 164, 0, rad(-180), rad(360), 0, 'use_polarity', 40, 10, ModelID)",
+    "Vizion.teach_shape_model (Image, 15, 15, 164, 164, 0, rad(-180), rad(360), 0, 'use_polarity', 40, 10, ModelID)",
 )
 def teach_shape_model(
     image,
@@ -3183,8 +3488,8 @@ def teach_shape_model(
     ],
     [P("Row", "列"), P("Column", "行"), P("Angle", "角度，弳度"), P("Score", "分數")],
     "尋找形狀模型",
-    "用建立時算好的旋轉模型，從最粗層全圖搜尋，再只在候選附近細化，最後做次像素內插。",
-    "find_shape_model (Image, ModelID, rad(-180), rad(360), 0.6, 0, 0.5, 'interpolation', 0, 0.8, Row, Column, Angle, Score)",
+    "用建立時算好的旋轉模型，從最粗層全圖搜尋，再只在候選附近細化。interpolation 用分數曲面的拋物線。least_squares 再沿邊緣法線把列、行和角度做最小二乘。",
+    "Vizion.find_shape_model (Image, ModelID, rad(-180), rad(360), 0.6, 0, 0.5, 'interpolation', 0, 0.8, Row, Column, Angle, Score)",
 )
 def find_shape_model(
     image,
@@ -3215,7 +3520,7 @@ def find_shape_model(
         scalar(min_score, "MinScore"),
         whole(num_matches, "NumMatches"),
         scalar(max_overlap, "MaxOverlap"),
-        mode != "none",
+        mode,
         whole(num_levels, "NumLevels"),
         scalar(greediness, "Greediness"),
     )
@@ -3231,7 +3536,7 @@ def find_shape_model(
     [],
     "取出模型輪廓",
     "輪廓點已沿梯度做到次像素，座標在模板影像上。Level 1 是原始解析度。",
-    "get_shape_model_contours (ModelContours, ModelID, 1)",
+    "Vizion.get_shape_model_contours (ModelContours, ModelID, 1)",
 )
 def get_shape_model_contours(model, level, *, ctx):
     shape = _expect_model(model)
@@ -3255,7 +3560,7 @@ def get_shape_model_contours(model, level, *, ctx):
     [],
     "畫出匹配輪廓",
     "把模型的次像素輪廓剛性變換到每個匹配位置，並在輪廓旁標出角度到小數三位。每個實例使用 16 色循環中的下一個顏色。",
-    "dev_display_shape_matching_results (ModelID, Row, Column, Angle)",
+    "Vizion.dev_display_shape_matching_results (ModelID, Row, Column, Angle)",
 )
 def dev_display_shape_matching_results(model, row, column, angle, *, ctx):
     from .ncc_model import format_degrees
@@ -3315,7 +3620,7 @@ def dev_display_shape_matching_results(model, row, column, angle, *, ctx):
     [P("ModelID", "NCC 模型")],
     "建立 NCC 模型",
     "建立時做成灰階金字塔，並依角度步進預先轉好每一層的模板。原點是 domain 重心；沒有 domain 時用影像中心。",
-    "create_ncc_model (Template, 0, rad(-180), rad(360), 0, 'use_polarity', ModelID)",
+    "Vizion.create_ncc_model (Template, 0, rad(-180), rad(360), 0, 'use_polarity', ModelID)",
 )
 def create_ncc_model(template, num_levels, angle_start, angle_extent, angle_step, metric, *, ctx):
     from .ncc_model import create_ncc_model as build_model
@@ -3353,7 +3658,7 @@ def create_ncc_model(template, num_levels, angle_start, angle_extent, angle_step
     [P("ModelID", "NCC 模型")],
     "教導 NCC 模型",
     "用矩形框出要記的灰階圖案。模型原點是教導框中心。",
-    "teach_ncc_model (Image, 15, 15, 164, 164, 0, rad(-180), rad(360), 0, 'use_polarity', ModelID)",
+    "Vizion.teach_ncc_model (Image, 15, 15, 164, 164, 0, rad(-180), rad(360), 0, 'use_polarity', ModelID)",
 )
 def teach_ncc_model(
     image,
@@ -3389,8 +3694,8 @@ def teach_ncc_model(
     ],
     [P("Row", "中心列"), P("Column", "中心行"), P("Angle", "角度，弳度"), P("Score", "分數")],
     "NCC 定位",
-    "用建立時算好的旋轉模板，從最粗層做正規相關，再只在候選附近細化，最後做次像素內插。",
-    "find_ncc_model (Image, ModelID, rad(-180), rad(360), 0.7, 0, 0.4, 'interpolation', 0, Row, Column, Angle, Score)",
+    "用建立時算好的旋轉模板，從最粗層做正規相關，再只在候選附近細化。interpolation 在整數峰周圍的分數上做 Keys 三次內插，平坦的峰留在整數。least_squares 仍從整數峰用 Lucas-Kanade 沿灰階梯度修列和行，角度維持搜尋結果。",
+    "Vizion.find_ncc_model (Image, ModelID, rad(-180), rad(360), 0.7, 0, 0.4, 'interpolation', 0, Row, Column, Angle, Score)",
 )
 def find_ncc_model(
     image,
@@ -3422,7 +3727,7 @@ def find_ncc_model(
         scalar(min_score, "MinScore"),
         whole(num_matches, "NumMatches"),
         scalar(max_overlap, "MaxOverlap"),
-        mode != "none",
+        mode,
         whole(num_levels, "NumLevels"),
     )
     rows, cols = _with_origin(rows, cols, model)
@@ -3437,7 +3742,7 @@ def find_ncc_model(
     [],
     "畫出 NCC 定位",
     "只畫中心十字、方向箭頭，以及箭頭旁的角度。每個實例使用 16 色循環中的下一個顏色。角度 0 指向右方，逆時針為正，顯示到小數三位。",
-    "dev_display_ncc_matching_results (ModelID, Row, Column, Angle)",
+    "Vizion.dev_display_ncc_matching_results (ModelID, Row, Column, Angle)",
 )
 def dev_display_ncc_matching_results(model, row, column, angle, *, ctx):
     from .ncc_model import NccModel, angle_label, color_for_match, marker_contours
@@ -3493,7 +3798,7 @@ def dev_display_ncc_matching_results(model, row, column, angle, *, ctx):
     [],
     "用多色顯示輪廓或區域",
     "之後 dev_display 的每一條輪廓、每一個區域物件會輪流使用這組顏色。單一顏色請用 dev_set_color。形狀匹配結果固定使用 16 色。",
-    "dev_set_colored (16)",
+    "Vizion.dev_set_colored (16)",
 )
 def dev_set_colored(num_colors, *, ctx):
     count = whole(num_colors, "NumColors")
@@ -3536,7 +3841,7 @@ _GAUGE_TAIL = [
     [P("Row", "邊緣的列"), P("Column", "邊緣的行"), P("Amplitude", "梯度，沿搜尋方向"), P("Distance", "離起點的像素距離")],
     "點量規：沿一條線找次像素邊緣",
     "在起點到終點的灰階剖面上找梯度峰，再用拋物線內插到次像素。positive 是沿搜尋方向由暗到亮，negative 相反，all 兩者都收。Select 用 all 會回傳每一個邊緣。這組量規是剖面次像素邊緣再擬合幾何，不是商業量測函式庫的程式。",
-    "gauge_point (Image, Cross, 110, 80, 110, 220, 1, 8, 'all', 'first', Row, Column, Amplitude, Distance)",
+    "Vizion.gauge_point (Image, Cross, 110, 80, 110, 220, 1, 8, 'all', 'first', Row, Column, Amplitude, Distance)",
 )
 def gauge_point(image, row1, column1, row2, column2, sigma, threshold, transition, select, *, ctx):
     src, gray, domain = _gauge_source(image)
@@ -3566,7 +3871,7 @@ def gauge_point(image, row1, column1, row2, column2, sigma, threshold, transitio
     [P("Row1", "擬合起點的列"), P("Column1", "擬合起點的行"), P("Row2", "擬合終點的列"), P("Column2", "擬合終點的行"), P("Angle", "直線方向，弳度"), P("Used", "用來擬合的點數")],
     "直線量規：沿名義直線找邊再擬合",
     "在直線上放多條垂直搜尋線，每條取一個次像素邊緣，再擬合直線。Select 為 all 時，每條搜尋線仍取梯度最強的點。角度 0 指向右方，列增加的方向為正。",
-    "gauge_line (Image, Line, 200, 380, 200, 480, 12, 1, 8, 'all', 'best', Row1, Column1, Row2, Column2, Angle, Used)",
+    "Vizion.gauge_line (Image, Line, 200, 380, 200, 480, 12, 1, 8, 'all', 'best', Row1, Column1, Row2, Column2, Angle, Used)",
 )
 def gauge_line(image, row1, column1, row2, column2, tolerance, sigma, threshold, transition, select, *, ctx):
     src, gray, domain = _gauge_source(image)
@@ -3592,7 +3897,7 @@ def gauge_line(image, row1, column1, row2, column2, tolerance, sigma, threshold,
     [P("Row", "圓心列"), P("Column", "圓心行"), P("Radius", "半徑"), P("Used", "用來擬合的點數")],
     "圓量規：沿半徑找邊再擬合圓",
     "繞名義圓一圈放搜尋線，由內往外取次像素邊緣，再做幾何圓擬合。名義圓心要落在真實圓心的 Tolerance 之內。",
-    "gauge_circle (Image, Circle, 110, 150, 42, 12, 1, 8, 'all', 'best', Row, Column, Radius, Used)",
+    "Vizion.gauge_circle (Image, Circle, 110, 150, 42, 12, 1, 8, 'all', 'best', Row, Column, Radius, Used)",
 )
 def gauge_circle(image, row, column, radius, tolerance, sigma, threshold, transition, select, *, ctx):
     src, gray, domain = _gauge_source(image)
@@ -3616,7 +3921,7 @@ def gauge_circle(image, row, column, radius, tolerance, sigma, threshold, transi
     [P("Row", "中心列"), P("Column", "中心行"), P("Phi", "長軸方向，弳度"), P("Length1", "半長"), P("Length2", "半寬"), P("Used", "用來擬合的點數")],
     "矩形量規：四邊各找邊再交成矩形",
     "Phi 為 0 時 Length1 沿著行方向，Length2 沿著列方向。四邊各自擬合直線，交點決定矩形。",
-    "gauge_rectangle (Image, Rectangle, 244.5, 429.5, 0, 70, 45, 12, 1, 8, 'all', 'best', Row, Column, Phi, Length1, Length2, Used)",
+    "Vizion.gauge_rectangle (Image, Rectangle, 244.5, 429.5, 0, 70, 45, 12, 1, 8, 'all', 'best', Row, Column, Phi, Length1, Length2, Used)",
 )
 def gauge_rectangle(image, row, column, phi, length1, length2, tolerance, sigma, threshold, transition, select, *, ctx):
     src, gray, domain = _gauge_source(image)
@@ -3648,7 +3953,7 @@ def gauge_rectangle(image, row, column, phi, length1, length2, tolerance, sigma,
     ],
     "扇形量規：內弧、外弧和兩條半徑",
     "角度 0 指向右方，列增加的方向為正。張角為正時，角度沿這個方向增加。四段邊緣都要找得到。",
-    "gauge_wedge (Image, Wedge, 340, 170, 24, 58, 0.35, 1.8, 10, 1, 8, 'all', 'best', Row, Column, Radius1, Radius2, AngleStart, AngleExtent, Used)",
+    "Vizion.gauge_wedge (Image, Wedge, 340, 170, 24, 58, 0.35, 1.8, 10, 1, 8, 'all', 'best', Row, Column, Radius1, Radius2, AngleStart, AngleExtent, Used)",
 )
 def gauge_wedge(
     image, row, column, radius1, radius2, angle_start, angle_extent, tolerance, sigma, threshold, transition, select, *, ctx
@@ -3679,7 +3984,7 @@ def gauge_wedge(
     [P("Rows", "擬合頂點的列"), P("Columns", "擬合頂點的行"), P("Used", "用來擬合的點數")],
     "多邊形量規：每邊找邊，相鄰邊相交成頂點",
     "頂點請沿邊界順序給。首尾座標相同時會當成封閉。開放多邊形的兩個端點是投影到擬合直線上的位置。",
-    "gauge_polygon (Image, Polygon, [200, 200, 290, 290], [360, 500, 500, 360], 12, 1, 8, 'all', 'best', 1, Rows, Columns, Used)",
+    "Vizion.gauge_polygon (Image, Polygon, [200, 200, 290, 290], [360, 500, 500, 360], 12, 1, 8, 'all', 'best', 1, Rows, Columns, Used)",
 )
 def gauge_polygon(image, rows, columns, tolerance, sigma, threshold, transition, select, closed, *, ctx):
     src, gray, domain = _gauge_source(image)
@@ -3699,7 +4004,7 @@ def gauge_polygon(image, rows, columns, tolerance, sigma, threshold, transition,
     [P("Distance", "歐氏距離，像素")],
     "兩點距離",
     "座標是像素。列往下、行往右。",
-    "distance_pp (0, 0, 3, 4, Distance)",
+    "Vizion.distance_pp (0, 0, 3, 4, Distance)",
 )
 def distance_pp(row1, column1, row2, column2, *, ctx):
     return Result([], [gauge.distance_pp(scalar(row1, "Row1"), scalar(column1, "Column1"), scalar(row2, "Row2"), scalar(column2, "Column2"))])
@@ -3717,7 +4022,7 @@ def distance_pp(row1, column1, row2, column2, *, ctx):
     [P("Distance", "點到無限長直線的距離，像素")],
     "點到直線的距離",
     "直線用兩個點決定，距離是垂直距離，不是到線段端點的距離。",
-    "distance_pl (20, 0, 0, 10, 50, 10, Distance)",
+    "Vizion.distance_pl (20, 0, 0, 10, 50, 10, Distance)",
 )
 def distance_pl(row, column, row1, column1, row2, column2, *, ctx):
     return Result([], [gauge.distance_pl(
@@ -3748,7 +4053,7 @@ def _project_line(row, column, row1, column1, row2, column2):
     [P("Distance", "點到線段的距離，像素")],
     "點到線段的距離",
     "垂足落在線段外時，距離改量到較近的端點。和 distance_pl 的無限長直線不同。",
-    "distance_ps (0, 0, 0, 10, 0, 20, Distance)",
+    "Vizion.distance_ps (0, 0, 0, 10, 0, 20, Distance)",
 )
 def distance_ps(row, column, row1, column1, row2, column2, *, ctx):
     py = scalar(row, "Row")
@@ -3806,7 +4111,7 @@ def _region_line_distance(region, row1, column1, row2, column2, segment: bool) -
     [P("Distance", "區域到無限長直線的最短距離")],
     "區域到直線的距離",
     "每個物件一個距離，量的是區域裡最近的像素到無限長直線的垂直距離。",
-    "distance_lr (Region, 0, 0, 0, 100, Distance)",
+    "Vizion.distance_lr (Region, 0, 0, 0, 100, Distance)",
 )
 def distance_lr(region, row1, column1, row2, column2, *, ctx):
     return Result([], [_region_line_distance(region, row1, column1, row2, column2, False)])
@@ -3823,7 +4128,7 @@ def distance_lr(region, row1, column1, row2, column2, *, ctx):
     [P("Distance", "區域到線段的最短距離")],
     "區域到線段的距離",
     "垂足落在線段外時，改量到較近的端點。每個物件一個距離。",
-    "distance_sr (Region, 0, 0, 0, 100, Distance)",
+    "Vizion.distance_sr (Region, 0, 0, 0, 100, Distance)",
 )
 def distance_sr(region, row1, column1, row2, column2, *, ctx):
     return Result([], [_region_line_distance(region, row1, column1, row2, column2, True)])
@@ -3840,7 +4145,7 @@ def distance_sr(region, row1, column1, row2, column2, *, ctx):
     [P("Distance", "輪廓到無限長直線的最短距離")],
     "輪廓到直線的距離",
     "每條輪廓一個距離，用輪廓上的點量到無限長直線。",
-    "distance_lc (Contour, 0, 0, 0, 100, Distance)",
+    "Vizion.distance_lc (Contour, 0, 0, 0, 100, Distance)",
 )
 def distance_lc(contour, row1, column1, row2, column2, *, ctx):
     source = expect_xld(contour, "Contour")
@@ -3908,7 +4213,7 @@ def _polyline_segment_distance(rows, cols, row1, column1, row2, column2) -> floa
     [P("Distance", "輪廓到線段的最短距離")],
     "輪廓到線段的距離",
     "每條輪廓一個距離。折線和線段相交時是 0，否則量端點到另一段的距離。不會自動把輪廓封閉。",
-    "distance_sc (Contour, 0, 0, 0, 100, Distance)",
+    "Vizion.distance_sc (Contour, 0, 0, 0, 100, Distance)",
 )
 def distance_sc(contour, row1, column1, row2, column2, *, ctx):
     source = expect_xld(contour, "Contour")
@@ -3966,7 +4271,7 @@ def _segment_gap(row1, column1, row2, column2, row3, column3, row4, column4) -> 
     [P("Distance", "兩條線段的最短距離")],
     "兩條線段的距離",
     "線段相交或端點落在另一條上時，距離是 0。這不是無限長直線。",
-    "distance_ss (0, 0, 0, 10, 5, 0, 5, 10, Distance)",
+    "Vizion.distance_ss (0, 0, 0, 10, 5, 0, 5, 10, Distance)",
 )
 def distance_ss(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
     return Result([], [_segment_gap(
@@ -3987,7 +4292,7 @@ def distance_ss(row1, column1, row2, column2, row3, column3, row4, column4, *, c
     [P("RowProj", "垂足的列"), P("ColProj", "垂足的行")],
     "點在直線上的垂足",
     "直線是無限長的。兩個端點重合時，垂足就是那個點。",
-    "projection_pl (5, 4, 0, 0, 0, 10, RowProj, ColProj)",
+    "Vizion.projection_pl (5, 4, 0, 0, 0, 10, RowProj, ColProj)",
 )
 def projection_pl(row, column, row1, column1, row2, column2, *, ctx):
     proj_row, proj_col, _scale = _project_line(
@@ -4008,7 +4313,7 @@ def projection_pl(row, column, row1, column1, row2, column2, *, ctx):
     [P("Distance", "點到圓周的距離，像素")],
     "點到圓周的距離",
     "點在圓內時距離仍是正的，表示離圓周多遠。",
-    "distance_pc (110, 160, 110, 150, 42, Distance)",
+    "Vizion.distance_pc (110, 160, 110, 150, 42, Distance)",
 )
 def distance_pc(row, column, center_row, center_col, radius, *, ctx):
     return Result([], [gauge.distance_pc(
@@ -4030,7 +4335,7 @@ def distance_pc(row, column, center_row, center_col, radius, *, ctx):
     [P("Angle", "夾角，0 到 π/2 弳度")],
     "兩直線的夾角",
     "取較小的那個夾角，平行時為 0，垂直時為 π/2。方向相反的兩條線視為平行。",
-    "angle_ll (0, 0, 0, 10, 0, 0, 10, 0, Angle)",
+    "Vizion.angle_ll (0, 0, 0, 10, 0, 0, 10, 0, Angle)",
 )
 def angle_ll(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
     return Result([], [gauge.angle_ll(
@@ -4052,7 +4357,7 @@ def angle_ll(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx)
     [P("Row", "交點的列"), P("Column", "交點的行")],
     "兩直線的交點",
     "兩條線視為無限長。平行時會報錯。",
-    "intersection_ll (0, 10, 50, 10, 20, 0, 20, 40, Row, Column)",
+    "Vizion.intersection_ll (0, 10, 50, 10, 20, 0, 20, 40, Row, Column)",
 )
 def intersection_ll(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
     row, column = gauge.intersection_ll(
@@ -4081,7 +4386,7 @@ def _line_phi(row1, column1, row2, column2) -> float:
     [P("Angle", "和水平方向的夾角，弳度")],
     "直線的方向",
     "水平朝右是 0。正角度在畫面上順時針，朝下是 π/2。範圍是 −π 到 π。",
-    "angle_lx (0, 0, 0, 10, Angle)",
+    "Vizion.angle_lx (0, 0, 0, 10, Angle)",
 )
 def angle_lx(row1, column1, row2, column2, *, ctx):
     return Result([], [_line_phi(scalar(row1, "Row1"), scalar(column1, "Column1"), scalar(row2, "Row2"), scalar(column2, "Column2"))])
@@ -4101,7 +4406,7 @@ def angle_lx(row1, column1, row2, column2, *, ctx):
     ],
     "直線的中點、長度和方向",
     "方向和 angle_lx 相同。",
-    "line_position (0, 0, 0, 10, RowCenter, ColCenter, Length, Phi)",
+    "Vizion.line_position (0, 0, 0, 10, RowCenter, ColCenter, Length, Phi)",
 )
 def line_position(row1, column1, row2, column2, *, ctx):
     r1 = scalar(row1, "Row1")
@@ -4141,7 +4446,7 @@ def _on_segment(row, column, row1, column1, row2, column2) -> bool:
     [P("Row", "交點列"), P("Column", "交點行"), P("IsOverlapping", "1 表示有交點")],
     "兩條線段的交點",
     "只算線段，不算無限長直線。沒有交點時座標是 0，IsOverlapping 是 0。端點落在另一條上也算相交。",
-    "intersection_segments (0, 0, 10, 10, 0, 10, 10, 0, Row, Column, IsOverlapping)",
+    "Vizion.intersection_segments (0, 0, 10, 10, 0, 10, 10, 0, Row, Column, IsOverlapping)",
 )
 def intersection_segments(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
     r1 = scalar(row1, "Row1")
@@ -4183,7 +4488,7 @@ def intersection_segments(row1, column1, row2, column2, row3, column3, row4, col
     [P("Row", "交點列"), P("Column", "交點行"), P("IsOverlapping", "1 表示有交點")],
     "兩條無限長直線的交點",
     "平行時沒有交點，座標是 0，IsOverlapping 是 0。這不是線段。",
-    "intersection_lines (0, 0, 0, 80, 0, 20, 40, 20, Row, Column, IsOverlapping)",
+    "Vizion.intersection_lines (0, 0, 0, 80, 0, 20, 40, 20, Row, Column, IsOverlapping)",
 )
 def intersection_lines(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
     r1, c1 = scalar(row1, "Row1"), scalar(column1, "Column1")
@@ -4214,7 +4519,7 @@ def intersection_lines(row1, column1, row2, column2, row3, column3, row4, column
     [P("Row", "交點列"), P("Column", "交點行"), P("IsOverlapping", "1 表示交在線段上")],
     "線段和無限長直線的交點",
     "第一組兩點是線段，第二組是無限長直線。交點不在線段上、或兩線平行時，座標是 0，IsOverlapping 是 0。",
-    "intersection_segment_line (10, 0, 10, 40, 0, 20, 40, 20, Row, Column, IsOverlapping)",
+    "Vizion.intersection_segment_line (10, 0, 10, 40, 0, 20, 40, 20, Row, Column, IsOverlapping)",
 )
 def intersection_segment_line(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
     r1, c1 = scalar(row1, "Row1"), scalar(column1, "Column1")
@@ -4246,7 +4551,7 @@ def intersection_segment_line(row1, column1, row2, column2, row3, column3, row4,
     [P("RowIntersect", "交點列"), P("ColumnIntersect", "交點行")],
     "無限長直線和圓的交點",
     "沒有交點時得到空 tuple。相切時只有一個點。直線由兩個點決定。",
-    "intersection_line_circle (0, -10, 0, 10, 0, 0, 5, Row, Column)",
+    "Vizion.intersection_line_circle (0, -10, 0, 10, 0, 0, 5, Row, Column)",
 )
 def intersection_line_circle(row1, column1, row2, column2, row, column, radius, *, ctx):
     r1 = scalar(row1, "Row1")
@@ -4292,7 +4597,7 @@ def intersection_line_circle(row1, column1, row2, column2, row, column, radius, 
     [P("Distance", "線段到無限長直線的距離")],
     "線段到直線的距離",
     "線段穿過直線時距離是 0。否則是兩個端點裡較近的那個垂直距離。",
-    "distance_sl (0, 0, 0, 10, 5, 0, 5, 20, Distance)",
+    "Vizion.distance_sl (0, 0, 0, 10, 5, 0, 5, 20, Distance)",
 )
 def distance_sl(row1, column1, row2, column2, row3, column3, row4, column4, *, ctx):
     r1 = scalar(row1, "Row1")
@@ -4349,7 +4654,7 @@ def _circle_hits(row1, col1, row2, col2, center_row, center_col, radius):
     [P("Row", "交點列"), P("Column", "交點行")],
     "兩個圓的交點",
     "沒有交點時得到空 tuple。相切時只有一個點。兩圓完全重合會失敗。",
-    "intersection_circles (0, 0, 5, 0, 6, 5, Row, Column)",
+    "Vizion.intersection_circles (0, 0, 5, 0, 6, 5, Row, Column)",
 )
 def intersection_circles(row1, column1, radius1, row2, column2, radius2, *, ctx):
     center1_row = scalar(row1, "Row1")
@@ -4392,7 +4697,7 @@ def intersection_circles(row1, column1, radius1, row2, column2, radius2, *, ctx)
     [P("RowIntersect", "交點列"), P("ColumnIntersect", "交點行")],
     "線段和圓的交點",
     "只算線段，不算無限長直線。沒有交點時得到空 tuple。",
-    "intersection_segment_circle (0, -10, 0, 10, 0, 0, 5, Row, Column)",
+    "Vizion.intersection_segment_circle (0, -10, 0, 10, 0, 0, 5, Row, Column)",
 )
 def intersection_segment_circle(row1, column1, row2, column2, row, column, radius, *, ctx):
     hits = _circle_hits(
@@ -4412,6 +4717,29 @@ GROUP_ORDER = [
     "檔案", "灰階與濾波", "幾何", "分割", "形態學", "區域", "特徵", "輪廓", "量測",
     "文字", "條碼", "相機", "標定", "三維", "分類", "形狀匹配", "NCC定位", "顯示", "矩陣", "Tuple",
 ]
+
+GROUP_PRINCIPLE = {
+    "檔案": "影像以 8 位元讀寫。灰階是一層，彩色是藍、綠、紅三層。",
+    "灰階與濾波": "對每個像素做灰階運算，位置不變，輸出仍是影像。",
+    "幾何": "用齊次矩陣描述平移、旋轉、縮放或投影，再套到點、區域或影像。",
+    "分割": "依灰階門檻或相連的像素，把前景和背景分開。",
+    "形態學": "用結構元素膨脹、侵蝕、開運算或閉運算，改變區域外形。",
+    "區域": "對區域做集合、選取、移動或產生，不改影像的灰階。",
+    "特徵": "由區域的面積、外框、矩或灰階統計，算出一個數值。",
+    "輪廓": "把邊界或擬合結果存成 XLD 點列，點的順序是欄、列。",
+    "量測": "沿一條線或一個形狀取出灰階剖面，再決定邊緣落在哪個位置。",
+    "文字": "先在影像上找出字的位置，再把筆畫讀成字串。",
+    "條碼": "依條碼或二維碼的模組規則畫出符號，或從影像解回字串。",
+    "相機": "打開相機裝置，抓一張畫面進來。",
+    "標定": "用已知的對應點，求出相機或平面之間的轉換。",
+    "三維": "對點雲或高度圖計算平面、距離或曲面。",
+    "分類": "用樣本的特徵，把物件分成事先定好的類別。",
+    "形狀匹配": "把教導過的邊緣和場景比對，找出位置、角度和尺度。",
+    "NCC定位": "用正規化互相關，在灰階圖上找教導過的樣板。",
+    "顯示": "把影像、區域或輪廓畫到畫布，不改已經算出的數值。",
+    "矩陣": "對數值矩陣做建立、運算或分解。",
+    "Tuple": "對控制用的數值或字串序列做索引、篩選和運算。tuple 算子的索引從 0 開始。",
+}
 
 
 def list_operators() -> list[dict]:

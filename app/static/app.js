@@ -29,6 +29,10 @@ let operators = [];
 let operatorNames = new Set();
 let sessionId = null;
 let server = { line: null, done: false, error: null, errorLine: null, iconic: [], control: [], display: null, log: [], paused: null, lineTimes: [] };
+let diagnostics = [];
+let logHidden = false;
+const problemFilter = { error: true, warning: true, message: true };
+const CALL_KEYWORDS = new Set(["if", "else", "endif", "for", "endfor", "while", "endwhile", "try", "catch", "endtry", "procedure", "endprocedure", "endproc"]);
 let breakpoints = new Set();
 let selectedVar = null;
 let inflight = false;
@@ -78,7 +82,8 @@ function renderGutter() {
     const cls = ["gl"];
     if (breakpoints.has(line)) cls.push("bp");
     if (server.line === line) cls.push("cur");
-    if (server.errorLine === line) cls.push("err");
+    if (server.errorLine === line || diagnostics.some((item) => item.line === line && item.sev === "error")) cls.push("err");
+    else if (diagnostics.some((item) => item.line === line && item.sev === "warning")) cls.push("warn");
     html += `<div class="${cls.join(" ")}" data-line="${line}"><span class="pc"></span><span class="num">${line}</span></div>`;
   }
   gutter.innerHTML = html;
@@ -139,6 +144,7 @@ function revealLine(line) {
 }
 
 function renderEditor() {
+  renderProblems();
   renderHighlight();
   renderGutter();
   renderTimes();
@@ -151,7 +157,7 @@ function renderVars() {
     <button class="var ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="iconic">
       <img alt="" src="${item.thumb || ""}">
       <span class="vn">${esc(item.name)}</span>
-      <span class="vm">${esc(item.kind)} · ${esc(item.info)}</span>
+      <span class="vm">${esc(item.role && item.role !== item.kind ? item.role + " · " + item.kind : item.kind)} · ${esc(item.info)}</span>
     </button>`).join("") || `<div class="hint">還沒有圖像變數</div>`;
   controlList.innerHTML = server.control.map((item) => `
     <button class="var ctrl ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="control" title="${esc(item.full || item.text)}">
@@ -161,12 +167,172 @@ function renderVars() {
 }
 
 function renderLog() {
-  const lines = server.log || [];
+  const lines = logHidden ? [] : (server.log || []);
   logBox.innerHTML = lines.map((line) => {
     const cls = String(line).startsWith("錯誤") ? "bad" : "";
     return `<span class="${cls}">${esc(line)}</span>`;
   }).join("\n");
   logBox.scrollTop = logBox.scrollHeight;
+  renderProblems();
+}
+
+function programFile() {
+  return document.getElementById("progName").value || "程式";
+}
+
+function noteExprReads(expr, reads) {
+  const skip = new Set(["and", "or", "not", "mod", "true", "false"]);
+  const re = /[A-Za-z_]\w*/g;
+  let match;
+  while ((match = re.exec(String(expr)))) {
+    if (!skip.has(match[0].toLowerCase())) reads.add(match[0].toLowerCase());
+  }
+}
+
+function noteCallUses(op, argsBody, lineNo, reads, writes) {
+  const args = splitCall(argsBody);
+  op.params.forEach((param, index) => {
+    const arg = args[index];
+    if (arg == null || arg === "") return;
+    const ident = arg.match(/^[A-Za-z_]\w*$/);
+    if (param.role.includes("輸出")) {
+      if (ident) writes.push({ name: ident[0], line: lineNo });
+    } else {
+      noteExprReads(arg, reads);
+    }
+  });
+}
+
+function collectDiagnostics() {
+  const items = [];
+  const file = programFile();
+  const lines = code.value.split("\n");
+  const procedures = new Set();
+  lines.forEach((raw) => {
+    const header = raw.trim().match(/^procedure\s+([A-Za-z_]\w*)/i);
+    if (header) procedures.add(header[1].toLowerCase());
+  });
+  const reads = new Set();
+  const writes = [];
+  lines.forEach((raw, index) => {
+    const lineNo = index + 1;
+    const text = raw.trim();
+    if (!text || text.startsWith("*") || text.startsWith("//")) return;
+    const loop = text.match(/^for\s+([A-Za-z_]\w*)\s*:=(.*)$/i);
+    if (loop) {
+      writes.push({ name: loop[1], line: lineNo });
+      noteExprReads(loop[2], reads);
+      return;
+    }
+    const dotted = text.match(/^(Vizion\.[A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)\s*$/i);
+    const bare = text.match(/^([A-Za-z_]\w*)\s*\((.*)\)\s*$/);
+    if (dotted) {
+      const op = findOperator(dotted[1]);
+      if (!op) items.push({ sev: "error", code: "VIZ002", text: `未知算子 ${dotted[1]}`, file, line: lineNo });
+      else noteCallUses(op, dotted[2], lineNo, reads, writes);
+      return;
+    }
+    if (bare) {
+      const low = bare[1].toLowerCase();
+      if (CALL_KEYWORDS.has(low) || procedures.has(low)) {
+        noteExprReads(bare[2], reads);
+        return;
+      }
+      const op = findOperator(bare[1]);
+      if (op) {
+        items.push({ sev: "error", code: "VIZ001", text: `算子要寫成 ${op.name} (...)`, file, line: lineNo });
+        noteCallUses(op, bare[2], lineNo, reads, writes);
+      } else {
+        items.push({ sev: "error", code: "VIZ002", text: `未知算子 ${bare[1]}`, file, line: lineNo });
+      }
+      return;
+    }
+    const assign = text.match(/^([A-Za-z_]\w*)\s*:=(.*)$/);
+    if (assign) {
+      writes.push({ name: assign[1], line: lineNo });
+      noteExprReads(assign[2], reads);
+    }
+  });
+  const warned = new Set();
+  writes.forEach((item) => {
+    const key = item.name.toLowerCase();
+    if (warned.has(key) || reads.has(key)) return;
+    warned.add(key);
+    items.push({ sev: "warning", code: "VIZ100", text: `變數 ${item.name} 指定了但沒有被使用`, file, line: item.line });
+  });
+  procedures.forEach((name) => {
+    const called = lines.some((raw) => new RegExp(`^${name}\\s*\\(`, "i").test(raw.trim()));
+    if (called) return;
+    const line = lines.findIndex((raw) => new RegExp(`^procedure\\s+${name}\\b`, "i").test(raw.trim())) + 1;
+    items.push({ sev: "warning", code: "VIZ101", text: `程序 ${name} 沒有被呼叫`, file, line });
+  });
+  (server.log || []).forEach((line) => {
+    const text = String(line).trim();
+    const where = text.match(/第\s*(\d+)\s*行/);
+    const lineNo = where ? Number(where[1]) : null;
+    if (text.startsWith("錯誤")) {
+      if (items.some((item) => item.sev === "error" && item.line === (lineNo || server.errorLine))) return;
+      items.push({ sev: "error", code: "VIZ200", text: text.replace(/^錯誤\s*/, ""), file, line: lineNo || server.errorLine });
+    } else if (text.startsWith("catch ")) {
+      items.push({ sev: "message", code: "VIZ300", text, file, line: lineNo });
+    } else if (text.includes("執行完成") || text.startsWith("中斷點") || text.startsWith("已停止") || text.includes("Vizion.stop")) {
+      items.push({ sev: "message", code: "VIZ301", text, file, line: lineNo });
+    }
+  });
+  if (server.error && !items.some((item) => item.sev === "error" && item.line === server.errorLine && item.text.includes(server.error))) {
+    items.push({ sev: "error", code: "VIZ200", text: server.error, file, line: server.errorLine });
+  }
+  return items;
+}
+
+function renderProblems() {
+  const body = document.getElementById("errBody");
+  if (!body || !code) return;
+  diagnostics = collectDiagnostics();
+  const counts = { error: 0, warning: 0, message: 0 };
+  diagnostics.forEach((item) => { counts[item.sev] += 1; });
+  const errCount = document.getElementById("errCount");
+  const warnCount = document.getElementById("warnCount");
+  const msgCount = document.getElementById("msgCount");
+  if (errCount) errCount.textContent = String(counts.error);
+  if (warnCount) warnCount.textContent = String(counts.warning);
+  if (msgCount) msgCount.textContent = String(counts.message);
+  const badge = document.getElementById("problemBadge");
+  if (badge) badge.textContent = String(counts.error || counts.warning || counts.message);
+  const stErrors = document.getElementById("stErrors");
+  const stWarnings = document.getElementById("stWarnings");
+  const stMessages = document.getElementById("stMessages");
+  if (stErrors) {
+    stErrors.textContent = `錯誤 ${counts.error}`;
+    stErrors.classList.toggle("hot-error", counts.error > 0);
+  }
+  if (stWarnings) {
+    stWarnings.textContent = `警告 ${counts.warning}`;
+    stWarnings.classList.toggle("hot-warning", counts.warning > 0);
+  }
+  if (stMessages) stMessages.textContent = `訊息 ${counts.message}`;
+  const visible = diagnostics.filter((item) => problemFilter[item.sev]);
+  const label = { error: "錯誤", warning: "警告", message: "訊息" };
+  body.innerHTML = visible.map((item) => `
+    <tr data-line="${item.line || ""}">
+      <td class="sev-${item.sev}">${label[item.sev]}</td>
+      <td>${esc(item.code)}</td>
+      <td class="desc">${esc(item.text)}</td>
+      <td>${esc(item.file)}</td>
+      <td>${item.line || ""}</td>
+    </tr>`).join("") || `<tr><td></td><td></td><td class="desc">沒有要顯示的項目</td><td></td><td></td></tr>`;
+}
+
+function goToLine(line) {
+  const number = Number(line);
+  if (!number) return;
+  const lines = code.value.split("\n");
+  let pos = 0;
+  for (let index = 1; index < number && index <= lines.length; index += 1) pos += lines[index - 1].length + 1;
+  code.focus();
+  code.selectionStart = pos;
+  code.selectionEnd = pos + (lines[number - 1] || "").length;
+  revealLine(number);
 }
 
 function setStatus() {
@@ -200,6 +366,7 @@ function setStatus() {
 let imageStamp = null;
 
 function applyState(data) {
+  logHidden = false;
   const nextStamp = data.imageStamp;
   const imageChanged = imageStamp != null && nextStamp != null && nextStamp !== imageStamp;
   if (nextStamp != null) imageStamp = nextStamp;
@@ -224,7 +391,7 @@ function applyState(data) {
   renderHisto(data.histogram || null);
   if (imageChanged) clearPick();
   if (data.error) {
-    showTab("log");
+    showTab("problems");
     showErrorDialog(data.error, data.errorLine);
   }
   publishCustomVars();
@@ -315,7 +482,7 @@ function showTab(name) {
 
 function renderOps() {
   const query = opSearch.value.trim().toLowerCase();
-  const visible = operators.filter((op) => !query || (op.name + op.short + op.detail).toLowerCase().includes(query));
+  const visible = operators.filter((op) => !query || (op.name + op.purpose + op.principle + op.setup).toLowerCase().includes(query));
   let html = "";
   let group = "";
   for (const op of visible) {
@@ -335,13 +502,16 @@ function showOp(name) {
   const rows = op.params.map((param) => `<tr><td>${esc(param.name)}</td><td class="role">${esc(param.role)}</td><td>${esc(param.desc)}</td></tr>`).join("");
   opHelp.innerHTML = `
     <h2>${esc(op.name)}</h2>
-    <p class="lead">${esc(op.short)}</p>
-    <p class="prose">${esc(op.detail)}</p>
-    <div class="hint">原型</div>
-    <pre>${esc(op.prototype)}</pre>
-    <div class="hint">程式呼叫</div>
-    <pre>${esc(op.example)}</pre>
+    <h3>用途</h3>
+    <p class="lead">${esc(op.purpose)}</p>
+    <h3>原理</h3>
+    <p class="prose">${esc(op.principle)}</p>
+    <h3>如何設定</h3>
+    <p class="prose">${esc(op.setup)}</p>
     ${rows ? `<table class="params"><tr><th>參數</th><th>角色</th><th>說明</th></tr>${rows}</table>` : ""}
+    <h3>範例用法</h3>
+    <div class="hint">${esc(op.prototype)}</div>
+    <pre>${esc(op.example)}</pre>
     <button id="btnInsert" type="button">插入範本</button>`;
   document.getElementById("btnInsert").onclick = () => insertAtCursor(op.example);
 }
@@ -494,6 +664,21 @@ function buildOperatorMenu() {
   }).join("") || `<div class="hint" style="padding:8px">沒有算子</div>`);
 }
 
+function findOperator(token) {
+  const lower = String(token || "").toLowerCase();
+  if (!lower) return null;
+  return operators.find((op) => {
+    const name = op.name.toLowerCase();
+    return name === lower || name === `vizion.${lower}`;
+  }) || null;
+}
+
+function operatorMatchesPrefix(op, lower) {
+  const name = op.name.toLowerCase();
+  const bare = name.startsWith("vizion.") ? name.slice("vizion.".length) : name;
+  return name.startsWith(lower) || bare.startsWith(lower);
+}
+
 function formFields() {
   return [...document.querySelectorAll("#opForm input, #opForm select")];
 }
@@ -508,7 +693,7 @@ function refreshOpPreview() {
 function parseOperatorLine(text) {
   const src = text.trim();
   if (!src || src.startsWith("*")) return null;
-  const match = src.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+  const match = src.match(/^((?:Vizion\.)?[A-Za-z_][A-Za-z0-9_]*)\s*\(/i);
   if (!match) return null;
   let quote = "";
   let depth = 1;
@@ -544,7 +729,7 @@ function parseOperatorLine(text) {
 function openOperatorAtLine(lineIndex) {
   const parsed = parseOperatorLine(code.value.split("\n")[lineIndex] || "");
   if (!parsed) return;
-  const op = operators.find((item) => item.name.toLowerCase() === parsed.name.toLowerCase());
+  const op = findOperator(parsed.name);
   if (!op) return;
   openOperatorForm(op.name, callValues(op, parsed.args), lineIndex);
 }
@@ -559,7 +744,13 @@ function openOperatorForm(name, preset, lineIndex) {
   const ok = document.getElementById("opDialogOk");
   if (ok) ok.textContent = editingLine == null ? "插入" : "更新";
   document.getElementById("opDialogTitle").textContent = op.name;
-  document.getElementById("opDialogLead").textContent = op.detail || op.short;
+  document.getElementById("opDialogGuide").innerHTML = `
+    <h3>用途</h3>
+    <p class="guide-body">${esc(op.purpose)}</p>
+    <h3>原理</h3>
+    <p class="guide-body">${esc(op.principle)}</p>
+    <h3>如何設定</h3>
+    <p class="guide-body">${esc(op.setup)}</p>`;
   let role = "";
   let html = "";
   op.params.forEach((param, index) => {
@@ -799,7 +990,7 @@ function logicalChunk() {
   const trimmed = chunk.trimStart();
   if (trimmed.startsWith("*") || trimmed.startsWith("//")) return null;
   if (quoteOpen(chunk)) return null;
-  const tokenMatch = chunk.match(/[A-Za-z_]\w*$/);
+  const tokenMatch = chunk.match(/(?:Vizion\.)?[A-Za-z_][A-Za-z0-9_]*$/i);
   const token = tokenMatch ? tokenMatch[0] : "";
   const head = chunk.slice(0, chunk.length - token.length);
   const paren = unclosedParen(head);
@@ -839,9 +1030,9 @@ function classifiedNames() {
       control.add(assign[1]);
       continue;
     }
-    const call = raw.match(/^([A-Za-z_]\w*)\s*\((.*)\)\s*$/);
+    const call = raw.match(/^((?:Vizion\.)?[A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)\s*$/i);
     if (!call) continue;
-    const op = operators.find((item) => item.name.toLowerCase() === call[1].toLowerCase());
+    const op = findOperator(call[1]);
     if (!op) continue;
     splitCallArgs(`${call[1]} (${call[2]})`).forEach((arg, index) => {
       if (!/^[A-Za-z_]\w*$/.test(arg)) return;
@@ -866,9 +1057,9 @@ function senseContextItems(ctx) {
   const token = ctx.token;
   const lower = token.toLowerCase();
   if (ctx.paren) {
-    const nameMatch = ctx.paren.before.match(/(?:^|\s)([A-Za-z_]\w*)\s*$/);
+    const nameMatch = ctx.paren.before.match(/(?:^|\s)((?:Vizion\.)?[A-Za-z_][A-Za-z0-9_]*)\s*$/i);
     const opName = nameMatch ? nameMatch[1] : "";
-    const op = operators.find((item) => item.name.toLowerCase() === opName.toLowerCase());
+    const op = findOperator(opName);
     const argIndex = commaCount(ctx.paren.inside);
     const param = op && op.params ? op.params[argIndex] : null;
     const exampleArg = op ? splitCallArgs(op.example)[argIndex] : "";
@@ -902,7 +1093,7 @@ function senseContextItems(ctx) {
   if (!statement) return { items: [], sig: "" };
   if (!token && !senseForce) return { items: [], sig: "" };
   const ops = operators
-    .filter((op) => op.name.toLowerCase().startsWith(lower))
+    .filter((op) => operatorMatchesPrefix(op, lower))
     .filter((op) => !(ctx.parenFollows && op.name.toLowerCase() === lower))
     .sort((a, b) => a.name.length - b.name.length || a.order - b.order)
     .map((op) => ({
@@ -1342,6 +1533,26 @@ code.addEventListener("input", () => {
   renderEditor();
   updateSense();
 });
+document.getElementById("btnClearLog").addEventListener("click", () => {
+  logHidden = true;
+  logBox.textContent = "";
+});
+document.getElementById("errFilters").addEventListener("click", (event) => {
+  const button = event.target.closest(".errfilter");
+  if (!button) return;
+  const sev = button.dataset.sev;
+  problemFilter[sev] = !problemFilter[sev];
+  button.classList.toggle("on", problemFilter[sev]);
+  renderProblems();
+});
+document.getElementById("errBody").addEventListener("click", (event) => {
+  const row = event.target.closest("tr");
+  if (!row || !row.dataset.line) return;
+  goToLine(row.dataset.line);
+});
+document.getElementById("stErrors").addEventListener("click", () => showTab("problems"));
+document.getElementById("stWarnings").addEventListener("click", () => showTab("problems"));
+document.getElementById("stMessages").addEventListener("click", () => showTab("problems"));
 code.addEventListener("scroll", () => {
   hl.scrollTop = code.scrollTop;
   hl.scrollLeft = code.scrollLeft;
@@ -1536,7 +1747,7 @@ document.getElementById("fileOpen").onchange = async () => {
   await exec("reset");
 };
 document.getElementById("btnSave").onclick = async () => {
-  const name = document.getElementById("progName").value.trim() || "program.hdv";
+  const name = document.getElementById("progName").value.trim() || "program.viz";
   const res = await fetch("/api/programs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1606,7 +1817,7 @@ function syncViewMenu() {
 window.VisDevCommands = {
   new() {
     code.value = "* 新程式\n";
-    document.getElementById("progName").value = "untitled.hdv";
+    document.getElementById("progName").value = "untitled.viz";
     sessionId = null;
     breakpoints = new Set();
     renderEditor();
@@ -1615,10 +1826,11 @@ window.VisDevCommands = {
   open() { document.getElementById("fileOpen").click(); },
   save() { document.getElementById("btnSave").click(); },
   saveAs() {
-    const current = document.getElementById("progName").value.trim() || "program.hdv";
+    const current = document.getElementById("progName").value.trim() || "program.viz";
     const name = window.prompt("另存新檔的檔名", current);
     if (!name || !name.trim()) return;
-    const file = name.trim().toLowerCase().endsWith(".hdv") ? name.trim() : `${name.trim()}.hdv`;
+    const lower = name.trim().toLowerCase();
+    const file = lower.endsWith(".hdv") || lower.endsWith(".viz") ? name.trim() : `${name.trim()}.viz`;
     document.getElementById("progName").value = file;
     document.getElementById("btnSave").click();
   },

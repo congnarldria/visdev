@@ -191,7 +191,9 @@ def list_files():
     def collect(folder: Path, kind: str, order: tuple[str, ...] = ()):
         if not folder.exists():
             return []
-        files = {path.name: path for path in folder.glob("*.hdv")}
+        files = {}
+        for pattern in ("*.hdv", "*.viz"):
+            files.update({path.name: path for path in folder.glob(pattern)})
         names = [name for name in order if name in files]
         names.extend(sorted(name for name in files if name not in order))
         return [{"name": name, "kind": kind, "title": _program_title(files[name])} for name in names]
@@ -205,7 +207,7 @@ def list_files():
 @app.get("/api/files/{kind}/{name}")
 def read_program(kind: str, name: str):
     folder = {"samples": ROOT / "samples", "workspace": ROOT / "workspace"}.get(kind)
-    if folder is None or Path(name).name != name or not name.endswith(".hdv"):
+    if folder is None or Path(name).name != name or not name.lower().endswith((".hdv", ".viz")):
         raise HTTPException(400, "不正確的檔名")
     path = folder / name
     if not path.is_file():
@@ -215,9 +217,9 @@ def read_program(kind: str, name: str):
 
 @app.post("/api/programs")
 def save_program(body: SaveIn):
-    name = Path(body.name).name.strip() or "program.hdv"
-    if not name.endswith(".hdv"):
-        name += ".hdv"
+    name = Path(body.name).name.strip() or "program.viz"
+    if not name.lower().endswith((".hdv", ".viz")):
+        name += ".viz"
     if any(ch in name for ch in '\\/:*?"<>|'):
         raise HTTPException(400, "檔名含有不允許的字元")
     path = ROOT / "workspace" / name

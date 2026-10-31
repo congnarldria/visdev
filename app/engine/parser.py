@@ -82,6 +82,35 @@ class EndWhileStmt(Stmt):
 
 
 @dataclass
+class ProcedureStmt(Stmt):
+    name: str = ""
+    iconic_in: list[str] = field(default_factory=list)
+    iconic_out: list[str] = field(default_factory=list)
+    control_in: list[str] = field(default_factory=list)
+    control_out: list[str] = field(default_factory=list)
+
+
+@dataclass
+class EndProcedureStmt(Stmt):
+    pass
+
+
+@dataclass
+class TryStmt(Stmt):
+    pass
+
+
+@dataclass
+class CatchStmt(Stmt):
+    var: str = "Exception"
+
+
+@dataclass
+class EndTryStmt(Stmt):
+    pass
+
+
+@dataclass
 class Program:
     stmts: list
     if_false: dict
@@ -90,6 +119,10 @@ class Program:
     end_for: dict
     while_end: dict
     end_while: dict
+    proc_end: dict
+    procs: dict
+    try_catch: dict
+    catch_end: dict
 
 
 def split_commas(text: str) -> list[str]:
@@ -199,8 +232,88 @@ def _parse_for(text: str, line: int, lines: list[int]) -> ForStmt:
     return ForStmt(line, lines, var, start.strip(), end.strip(), step.strip())
 
 
-def _parse_call(name: str, args: str, line: int, lines: list[int]) -> Call:
-    op = REGISTRY.get(name.lower())
+class _Slot:
+    def __init__(self):
+        self.default = None
+
+
+class _Spec:
+    def __init__(self, name: str, iconic_in, iconic_out, control_in, control_out):
+        self.name = name
+        self.iconic_in = iconic_in
+        self.iconic_out = iconic_out
+        self.controls = list(control_in)
+        self.control_in = [_Slot() for _ in control_in]
+        self.control_out = control_out
+        self.example = name + " (...)"
+
+
+def _split_colon(text: str) -> list[str]:
+    parts: list[str] = []
+    buf: list[str] = []
+    quote = None
+    depth = 0
+    for ch in text:
+        if quote:
+            buf.append(ch)
+            if ch == quote:
+                quote = None
+            continue
+        if ch in "'\"":
+            quote = ch
+            buf.append(ch)
+            continue
+        if ch in "[(":
+            depth += 1
+            buf.append(ch)
+            continue
+        if ch in "])":
+            depth -= 1
+            buf.append(ch)
+            continue
+        if ch == ":" and depth == 0:
+            parts.append("".join(buf))
+            buf = []
+            continue
+        buf.append(ch)
+    parts.append("".join(buf))
+    return parts
+
+
+def _procedure_specs(rows) -> dict[str, _Spec]:
+    specs: dict[str, _Spec] = {}
+    for line, text, _lines in rows:
+        raw = text.strip()
+        if raw.endswith(";"):
+            raw = raw[:-1].strip()
+        matched = re.fullmatch(r"procedure\s+([A-Za-z_]\w*)\s*\((.*)\)\s*", raw, flags=re.IGNORECASE | re.DOTALL)
+        if not matched:
+            continue
+        name = matched.group(1).lower()
+        if name in REGISTRY:
+            raise ParseError(line, f"程序 {name} 和已有算子同名")
+        if name in specs:
+            raise ParseError(line, f"程序 {name} 重複定義")
+        parts = _split_colon(matched.group(2))
+        if len(parts) != 4:
+            raise ParseError(line, "程序要寫成 procedure 名稱 (圖像輸入 : 圖像輸出 : 控制輸入 : 控制輸出)")
+        groups = [split_commas(part) for part in parts]
+        for token in groups[0] + groups[1] + groups[2] + groups[3]:
+            if not is_ident(token):
+                raise ParseError(line, f"程序參數必須是變數名稱，得到 {token}")
+        specs[name] = _Spec(name, groups[0], groups[1], groups[2], groups[3])
+    return specs
+
+
+def _lookup_operator(name: str):
+    low = name.lower()
+    if low.startswith("vizion."):
+        return REGISTRY.get(low.split(".", 1)[1])
+    return None
+
+
+def _parse_call(name: str, args: str, line: int, lines: list[int], spec=None) -> Call:
+    op = spec if spec is not None else _lookup_operator(name)
     if op is None:
         raise ParseError(line, f"未知算子 {name}")
     tokens = split_commas(args)
@@ -235,9 +348,22 @@ def _parse_call(name: str, args: str, line: int, lines: list[int]) -> Call:
     return Call(line, lines, op.name, iconic_in, iconic_out, control_in, control_out)
 
 
+def _parse_procedure(raw: str, line: int, lines: list[int], specs: dict) -> ProcedureStmt:
+    matched = re.fullmatch(r"procedure\s+([A-Za-z_]\w*)\s*\((.*)\)\s*", raw, flags=re.IGNORECASE | re.DOTALL)
+    if not matched:
+        raise ParseError(line, "程序要寫成 procedure 名稱 (圖像輸入 : 圖像輸出 : 控制輸入 : 控制輸出)")
+    spec = specs[matched.group(1).lower()]
+    return ProcedureStmt(
+        line, lines, spec.name,
+        list(spec.iconic_in), list(spec.iconic_out), list(spec.controls), list(spec.control_out),
+    )
+
+
 def parse_program(source: str) -> Program:
+    rows = list(_logical_lines(source))
+    specs = _procedure_specs(rows)
     stmts = []
-    for line, text, lines in _logical_lines(source):
+    for line, text, lines in rows:
         raw = text.strip()
         if raw.endswith(";"):
             raw = raw[:-1].strip()
@@ -260,6 +386,25 @@ def parse_program(source: str) -> Program:
         if low == "endwhile":
             stmts.append(EndWhileStmt(line, lines))
             continue
+        if low == "endprocedure" or low == "endproc":
+            stmts.append(EndProcedureStmt(line, lines))
+            continue
+        if low == "try":
+            stmts.append(TryStmt(line, lines))
+            continue
+        if low == "endtry":
+            stmts.append(EndTryStmt(line, lines))
+            continue
+        if low == "catch" or low.startswith("catch ") or low.startswith("catch("):
+            matched = re.fullmatch(r"catch(?:\s*\(\s*([A-Za-z_]\w*)\s*\)|\s+([A-Za-z_]\w*))?\s*", raw, flags=re.IGNORECASE)
+            if not matched:
+                raise ParseError(line, "catch 要寫成 catch (Exception)")
+            var = matched.group(1) or matched.group(2) or "Exception"
+            stmts.append(CatchStmt(line, lines, var))
+            continue
+        if low.startswith("procedure ") or low.startswith("procedure("):
+            stmts.append(_parse_procedure(raw, line, lines, specs))
+            continue
         if low.startswith("if ") or low.startswith("if("):
             matched = re.fullmatch(r"if\s*\((.*)\)\s*", raw, flags=re.IGNORECASE | re.DOTALL)
             if not matched:
@@ -279,11 +424,21 @@ def parse_program(source: str) -> Program:
         if matched:
             stmts.append(Assign(line, lines, matched.group(1), matched.group(2).strip()))
             continue
-        matched = re.fullmatch(r"([A-Za-z_]\w*)\s*\((.*)\)\s*", raw, flags=re.DOTALL)
+        matched = re.fullmatch(r"(Vizion\.[A-Za-z_]\w*)\s*\((.*)\)\s*", raw, flags=re.IGNORECASE | re.DOTALL)
         if matched:
             stmts.append(_parse_call(matched.group(1), matched.group(2), line, lines))
             continue
-        raise ParseError(line, "看不懂這一行。註解用 *，指定用 :=，呼叫用 operator (...)")
+        matched = re.fullmatch(r"([A-Za-z_]\w*)\s*\((.*)\)\s*", raw, flags=re.DOTALL)
+        if matched:
+            key = matched.group(1).lower()
+            spec = specs.get(key)
+            if spec is None and key in REGISTRY:
+                raise ParseError(line, f"算子要寫成 {REGISTRY[key].name} (...)")
+            if spec is None:
+                raise ParseError(line, f"未知算子 {matched.group(1)}")
+            stmts.append(_parse_call(matched.group(1), matched.group(2), line, lines, spec))
+            continue
+        raise ParseError(line, "看不懂這一行。註解用 *，指定用 :=，呼叫用 Vizion.operator (...)")
     return _link(stmts)
 
 
@@ -295,8 +450,17 @@ def _link(stmts: list) -> Program:
     end_for: dict[int, int] = {}
     while_end: dict[int, int] = {}
     end_while: dict[int, int] = {}
+    proc_end: dict[int, int] = {}
+    procs: dict[str, int] = {}
+    try_catch: dict[int, int] = {}
+    catch_end: dict[int, int] = {}
     for index, stmt in enumerate(stmts):
-        if isinstance(stmt, (IfStmt, ForStmt, WhileStmt)):
+        if isinstance(stmt, ProcedureStmt):
+            if stack:
+                raise ParseError(stmt.line, "程序要寫在最外層")
+            stack.append(index)
+            continue
+        if isinstance(stmt, (IfStmt, ForStmt, WhileStmt, TryStmt)):
             stack.append(index)
             continue
         if isinstance(stmt, ElseStmt):
@@ -328,6 +492,38 @@ def _link(stmts: list) -> Program:
             while_end[while_index] = index
             end_while[index] = while_index
             continue
+        if isinstance(stmt, EndProcedureStmt):
+            if not stack or not isinstance(stmts[stack[-1]], ProcedureStmt):
+                raise ParseError(stmt.line, "endprocedure 沒有對應的 procedure")
+            proc_index = stack.pop()
+            proc_end[proc_index] = index
+            procs[stmts[proc_index].name] = proc_index
+            continue
+        if isinstance(stmt, CatchStmt):
+            if not stack or not isinstance(stmts[stack[-1]], TryStmt):
+                raise ParseError(stmt.line, "catch 沒有對應的 try")
+            try_catch[stack[-1]] = index
+            stack.append(index)
+            continue
+        if isinstance(stmt, EndTryStmt):
+            if not stack or not isinstance(stmts[stack[-1]], CatchStmt):
+                raise ParseError(stmt.line, "endtry 前面要有 catch")
+            catch_index = stack.pop()
+            catch_end[catch_index] = index + 1
+            if not stack or not isinstance(stmts[stack[-1]], TryStmt):
+                raise ParseError(stmt.line, "endtry 沒有對應的 try")
+            stack.pop()
+            continue
     if stack:
-        raise ParseError(stmts[stack[-1]].line, "這個區塊沒有結束")
-    return Program(stmts, if_false, else_jump, for_end, end_for, while_end, end_while)
+        opener = stmts[stack[-1]]
+        if isinstance(opener, ProcedureStmt):
+            raise ParseError(opener.line, "procedure 沒有 endprocedure")
+        if isinstance(opener, TryStmt):
+            raise ParseError(opener.line, "try 沒有 endtry")
+        if isinstance(opener, CatchStmt):
+            raise ParseError(opener.line, "catch 沒有 endtry")
+        raise ParseError(opener.line, "這個區塊沒有結束")
+    return Program(
+        stmts, if_false, else_jump, for_end, end_for, while_end, end_while,
+        proc_end, procs, try_catch, catch_end,
+    )

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net48;net8.0</TargetFrameworks>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Vizion</RootNamespace>
+    <AssemblyName>Vizion.Display</AssemblyName>
+    <Description>VisDev 顯示核心。Windows 7 SP1 用 .NET Framework 4.8，Windows 10 以後也可以用 .NET 8。只畫可見範圍。</Description>
+  </PropertyGroup>
+</Project>

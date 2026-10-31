@@ -398,8 +398,11 @@ def _local_peaks(score: np.ndarray, minimum: float, limit: int):
     return peaks
 
 
-def _score_at(field_x, field_y, field_m, level: _Level, row: float, col: float, angle: float, metric: str, min_contrast: float):
+def _score_at(field_x, field_y, field_m, level: _Level, row: float, col: float, angle: float, metric: str, min_contrast: float, scale_factor: float = 1.0):
     cols, rows, gx, gy = _rotate(level.cols, level.rows, level.gx, level.gy, angle)
+    if scale_factor != 1.0:
+        cols = cols * scale_factor
+        rows = rows * scale_factor
     sample_x = col + cols
     sample_y = row + rows
     image_x, valid_x = _sample(field_x, sample_x, sample_y)
@@ -419,6 +422,163 @@ def _parabola(left: float, center: float, right: float) -> float:
     if abs(denom) < 1e-6 or center < left or center < right:
         return 0.0
     return float(np.clip(0.5 * (left - right) / denom, -0.75, 0.75))
+
+
+def _subpixel_mode(subpixel) -> str:
+    if subpixel is True or subpixel == "interpolation":
+        return "interpolation"
+    if subpixel is False or subpixel in ("none", 0):
+        return "none"
+    if subpixel == "least_squares":
+        return "least_squares"
+    return "interpolation"
+
+
+def _least_squares_pose(magnitude, level: _Level, row: float, col: float, angle: float, min_contrast: float):
+    step = max(1, int(math.ceil(len(level.cols) / 80)))
+    point_col = level.cols[::step]
+    point_row = level.rows[::step]
+    grad_x = level.gx[::step]
+    grad_y = level.gy[::step]
+    pose = (float(row), float(col), float(angle))
+    for _turn in range(4):
+        row, col, angle = pose
+        cosine = math.cos(angle)
+        sine = math.sin(angle)
+        rotated_col = point_col * cosine + point_row * sine
+        rotated_row = -point_col * sine + point_row * cosine
+        normal_col = grad_x * cosine + grad_y * sine
+        normal_row = -grad_x * sine + grad_y * cosine
+        sample_col = col + rotated_col
+        sample_row = row + rotated_row
+        center, valid_center = _sample(magnitude, sample_col, sample_row)
+        before, valid_before = _sample(magnitude, sample_col - normal_col, sample_row - normal_row)
+        after, valid_after = _sample(magnitude, sample_col + normal_col, sample_row + normal_row)
+        denom = before - 2.0 * center + after
+        keep = (
+            (center >= before)
+            & (center >= after)
+            & (np.abs(denom) > 1e-3)
+            & valid_center
+            & valid_before
+            & valid_after
+            & (center >= min_contrast)
+        )
+        if int(np.count_nonzero(keep)) < 8:
+            break
+        offset = np.clip(0.5 * (before[keep] - after[keep]) / denom[keep], -0.6, 0.6)
+        normal_col = normal_col[keep]
+        normal_row = normal_row[keep]
+        rotated_col = rotated_col[keep]
+        rotated_row = rotated_row[keep]
+        design = np.column_stack(
+            [normal_col, normal_row, normal_col * rotated_row - normal_row * rotated_col]
+        )
+        delta, *_rest = np.linalg.lstsq(design, offset, rcond=None)
+        dcol = float(np.clip(delta[0], -0.6, 0.6))
+        drow = float(np.clip(delta[1], -0.6, 0.6))
+        dangle = float(np.clip(delta[2], -math.radians(1.5), math.radians(1.5)))
+        if abs(dcol) + abs(drow) + abs(dangle) < 1e-4:
+            break
+        pose = (row + drow, col + dcol, angle + dangle)
+    return pose
+
+
+def _scale_window(model, scale: float, search_min: float, search_max: float) -> tuple[float, float]:
+    taught = sorted(item[0] for item in model.scales)
+    index = min(range(len(taught)), key=lambda item: abs(taught[item] - scale))
+    low = high = taught[index]
+    if index > 0:
+        low = 0.5 * (taught[index - 1] + taught[index])
+    if index + 1 < len(taught):
+        high = 0.5 * (taught[index] + taught[index + 1])
+    low = max(low, float(search_min))
+    high = min(high, float(search_max))
+    if high < low:
+        return float(scale), float(scale)
+    return low, high
+
+
+def _least_squares_scale(magnitude, level: _Level, row: float, col: float, angle: float, scale: float, low: float, high: float, min_contrast: float):
+    """Move scale between the neighboring taught steps. Points already belong to `scale`."""
+    if high - low < 1e-6 or scale <= 1e-6:
+        return float(row), float(col), float(angle), float(scale)
+    step = max(1, int(math.ceil(len(level.cols) / 80)))
+    point_col = level.cols[::step]
+    point_row = level.rows[::step]
+    grad_x = level.gx[::step]
+    grad_y = level.gy[::step]
+    factor = 1.0
+    pose = (float(row), float(col), float(angle), factor)
+    for _turn in range(4):
+        row, col, angle, factor = pose
+        cosine = math.cos(angle)
+        sine = math.sin(angle)
+        base_col = point_col * cosine + point_row * sine
+        base_row = -point_col * sine + point_row * cosine
+        rotated_col = base_col * factor
+        rotated_row = base_row * factor
+        normal_col = grad_x * cosine + grad_y * sine
+        normal_row = -grad_x * sine + grad_y * cosine
+        sample_col = col + rotated_col
+        sample_row = row + rotated_row
+        center, valid_center = _sample(magnitude, sample_col, sample_row)
+        before, valid_before = _sample(magnitude, sample_col - normal_col, sample_row - normal_row)
+        after, valid_after = _sample(magnitude, sample_col + normal_col, sample_row + normal_row)
+        denom = before - 2.0 * center + after
+        keep = (
+            (center >= before)
+            & (center >= after)
+            & (np.abs(denom) > 1e-3)
+            & valid_center
+            & valid_before
+            & valid_after
+            & (center >= min_contrast)
+        )
+        if int(np.count_nonzero(keep)) < 8:
+            break
+        offset = np.clip(0.5 * (before[keep] - after[keep]) / denom[keep], -0.6, 0.6)
+        normal_col = normal_col[keep]
+        normal_row = normal_row[keep]
+        rotated_col = rotated_col[keep]
+        rotated_row = rotated_row[keep]
+        radial = base_col[keep] * normal_col + base_row[keep] * normal_row
+        design = np.column_stack(
+            [normal_col, normal_row, normal_col * rotated_row - normal_row * rotated_col, radial]
+        )
+        delta, *_rest = np.linalg.lstsq(design, offset, rcond=None)
+        dcol = float(np.clip(delta[0], -0.6, 0.6))
+        drow = float(np.clip(delta[1], -0.6, 0.6))
+        dangle = float(np.clip(delta[2], -math.radians(1.5), math.radians(1.5)))
+        dfactor = float(np.clip(delta[3], -0.08, 0.08))
+        if abs(dcol) + abs(drow) + abs(dangle) + abs(dfactor) < 1e-4:
+            break
+        factor = min(max(factor + dfactor, low / scale), high / scale)
+        pose = (row + drow, col + dcol, angle + dangle, factor)
+    row, col, angle, factor = pose
+    return row, col, angle, float(scale * factor)
+
+
+def _refine_poses(image, model: ShapeModel, rows, cols, angles, scores):
+    gray = np.ascontiguousarray(_gray(image), dtype=np.float32)
+    field_x, field_y, magnitude = _gradients(gray)
+    level = model.levels[0]
+    refined_rows, refined_cols, refined_angles, refined_scores = [], [], [], []
+    for row, col, angle, score in zip(_flat(rows), _flat(cols), _flat(angles), _flat(scores)):
+        old = _score_at(field_x, field_y, magnitude, level, row, col, angle, model.metric, model.min_contrast)
+        nrow, ncol, nangle = _least_squares_pose(magnitude, level, row, col, angle, model.min_contrast)
+        new = _score_at(field_x, field_y, magnitude, level, nrow, ncol, nangle, model.metric, model.min_contrast)
+        if new + 1e-4 >= old:
+            refined_rows.append(nrow)
+            refined_cols.append(ncol)
+            refined_angles.append(nangle)
+            refined_scores.append(new if new > 0 else float(score))
+        else:
+            refined_rows.append(float(row))
+            refined_cols.append(float(col))
+            refined_angles.append(float(angle))
+            refined_scores.append(float(score))
+    return refined_rows, refined_cols, refined_angles, refined_scores
 
 
 def _angle_step_at(model: ShapeModel, level_index: int) -> float:
@@ -479,6 +639,7 @@ def find_shape_model(
     num_levels: int,
     greediness: float,
 ):
+    mode = _subpixel_mode(subpixel)
     backend = _match_backend()
     if backend is not None and getattr(model, "native", None) is not None:
         levels_used = model.num_levels if not num_levels else max(1, min(int(num_levels), model.num_levels))
@@ -486,7 +647,7 @@ def find_shape_model(
         pyramid = [gray]
         for _ in range(1, levels_used):
             pyramid.append(np.ascontiguousarray(cv2.pyrDown(pyramid[-1])))
-        return backend.shape_find(
+        rows, cols, angles, scores = backend.shape_find(
             model.native,
             pyramid,
             float(angle_start),
@@ -494,9 +655,12 @@ def find_shape_model(
             float(min_score),
             int(num_matches),
             float(max_overlap),
-            1 if subpixel else 0,
+            1 if mode != "none" else 0,
             float(greediness),
         )
+        if mode == "least_squares":
+            return _refine_poses(image, model, rows, cols, angles, scores)
+        return rows, cols, angles, scores
     gray = _gray(image)
     levels_used = model.num_levels if not num_levels else max(1, min(int(num_levels), model.num_levels))
     pyramid = [gray]
@@ -559,7 +723,7 @@ def find_shape_model(
             break
 
     poses = []
-    if found and subpixel:
+    if found and mode != "none":
         raw_x, raw_y, mag = fields[0][3], fields[0][4], fields[0][5]
         level = model.levels[0]
         for row, col, angle, score in found:
@@ -575,6 +739,8 @@ def find_shape_model(
     cols = [item[1] for item in poses]
     angles = [item[2] for item in poses]
     scores = [item[3] for item in poses]
+    if mode == "least_squares" and rows:
+        return _refine_poses(image, model, rows, cols, angles, scores)
     return rows, cols, angles, scores
 
 
@@ -806,6 +972,29 @@ def find_scaled_shape_model(
             break
     if not chosen:
         return [], [], [], [], []
+    mode = _subpixel_mode(subpixel)
+    if mode == "least_squares":
+        gray = np.ascontiguousarray(_gray(image), dtype=np.float32)
+        _gx, _gy, magnitude = _gradients(gray)
+        refined = []
+        for score, row, col, angle, scale, radius in chosen:
+            child = next(item[1] for item in model.scales if abs(item[0] - scale) < 1e-6)
+            low, high = _scale_window(model, scale, scale_min, scale_max)
+            nrow, ncol, nangle, nscale = _least_squares_scale(
+                magnitude, child.levels[0], row, col, angle, scale, low, high, child.min_contrast
+            )
+            factor = nscale / scale if scale else 1.0
+            old_same = _score_at(
+                _gx, _gy, magnitude, child.levels[0], row, col, angle, model.metric, child.min_contrast, 1.0
+            )
+            new_score = _score_at(
+                _gx, _gy, magnitude, child.levels[0], nrow, ncol, nangle, model.metric, child.min_contrast, factor
+            )
+            if new_score + 1e-4 >= old_same:
+                refined.append((new_score if new_score > 0 else score, nrow, ncol, nangle, nscale, radius))
+            else:
+                refined.append((score, row, col, angle, scale, radius))
+        chosen = refined
     return (
         [item[1] for item in chosen],
         [item[2] for item in chosen],

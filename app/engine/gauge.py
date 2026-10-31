@@ -123,7 +123,7 @@ def measure_point(gray, domain, row1, col1, row2, col2, sigma, threshold, transi
     return hits
 
 
-def measure_line(gray, domain, row1, col1, row2, col2, tolerance, sigma, threshold, transition, select) -> LineFit:
+def measure_line(gray, domain, row1, col1, row2, col2, tolerance, sigma, threshold, transition, select, width=0.0) -> LineFit:
     gray, domain = _prepare(gray, domain)
     transition = _choice(transition, _TRANSITIONS, "Transition")
     select = _choice(select, _SELECTS, "Select")
@@ -133,7 +133,7 @@ def measure_line(gray, domain, row1, col1, row2, col2, tolerance, sigma, thresho
     x0, y0, x1, y1 = float(col1), float(row1), float(col2), float(row2)
     dx, dy, length = _unit(x1 - x0, y1 - y0, "直線量規至少要 2 像素")
     sx0, sy0, sx1, sy1 = _shrink(x0, y0, x1, y1, min(4.0, length * 0.08))
-    points = _along(gray, domain, sx0, sy0, sx1, sy1, tolerance, sigma, threshold, transition, select)
+    points = _along(gray, domain, sx0, sy0, sx1, sy1, tolerance, sigma, threshold, transition, select, width)
     if len(points) < 2:
         raise ValueError("直線量規找不到足夠的邊緣")
     origin, direction, kept = _refit_line(points, dx, dy)
@@ -150,7 +150,7 @@ def measure_line(gray, domain, row1, col1, row2, col2, tolerance, sigma, thresho
     )
 
 
-def measure_circle(gray, domain, row, col, radius, tolerance, sigma, threshold, transition, select) -> CircleFit:
+def measure_circle(gray, domain, row, col, radius, tolerance, sigma, threshold, transition, select, width=0.0) -> CircleFit:
     gray, domain = _prepare(gray, domain)
     transition = _choice(transition, _TRANSITIONS, "Transition")
     select = _choice(select, _SELECTS, "Select")
@@ -160,7 +160,7 @@ def measure_circle(gray, domain, row, col, radius, tolerance, sigma, threshold, 
     row = float(row)
     col = float(col)
     radius = _number("Radius", radius, 1)
-    points = _circle_points(gray, domain, row, col, radius, tolerance, sigma, threshold, transition, select)
+    points = _circle_points(gray, domain, row, col, radius, tolerance, sigma, threshold, transition, select, width)
     if len(points) < 3:
         raise ValueError("圓量規找不到足夠的邊緣")
     fitted_row, fitted_col, fitted_radius, kept = _refit_circle(points, row, col, radius, tolerance)
@@ -409,6 +409,51 @@ def _sample(gray, domain, x: float, y: float) -> float:
     return top * (1 - dy) + bottom * dy
 
 
+def _cubic_kernel(offset: np.ndarray) -> np.ndarray:
+    span = np.abs(np.asarray(offset, np.float64))
+    cube = span * span * span
+    square = span * span
+    return np.where(
+        span <= 1.0,
+        1.5 * cube - 2.5 * square + 1.0,
+        np.where(span < 2.0, -0.5 * cube + 2.5 * square - 4.0 * span + 2.0, 0.0),
+    )
+
+
+def sample_bicubic(planes: np.ndarray, rows, cols, *, border: str = "replicate") -> np.ndarray:
+    """Keys cubic, a = -0.5. rows and cols may be any shape. planes is gray or color.
+
+    replicate clamps the 16 taps to the image. constant treats anything outside as 0.
+    """
+    rows = np.asarray(rows, np.float64)
+    cols = np.asarray(cols, np.float64)
+    shape = rows.shape
+    flat_rows = rows.reshape(-1)
+    flat_cols = cols.reshape(-1)
+    height, width = planes.shape[:2]
+    row0 = np.floor(flat_rows).astype(np.int32)
+    col0 = np.floor(flat_cols).astype(np.int32)
+    extra = planes.shape[2:]
+    total = np.zeros((flat_rows.size,) + extra, np.float64)
+    for row_offset in range(-1, 3):
+        row_weight = _cubic_kernel(row_offset - (flat_rows - row0))
+        raw_row = row0 + row_offset
+        row_index = np.clip(raw_row, 0, height - 1)
+        for col_offset in range(-1, 3):
+            col_weight = _cubic_kernel(col_offset - (flat_cols - col0))
+            raw_col = col0 + col_offset
+            col_index = np.clip(raw_col, 0, width - 1)
+            picked = planes[row_index, col_index].astype(np.float64)
+            weight = row_weight * col_weight
+            if border == "constant":
+                inside = (raw_row >= 0) & (raw_row < height) & (raw_col >= 0) & (raw_col < width)
+                weight = weight * inside.astype(np.float64)
+            if picked.ndim > 1:
+                weight = weight.reshape(weight.shape + (1,) * (picked.ndim - 1))
+            total += picked * weight
+    return total.reshape(shape + extra)
+
+
 def _smooth(values: np.ndarray, sigma_px: float, step: float) -> np.ndarray:
     if sigma_px <= 0.05 or len(values) < 5:
         return values
@@ -426,7 +471,7 @@ def _smooth(values: np.ndarray, sigma_px: float, step: float) -> np.ndarray:
     return out
 
 
-def _locate(gray, domain, x0, y0, x1, y1, sigma, threshold, transition) -> list[Hit]:
+def _locate(gray, domain, x0, y0, x1, y1, sigma, threshold, transition, width=0.0) -> list[Hit]:
     length = math.hypot(x1 - x0, y1 - y0)
     if length < 1.5:
         return []
@@ -437,7 +482,19 @@ def _locate(gray, domain, x0, y0, x1, y1, sigma, threshold, transition) -> list[
     dy = (y1 - y0) / length
     xs = x0 + dx * ts
     ys = y0 + dy * ts
-    values = np.array([_sample(gray, domain, float(x), float(y)) for x, y in zip(xs, ys)], dtype=np.float64)
+    half = max(0, int(round(float(width))))
+    if half == 0:
+        values = np.array([_sample(gray, domain, float(x), float(y)) for x, y in zip(xs, ys)], dtype=np.float64)
+    else:
+        tangent_x, tangent_y = -dy, dx
+        values = np.empty(count, np.float64)
+        for index, (x, y) in enumerate(zip(xs, ys)):
+            samples = [
+                _sample(gray, domain, float(x + tangent_x * offset), float(y + tangent_y * offset))
+                for offset in range(-half, half + 1)
+            ]
+            finite = [item for item in samples if math.isfinite(item)]
+            values[index] = float(np.mean(finite)) if finite else math.nan
     values = _smooth(values, sigma, step)
     grad = np.full(count, np.nan)
     for index in range(1, count - 1):
@@ -487,7 +544,7 @@ def _pick(hits: list[Hit], select: str) -> list[Hit]:
     return [max(ordered, key=lambda item: abs(item.amplitude))]
 
 
-def _along(gray, domain, x0, y0, x1, y1, tolerance, sigma, threshold, transition, select) -> list:
+def _along(gray, domain, x0, y0, x1, y1, tolerance, sigma, threshold, transition, select, width=0.0) -> list:
     dx, dy, length = _unit(x1 - x0, y1 - y0, "量測段至少要 2 像素")
     nx, ny = -dy, dx
     count = int(min(56, max(8, round(length / 3.5))))
@@ -508,6 +565,7 @@ def _along(gray, domain, x0, y0, x1, y1, tolerance, sigma, threshold, transition
                 sigma,
                 threshold,
                 transition,
+                width,
             ),
             choice,
         )
@@ -619,7 +677,7 @@ def _refit_circle(points, row, col, radius, tolerance):
     return fitted_row, fitted_col, fitted_radius, kept
 
 
-def _circle_points(gray, domain, row, col, radius, tolerance, sigma, threshold, transition, select):
+def _circle_points(gray, domain, row, col, radius, tolerance, sigma, threshold, transition, select, width=0.0):
     count = int(min(72, max(24, round(math.tau * radius / 4))))
     choice = "best" if select == "all" else select
     points = []
@@ -640,6 +698,7 @@ def _circle_points(gray, domain, row, col, radius, tolerance, sigma, threshold, 
                 sigma,
                 threshold,
                 transition,
+                width,
             ),
             choice,
         )

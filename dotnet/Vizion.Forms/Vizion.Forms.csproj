@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net48;net8.0-windows</TargetFrameworks>
+    <LangVersion>12.0</LangVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Vizion.Forms</RootNamespace>
+    <AssemblyName>Vizion.Forms</AssemblyName>
+    <Description>WinForms 顯示控制項。Windows 7 SP1 用 .NET Framework 4.8。只畫可見範圍，連續畫面只留最後一張。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Vizion.Display\Vizion.Display.csproj" />
+  </ItemGroup>
+</Project>

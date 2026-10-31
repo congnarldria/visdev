@@ -4,6 +4,8 @@ import ast
 import math
 import operator
 
+from .objects import Image, Region, XLD
+
 
 class ExprError(Exception):
     pass
@@ -190,24 +192,74 @@ def _eval(node, variables):
         return [_eval(item, variables) for item in node.elts]
     if isinstance(node, ast.Subscript):
         value = _eval(node.value, variables)
-        if isinstance(value, str):
-            raise ExprError("字串不能用索引")
-        seq = to_list(value)
         index = _eval(node.slice, variables)
-        if is_seq(index):
-            return [_index(seq, item) for item in index]
-        return _index(seq, index)
+        name = node.value.id if isinstance(node.value, ast.Name) else ""
+        return _subscript(value, index, name)
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
         args = [_eval(arg, variables) for arg in node.args]
         return _call(node.func.id, args)
     raise ExprError("不支援的運算式")
 
 
-def _index(seq: list, index):
+def _index(seq: list, index, origin: int):
     pos = int(_num(index))
+    if origin == 0:
+        if not seq or pos < 0 or pos >= len(seq):
+            if not seq:
+                raise ExprError(f"索引 {pos} 超出範圍，tuple 是空的")
+            raise ExprError(f"索引 {pos} 超出範圍 0..{len(seq) - 1}")
+        return seq[pos]
     if pos < 1 or pos > len(seq):
         raise ExprError(f"索引 {pos} 超出範圍 1..{len(seq)}")
     return seq[pos - 1]
+
+
+def _slot(index, count: int, origin: int) -> list[int]:
+    items = list(index) if is_seq(index) else [index]
+    slots = []
+    for item in items:
+        pos = int(_num(item))
+        if origin == 0:
+            if count == 0 or pos < 0 or pos >= count:
+                if count == 0:
+                    raise ExprError(f"索引 {pos} 超出範圍，tuple 是空的")
+                raise ExprError(f"索引 {pos} 超出範圍 0..{count - 1}")
+            slots.append(pos)
+            continue
+        if pos < 1 or pos > count:
+            raise ExprError(f"索引 {pos} 超出範圍 1..{count}")
+        slots.append(pos - 1)
+    return slots
+
+
+def _subscript(value, index, name: str):
+    # HObject (region, contour, image tuple) is 1-based, including C# ho_ variables.
+    # HTuple named hv_ is 0-based, matching HALCON C#. Other control tuples stay 1-based.
+    if isinstance(value, Region):
+        slots = _slot(index, value.count(), 1)
+        links = None
+        if value.links is not None and len(value.links) == value.count():
+            links = [value.links[slot] for slot in slots]
+        masks = [value.objects[slot] for slot in slots]
+        return Region(value.width, value.height, masks, multi_color=len(masks) > 1, links=links)
+    if isinstance(value, XLD):
+        slots = _slot(index, len(value.contours), 1)
+        groups = None
+        if value.groups is not None and len(value.groups) == len(value.contours):
+            groups = [value.groups[slot] for slot in slots]
+        contours = [value.contours[slot] for slot in slots]
+        return XLD(value.width, value.height, contours, multi_color=len(contours) > 1, groups=groups)
+    if isinstance(value, str):
+        raise ExprError("字串不能用索引")
+    if isinstance(value, list) and value and all(isinstance(item, Image) for item in value):
+        if is_seq(index):
+            return [_index(value, item, 1) for item in index]
+        return _index(value, index, 1)
+    origin = 0 if name.lower().startswith("hv_") else 1
+    seq = to_list(value)
+    if is_seq(index):
+        return [_index(seq, item, origin) for item in index]
+    return _index(seq, index, origin)
 
 
 def _flat_nums(args: list) -> list:

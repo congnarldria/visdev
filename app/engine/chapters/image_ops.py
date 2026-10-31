@@ -6,6 +6,7 @@ is the column, matching HALCON's iconic convention: Tx shifts rows, Ty shifts co
 
 from __future__ import annotations
 
+import itertools
 import math
 
 import cv2
@@ -64,15 +65,32 @@ def _interpolation(value) -> int:
     return _INTERP[name]
 
 
+def _resize_image(data: np.ndarray, width: int, height: int, interpolation) -> np.ndarray:
+    kind = text(interpolation, "Interpolation").lower()
+    if kind == "bicubic":
+        from ..gauge import sample_bicubic
+
+        source_height, source_width = data.shape[:2]
+        rows = (np.arange(height, dtype=np.float64) + 0.5) * source_height / height - 0.5
+        cols = (np.arange(width, dtype=np.float64) + 0.5) * source_width / width - 0.5
+        grid_cols, grid_rows = np.meshgrid(cols, rows)
+        sampled = sample_bicubic(data, grid_rows, grid_cols)
+        return np.clip(np.round(sampled), 0, 255).astype(np.uint8)
+    return cv2.resize(data, (width, height), interpolation=_interpolation(interpolation))
+
+
 def _warp(image: Image, matrix: np.ndarray, width: int, height: int, interpolation: int) -> Image:
-    data = cv2.warpAffine(
-        image.data,
-        matrix,
-        (width, height),
-        flags=interpolation,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=0,
-    )
+    if int(interpolation) == int(cv2.INTER_CUBIC):
+        data = _sample_warp(image.data, matrix, width, height)
+    else:
+        data = cv2.warpAffine(
+            image.data,
+            matrix,
+            (width, height),
+            flags=interpolation,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=0,
+        )
     domain = None
     if image.domain is not None:
         warped = cv2.warpAffine(image.domain, matrix, (width, height), flags=cv2.INTER_NEAREST, borderValue=0)
@@ -80,6 +98,26 @@ def _warp(image: Image, matrix: np.ndarray, width: int, height: int, interpolati
         data = data.copy()
         data[domain == 0] = 0
     return Image(data, domain)
+
+
+def _sample_warp(data: np.ndarray, matrix: np.ndarray, width: int, height: int) -> np.ndarray:
+    """Gather with Keys cubic. The matrix moves source pixels forward, so each output pixel samples the inverse."""
+    from ..gauge import sample_bicubic
+
+    linear = np.asarray(matrix, np.float64)
+    axes = linear[:, :2]
+    shift = linear[:, 2]
+    det = float(axes[0, 0] * axes[1, 1] - axes[0, 1] * axes[1, 0])
+    if abs(det) < 1e-12:
+        raise ValueError("這個仿射把影像壓成一條線，沒辦法取樣")
+    inverse = np.array([[axes[1, 1], -axes[0, 1]], [-axes[1, 0], axes[0, 0]]], np.float64) / det
+    grid_cols, grid_rows = np.meshgrid(np.arange(width, dtype=np.float64), np.arange(height, dtype=np.float64))
+    delta_col = grid_cols - shift[0]
+    delta_row = grid_rows - shift[1]
+    src_col = inverse[0, 0] * delta_col + inverse[0, 1] * delta_row
+    src_row = inverse[1, 0] * delta_col + inverse[1, 1] * delta_row
+    sampled = sample_bicubic(data, src_row, src_col, border="constant")
+    return np.clip(np.round(sampled), 0, 255).astype(np.uint8)
 
 
 def _mat_from(value) -> np.ndarray:
@@ -144,7 +182,7 @@ def _plane(image: Image, channel: int) -> np.ndarray:
     [],
     "兩張影像相加",
     "每個像素是 (灰階1 + 灰階2) × Mult + Add，超過 0 到 255 會截斷。兩張圖的尺寸和通道數要相同。domain 取交集，外面補 0。",
-    "add_image (Image1, Image2, ImageResult, 0.5, 0)",
+    "Vizion.add_image (Image1, Image2, ImageResult, 0.5, 0)",
 )
 def add_image(image1, image2, mult, add, *, ctx):
     return _combine(image1, image2, lambda a, b: a + b, scalar(mult, "Mult"), scalar(add, "Add"), "add_image")
@@ -158,7 +196,7 @@ def add_image(image1, image2, mult, add, *, ctx):
     [],
     "兩張影像相減",
     "每個像素是 (被減影像 - 減數影像) × Mult + Add，超過 0 到 255 會截斷。",
-    "sub_image (Image1, Image2, ImageSub, 1, 128)",
+    "Vizion.sub_image (Image1, Image2, ImageSub, 1, 128)",
 )
 def sub_image(image_minuend, image_subtrahend, mult, add, *, ctx):
     return _combine(image_minuend, image_subtrahend, lambda a, b: a - b, scalar(mult, "Mult"), scalar(add, "Add"), "sub_image")
@@ -172,7 +210,7 @@ def sub_image(image_minuend, image_subtrahend, mult, add, *, ctx):
     [],
     "兩張影像相乘",
     "每個像素是 (灰階1 × 灰階2) × Mult + Add。灰階直接相乘會很大，Mult 通常要小於 1。",
-    "mult_image (Image1, Image2, ImageResult, 0.005, 0)",
+    "Vizion.mult_image (Image1, Image2, ImageResult, 0.005, 0)",
 )
 def mult_image(image1, image2, mult, add, *, ctx):
     return _combine(image1, image2, lambda a, b: a * b, scalar(mult, "Mult"), scalar(add, "Add"), "mult_image")
@@ -186,7 +224,7 @@ def mult_image(image1, image2, mult, add, *, ctx):
     [],
     "兩張影像相除",
     "每個像素是 (灰階1 / 灰階2) × Mult + Add。分母是 0 的像素結果是 0。",
-    "div_image (Image1, Image2, ImageResult, 1, 0)",
+    "Vizion.div_image (Image1, Image2, ImageResult, 1, 0)",
 )
 def div_image(image1, image2, mult, add, *, ctx):
     def divide(a, b):
@@ -205,7 +243,7 @@ def div_image(image1, image2, mult, add, *, ctx):
     [],
     "兩張影像的絕對差",
     "每個像素是 |灰階1 - 灰階2| × Mult，超過 255 會截斷。",
-    "abs_diff_image (Image1, Image2, ImageAbsDiff, 1)",
+    "Vizion.abs_diff_image (Image1, Image2, ImageAbsDiff, 1)",
 )
 def abs_diff_image(image1, image2, mult, *, ctx):
     return _combine(image1, image2, lambda a, b: np.abs(a - b), scalar(mult, "Mult"), 0.0, "abs_diff_image")
@@ -219,7 +257,7 @@ def abs_diff_image(image1, image2, mult, *, ctx):
     [],
     "每個像素取較小灰階",
     "兩張圖的尺寸和通道數要相同。",
-    "min_image (Image1, Image2, ImageMin)",
+    "Vizion.min_image (Image1, Image2, ImageMin)",
 )
 def min_image(image1, image2, *, ctx):
     return _combine(image1, image2, np.minimum, 1.0, 0.0, "min_image")
@@ -233,7 +271,7 @@ def min_image(image1, image2, *, ctx):
     [],
     "每個像素取較大灰階",
     "兩張圖的尺寸和通道數要相同。",
-    "max_image (Image1, Image2, ImageMax)",
+    "Vizion.max_image (Image1, Image2, ImageMax)",
 )
 def max_image(image1, image2, *, ctx):
     return _combine(image1, image2, np.maximum, 1.0, 0.0, "max_image")
@@ -247,7 +285,7 @@ def max_image(image1, image2, *, ctx):
     [P("Channels", "通道數")],
     "通道數",
     "灰階是 1。彩色是 3，通道 1 紅、2 綠、3 藍。",
-    "count_channels (Image, Channels)",
+    "Vizion.count_channels (Image, Channels)",
 )
 def count_channels(image, *, ctx):
     return Result([], [_channel_count(expect_image(image, "Image"))])
@@ -261,7 +299,7 @@ def count_channels(image, *, ctx):
     [],
     "取出一個通道",
     "彩色圖的通道 1 是紅、2 是綠、3 是藍。影像在內部以 BGR 存放，這個編號仍跟 HALCON 相同。",
-    "access_channel (Image, Red, 1)",
+    "Vizion.access_channel (Image, Red, 1)",
 )
 def access_channel(image, channel, *, ctx):
     picture = expect_image(image, "Image")
@@ -277,7 +315,7 @@ def access_channel(image, channel, *, ctx):
     [],
     "三張灰階合成彩色",
     "三張都必須是相同尺寸的灰階圖。順序是紅、綠、藍。",
-    "compose3 (Red, Green, Blue, ImageRGB)",
+    "Vizion.compose3 (Red, Green, Blue, ImageRGB)",
 )
 def compose3(image1, image2, image3, *, ctx):
     planes = [expect_image(item, name) for item, name in ((image1, "Image1"), (image2, "Image2"), (image3, "Image3"))]
@@ -303,7 +341,7 @@ def compose3(image1, image2, image3, *, ctx):
     [],
     "彩色拆成紅綠藍",
     "灰階影像不能拆。通道順序是紅、綠、藍。",
-    "decompose3 (ImageRGB, Red, Green, Blue)",
+    "Vizion.decompose3 (ImageRGB, Red, Green, Blue)",
 )
 def decompose3(image, *, ctx):
     picture = expect_image(image, "MultiChannelImage")
@@ -322,7 +360,7 @@ def decompose3(image, *, ctx):
     [],
     "在後面加一個通道",
     "第二張必須是相同尺寸的灰階。彩色圖再加一通道後，access_channel 的紅綠藍編號不再適用。",
-    "append_channel (Image, Gray, Extended)",
+    "Vizion.append_channel (Image, Gray, Extended)",
 )
 def append_channel(image1, image2, *, ctx):
     base = expect_image(image1, "Image1")
@@ -344,7 +382,7 @@ def append_channel(image1, image2, *, ctx):
     [],
     "影像鏡像",
     "row 上下對調，column 左右對調，diagonal 轉置。轉置後寬高會交換。",
-    "mirror_image (Image, ImageMirror, 'column')",
+    "Vizion.mirror_image (Image, ImageMirror, 'column')",
 )
 def mirror_image(image, mode, *, ctx):
     picture = expect_image(image, "Image")
@@ -371,7 +409,7 @@ def mirror_image(image, mode, *, ctx):
     [],
     "繞影像中心旋轉",
     "正角度在畫面上逆時針。畫布大小不變，轉出去的部分切掉，空出來的地方補 0。constant 用最近鄰取樣。",
-    "rotate_image (Image, ImageRotate, rad(15), 'bilinear')",
+    "Vizion.rotate_image (Image, ImageRotate, rad(15), 'bilinear')",
 )
 def rotate_image(image, phi, interpolation, *, ctx):
     picture = expect_image(image, "Image")
@@ -392,8 +430,8 @@ def rotate_image(image, phi, interpolation, *, ctx):
     ],
     [],
     "依倍率縮放影像",
-    "ScaleWidth 乘行數，ScaleHeight 乘列數。小於等於 0 會報錯。",
-    "zoom_image_factor (Image, ImageZoomed, 0.5, 0.5, 'bilinear')",
+    "ScaleWidth 乘行數，ScaleHeight 乘列數。小於等於 0 會報錯。bicubic 用 16 點三次內插，半個像素不是兩點的平均。",
+    "Vizion.zoom_image_factor (Image, ImageZoomed, 0.5, 0.5, 'bilinear')",
 )
 def zoom_image_factor(image, scale_width, scale_height, interpolation, *, ctx):
     picture = expect_image(image, "Image")
@@ -403,7 +441,7 @@ def zoom_image_factor(image, scale_width, scale_height, interpolation, *, ctx):
         raise ValueError("縮放倍率必須大於 0")
     width = max(1, int(round(picture.width * sx)))
     height = max(1, int(round(picture.height * sy)))
-    data = cv2.resize(picture.data, (width, height), interpolation=_interpolation(interpolation))
+    data = _resize_image(picture.data, width, height, interpolation)
     domain = None
     if picture.domain is not None:
         domain = cv2.resize(picture.domain, (width, height), interpolation=cv2.INTER_NEAREST)
@@ -422,8 +460,8 @@ def zoom_image_factor(image, scale_width, scale_height, interpolation, *, ctx):
     ],
     [],
     "縮放到指定尺寸",
-    "寬高用像素，至少是 1。",
-    "zoom_image_size (Image, ImageZoom, 320, 240, 'bilinear')",
+    "寬高用像素，至少是 1。bicubic 用 16 點三次內插，半個像素不是兩點的平均。",
+    "Vizion.zoom_image_size (Image, ImageZoom, 320, 240, 'bilinear')",
 )
 def zoom_image_size(image, width, height, interpolation, *, ctx):
     picture = expect_image(image, "Image")
@@ -431,7 +469,7 @@ def zoom_image_size(image, width, height, interpolation, *, ctx):
     high = whole(height, "Height")
     if wide < 1 or high < 1:
         raise ValueError("寬高至少要 1")
-    data = cv2.resize(picture.data, (wide, high), interpolation=_interpolation(interpolation))
+    data = _resize_image(picture.data, wide, high, interpolation)
     domain = None
     if picture.domain is not None:
         domain = cv2.resize(picture.domain, (wide, high), interpolation=cv2.INTER_NEAREST)
@@ -447,7 +485,7 @@ def zoom_image_size(image, width, height, interpolation, *, ctx):
     [P("HomMat2D", "單位矩陣，6 個數")],
     "建立單位仿射矩陣",
     "用在影像時，前三個數作用在列，後三個數作用在行。x 是列、y 是行。",
-    "hom_mat2d_identity (HomMat2D)",
+    "Vizion.hom_mat2d_identity (HomMat2D)",
 )
 def hom_mat2d_identity(*, ctx):
     return Result([], [[1, 0, 0, 0, 1, 0]])
@@ -473,7 +511,7 @@ def _around(matrix: np.ndarray, linear: np.ndarray, px: float, py: float, local:
     [P("HomMat2DTranslate", "平移後的矩陣")],
     "在固定座標系加上平移",
     "用在影像時 Tx 加在列、Ty 加在行。這是全域平移，先做原來的矩陣，再平移。",
-    "hom_mat2d_translate (HomMat2D, 20, 0, HomMat2DTranslate)",
+    "Vizion.hom_mat2d_translate (HomMat2D, 20, 0, HomMat2DTranslate)",
 )
 def hom_mat2d_translate(hom_mat2d, tx, ty, *, ctx):
     return Result([], [_pack(_translate(_mat_from(hom_mat2d), scalar(tx, "Tx"), scalar(ty, "Ty"), False))])
@@ -487,7 +525,7 @@ def hom_mat2d_translate(hom_mat2d, tx, ty, *, ctx):
     [P("HomMat2DTranslate", "平移後的矩陣")],
     "在矩陣自己的座標系加上平移",
     "先平移，再做原來的矩陣。影像上 x 仍是列、y 仍是行。",
-    "hom_mat2d_translate_local (HomMat2D, 20, 0, HomMat2DTranslate)",
+    "Vizion.hom_mat2d_translate_local (HomMat2D, 20, 0, HomMat2DTranslate)",
 )
 def hom_mat2d_translate_local(hom_mat2d, tx, ty, *, ctx):
     return Result([], [_pack(_translate(_mat_from(hom_mat2d), scalar(tx, "Tx"), scalar(ty, "Ty"), True))])
@@ -506,7 +544,7 @@ def _rotation(phi: float) -> np.ndarray:
     [P("HomMat2DRotate", "旋轉後的矩陣")],
     "繞一個點旋轉",
     "正角度在 x 向右、y 向下的座標裡逆時針。用在影像時，點的座標是 (列, 行)。這是全域旋轉。",
-    "hom_mat2d_rotate (HomMat2D, rad(90), 0, 0, HomMat2DRotate)",
+    "Vizion.hom_mat2d_rotate (HomMat2D, rad(90), 0, 0, HomMat2DRotate)",
 )
 def hom_mat2d_rotate(hom_mat2d, phi, px, py, *, ctx):
     matrix = _around(_mat_from(hom_mat2d), _rotation(scalar(phi, "Phi")), scalar(px, "Px"), scalar(py, "Py"), False)
@@ -521,7 +559,7 @@ def hom_mat2d_rotate(hom_mat2d, phi, px, py, *, ctx):
     [P("HomMat2DRotate", "旋轉後的矩陣")],
     "在局部座標系繞點旋轉",
     "先繞局部的點旋轉，再做原來的矩陣。",
-    "hom_mat2d_rotate_local (HomMat2D, rad(90), 0, 0, HomMat2DRotate)",
+    "Vizion.hom_mat2d_rotate_local (HomMat2D, rad(90), 0, 0, HomMat2DRotate)",
 )
 def hom_mat2d_rotate_local(hom_mat2d, phi, px, py, *, ctx):
     matrix = _around(_mat_from(hom_mat2d), _rotation(scalar(phi, "Phi")), scalar(px, "Px"), scalar(py, "Py"), True)
@@ -540,7 +578,7 @@ def _scale(sx: float, sy: float) -> np.ndarray:
     [P("HomMat2DScale", "縮放後的矩陣")],
     "繞一個點縮放",
     "用在影像時 Sx 放大列方向、Sy 放大行方向。倍率 0 會報錯。",
-    "hom_mat2d_scale (HomMat2D, 2, 2, 0, 0, HomMat2DScale)",
+    "Vizion.hom_mat2d_scale (HomMat2D, 2, 2, 0, 0, HomMat2DScale)",
 )
 def hom_mat2d_scale(hom_mat2d, sx, sy, px, py, *, ctx):
     scale_x, scale_y = scalar(sx, "Sx"), scalar(sy, "Sy")
@@ -558,7 +596,7 @@ def hom_mat2d_scale(hom_mat2d, sx, sy, px, py, *, ctx):
     [P("HomMat2DScale", "縮放後的矩陣")],
     "在局部座標系繞點縮放",
     "先做局部縮放，再做原來的矩陣。",
-    "hom_mat2d_scale_local (HomMat2D, 2, 2, 0, 0, HomMat2DScale)",
+    "Vizion.hom_mat2d_scale_local (HomMat2D, 2, 2, 0, 0, HomMat2DScale)",
 )
 def hom_mat2d_scale_local(hom_mat2d, sx, sy, px, py, *, ctx):
     scale_x, scale_y = scalar(sx, "Sx"), scalar(sy, "Sy")
@@ -582,7 +620,7 @@ def hom_mat2d_scale_local(hom_mat2d, sx, sy, px, py, *, ctx):
     [P("HomMat2DSlant", "傾斜後的矩陣")],
     "繞一個點做剪切",
     "axis 為 x 時，y 加上 tan(Theta) 乘上相對 x。axis 為 y 時反過來。這是全域剪切。",
-    "hom_mat2d_slant (HomMat2D, rad(10), 'x', 0, 0, HomMat2DSlant)",
+    "Vizion.hom_mat2d_slant (HomMat2D, rad(10), 'x', 0, 0, HomMat2DSlant)",
 )
 def hom_mat2d_slant(hom_mat2d, theta, axis, px, py, *, ctx):
     shear = math.tan(scalar(theta, "Theta"))
@@ -605,7 +643,7 @@ def hom_mat2d_slant(hom_mat2d, theta, axis, px, py, *, ctx):
     [P("HomMat2DCompose", "合成矩陣")],
     "兩個矩陣相乘",
     "先做右邊，再做左邊。點的新座標是 Left × Right × 點。",
-    "hom_mat2d_compose (HomMat2DLeft, HomMat2DRight, HomMat2DCompose)",
+    "Vizion.hom_mat2d_compose (HomMat2DLeft, HomMat2DRight, HomMat2DCompose)",
 )
 def hom_mat2d_compose(hom_mat2d_left, hom_mat2d_right, *, ctx):
     return Result([], [_pack(_mat_from(hom_mat2d_left) @ _mat_from(hom_mat2d_right))])
@@ -619,7 +657,7 @@ def hom_mat2d_compose(hom_mat2d_left, hom_mat2d_right, *, ctx):
     [P("HomMat2DInvert", "反矩陣")],
     "仿射矩陣取反",
     "反矩陣再套用一次就回到原點。行列式太接近 0 時會報錯。",
-    "hom_mat2d_invert (HomMat2D, HomMat2DInvert)",
+    "Vizion.hom_mat2d_invert (HomMat2D, HomMat2DInvert)",
 )
 def hom_mat2d_invert(hom_mat2d, *, ctx):
     matrix = _mat_from(hom_mat2d)
@@ -636,7 +674,7 @@ def hom_mat2d_invert(hom_mat2d, *, ctx):
     [P("Determinant", "左上 2×2 的行列式")],
     "仿射矩陣的行列式",
     "看線性部分的面積倍率。負值表示有翻轉。",
-    "hom_mat2d_determinant (HomMat2D, Determinant)",
+    "Vizion.hom_mat2d_determinant (HomMat2D, Determinant)",
 )
 def hom_mat2d_determinant(hom_mat2d, *, ctx):
     matrix = _mat_from(hom_mat2d)
@@ -651,7 +689,7 @@ def hom_mat2d_determinant(hom_mat2d, *, ctx):
     [P("RowTrans", "轉換後的列"), P("ColTrans", "轉換後的行")],
     "用矩陣轉換影像座標",
     "列是 x、行是 y。Row 和 Col 可以是 tuple，兩個輸出會一起變長。",
-    "affine_trans_pixel (HomMat2D, 10, 20, RowTrans, ColTrans)",
+    "Vizion.affine_trans_pixel (HomMat2D, 10, 20, RowTrans, ColTrans)",
 )
 def affine_trans_pixel(hom_mat2d, row, col, *, ctx):
     rows, cols = _apply_points(_mat_from(hom_mat2d), row, col)
@@ -666,7 +704,7 @@ def affine_trans_pixel(hom_mat2d, row, col, *, ctx):
     [P("Qx", "轉換後的 x"), P("Qy", "轉換後的 y")],
     "用矩陣轉換點",
     "和 affine_trans_pixel 用同一套矩陣。用在影像時 Px 填列、Py 填行，Qx 是新的列、Qy 是新的行。",
-    "affine_trans_point_2d (HomMat2D, 10, 20, Qx, Qy)",
+    "Vizion.affine_trans_point_2d (HomMat2D, 10, 20, Qx, Qy)",
 )
 def affine_trans_point_2d(hom_mat2d, px, py, *, ctx):
     qx, qy = _apply_points(_mat_from(hom_mat2d), px, py)
@@ -684,8 +722,9 @@ def affine_trans_point_2d(hom_mat2d, px, py, *, ctx):
     ],
     [],
     "用仿射矩陣轉換影像",
-    "矩陣的 x 是列、y 是行。false 保持原圖大小，轉出去的部分切掉。true 會平移畫布，讓四個角都落在新圖裡。影像外補 0。",
-    "affine_trans_image (Image, ImageAffineTrans, HomMat2D, 'bilinear', 'false')",
+    "矩陣的 x 是列、y 是行。false 保持原圖大小，轉出去的部分切掉。true 會平移畫布，讓四個角都落在新圖裡。影像外補 0。"
+    "bicubic 用 16 點 Keys 三次內插，半個像素是 112。bilinear 和 nearest 仍走 OpenCV。",
+    "Vizion.affine_trans_image (Image, ImageAffineTrans, HomMat2D, 'bilinear', 'false')",
 )
 def affine_trans_image(image, hom_mat2d, interpolation, adapt_image_size, *, ctx):
     picture = expect_image(image, "Image")
@@ -835,7 +874,7 @@ _bind_circle("gray_closing_circle", "close", "灰階圓形閉運算", "先用圓
     [],
     "把對比拉滿",
     "定義域裡的最小值變成 0、最大值變成 255。整張一樣亮時輸出 0。彩色圖每個通道分開拉。",
-    "scale_image_max (Image, ImageScaleMax)",
+    "Vizion.scale_image_max (Image, ImageScaleMax)",
 )
 def scale_image_max(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -876,7 +915,7 @@ def scale_image_max(image, *, ctx):
     [],
     "建立全黑影像",
     "Type 只能是 byte。影像裡每個像素都是 0。",
-    "gen_image_const (Image, 'byte', 640, 480)",
+    "Vizion.gen_image_const (Image, 'byte', 640, 480)",
 )
 def gen_image_const(kind, width, height, *, ctx):
     if text(kind, "Type").lower() != "byte":
@@ -896,7 +935,7 @@ def gen_image_const(kind, width, height, *, ctx):
     [],
     "用固定灰階填滿一張新影像",
     "尺寸跟輸入相同。定義域是整張圖，不沿用輸入的定義域。",
-    "gen_image_proto (Image, ImageCleared, 0)",
+    "Vizion.gen_image_proto (Image, ImageCleared, 0)",
 )
 def gen_image_proto(image, grayval, *, ctx):
     picture = expect_image(image, "Image")
@@ -916,7 +955,7 @@ def gen_image_proto(image, grayval, *, ctx):
     [],
     "把區域畫進影像",
     "區域和影像的寬高要相同。margin 用一像素的外框。",
-    "paint_region (Region, Image, ImageResult, 255, 'fill')",
+    "Vizion.paint_region (Region, Image, ImageResult, 255, 'fill')",
 )
 def paint_region(region, image, grayval, kind, *, ctx):
     picture = expect_image(image, "Image")
@@ -960,7 +999,7 @@ _COLOR_SPACES = ["'hsv'", "'lab'", "'yuv'"]
     [],
     "把紅綠藍轉成其他色彩空間",
     "三張輸入都要是相同尺寸的灰階。hsv 的 H 是 0 到 180。lab 的 a、b 以 128 為 0。這是 OpenCV 的數值，不是 HALCON 的實數範圍。",
-    "trans_from_rgb (Red, Green, Blue, H, S, V, 'hsv')",
+    "Vizion.trans_from_rgb (Red, Green, Blue, H, S, V, 'hsv')",
 )
 def trans_from_rgb(image_red, image_green, image_blue, color_space, *, ctx):
     planes = [expect_image(item, name) for item, name in ((image_red, "ImageRed"), (image_green, "ImageGreen"), (image_blue, "ImageBlue"))]
@@ -1000,7 +1039,7 @@ def _se_kernel(struct) -> np.ndarray:
     [P("Width", "寬度"), P("Height", "高度")],
     "讀取影像寬高",
     "寬是行數，高是列數。",
-    "get_image_size (Image, Width, Height)",
+    "Vizion.get_image_size (Image, Width, Height)",
 )
 def get_image_size(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -1015,7 +1054,7 @@ def get_image_size(image, *, ctx):
     [P("Grayval", "灰階")],
     "讀取像素灰階",
     "座標會四捨五入到像素，超出影像會失敗。灰階圖一個點回傳一個數。彩色圖回傳紅、綠、藍。多個點時灰階是 tuple，彩色是依點排好的紅、綠、藍。",
-    "get_grayval (Image, 10, 20, Grayval)",
+    "Vizion.get_grayval (Image, 10, 20, Grayval)",
 )
 def get_grayval(image, row, column, *, ctx):
     picture = expect_image(image, "Image")
@@ -1047,7 +1086,7 @@ def get_grayval(image, row, column, *, ctx):
     [P("Min", "最小灰階"), P("Max", "最大灰階"), P("Range", "最大減最小")],
     "區域裡的最小和最大灰階",
     "Percent 0 用真正的最小和最大。Percent 10 會丟掉最暗和最亮各 5%。多個物件合併成一個範圍。彩色影像先轉成亮度。",
-    "min_max_gray (Regions, Image, 0, Min, Max, Range)",
+    "Vizion.min_max_gray (Regions, Image, 0, Min, Max, Range)",
 )
 def min_max_gray(region, image, percent, *, ctx):
     picture = expect_image(image, "Image")
@@ -1081,7 +1120,7 @@ def min_max_gray(region, image, percent, *, ctx):
     [],
     "恢復整張定義域",
     "像素不變，只拿掉 reduce_domain 或 change_domain 設過的範圍。",
-    "full_domain (Image, ImageFull)",
+    "Vizion.full_domain (Image, ImageFull)",
 )
 def full_domain(image, *, ctx):
     picture = expect_image(image, "Image").copy()
@@ -1097,7 +1136,7 @@ def full_domain(image, *, ctx):
     [],
     "裁切到定義域",
     "沒有限制定義域時，結果就是原圖。定義域是空的會失敗。",
-    "crop_domain (Image, ImagePart)",
+    "Vizion.crop_domain (Image, ImagePart)",
 )
 def crop_domain(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -1121,7 +1160,7 @@ def crop_domain(image, *, ctx):
     [],
     "換成新的定義域",
     "直接換成這個區域，不和舊的定義域做交集。reduce_domain 會和現有定義域取交集。",
-    "change_domain (Image, Region, ImageNew)",
+    "Vizion.change_domain (Image, Region, ImageNew)",
 )
 def change_domain(image, region, *, ctx):
     picture = expect_image(image, "Image").copy()
@@ -1140,7 +1179,7 @@ def change_domain(image, region, *, ctx):
     [],
     "拉平緩慢的照明變化",
     "輸出 = (原圖 − 局部平均) + 局部平均 × Factor + 整張平均 × (1 − Factor)。Factor 1 就是原圖，Factor 0 去掉局部明暗。偶數遮罩會加 1 變成奇數。這和 emphasize 不同，emphasize 是把高頻加回原圖。",
-    "illuminate (Image, ImageIlluminate, 31, 31, 0)",
+    "Vizion.illuminate (Image, ImageIlluminate, 31, 31, 0)",
 )
 def illuminate(image, mask_width, mask_height, factor, *, ctx):
     picture = expect_image(image, "Image")
@@ -1192,7 +1231,7 @@ def _gray_hat(image, struct, mode: str) -> Result:
     [],
     "灰階頂帽",
     "原圖減去開運算，用來抓比結構元素小的亮點。結構元素的原點是它外框的中心，和區域形態學一樣。定義域外當成 0，邊緣可能有假亮點。",
-    "gray_tophat (Image, StructElement, ImageTopHat)",
+    "Vizion.gray_tophat (Image, StructElement, ImageTopHat)",
 )
 def gray_tophat(image, struct_element, *, ctx):
     return _gray_hat(image, struct_element, "top")
@@ -1206,7 +1245,7 @@ def gray_tophat(image, struct_element, *, ctx):
     [],
     "灰階底帽",
     "閉運算減去原圖，用來抓比結構元素小的暗點。原點是結構元素外框的中心。",
-    "gray_bothat (Image, StructElement, ImageBotHat)",
+    "Vizion.gray_bothat (Image, StructElement, ImageBotHat)",
 )
 def gray_bothat(image, struct_element, *, ctx):
     return _gray_hat(image, struct_element, "bottom")
@@ -1228,7 +1267,7 @@ _LAPLACE_MASKS = ["'n_4'", "'n_8'"]
     [],
     "拉普拉斯",
     "3×3 的 n_4 是上下左右，n_8 再包含對角。5 和 7 用 OpenCV 的拉普拉斯，兩種 FilterMask 相同。signed 會加上 128 再夾到 0 到 255。",
-    "laplace (Image, ImageLaplace, 'absolute', 3, 'n_4')",
+    "Vizion.laplace (Image, ImageLaplace, 'absolute', 3, 'n_4')",
 )
 def laplace(image, result_type, mask_size, filter_mask, *, ctx):
     picture = expect_image(image, "Image")
@@ -1275,7 +1314,7 @@ def laplace(image, result_type, mask_size, filter_mask, *, ctx):
     [],
     "把環形區域展開成長方形",
     "角度 0 朝右，正角度在畫面上順時針。寬度是角度取樣，高度是半徑取樣。影像外補 0。",
-    "polar_trans_image_ext (Image, PolarTransImage, 60, 60, 0, rad(360), 10, 28, 64, 16, 'bilinear')",
+    "Vizion.polar_trans_image_ext (Image, PolarTransImage, 60, 60, 0, rad(360), 10, 28, 64, 16, 'bilinear')",
 )
 def polar_trans_image_ext(image, row, column, angle_start, angle_end, radius_start, radius_end, width, height, interpolation, *, ctx):
     picture = expect_image(image, "Image")
@@ -1304,7 +1343,7 @@ def polar_trans_image_ext(image, row, column, angle_start, angle_end, radius_sta
     [],
     "複製影像",
     "像素和定義域都複製一份。之後改其中一張，不會影響另一張。",
-    "copy_image (Image, ImageCopy)",
+    "Vizion.copy_image (Image, ImageCopy)",
 )
 def copy_image(image, *, ctx):
     return Result([expect_image(image, "Image").copy()], [])
@@ -1326,7 +1365,7 @@ def copy_image(image, *, ctx):
     [],
     "建立灰階斜坡",
     "灰階 = Alpha × (列 − Row) + Beta × (行 − Column) + Gamma，再夾到 0 到 255。這版只做 byte。",
-    "gen_image_gray_ramp (Ramp, 0, 2, 10, 0, 0, 40, 30)",
+    "Vizion.gen_image_gray_ramp (Ramp, 0, 2, 10, 0, 0, 40, 30)",
 )
 def gen_image_gray_ramp(alpha, beta, gamma, row, column, width, height, *, ctx):
     wide = whole(width, "Width")
@@ -1355,7 +1394,7 @@ def gen_image_gray_ramp(alpha, beta, gamma, row, column, width, height, *, ctx):
     [],
     "依寬高裁切",
     "矩形必須完全落在影像裡，所以結果的寬高就是指定的寬高。crop_rectangle1 是用兩個對角。",
-    "crop_part (Image, ImagePart, 0, 0, 10, 8)",
+    "Vizion.crop_part (Image, ImagePart, 0, 0, 10, 8)",
 )
 def crop_part(image, row, column, width, height, *, ctx):
     picture = expect_image(image, "Image")
@@ -1389,7 +1428,7 @@ def _local_gray(image, mask_width, mask_height):
     [],
     "局部標準差",
     "用矩形平均算出每個像素附近的標準差，再四捨五入成 0 到 255。彩色先轉成亮度。偶數遮罩可用，原點可能和 HALCON 差 1 像素。",
-    "deviation_image (Image, ImageDeviation, 5, 5)",
+    "Vizion.deviation_image (Image, ImageDeviation, 5, 5)",
 )
 def deviation_image(image, width, height, *, ctx):
     picture, gray, wide, high = _local_gray(image, width, height)
@@ -1408,7 +1447,7 @@ def deviation_image(image, width, height, *, ctx):
     [],
     "矩形範圍的灰階差",
     "每個像素輸出附近最大值減最小值。彩色先轉成亮度。用來抓局部對比。",
-    "gray_range_rect (Image, ImageResult, 5, 5)",
+    "Vizion.gray_range_rect (Image, ImageResult, 5, 5)",
 )
 def gray_range_rect(image, mask_height, mask_width, *, ctx):
     picture, gray, wide, high = _local_gray(image, mask_width, mask_height)
@@ -1425,7 +1464,7 @@ def gray_range_rect(image, mask_height, mask_width, *, ctx):
     [],
     "Sobel 振幅和方向",
     "方向編成 0 到 255。朝右是 128，正角度在畫面上順時針增加，轉半圈回到 0。振幅超過 255 會被截斷。彩色先轉成亮度。",
-    "sobel_dir (Image, EdgeAmplitude, EdgeDirection, 'sum_sqrt', 3)",
+    "Vizion.sobel_dir (Image, EdgeAmplitude, EdgeDirection, 'sum_sqrt', 3)",
 )
 def sobel_dir(image, filter_type, size, *, ctx):
     picture = expect_image(image, "Image")
@@ -1457,7 +1496,7 @@ def sobel_dir(image, filter_type, size, *, ctx):
     [P("AbsoluteHisto", "256 格的像素數"), P("RelativeHisto", "每一格占的比例")],
     "灰階直方圖",
     "固定 256 格，從 0 到 255。多個物件合併計算。彩色先轉成亮度。空區域得到全 0。",
-    "gray_histo (Regions, Image, AbsoluteHisto, RelativeHisto)",
+    "Vizion.gray_histo (Regions, Image, AbsoluteHisto, RelativeHisto)",
 )
 def gray_histo(region, image, *, ctx):
     picture = expect_image(image, "Image")
@@ -1482,7 +1521,7 @@ def gray_histo(region, image, *, ctx):
     [P("HorProjection", "每一列的灰階和"), P("VertProjection", "每一行的灰階和")],
     "灰階投影",
     "水平投影的長度等於影像高度，垂直投影的長度等於寬度。區域外的像素不計入。彩色先轉成亮度。",
-    "gray_projections (Regions, Image, 'simple', HorProjection, VertProjection)",
+    "Vizion.gray_projections (Regions, Image, 'simple', HorProjection, VertProjection)",
 )
 def gray_projections(region, image, mode, *, ctx):
     picture = expect_image(image, "Image")
@@ -1546,7 +1585,7 @@ def _apply_proj(matrix: np.ndarray, rows, cols):
     [],
     "把一段灰階拉開到 0 到 255",
     "小於 Min 變成 0，大於 Max 變成 255。Min 和 Max 相同時整張變成 0。彩色三個通道用同一組上下限。",
-    "scale_image_range (Image, ImageScaled, 0, 63)",
+    "Vizion.scale_image_range (Image, ImageScaled, 0, 63)",
 )
 def scale_image_range(image, min_gray, max_gray, *, ctx):
     picture = expect_image(image, "Image")
@@ -1568,7 +1607,7 @@ def scale_image_range(image, min_gray, max_gray, *, ctx):
     [],
     "把其他色彩空間轉回紅綠藍",
     "輸入範圍要和 trans_from_rgb 相同。hsv 的 H 是 0 到 180，lab 的 a、b 以 128 為 0。",
-    "trans_to_rgb (H, S, V, Red, Green, Blue, 'hsv')",
+    "Vizion.trans_to_rgb (H, S, V, Red, Green, Blue, 'hsv')",
 )
 def trans_to_rgb(image1, image2, image3, color_space, *, ctx):
     planes = [expect_image(item, name) for item, name in ((image1, "Image1"), (image2, "Image2"), (image3, "Image3"))]
@@ -1587,6 +1626,22 @@ def trans_to_rgb(image1, image2, image3, color_space, *, ctx):
 _DERIV_COMPONENTS = ["'none'", "'x'", "'y'", "'xx'", "'yy'", "'xy'", "'gradient'", "'laplace'"]
 
 
+def _deriv_gauss_kernels(sigma: float):
+    """Separable Gaussian derivatives. First kernel is flipped because sepFilter2D correlates."""
+    radius = max(1, int(math.ceil(sigma * 4.0)))
+    axis = np.arange(-radius, radius + 1, dtype=np.float64)
+    variance = sigma * sigma
+    smooth = np.exp(-0.5 * axis * axis / variance)
+    smooth /= smooth.sum()
+    first = (axis / variance) * smooth
+    second = ((axis * axis / (variance * variance)) - (1.0 / variance)) * smooth
+    return [item.astype(np.float32) for item in (smooth, first, second)]
+
+
+def _sep_deriv(gray: np.ndarray, across: np.ndarray, along: np.ndarray) -> np.ndarray:
+    return cv2.sepFilter2D(gray, cv2.CV_32F, across, along, borderType=cv2.BORDER_REFLECT_101)
+
+
 @operator(
     "灰階與濾波",
     [P("Image", "輸入影像")],
@@ -1597,8 +1652,8 @@ _DERIV_COMPONENTS = ["'none'", "'x'", "'y'", "'xx'", "'yy'", "'xy'", "'gradient'
     ],
     [],
     "高斯導數",
-    "x 是行方向，y 是列方向。none 只做平滑，gradient 是振幅。其餘是有號導數，128 代表 0。尺度是 OpenCV 的 Sobel，不是 HALCON 正規化後的導數。彩色先轉成亮度。",
-    "derivate_gauss (Image, DerivGauss, 1.0, 'x')",
+    "x 是行方向，y 是列方向。用可分離的高斯導數，不是先模糊再做 Sobel。none 只做平滑，gradient 是振幅、不加 128。有號導數以 128 為 0：灰階每像素增加 1 時，x 大約是 129；平坦或直線斜坡的二階導數是 128。彩色先轉成亮度。",
+    "Vizion.derivate_gauss (Image, DerivGauss, 1.0, 'x')",
 )
 def derivate_gauss(image, sigma, component, *, ctx):
     picture = expect_image(image, "Image")
@@ -1608,29 +1663,29 @@ def derivate_gauss(image, sigma, component, *, ctx):
     kind = text(component, "Component").lower()
     if kind not in ("none", "x", "y", "xx", "yy", "xy", "gradient", "laplace"):
         raise ValueError("Component 不支援")
-    kernel = min(31, max(3, int(round(spread * 6)) | 1))
-    smooth = cv2.GaussianBlur(picture.gray().astype(np.float32), (kernel, kernel), spread)
+    smooth, first, second = _deriv_gauss_kernels(spread)
+    gray = picture.gray().astype(np.float32)
 
-    def sobel(order_x: int, order_y: int) -> np.ndarray:
-        return cv2.Sobel(smooth, cv2.CV_32F, order_x, order_y, ksize=3)
+    def sep(across, along):
+        return _sep_deriv(gray, across, along)
 
     signed = kind not in ("none", "gradient")
     if kind == "none":
-        response = smooth
+        response = sep(smooth, smooth)
     elif kind == "x":
-        response = sobel(1, 0)
+        response = sep(first, smooth)
     elif kind == "y":
-        response = sobel(0, 1)
+        response = sep(smooth, first)
     elif kind == "xx":
-        response = sobel(2, 0)
+        response = sep(second, smooth)
     elif kind == "yy":
-        response = sobel(0, 2)
+        response = sep(smooth, second)
     elif kind == "xy":
-        response = sobel(1, 1)
+        response = sep(first, first)
     elif kind == "gradient":
-        response = cv2.magnitude(sobel(1, 0), sobel(0, 1))
+        response = np.hypot(sep(first, smooth), sep(smooth, first))
     else:
-        response = cv2.Laplacian(smooth, cv2.CV_32F, ksize=3)
+        response = sep(second, smooth) + sep(smooth, second)
     if signed:
         out = np.clip(np.round(response + 128), 0, 255)
     else:
@@ -1665,7 +1720,7 @@ _LAWS_TYPES = ["'ll'", "'le'", "'el'", "'ee'", "'ss'", "'ls'", "'sl'", "'rr'"]
     [],
     "Laws 紋理濾波",
     "第一個字母沿列，第二個沿行。l 是平滑，e 是邊緣，s 是斑點，r 和 w 只在 5 點核。結果取絕對值並除以核的權重和，所以 ll 大致保留原灰階，常數圖的 el 是 0。",
-    "texture_laws (Image, ImageTexture, 'el', 0, 5)",
+    "Vizion.texture_laws (Image, ImageTexture, 'el', 0, 5)",
 )
 def texture_laws(image, filter_type, shift, filter_size, *, ctx):
     picture = expect_image(image, "Image")
@@ -1696,7 +1751,7 @@ def texture_laws(image, filter_type, shift, filter_size, *, ctx):
     [],
     "改指定像素的灰階",
     "會產生一張新影像，不改原來那張。一個灰階可以套到所有點。彩色給三個數時依序是紅、綠、藍。",
-    "set_grayval (Image, ImageResult, 10, 12, 255)",
+    "Vizion.set_grayval (Image, ImageResult, 10, 12, 255)",
 )
 def set_grayval(image, row, column, grayval, *, ctx):
     picture = expect_image(image, "Image")
@@ -1733,6 +1788,64 @@ def set_grayval(image, row, column, grayval, *, ctx):
     return image_out(picture, data)
 
 
+def _perspective(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
+    left = np.ascontiguousarray(src, dtype=np.float32)
+    right = np.ascontiguousarray(dst, dtype=np.float32)
+    try:
+        if len(left) == 4:
+            mapped = cv2.getPerspectiveTransform(left, right)
+        else:
+            mapped, _status = cv2.findHomography(left, right, 0)
+    except cv2.error as exc:
+        raise ValueError("這些點估計不出投影矩陣") from exc
+    if mapped is None:
+        raise ValueError("這些點估計不出投影矩陣")
+    return mapped
+
+
+def _proj_error(mapped: np.ndarray, src: np.ndarray, dst: np.ndarray) -> np.ndarray:
+    homo = np.column_stack([src.astype(np.float64), np.ones(len(src))])
+    warped = homo @ mapped.T
+    scale = warped[:, 2]
+    if np.any(np.abs(scale) < 1e-12):
+        return np.full(len(src), np.inf)
+    xy = warped[:, :2] / scale[:, None]
+    return np.hypot(xy[:, 0] - dst[:, 0], xy[:, 1] - dst[:, 1])
+
+
+def _robust_perspective(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
+    count = len(src)
+    if count <= 4:
+        return _perspective(src, dst)
+    if count <= 12:
+        groups = list(itertools.combinations(range(count), 4))
+    else:
+        generator = np.random.default_rng(0)
+        groups = [tuple(int(item) for item in generator.choice(count, 4, replace=False)) for _turn in range(80)]
+    best_error = None
+    best_score = math.inf
+    for group in groups:
+        chosen = list(group)
+        try:
+            mapped = _perspective(src[chosen], dst[chosen])
+        except ValueError:
+            continue
+        error = _proj_error(mapped, src, dst)
+        score = float(np.median(error))
+        if score < best_score:
+            best_score = score
+            best_error = error
+    if best_error is None:
+        raise ValueError("這些點估計不出投影矩陣")
+    limit = 2.5 * best_score if best_score > 0.4 else 1.0
+    keep = best_error <= limit + 1e-9
+    if int(np.count_nonzero(keep)) < 4:
+        order = np.argsort(best_error)[:4]
+        keep = np.zeros(count, np.bool_)
+        keep[order] = True
+    return _perspective(src[keep], dst[keep])
+
+
 @operator(
     "幾何",
     [],
@@ -1747,8 +1860,8 @@ def set_grayval(image, row, column, grayval, *, ctx):
     ],
     [P("HomMat2D", "3×3 投影矩陣，九個數")],
     "用點對點估計投影矩陣",
-    "至少四個點。x 是列、y 是行，和 HomMat2D 相同。權重不是 1 時先除以權重。點共線會失敗。",
-    "hom_vector_to_proj_hom_mat2d ([0,0,20,20], [0,30,30,0], [1,1,1,1], [7,7,27,27], [5,35,35,5], [1,1,1,1], HomMat2D)",
+    "至少四個點。先估計投影，再丟掉殘差明顯偏大的點重擬合。剛好四個點時不會丟。x 是列、y 是行，和 HomMat2D 相同。權重不是 1 時先除以權重。點共線會失敗。",
+    "Vizion.hom_vector_to_proj_hom_mat2d ([0,0,20,20], [0,30,30,0], [1,1,1,1], [7,7,27,27], [5,35,35,5], [1,1,1,1], HomMat2D)",
 )
 def hom_vector_to_proj_hom_mat2d(px, py, pw, qx, qy, qw, *, ctx):
     def cartesian(xs, ys, ws, label: str):
@@ -1767,12 +1880,7 @@ def hom_vector_to_proj_hom_mat2d(px, py, pw, qx, qy, qw, *, ctx):
         raise ValueError("來源和目標的點數要相同")
     if len(src) < 4:
         raise ValueError("至少要四個點")
-    if len(src) == 4:
-        mapped = cv2.getPerspectiveTransform(src, dst)
-    else:
-        mapped, _status = cv2.findHomography(src, dst, 0)
-    if mapped is None:
-        raise ValueError("這些點估計不出投影矩陣")
+    mapped = _robust_perspective(src, dst)
     matrix = np.array(
         [
             [mapped[1, 1], mapped[1, 0], mapped[1, 2]],
@@ -1792,7 +1900,7 @@ def hom_vector_to_proj_hom_mat2d(px, py, pw, qx, qy, qw, *, ctx):
     [P("RowTrans", "轉換後的列"), P("ColTrans", "轉換後的行")],
     "用投影矩陣轉換像素",
     "6 個數會當成仿射。9 個數是完整投影。一個點回傳兩個數，多個點回傳 tuple。",
-    "projective_trans_pixel (HomMat2D, 10, 12, RowTrans, ColTrans)",
+    "Vizion.projective_trans_pixel (HomMat2D, 10, 12, RowTrans, ColTrans)",
 )
 def projective_trans_pixel(hom_mat2d, row, col, *, ctx):
     rows, cols = _apply_proj(_proj_from(hom_mat2d), row, col)
@@ -1811,7 +1919,7 @@ def projective_trans_pixel(hom_mat2d, row, col, *, ctx):
     [],
     "用投影矩陣轉換影像",
     "和 projective_trans_pixel 同一套矩陣。false 保持原圖大小。true 會平移畫布，讓四個角落進新圖，座標原點跟著變。影像外補 0。",
-    "projective_trans_image (Image, TransImage, HomMat2D, 'nearest_neighbor', 'false')",
+    "Vizion.projective_trans_image (Image, TransImage, HomMat2D, 'nearest_neighbor', 'false')",
 )
 def projective_trans_image(image, hom_mat2d, interpolation, adapt_image_size, *, ctx):
     picture = expect_image(image, "Image")
@@ -1850,7 +1958,7 @@ def projective_trans_image(image, hom_mat2d, interpolation, adapt_image_size, *,
     [P("MinThresh", "每一段的下限"), P("MaxThresh", "每一段的上限")],
     "從直方圖找出灰階區間",
     "先把直方圖做高斯平滑，再以波谷切開。沒有波谷時就是 0 到 255 一段。空的區間會丟掉。",
-    "histo_to_thresh (Histogram, 2, MinThresh, MaxThresh)",
+    "Vizion.histo_to_thresh (Histogram, 2, MinThresh, MaxThresh)",
 )
 def histo_to_thresh(histogram, sigma, *, ctx):
     counts = np.array([float(item) for item in as_list(histogram)], np.float64)
@@ -1897,6 +2005,29 @@ def _point_pairs(px, py, qx, qy):
     if not src_r or not (len(src_r) == len(src_c) == len(dst_r) == len(dst_c)):
         raise ValueError("來源和目標的點數要相同，而且不能是空的")
     return np.column_stack([src_r, src_c]), np.column_stack([dst_r, dst_c])
+
+
+def _pair_error(matrix: np.ndarray, src: np.ndarray, dst: np.ndarray) -> np.ndarray:
+    mapped_row = matrix[0, 0] * src[:, 0] + matrix[0, 1] * src[:, 1] + matrix[0, 2]
+    mapped_col = matrix[1, 0] * src[:, 0] + matrix[1, 1] * src[:, 1] + matrix[1, 2]
+    return np.hypot(mapped_row - dst[:, 0], mapped_col - dst[:, 1])
+
+
+def _robust_fit(src: np.ndarray, dst: np.ndarray, fit, minimum: int) -> np.ndarray:
+    matrix = fit(src, dst)
+    if len(src) <= minimum:
+        return matrix
+    for _turn in range(3):
+        error = _pair_error(matrix, src, dst)
+        median = float(np.median(error))
+        limit = 2.5 * median if median > 0.4 else 1.0
+        keep = error <= limit + 1e-9
+        if int(np.count_nonzero(keep)) < minimum or bool(np.all(keep)):
+            break
+        src = src[keep]
+        dst = dst[keep]
+        matrix = fit(src, dst)
+    return matrix
 
 
 def _affine_lstsq(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
@@ -1949,14 +2080,14 @@ def _rigid_lstsq(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
     [P("Px", "來源 x，影像上是列"), P("Py", "來源 y，影像上是行"), P("Qx", "目標 x"), P("Qy", "目標 y")],
     [P("HomMat2D", "仿射矩陣")],
     "用點對點估計仿射矩陣",
-    "至少三個點。用最小平方，不剔除離群點。x 是列、y 是行。點共線時結果可能不穩定。",
-    "vector_to_hom_mat2d ([0, 0, 10], [0, 10, 0], [5, 5, 15], [3, 13, 3], HomMat2D)",
+    "至少三個點。先做最小平方，再丟掉殘差明顯偏大的點重擬合。點數剛好三個時不會丟。x 是列、y 是行。點共線時結果可能不穩定。",
+    "Vizion.vector_to_hom_mat2d ([0, 0, 10], [0, 10, 0], [5, 5, 15], [3, 13, 3], HomMat2D)",
 )
 def vector_to_hom_mat2d(px, py, qx, qy, *, ctx):
     src, dst = _point_pairs(px, py, qx, qy)
     if len(src) < 3:
         raise ValueError("仿射至少要三個點")
-    return Result([], [_pack(_affine_lstsq(src, dst))])
+    return Result([], [_pack(_robust_fit(src, dst, _affine_lstsq, 3))])
 
 
 @operator(
@@ -1966,14 +2097,14 @@ def vector_to_hom_mat2d(px, py, qx, qy, *, ctx):
     [P("Px", "來源 x，影像上是列"), P("Py", "來源 y，影像上是行"), P("Qx", "目標 x"), P("Qy", "目標 y")],
     [P("HomMat2D", "相似變換")],
     "用點對點估計相似變換",
-    "至少兩個點。包含平移、旋轉和等比縮放，沒有剪切。用最小平方。",
-    "vector_to_similarity ([0, 0], [0, 10], [0, 0], [0, 20], HomMat2D)",
+    "至少兩個點。包含平移、旋轉和等比縮放，沒有剪切。點數超過兩個時會丟掉殘差明顯偏大的點再重擬合。",
+    "Vizion.vector_to_similarity ([0, 0], [0, 10], [0, 0], [0, 20], HomMat2D)",
 )
 def vector_to_similarity(px, py, qx, qy, *, ctx):
     src, dst = _point_pairs(px, py, qx, qy)
     if len(src) < 2:
         raise ValueError("相似變換至少要兩個點")
-    return Result([], [_pack(_similarity_lstsq(src, dst))])
+    return Result([], [_pack(_robust_fit(src, dst, _similarity_lstsq, 2))])
 
 
 @operator(
@@ -1983,14 +2114,14 @@ def vector_to_similarity(px, py, qx, qy, *, ctx):
     [P("Px", "來源 x，影像上是列"), P("Py", "來源 y，影像上是行"), P("Qx", "目標 x"), P("Qy", "目標 y")],
     [P("HomMat2D", "剛體變換")],
     "用點對點估計剛體變換",
-    "至少兩個點。只做平移和旋轉，不縮放。",
-    "vector_to_rigid ([0, 0, 10], [0, 10, 0], [0, -10, 0], [0, 0, 10], HomMat2D)",
+    "至少兩個點。只做平移和旋轉，不縮放。點數超過兩個時會丟掉殘差明顯偏大的點再重擬合。",
+    "Vizion.vector_to_rigid ([0, 0, 10], [0, 10, 0], [0, -10, 0], [0, 0, 10], HomMat2D)",
 )
 def vector_to_rigid(px, py, qx, qy, *, ctx):
     src, dst = _point_pairs(px, py, qx, qy)
     if len(src) < 2:
         raise ValueError("剛體變換至少要兩個點")
-    return Result([], [_pack(_rigid_lstsq(src, dst))])
+    return Result([], [_pack(_robust_fit(src, dst, _rigid_lstsq, 2))])
 
 
 @operator(
@@ -2007,7 +2138,7 @@ def vector_to_rigid(px, py, qx, qy, *, ctx):
     [P("HomMat2DReflect", "加上鏡射後的矩陣")],
     "對一條軸做鏡射",
     "鏡射加在原本矩陣之後。兩點決定軸。正的行會被翻到軸的另一側。",
-    "hom_mat2d_reflect (HomMat2D, 0, 0, 10, 0, HomMat2DReflect)",
+    "Vizion.hom_mat2d_reflect (HomMat2D, 0, 0, 10, 0, HomMat2DReflect)",
 )
 def hom_mat2d_reflect(hom_mat2d, px, py, qx, qy, *, ctx):
     row1 = scalar(px, "Px")
@@ -2037,8 +2168,8 @@ def hom_mat2d_reflect(hom_mat2d, px, py, qx, qy, *, ctx):
     ],
     [P("Row", "角點列"), P("Column", "角點行")],
     "Harris 角點",
-    "Threshold 是最大回應的比例，不是絕對灰階。角點依回應由強到弱排列。SubPixel 為 true 時用 cornerSubPix 再修一次。不填時角點是整數像素。平坦或沒有角時得到空 tuple。",
-    "points_harris (Image, 1, 0.05, 0.04, 'false', Row, Column)",
+    "用高斯導數的結構張量算 Harris 回應，不是方框加 Sobel。Threshold 是最大回應的比例。SubPixel 為 true 時，在整數峰上解加權最小二乘，把角點修到次像素。不填時角點是整數像素。角點依回應由強到弱。平坦或沒有角時得到空 tuple。",
+    "Vizion.points_harris (Image, 1, 0.05, 0.04, 'false', Row, Column)",
 )
 def points_harris(image, sigma, threshold, alpha, subpixel, *, ctx):
     picture = expect_image(image, "Image")
@@ -2049,8 +2180,15 @@ def points_harris(image, sigma, threshold, alpha, subpixel, *, ctx):
         raise ValueError("Sigma 必須大於 0")
     if not 0 <= ratio <= 1:
         raise ValueError("Threshold 要在 0 到 1")
-    block = max(3, int(round(spread * 2)) | 1)
-    response = cv2.cornerHarris(picture.gray().astype(np.float32), block, 3, score)
+    gray = picture.gray().astype(np.float32)
+    gradient_col, gradient_row = _foerstner_gradient(gray, spread)
+    kernel = min(31, max(3, int(round(spread * 6)) | 1))
+    sxx = cv2.GaussianBlur(gradient_col * gradient_col, (kernel, kernel), spread)
+    syy = cv2.GaussianBlur(gradient_row * gradient_row, (kernel, kernel), spread)
+    sxy = cv2.GaussianBlur(gradient_col * gradient_row, (kernel, kernel), spread)
+    det = sxx * syy - sxy * sxy
+    trace = sxx + syy
+    response = det - score * trace * trace
     peak = response == cv2.dilate(response, np.ones((3, 3), np.uint8))
     limit = float(response.max()) * ratio if response.size else 0.0
     peak = peak & (response >= limit) & (response > 0)
@@ -2065,16 +2203,12 @@ def points_harris(image, sigma, threshold, alpha, subpixel, *, ctx):
     if refine not in ("true", "false", "1", "0"):
         raise ValueError("SubPixel 只能是 true 或 false")
     if refine in ("true", "1"):
-        gray = picture.gray()
-        corners = np.column_stack([coords[:, 1], coords[:, 0]]).astype(np.float32).reshape(-1, 1, 2)
-        cv2.cornerSubPix(
-            gray,
-            corners,
-            (3, 3),
-            (-1, -1),
-            (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01),
-        )
-        return Result([], [corners[:, 0, 1].tolist(), corners[:, 0, 0].tolist()])
+        rows, cols = [], []
+        for row, col in coords:
+            refined_row, refined_col = _foerstner_point(gradient_col, gradient_row, int(row), int(col), spread)
+            rows.append(refined_row)
+            cols.append(refined_col)
+        return Result([], [rows, cols])
     return Result([], [coords[:, 0].astype(int).tolist(), coords[:, 1].astype(int).tolist()])
 
 
@@ -2086,7 +2220,7 @@ def points_harris(image, sigma, threshold, alpha, subpixel, *, ctx):
     [],
     "局部極大",
     "3×3 裡比周圍高的像素。比遮罩還大的平坦高台，內部不會被標出來。不填 MinGray 時用 0。彩色先轉成亮度。",
-    "local_max (Image, LocalMaxima, 1)",
+    "Vizion.local_max (Image, LocalMaxima, 1)",
 )
 def local_max(image, min_gray, *, ctx):
     picture = expect_image(image, "Image")
@@ -2112,7 +2246,7 @@ _BAYER = ["'bayer_rg'", "'bayer_gr'", "'bayer_bg'", "'bayer_gb'"]
     [],
     "把 Bayer 圖轉成彩色",
     "bayer_rg 表示左上是紅、右上是綠，bayer_bg 表示左上是藍。名稱是像素排列，不是 OpenCV 常數的名字。結果的通道 1 是紅。邊緣像素比較不可靠。",
-    "cfa_to_rgb (CFAImage, RGBImage, 'bayer_rg')",
+    "Vizion.cfa_to_rgb (CFAImage, RGBImage, 'bayer_rg')",
 )
 def cfa_to_rgb(image, cfa_type, *, ctx):
     picture = expect_image(image, "CFAImage")
@@ -2141,7 +2275,7 @@ def cfa_to_rgb(image, cfa_type, *, ctx):
     [],
     "轉換影像型別",
     "這版的影像本來就是 0 到 255 的 byte，所以只複製一份。其他型別會失敗。",
-    "convert_image_type (Image, ImageConverted, 'byte')",
+    "Vizion.convert_image_type (Image, ImageConverted, 'byte')",
 )
 def convert_image_type(image, kind, *, ctx):
     if text(kind, "Type").lower() != "byte":
@@ -2157,7 +2291,7 @@ def convert_image_type(image, kind, *, ctx):
     [],
     "灰階次方",
     "先把灰階除以 255，做次方，再乘回 255。大於 1 會讓中間調變暗。彩色每個通道分開算。",
-    "pow_image (Image, ImagePow, 2)",
+    "Vizion.pow_image (Image, ImagePow, 2)",
 )
 def pow_image(image, exponent, *, ctx):
     picture = expect_image(image, "Image")
@@ -2177,7 +2311,7 @@ def pow_image(image, exponent, *, ctx):
     [],
     "局部極小",
     "3×3 裡比周圍暗的像素。比遮罩還大的平坦暗區，內部不會被標出來。不填 MaxGray 時用 255。彩色先轉成亮度。",
-    "local_min (Image, LocalMinima, 255)",
+    "Vizion.local_min (Image, LocalMinima, 255)",
 )
 def local_min(image, max_gray, *, ctx):
     picture = expect_image(image, "Image")
@@ -2200,7 +2334,7 @@ def local_min(image, max_gray, *, ctx):
     [],
     "矩形排序濾波",
     "每個像素換成遮罩裡排第 Rank 的灰階，從 0 開始。偶數遮罩會加 1，最大是 7。邊界用邊緣的像素補上。Rank 0 接近侵蝕，最後一個接近膨脹。彩色先轉成亮度。",
-    "rank_rect (Image, ImageRank, 3, 3, 0)",
+    "Vizion.rank_rect (Image, ImageRank, 3, 3, 0)",
 )
 def rank_rect(image, mask_width, mask_height, rank, *, ctx):
     picture = expect_image(image, "Image")
@@ -2228,7 +2362,7 @@ def rank_rect(image, mask_width, mask_height, rank, *, ctx):
     [],
     "把兩張影像接起來",
     "這版一次兩張，不是一個影像 tuple。尺寸不同時，不足的地方補 0。通道數要相同。",
-    "tile_images (Image1, Image2, TiledImage, 'horizontal')",
+    "Vizion.tile_images (Image1, Image2, TiledImage, 'horizontal')",
 )
 def tile_images(image1, image2, mode, *, ctx):
     first = expect_image(image1, "Image1")
@@ -2267,7 +2401,7 @@ def tile_images(image1, image2, mode, *, ctx):
     [],
     "修補區域裡的像素",
     "用周圍像素補上區域裡的洞。這是 OpenCV 的 Telea 方法，不是調和函數，所以和 HALCON 的數值不同。區域和影像的尺寸要相同。",
-    "harmonic_interpolation (Image, Region, ImageInpainted)",
+    "Vizion.harmonic_interpolation (Image, Region, ImageInpainted)",
 )
 def harmonic_interpolation(image, region, *, ctx):
     picture = expect_image(image, "Image")
@@ -2303,7 +2437,7 @@ _CONVOL_BORDERS = {
     [],
     "雙邊濾波",
     "平滑時會保留灰階差很大的邊緣。兩個 Sigma 都要大於 0，灰階差用 0 到 255。這版沒有聯合影像。彩色每個通道一起濾。",
-    "bilateral_filter (Image, ImageBilateral, 3, 20)",
+    "Vizion.bilateral_filter (Image, ImageBilateral, 3, 20)",
 )
 def bilateral_filter(image, sigma_spatial, sigma_range, *, ctx):
     picture = expect_image(image, "Image")
@@ -2327,7 +2461,7 @@ def bilateral_filter(image, sigma_spatial, sigma_range, *, ctx):
     [],
     "用自訂濾鏡做卷積",
     "名稱可用 sobel_x、sobel_y、laplace、smooth3、sharpen。係數總和是 0 時，結果會加 128，128 代表 0。其他係數直接裁到 0 到 255，不會自動除以總和。彩色先轉成亮度。",
-    "convol_image (Image, ImageResult, 'smooth3', 0, 'continued')",
+    "Vizion.convol_image (Image, ImageResult, 'smooth3', 0, 'continued')",
 )
 def convol_image(image, kernel, mask_width, margin, *, ctx):
     picture = expect_image(image, "Image")
@@ -2384,7 +2518,7 @@ def _suppress_gradient(magnitude: np.ndarray, dy: np.ndarray, dx: np.ndarray) ->
     [],
     "抽出邊緣振幅和方向",
     "方向和 sobel_dir 一樣，朝右是 128。canny 本身就有變細和遲滯，NMS 只對 sobel 有作用。none 時 Low、High 不用，整張圖都有振幅。沒有邊緣的地方振幅和方向都是 0。彩色先轉成亮度。",
-    "edges_image (Image, Amplitude, Direction, 'sobel', 1, 'nms', 10, 30)",
+    "Vizion.edges_image (Image, Amplitude, Direction, 'sobel', 1, 'nms', 10, 30)",
 )
 def edges_image(image, filter_name, alpha, nms, low, high, *, ctx):
     picture = expect_image(image, "Image")
@@ -2440,7 +2574,7 @@ def edges_image(image, filter_name, alpha, nms, low, high, *, ctx):
     [],
     "找出平坦的灰階塊",
     "鄰域裡每個像素都一樣才算。大片相同背景的內部也會被標出來，單點尖峰不會。偶數會加 1，最大 15。彩色先轉成亮度。",
-    "plateaus (Image, Plateaus, 3)",
+    "Vizion.plateaus (Image, Plateaus, 3)",
 )
 def plateaus(image, size, *, ctx):
     picture = expect_image(image, "Image")
@@ -2455,6 +2589,48 @@ def plateaus(image, size, *, ctx):
     return region_out(picture.width, picture.height, np.where(flat, 255, 0).astype(np.uint8))
 
 
+def _foerstner_gradient(gray: np.ndarray, sigma: float):
+    radius = max(1, int(math.ceil(sigma * 4.0)))
+    axis = np.arange(-radius, radius + 1, dtype=np.float64)
+    variance = sigma * sigma
+    smooth = np.exp(-0.5 * axis * axis / variance)
+    smooth /= smooth.sum()
+    first = ((axis / variance) * smooth).astype(np.float32)
+    smooth = smooth.astype(np.float32)
+    gradient_col = cv2.sepFilter2D(gray, cv2.CV_32F, first, smooth, borderType=cv2.BORDER_REFLECT_101)
+    gradient_row = cv2.sepFilter2D(gray, cv2.CV_32F, smooth, first, borderType=cv2.BORDER_REFLECT_101)
+    return gradient_col, gradient_row
+
+
+def _foerstner_point(gradient_col, gradient_row, row: int, col: int, sigma: float):
+    radius = max(2, int(math.ceil(sigma * 2.0)))
+    height, width = gradient_col.shape
+    row0 = max(0, row - radius)
+    row1 = min(height, row + radius + 1)
+    col0 = max(0, col - radius)
+    col1 = min(width, col + radius + 1)
+    rows = np.arange(row0, row1, dtype=np.float64)[:, None]
+    cols = np.arange(col0, col1, dtype=np.float64)[None, :]
+    offset_row = rows - row
+    offset_col = cols - col
+    weight = np.exp(-0.5 * (offset_row * offset_row + offset_col * offset_col) / (sigma * sigma))
+    gx = gradient_col[row0:row1, col0:col1].astype(np.float64)
+    gy = gradient_row[row0:row1, col0:col1].astype(np.float64)
+    sxx = float(np.sum(weight * gx * gx))
+    syy = float(np.sum(weight * gy * gy))
+    sxy = float(np.sum(weight * gx * gy))
+    bx = float(np.sum(weight * (gx * gx * cols + gx * gy * rows)))
+    by = float(np.sum(weight * (gx * gy * cols + gy * gy * rows)))
+    det = sxx * syy - sxy * sxy
+    if abs(det) < 1e-6:
+        return float(row), float(col)
+    refined_col = (syy * bx - sxy * by) / det
+    refined_row = (sxx * by - sxy * bx) / det
+    if abs(refined_row - row) > 1.0 or abs(refined_col - col) > 1.0:
+        return float(row), float(col)
+    return float(refined_row), float(refined_col)
+
+
 @operator(
     "特徵",
     [P("Image", "輸入影像")],
@@ -2462,8 +2638,8 @@ def plateaus(image, size, *, ctx):
     [P("Sigma", "平滑尺度"), P("Threshold", "相對最大強度，0 到 1")],
     [P("Row", "角點列"), P("Column", "角點行")],
     "Förstner 角點",
-    "用結構張量。圓度要超過 0.5，強度要超過最大強度的 Threshold。角點依強度由強到弱。這版沒有輸出共變異數。平坦或沒有角時得到空 tuple。彩色先轉成亮度。",
-    "points_foerstner (Image, 1.5, 0.05, Row, Column)",
+    "用高斯導數的結構張量。圓度要超過 0.5，強度要超過最大強度的 Threshold。整數峰再解加權最小二乘，把角點修到次像素。角點依強度由強到弱。平坦或沒有角時得到空 tuple。彩色先轉成亮度。",
+    "Vizion.points_foerstner (Image, 1.5, 0.05, Row, Column)",
 )
 def points_foerstner(image, sigma, threshold, *, ctx):
     picture = expect_image(image, "Image")
@@ -2473,13 +2649,12 @@ def points_foerstner(image, sigma, threshold, *, ctx):
         raise ValueError("Sigma 必須大於 0")
     if not 0 <= ratio <= 1:
         raise ValueError("Threshold 要在 0 到 1")
+    gray = picture.gray().astype(np.float32)
+    gradient_col, gradient_row = _foerstner_gradient(gray, spread)
     kernel = min(31, max(3, int(round(spread * 6)) | 1))
-    smooth = cv2.GaussianBlur(picture.gray().astype(np.float32), (kernel, kernel), spread)
-    ix = cv2.Sobel(smooth, cv2.CV_32F, 1, 0, ksize=3)
-    iy = cv2.Sobel(smooth, cv2.CV_32F, 0, 1, ksize=3)
-    sxx = cv2.GaussianBlur(ix * ix, (kernel, kernel), spread)
-    syy = cv2.GaussianBlur(iy * iy, (kernel, kernel), spread)
-    sxy = cv2.GaussianBlur(ix * iy, (kernel, kernel), spread)
+    sxx = cv2.GaussianBlur(gradient_col * gradient_col, (kernel, kernel), spread)
+    syy = cv2.GaussianBlur(gradient_row * gradient_row, (kernel, kernel), spread)
+    sxy = cv2.GaussianBlur(gradient_col * gradient_row, (kernel, kernel), spread)
     det = sxx * syy - sxy * sxy
     trace = sxx + syy
     valid = trace > 1e-6
@@ -2497,7 +2672,12 @@ def points_foerstner(image, sigma, threshold, *, ctx):
         return Result([], [[], []])
     order = np.argsort(strength[coords[:, 0], coords[:, 1]])[::-1]
     coords = coords[order]
-    return Result([], [coords[:, 0].astype(int).tolist(), coords[:, 1].astype(int).tolist()])
+    rows, cols = [], []
+    for row, col in coords:
+        refined_row, refined_col = _foerstner_point(gradient_col, gradient_row, int(row), int(col), spread)
+        rows.append(refined_row)
+        cols.append(refined_col)
+    return Result([], [rows, cols])
 
 
 @operator(
@@ -2508,7 +2688,7 @@ def points_foerstner(image, sigma, threshold, *, ctx):
     [],
     "用光流估計位移",
     "這是 Farneback，不是 HALCON 的 multigrid。128 代表沒有移動，比 128 大是往下或往右。超過範圍會截成 0 或 255。兩張圖的寬高要相同。彩色先轉成亮度。",
-    "optical_flow_mg (Image1, Image2, RowFlow, ColFlow, 1)",
+    "Vizion.optical_flow_mg (Image1, Image2, RowFlow, ColFlow, 1)",
 )
 def optical_flow_mg(image1, image2, scale, *, ctx):
     first = expect_image(image1, "Image1")
@@ -2540,7 +2720,7 @@ _COOC_DIRECTIONS = ["'0'", "'45'", "'90'", "'135'"]
     [],
     "找出和參考影像不一樣的地方",
     "abs 是兩邊相差超過門檻。light 是比參考亮，dark 是比參考暗。彩色先轉成亮度。有定義域時只比定義域裡面。",
-    "check_difference (Image, Pattern, Region, 'abs', 20)",
+    "Vizion.check_difference (Image, Pattern, Region, 'abs', 20)",
 )
 def check_difference(image, pattern, mode, threshold, *, ctx):
     picture = expect_image(image, "Image")
@@ -2579,7 +2759,7 @@ def check_difference(image, pattern, mode, threshold, *, ctx):
     [],
     "找出小亮點或小暗點",
     "用頂帽運算把小點從背景分離，再靠 PixelShift 門檻。直徑會變成奇數，範圍 3 到 31。彩色先轉成亮度。",
-    "dots_image (Image, DotRegion, 5, 'light', 30)",
+    "Vizion.dots_image (Image, DotRegion, 5, 'light', 30)",
 )
 def dots_image(image, diameter, filter_type, pixel_shift, *, ctx):
     picture = expect_image(image, "Image")
@@ -2628,7 +2808,7 @@ def _secondary_peak(smooth: np.ndarray, peak: int):
     [P("Threshold", "實際用的門檻")],
     "用直方圖把字元分開",
     "先找最高的背景波峰，再找另一側的字元波峰，門檻放在兩個波峰之間。Percent 100 就用波谷，比較低時門檻會往背景波峰靠。找不到第二個波峰時改用 Otsu。直方圖只用 HistoRegion，分類套到整張圖。",
-    "char_threshold (Image, HistoRegion, Characters, 2, 90, Threshold)",
+    "Vizion.char_threshold (Image, HistoRegion, Characters, 2, 90, Threshold)",
 )
 def char_threshold(image, histo_region, sigma, percent, *, ctx):
     picture = expect_image(image, "Image")
@@ -2700,7 +2880,7 @@ def _cooc_numbers(matrix: np.ndarray):
     [P("Energy", "能量"), P("Correlation", "相關"), P("Homogeneity", "均質"), P("Contrast", "對比")],
     "灰階共生矩陣的特徵",
     "0 度是同一列的下一個行，90 度是下一列。只算這一個方向。灰階完全一樣時 Correlation 是 0。每個物件一組。彩色先轉成亮度。",
-    "cooc_feature_image (Regions, Image, 8, '0', Energy, Correlation, Homogeneity, Contrast)",
+    "Vizion.cooc_feature_image (Regions, Image, 8, '0', Energy, Correlation, Homogeneity, Contrast)",
 )
 def cooc_feature_image(region, image, levels, direction, *, ctx):
     picture = expect_image(image, "Image")
@@ -2756,7 +2936,7 @@ def _odd_side(value, name: str, limit: int) -> int:
     [],
     "算到區域邊界的距離",
     "畫布沿用區域的寬高，不另外指定。距離超過 255 會截成 255。多個物件先合成一塊。這是 OpenCV 的距離轉換。",
-    "distance_transform (Region, Distance, 'euclidean', 'true')",
+    "Vizion.distance_transform (Region, Distance, 'euclidean', 'true')",
 )
 def distance_transform(region, metric, foreground, *, ctx):
     source = expect_region(region, "Region")
@@ -2791,7 +2971,7 @@ def distance_transform(region, metric, foreground, *, ctx):
     [],
     "把區域畫成影像",
     "多個物件先合成一塊。灰階超出 0 到 255 會被截掉。畫布沿用區域的寬高。",
-    "region_to_bin (Region, BinImage, 255, 0)",
+    "Vizion.region_to_bin (Region, BinImage, 255, 0)",
 )
 def region_to_bin(region, foreground_gray, background_gray, *, ctx):
     source = expect_region(region, "Region")
@@ -2810,7 +2990,7 @@ def region_to_bin(region, foreground_gray, background_gray, *, ctx):
     [],
     "用區域平均灰階填色",
     "每個物件用自己的平均灰階填滿，物件外是 0。物件重疊時，後面的蓋掉前面的。彩色先轉成亮度，結果是灰階。尺寸要相同。",
-    "region_to_mean (Image, Regions, ImageMean)",
+    "Vizion.region_to_mean (Image, Regions, ImageMean)",
 )
 def region_to_mean(image, region, *, ctx):
     picture = expect_image(image, "Image")
@@ -2835,7 +3015,7 @@ def region_to_mean(image, region, *, ctx):
     [],
     "減去局部平均",
     "128 代表和周圍一樣，比 128 大是比周圍亮。偶數遮罩會加 1，最大 31。邊界用鏡射。彩色先轉成亮度。",
-    "highpass_image (Image, Highpass, 5, 5)",
+    "Vizion.highpass_image (Image, Highpass, 5, 5)",
 )
 def highpass_image(image, width, height, *, ctx):
     picture = expect_image(image, "Image")
@@ -2863,7 +3043,7 @@ _DIFFUSION_MODES = ["'perona-malik'", "'parabolic'"]
     [],
     "保邊的擴散平滑",
     "這是四鄰域的 Perona-Malik。parabolic 用 1/(1+(梯度/Contrast)²)。最外一圈像素保持不動。彩色先轉成亮度。",
-    "anisotropic_diffusion (Image, ImageAniso, 'perona-malik', 20, 0.2, 10)",
+    "Vizion.anisotropic_diffusion (Image, ImageAniso, 'perona-malik', 20, 0.2, 10)",
 )
 def anisotropic_diffusion(image, mode, contrast, theta, iterations, *, ctx):
     picture = expect_image(image, "Image")
@@ -2917,7 +3097,7 @@ _MEDIAN_MARGINS = ["'continued'", "'mirror'", "'cyclic'"]
     [],
     "矩形中值濾波",
     "偶數遮罩會加 1，最大是 7。continued 用邊緣像素補，mirror 鏡射，cyclic 循環。彩色先轉成亮度。",
-    "median_rect (Image, ImageMedian, 3, 3, 'continued')",
+    "Vizion.median_rect (Image, ImageMedian, 3, 3, 'continued')",
 )
 def median_rect(image, mask_width, mask_height, margin, *, ctx):
     picture = expect_image(image, "Image")
@@ -2954,14 +3134,15 @@ _FACET_PINV = _facet_pinv()
     [P("Image", "輸入影像")],
     [],
     [
-        P("Filter", "facet 直接用灰階，gauss 先平滑", "'facet'", ["'facet'", "'gauss'"]),
+        P("Filter", "facet 用 3×3，gauss 用高斯導數", "'facet'", ["'facet'", "'gauss'"]),
         P("Sigma", "gauss 的平滑尺度"),
         P("Threshold", "峰值至少要這個灰階"),
     ],
     [P("Row", "次像素列"), P("Column", "次像素行")],
     "次像素局部極大",
-    "facet 用 3×3 二次曲面，位移最多 1 像素。gauss 會先做高斯平滑，Sigma 必須大於 0。平坦高台不會被標出來。沒有峰值時得到空 tuple。彩色先轉成亮度。",
-    "local_max_sub_pix (Image, 'facet', 1, 20, Row, Column)",
+    "facet 用 3×3 二次曲面，位移最多 1 像素。gauss 用和 derivate_gauss 同一套可分離高斯導數，在整數峰上解牛頓步，位移最多半個像素。"
+    "平坦高台不會被標出來。沒有峰值時得到空 tuple。彩色先轉成亮度。",
+    "Vizion.local_max_sub_pix (Image, 'facet', 1, 20, Row, Column)",
 )
 def local_max_sub_pix(image, filter_name, sigma, threshold, *, ctx):
     picture = expect_image(image, "Image")
@@ -2970,15 +3151,14 @@ def local_max_sub_pix(image, filter_name, sigma, threshold, *, ctx):
         raise ValueError("Filter 只能是 facet 或 gauss")
     spread = scalar(sigma, "Sigma")
     floor = scalar(threshold, "Threshold")
-    smooth = picture.gray().astype(np.float32)
+    gray = picture.gray().astype(np.float32)
     if kind == "gauss":
         if spread <= 0:
             raise ValueError("Sigma 必須大於 0")
-        kernel = min(31, max(3, int(round(spread * 6)) | 1))
-        smooth = cv2.GaussianBlur(smooth, (kernel, kernel), spread)
-    peaks = (smooth == cv2.dilate(smooth, np.ones((3, 3), np.uint8))) & (smooth > cv2.erode(smooth, np.ones((3, 3), np.uint8)))
-    peaks &= smooth >= floor
-    return Result([], list(_subpix_from_mask(smooth, peaks, picture.domain, maxima=True)))
+        return Result([], list(_gauss_extrema(gray, spread, floor, picture.domain, maxima=True)))
+    peaks = (gray == cv2.dilate(gray, np.ones((3, 3), np.uint8))) & (gray > cv2.erode(gray, np.ones((3, 3), np.uint8)))
+    peaks &= gray >= floor
+    return Result([], list(_subpix_from_mask(gray, peaks, picture.domain, maxima=True)))
 
 
 def _subpix_from_mask(smooth, mask, domain, *, maxima: bool):
@@ -3015,19 +3195,69 @@ def _subpix_from_mask(smooth, mask, domain, *, maxima: bool):
     return found_rows[order].tolist(), found_cols[order].tolist()
 
 
+def _gauss_extrema(gray: np.ndarray, sigma: float, limit: float, domain, *, maxima: bool):
+    smooth, first, second = _deriv_gauss_kernels(sigma)
+    value = _sep_deriv(gray, smooth, smooth)
+    slope_col = _sep_deriv(gray, first, smooth)
+    slope_row = _sep_deriv(gray, smooth, first)
+    curve_col = _sep_deriv(gray, second, smooth)
+    curve_row = _sep_deriv(gray, smooth, second)
+    curve_cross = _sep_deriv(gray, first, first)
+    kernel = np.ones((3, 3), np.uint8)
+    if maxima:
+        mask = (value == cv2.dilate(value, kernel)) & (value > cv2.erode(value, kernel)) & (value >= limit)
+    else:
+        mask = (value == cv2.erode(value, kernel)) & (value < cv2.dilate(value, kernel)) & (value <= limit)
+    mask = mask.copy()
+    mask[0, :] = False
+    mask[-1, :] = False
+    mask[:, 0] = False
+    mask[:, -1] = False
+    if domain is not None:
+        mask &= domain > 0
+    coords = np.argwhere(mask)
+    if len(coords) == 0:
+        return [], []
+    peak_rows = coords[:, 0]
+    peak_cols = coords[:, 1]
+    lx = slope_col[peak_rows, peak_cols]
+    ly = slope_row[peak_rows, peak_cols]
+    lxx = curve_col[peak_rows, peak_cols]
+    lyy = curve_row[peak_rows, peak_cols]
+    lxy = curve_cross[peak_rows, peak_cols]
+    det = lxx * lyy - lxy * lxy
+    if maxima:
+        valid = (det > 1e-6) & (lxx < 0) & (lyy < 0)
+    else:
+        valid = (det > 1e-6) & (lxx > 0) & (lyy > 0)
+    shift_col = np.zeros(len(coords), np.float64)
+    shift_row = np.zeros(len(coords), np.float64)
+    shift_col[valid] = (lxy[valid] * ly[valid] - lyy[valid] * lx[valid]) / det[valid]
+    shift_row[valid] = (lxy[valid] * lx[valid] - lxx[valid] * ly[valid]) / det[valid]
+    shift_col = np.clip(shift_col, -0.5, 0.5)
+    shift_row = np.clip(shift_row, -0.5, 0.5)
+    found_rows = peak_rows.astype(np.float64) + shift_row
+    found_cols = peak_cols.astype(np.float64) + shift_col
+    strength = value[peak_rows, peak_cols]
+    order = np.argsort(strength)
+    if maxima:
+        order = order[::-1]
+    return found_rows[order].tolist(), found_cols[order].tolist()
+
+
 @operator(
     "特徵",
     [P("Image", "輸入影像")],
     [],
     [
-        P("Filter", "facet 直接用灰階，gauss 先平滑", "'facet'", ["'facet'", "'gauss'"]),
+        P("Filter", "facet 用 3×3，gauss 用高斯導數", "'facet'", ["'facet'", "'gauss'"]),
         P("Sigma", "gauss 的平滑尺度"),
         P("MaxGray", "谷底不能高過這個灰階"),
     ],
     [P("Row", "次像素列"), P("Column", "次像素行")],
     "次像素局部極小",
-    "和 local_max_sub_pix 同一種 3×3 曲面，只是找谷底。平坦的低地不會被標出來。沒有谷底時得到空 tuple。彩色先轉成亮度。",
-    "local_min_sub_pix (Image, 'facet', 1, 40, Row, Column)",
+    "和 local_max_sub_pix 同一套。facet 仍是 3×3 曲面，gauss 用高斯導數的牛頓步。平坦的低地不會被標出來。沒有谷底時得到空 tuple。彩色先轉成亮度。",
+    "Vizion.local_min_sub_pix (Image, 'facet', 1, 40, Row, Column)",
 )
 def local_min_sub_pix(image, filter_name, sigma, max_gray, *, ctx):
     picture = expect_image(image, "Image")
@@ -3036,15 +3266,14 @@ def local_min_sub_pix(image, filter_name, sigma, max_gray, *, ctx):
         raise ValueError("Filter 只能是 facet 或 gauss")
     spread = scalar(sigma, "Sigma")
     ceiling = scalar(max_gray, "MaxGray")
-    smooth = picture.gray().astype(np.float32)
+    gray = picture.gray().astype(np.float32)
     if kind == "gauss":
         if spread <= 0:
             raise ValueError("Sigma 必須大於 0")
-        kernel = min(31, max(3, int(round(spread * 6)) | 1))
-        smooth = cv2.GaussianBlur(smooth, (kernel, kernel), spread)
-    valleys = (smooth == cv2.erode(smooth, np.ones((3, 3), np.uint8))) & (smooth < cv2.dilate(smooth, np.ones((3, 3), np.uint8)))
-    valleys &= smooth <= ceiling
-    return Result([], list(_subpix_from_mask(smooth, valleys, picture.domain, maxima=False)))
+        return Result([], list(_gauss_extrema(gray, spread, ceiling, picture.domain, maxima=False)))
+    valleys = (gray == cv2.erode(gray, np.ones((3, 3), np.uint8))) & (gray < cv2.dilate(gray, np.ones((3, 3), np.uint8)))
+    valleys &= gray <= ceiling
+    return Result([], list(_subpix_from_mask(gray, valleys, picture.domain, maxima=False)))
 
 
 @operator(
@@ -3057,8 +3286,9 @@ def local_min_sub_pix(image, filter_name, sigma, max_gray, *, ctx):
     ],
     [P("Row", "角點列"), P("Column", "角點行")],
     "FAST 角點",
-    "這是 OpenCV 的 FAST，圓周半徑固定是 3，沒有次像素。MinGray 是亮度差。直角的大方塊常常不夠彎，不會被標出來；圓或比較尖的角比較穩。沒有角點時得到空 tuple。彩色先轉成亮度。",
-    "points_lepetit (Image, 30, Row, Column)",
+    "自己看半徑 3 的圓周：連續 9 點都比中心亮或暗過 MinGray 才算角，所以直角的方塊也找得到。NonMax 為 true 時只留比八鄰域強的點。"
+    "整數位置再用高斯導數的加權最小二乘修進像素裡面。沒有角點時得到空 tuple。彩色先轉成亮度。",
+    "Vizion.points_lepetit (Image, 30, Row, Column)",
 )
 def points_lepetit(image, min_gray, nonmax, *, ctx):
     picture = expect_image(image, "Image")
@@ -3068,17 +3298,52 @@ def points_lepetit(image, min_gray, nonmax, *, ctx):
     keep = text(nonmax, "NonMax").lower()
     if keep not in ("true", "false"):
         raise ValueError("NonMax 只能是 true 或 false")
-    detector = cv2.FastFeatureDetector_create(difference, nonmaxSuppression=keep == "true")
-    points = list(detector.detect(np.ascontiguousarray(picture.gray()), None))
+    gray = picture.gray().astype(np.float32)
+    score = _fast_score(gray)
+    mask = score >= difference
+    if keep == "true":
+        mask &= score >= cv2.dilate(score, np.ones((3, 3), np.uint8))
     if picture.domain is not None:
-        domain = picture.domain
-        points = [point for point in points if domain[int(round(point.pt[1])), int(round(point.pt[0]))] > 0]
-    if not points:
+        mask &= picture.domain > 0
+    coords = np.argwhere(mask)
+    if len(coords) == 0:
         return Result([], [[], []])
-    points.sort(key=lambda point: point.response, reverse=True)
-    rows = [float(point.pt[1]) for point in points]
-    cols = [float(point.pt[0]) for point in points]
+    order = np.argsort(score[coords[:, 0], coords[:, 1]])[::-1]
+    coords = coords[order]
+    gradient_col, gradient_row = _foerstner_gradient(gray, 1.0)
+    rows, cols = [], []
+    for row, col in coords:
+        refined_row, refined_col = _foerstner_point(gradient_col, gradient_row, int(row), int(col), 1.0)
+        rows.append(refined_row)
+        cols.append(refined_col)
     return Result([], [rows, cols])
+
+
+_FAST_CIRCLE = (
+    (0, 3), (1, 3), (2, 2), (3, 1), (3, 0), (3, -1), (2, -2), (1, -3),
+    (0, -3), (-1, -3), (-2, -2), (-3, -1), (-3, 0), (-3, 1), (-2, 2), (-1, 3),
+)
+
+
+def _fast_score(gray: np.ndarray) -> np.ndarray:
+    """Largest contrast that still has nine contiguous circle pixels on one side of the center."""
+    height, width = gray.shape
+    if height < 7 or width < 7:
+        return np.zeros_like(gray)
+    center = gray[3:height - 3, 3:width - 3]
+    samples = [gray[3 + drow:height - 3 + drow, 3 + dcol:width - 3 + dcol] for dcol, drow in _FAST_CIRCLE]
+    ring = np.stack(samples, axis=0)
+    bright = ring - center
+    dark = center - ring
+
+    def arc(delta: np.ndarray) -> np.ndarray:
+        wrapped = np.concatenate([delta, delta[:8]], axis=0)
+        windows = [wrapped[index:index + 9].min(axis=0) for index in range(16)]
+        return np.max(np.stack(windows, axis=0), axis=0)
+
+    score = np.zeros_like(gray)
+    score[3:height - 3, 3:width - 3] = np.maximum(arc(bright), arc(dark))
+    return score
 
 
 def _same_gray_region(image: Image, region, image_name: str, region_name: str):
@@ -3116,7 +3381,7 @@ def _gray_plane(mask: np.ndarray, gray: np.ndarray):
     [],
     "留下兩個尺度之間的變化",
     "小遮罩的平均減去大遮罩的平均。128 代表沒有變化，比 128 大是中間比外圈亮。偶數會加 1，最大 31，而且 Inner 要比 Outer 小。彩色先轉成亮度。",
-    "bandpass_image (Image, ImageBandpass, 3, 9)",
+    "Vizion.bandpass_image (Image, ImageBandpass, 3, 9)",
 )
 def bandpass_image(image, inner, outer, *, ctx):
     picture = expect_image(image, "Image")
@@ -3139,7 +3404,7 @@ def bandpass_image(image, inner, outer, *, ctx):
     [P("Entropy", "熵")],
     "灰階分布的熵",
     "每個物件一組。灰階完全一樣時是 0。兩種灰階各一半、底數 2 時是 1。彩色先轉成亮度。",
-    "entropy_gray (Regions, Image, Entropy)",
+    "Vizion.entropy_gray (Regions, Image, Entropy)",
 )
 def entropy_gray(region, image, base, *, ctx):
     picture, source = _same_gray_region(image, region, "Image", "Regions")
@@ -3176,7 +3441,7 @@ def entropy_gray(region, image, base, *, ctx):
     ],
     "用平面配灰階",
     "灰階大約是 Mean + Alpha×(列-MRow) + Beta×(行-MCol)。重心是區域的面積中心，不是亮度中心。每個物件一組。彩色先轉成亮度。",
-    "moments_gray_plane (Regions, Image, MRow, MCol, Alpha, Beta, Mean)",
+    "Vizion.moments_gray_plane (Regions, Image, MRow, MCol, Alpha, Beta, Mean)",
 )
 def moments_gray_plane(region, image, *, ctx):
     picture, source = _same_gray_region(image, region, "Image", "Regions")
@@ -3200,7 +3465,7 @@ def moments_gray_plane(region, image, *, ctx):
     [P("Deviation", "和平面的均方根誤差")],
     "灰階離開平面多遠",
     "平面和 moments_gray_plane 一樣。完全是斜坡或平面時接近 0。每個物件一個值。彩色先轉成亮度。",
-    "plane_deviation (Regions, Image, Deviation)",
+    "Vizion.plane_deviation (Regions, Image, Deviation)",
 )
 def plane_deviation(region, image, *, ctx):
     picture, source = _same_gray_region(image, region, "Image", "Regions")
@@ -3217,7 +3482,7 @@ def plane_deviation(region, image, *, ctx):
     [P("Area", "灰階總和"), P("Row", "亮度重心列"), P("Column", "亮度重心行")],
     "灰階加權的面積和重心",
     "Area 是區域裡的灰階加總，不是像素數。灰階總和是 0 時，列和行回 0。每個物件一組。彩色先轉成亮度。",
-    "area_center_gray (Regions, Image, Area, Row, Column)",
+    "Vizion.area_center_gray (Regions, Image, Area, Row, Column)",
 )
 def area_center_gray(region, image, *, ctx):
     picture, source = _same_gray_region(image, region, "Image", "Regions")
@@ -3252,7 +3517,7 @@ def area_center_gray(region, image, *, ctx):
     ],
     "把仿射矩陣拆成參數",
     "重建順序是先縮放、再沿 x 剪切、再旋轉、最後平移。x 是列、y 是行。有翻轉時 Sx 可能是負的。倍率是 0 時會失敗。",
-    "hom_mat2d_to_affine_par (HomMat2D, Sx, Sy, Phi, Theta, Tx, Ty)",
+    "Vizion.hom_mat2d_to_affine_par (HomMat2D, Sx, Sy, Phi, Theta, Tx, Ty)",
 )
 def hom_mat2d_to_affine_par(hom_mat2d, *, ctx):
     matrix = _mat_from(hom_mat2d)
@@ -3288,7 +3553,7 @@ def hom_mat2d_to_affine_par(hom_mat2d, *, ctx):
     [],
     "灰階開根號",
     "每個通道分開開根號，再四捨五入成 byte。0 還是 0，81 變成 9，255 變成 16。",
-    "sqrt_image (Image, ImageSqrt)",
+    "Vizion.sqrt_image (Image, ImageSqrt)",
 )
 def sqrt_image(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -3307,7 +3572,7 @@ _LOG_MODES = ["'scaled'", "'natural'"]
     [],
     "灰階取對數",
     "scaled 用 ln(灰階+1)／ln(256) 乘上 255，0 還是 0、255 還是 255。natural 是 round(ln(灰階))，0 維持 0，所以 255 只會變成 6。每個通道分開算。",
-    "log_image (Image, ImageLog, 'scaled')",
+    "Vizion.log_image (Image, ImageLog, 'scaled')",
 )
 def log_image(image, mode, *, ctx):
     picture = expect_image(image, "Image")
@@ -3340,7 +3605,7 @@ _SHOCK_MODES = ["'laplace'", "'canny'"]
     [],
     "把邊緣變陡",
     "亮區的拉普拉斯是負的，會再變亮；暗區再變暗。canny 改看梯度方向的二階導數。完全平的地方不會變。彩色先轉成亮度。",
-    "shock_filter (Image, Sharpened, 0.5, 5, 'laplace', 0.8)",
+    "Vizion.shock_filter (Image, Sharpened, 0.5, 5, 'laplace', 0.8)",
 )
 def shock_filter(image, theta, iterations, mode, sigma, *, ctx):
     picture = expect_image(image, "Image")
@@ -3403,7 +3668,7 @@ _NOISE_TYPES = ["'uniform'", "'gaussian'"]
     [],
     "加上白雜訊",
     "結果會截成 0 到 255。Amp 是 0 時影像不變。同一個 Seed 每次都一樣，方便重現。彩色每個通道分開加。",
-    "add_noise_white (Image, ImageNoise, 20, 'uniform', 1)",
+    "Vizion.add_noise_white (Image, ImageNoise, 20, 'uniform', 1)",
 )
 def add_noise_white(image, amp, noise_type, seed, *, ctx):
     picture = expect_image(image, "Image")
@@ -3432,7 +3697,7 @@ def add_noise_white(image, amp, noise_type, seed, *, ctx):
     [P("Row", "鞍點列"), P("Column", "鞍點行")],
     "次像素鞍點",
     "一個方向往上彎、另一個方向往下彎，而且彎曲中心落在這個像素裡。平坦的斜坡不會被標出來。依曲率由強到弱排列。沒有鞍點時得到空 tuple。彩色先轉成亮度。",
-    "saddle_points_sub_pix (Image, 0, 0.2, Row, Column)",
+    "Vizion.saddle_points_sub_pix (Image, 0, 0.2, Row, Column)",
 )
 def saddle_points_sub_pix(image, sigma, threshold, *, ctx):
     picture = expect_image(image, "Image")
@@ -3486,7 +3751,7 @@ def saddle_points_sub_pix(image, sigma, threshold, *, ctx):
     [],
     "依直方圖的谷底分割",
     "先做灰階直方圖，用 Sigma 平滑後，在谷底切開。每個有像素的區間變成一個物件，暗的在前面。Sigma 0 不平滑。彩色先轉成亮度。",
-    "auto_threshold (Image, Regions, 2)",
+    "Vizion.auto_threshold (Image, Regions, 2)",
 )
 def auto_threshold(image, sigma, *, ctx):
     picture = expect_image(image, "Image")
@@ -3529,7 +3794,7 @@ def _binomial_kernel(size: int) -> np.ndarray:
     [],
     "伽瑪校正",
     "小於 Threshold 的灰階不變。其餘先對齊 Threshold 和 MaxGray，再做次方。Encode 為 true 時次方是 1/Gamma，會把中間調變亮；false 時次方就是 Gamma。彩色每個通道各自做。",
-    "gamma_image (Image, ImageGamma, 2)",
+    "Vizion.gamma_image (Image, ImageGamma, 2)",
 )
 def gamma_image(image, gamma, offset, threshold, max_gray, encode, *, ctx):
     picture = expect_image(image, "Image")
@@ -3560,7 +3825,7 @@ def gamma_image(image, gamma, offset, threshold, max_gray, encode, *, ctx):
     [],
     "把一張影像的灰階塗進另一張",
     "只塗來源定義域裡的像素。來源沒有定義域就整張塗上。來源是灰階、目的是彩色時，三個通道都塗上同一個亮度。結果沿用目的影像的定義域。",
-    "paint_gray (ImageSource, ImageDestination, MixedImage)",
+    "Vizion.paint_gray (ImageSource, ImageDestination, MixedImage)",
 )
 def paint_gray(source_image, dest_image, *, ctx):
     source = expect_image(source_image, "ImageSource")
@@ -3589,7 +3854,7 @@ def paint_gray(source_image, dest_image, *, ctx):
     [],
     "二項係數平滑",
     "遮罩係數是二項式，先沿水平再沿垂直，邊界用邊緣像素延伸。寬和高要是 1 到 31 的奇數。彩色每個通道各自做。",
-    "binomial_filter (Image, ImageBinomial, 3, 3)",
+    "Vizion.binomial_filter (Image, ImageBinomial, 3, 3)",
 )
 def binomial_filter(image, mask_width, mask_height, *, ctx):
     picture = expect_image(image, "Image")
@@ -3630,7 +3895,7 @@ def _zero_marks(signed: np.ndarray) -> np.ndarray:
     [],
     "灰階過零",
     "灰階 128 當作 0。相鄰像素一正一負，或其中一個剛好是 128 時，留下離 0 較近的那一側。彩色先轉成亮度。",
-    "zero_crossing (Image, RegionCrossing)",
+    "Vizion.zero_crossing (Image, RegionCrossing)",
 )
 def zero_crossing(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -3648,7 +3913,7 @@ def zero_crossing(image, *, ctx):
     [],
     "雙閾值",
     "灰階 128 當作 0。先留下比 Threshold 更亮或更暗的像素，再用 8 連通分成區塊。區塊裡要有像素超過 MinGray，而且面積不小於 MinSize。彩色先轉成亮度。",
-    "dual_threshold (Image, RegionCrossings, 4, 40, 20)",
+    "Vizion.dual_threshold (Image, RegionCrossings, 4, 40, 20)",
 )
 def dual_threshold(image, min_size, min_gray, threshold, *, ctx):
     picture = expect_image(image, "Image")
@@ -3684,7 +3949,7 @@ def dual_threshold(image, min_size, min_gray, threshold, *, ctx):
     [],
     "等向擴散",
     "用一次高斯完成，標準差是 Sigma 乘上次數的平方根。邊界用邊緣像素延伸。彩色每個通道各自做。",
-    "isotropic_diffusion (Image, ImageIso, 1.2, 1)",
+    "Vizion.isotropic_diffusion (Image, ImageIso, 1.2, 1)",
 )
 def isotropic_diffusion(image, sigma, iterations, *, ctx):
     picture = expect_image(image, "Image")
@@ -3736,7 +4001,7 @@ def _paint_values(picture: Image, mask: np.ndarray, grayval, kind: str) -> np.nd
     [],
     "只在定義域裡塗色",
     "和 paint_region 一樣填色，但定義域外面不改。結果的定義域維持原樣。沒有定義域時就整張畫。",
-    "overpaint_region (Region, Image, ImageResult, 200, 'fill')",
+    "Vizion.overpaint_region (Region, Image, ImageResult, 200, 'fill')",
 )
 def overpaint_region(region, image, grayval, kind, *, ctx):
     picture = expect_image(image, "Image")
@@ -3757,7 +4022,7 @@ def overpaint_region(region, image, grayval, kind, *, ctx):
     [],
     "二維灰階直方圖",
     "列是第一張的灰階，行是第二張的灰階。同一個位置出現幾次就寫進那個像素，超過 255 記成 255。兩張圖的定義域取交集。彩色先轉成亮度。",
-    "histo_2dim (Image1, Image2, Histo2Dim)",
+    "Vizion.histo_2dim (Image1, Image2, Histo2Dim)",
 )
 def histo_2dim(image1, image2, *, ctx):
     first = expect_image(image1, "Image1")
@@ -3789,7 +4054,7 @@ def histo_2dim(image1, image2, *, ctx):
     [],
     "Harris 角點回應",
     "128 表示沒有回應。角點比 128 亮，直線邊緣比 128 暗。Scale 用 0.001 時，明顯的直角大約會到 200 上下。彩色先轉成亮度。",
-    "corner_response (Image, ImageCorner, 3, 0.04, 0.001)",
+    "Vizion.corner_response (Image, ImageCorner, 3, 0.04, 0.001)",
 )
 def corner_response(image, size, weight, scale, *, ctx):
     picture = expect_image(image, "Image")
@@ -3827,7 +4092,7 @@ def _disk_offsets(radius: int) -> list[tuple[int, int]]:
     [],
     "圓形排序濾波",
     "每個像素換成圓裡面排第 Rank 的灰階，從 0 開始。半徑 1 的圓有 5 個像素，Rank 4 就是最亮。邊界用邊緣的像素補上。彩色先轉成亮度。",
-    "rank_image (Image, ImageRank, 1, 0)",
+    "Vizion.rank_image (Image, ImageRank, 1, 0)",
 )
 def rank_image(image, radius, rank, *, ctx):
     picture = expect_image(image, "Image")
@@ -3854,7 +4119,7 @@ def rank_image(image, radius, rank, *, ctx):
     [],
     "指數",
     "scaled 用 256 的次方再減 1，剛好是 scaled 對數的反運算：0 還是 0，128 約是 15，255 還是 255。natural 是 e 的灰階次方，超過 5 就會飽和。彩色每個通道各自做。",
-    "exp_image (Image, ImageExp, 'scaled')",
+    "Vizion.exp_image (Image, ImageExp, 'scaled')",
 )
 def exp_image(image, mode, *, ctx):
     picture = expect_image(image, "Image")
@@ -3877,7 +4142,7 @@ def exp_image(image, mode, *, ctx):
     [],
     "在定義域裡塗上另一張影像",
     "只改目的影像定義域裡的像素，來源的定義域不影響。沒有定義域就整張塗上。結果沿用目的定義域。來源是灰階、目的是彩色時，三個通道都塗上同一個亮度。",
-    "overpaint_gray (ImageDestination, ImageSource, MixedImage)",
+    "Vizion.overpaint_gray (ImageDestination, ImageSource, MixedImage)",
 )
 def overpaint_gray(dest_image, source_image, *, ctx):
     dest = expect_image(dest_image, "ImageDestination")
@@ -3905,7 +4170,7 @@ def overpaint_gray(dest_image, source_image, *, ctx):
     [],
     "對 128 取絕對值",
     "把 128 當作 0。平坦的 128 變成 0，0 變成 128，255 變成 127。彩色每個通道各自做。",
-    "abs_image (Image, ImageAbs)",
+    "Vizion.abs_image (Image, ImageAbs)",
 )
 def abs_image(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -3921,7 +4186,7 @@ def abs_image(image, *, ctx):
     [],
     "兩個方向圖的角度",
     "128 是朝右，和 sobel_dir 一樣。正角度在畫面上順時針，朝下約是 191，朝左是 255。兩個方向都是 128 時記成朝右。彩色先轉成亮度。",
-    "atan2_image (ImageY, ImageX, ImageDir)",
+    "Vizion.atan2_image (ImageY, ImageX, ImageDir)",
 )
 def atan2_image(image_y, image_x, *, ctx):
     vertical = expect_image(image_y, "ImageY")
@@ -3933,13 +4198,13 @@ def atan2_image(image_y, image_x, *, ctx):
     return image_out(vertical, direction)
 
 
-def _sample_gray(picture: Image, rows: np.ndarray, cols: np.ndarray, nearest: bool) -> np.ndarray:
+def _sample_gray(picture: Image, rows: np.ndarray, cols: np.ndarray, mode: str) -> np.ndarray:
     if picture.data.ndim == 2:
         planes = picture.data
     else:
         planes = picture.data[:, :, :3]
     height, width = picture.height, picture.width
-    if nearest:
+    if mode == "nearest":
         row_i = np.floor(rows + 0.5).astype(np.int32)
         col_i = np.floor(cols + 0.5).astype(np.int32)
         if np.any((row_i < 0) | (col_i < 0) | (row_i >= height) | (col_i >= width)):
@@ -3947,6 +4212,10 @@ def _sample_gray(picture: Image, rows: np.ndarray, cols: np.ndarray, nearest: bo
         return planes[row_i, col_i]
     if np.any((rows < 0) | (cols < 0) | (rows > height - 1) | (cols > width - 1)):
         raise ValueError("座標超出影像")
+    if mode == "bicubic":
+        from ..gauge import sample_bicubic
+
+        return sample_bicubic(planes, rows, cols)
     row0 = np.floor(rows).astype(np.int32)
     col0 = np.floor(cols).astype(np.int32)
     row1 = np.minimum(row0 + 1, height - 1)
@@ -3965,12 +4234,12 @@ def _sample_gray(picture: Image, rows: np.ndarray, cols: np.ndarray, nearest: bo
     [
         P("Row", "列，可以是小數或 tuple"),
         P("Column", "行，可以是小數或 tuple"),
-        P("Interpolation", "bilinear 或 nearest", "'bilinear'", ["'bilinear'", "'nearest'"]),
+        P("Interpolation", "bilinear、nearest 或 bicubic", "'bilinear'", ["'bilinear'", "'nearest'", "'bicubic'"]),
     ],
     [P("Grayval", "灰階")],
     "用內插讀灰階",
-    "bilinear 看周圍四個像素。nearest 四捨五入到像素，.5 往大的整數靠。超出影像會失敗。一個點的灰階圖回傳一個數。彩色回傳紅、綠、藍。",
-    "get_grayval_interpolated (Image, 10, 10.5, Grayval)",
+    "bilinear 看周圍四個像素。bicubic 用 16 個像素的三次內插，半個像素不會被拉成兩點的平均。nearest 四捨五入到像素，.5 往大的整數靠。超出影像會失敗。一個點的灰階圖回傳一個數。彩色回傳紅、綠、藍。",
+    "Vizion.get_grayval_interpolated (Image, 10, 10.5, Grayval)",
 )
 def get_grayval_interpolated(image, row, column, interpolation, *, ctx):
     picture = expect_image(image, "Image")
@@ -3979,11 +4248,11 @@ def get_grayval_interpolated(image, row, column, interpolation, *, ctx):
     if rows.size == 0 or rows.size != cols.size:
         raise ValueError("Row 和 Column 的長度要相同，而且不能是空的")
     mode = text(interpolation, "Interpolation").lower()
-    if mode not in ("bilinear", "nearest"):
-        raise ValueError("Interpolation 只能是 bilinear 或 nearest")
-    sampled = _sample_gray(picture, rows, cols, mode == "nearest")
+    if mode not in ("bilinear", "nearest", "bicubic"):
+        raise ValueError("Interpolation 只能是 bilinear、nearest 或 bicubic")
+    sampled = _sample_gray(picture, rows, cols, mode)
     if sampled.ndim == 1:
-        values = [float(item) if mode == "bilinear" else int(item) for item in sampled]
+        values = [int(item) if mode == "nearest" else float(item) for item in sampled]
         if len(values) == 1 and not isinstance(row, (list, tuple)):
             return Result([], [values[0]])
         return Result([], [values])
@@ -4025,7 +4294,7 @@ def _filter_amp(gray: np.ndarray, kernels: list[np.ndarray], scale: float) -> np
     [],
     "Prewitt 邊緣強度",
     "3×3 Prewitt。垂直或水平的完整階梯除以 3 之後，階梯兩側都是階梯高度，平坦處是 0。超過 255 會飽和。彩色先轉成亮度。",
-    "prewitt_amp (Image, ImageEdgeAmp)",
+    "Vizion.prewitt_amp (Image, ImageEdgeAmp)",
 )
 def prewitt_amp(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -4041,7 +4310,7 @@ def prewitt_amp(image, *, ctx):
     [],
     "Kirsch 邊緣強度",
     "八個方向取最大，再除以 15。垂直或水平階梯的強度等於階梯高度，平坦處是 0。彩色先轉成亮度。",
-    "kirsch_amp (Image, ImageEdgeAmp)",
+    "Vizion.kirsch_amp (Image, ImageEdgeAmp)",
 )
 def kirsch_amp(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -4057,7 +4326,7 @@ def kirsch_amp(image, *, ctx):
     [],
     "Roberts 邊緣",
     "用右下兩個像素做差分。sum_sqrt 是兩個差分的斜邊，sum_abs 是絕對值相加。最後一列和最後一行是 0。彩色先轉成亮度。",
-    "roberts (Image, ImageRoberts, 'sum_sqrt')",
+    "Vizion.roberts (Image, ImageRoberts, 'sum_sqrt')",
 )
 def roberts(image, filter_type, *, ctx):
     picture = expect_image(image, "Image")
@@ -4119,7 +4388,7 @@ def _polar_inverse_maps(polar_width, polar_height, row, column, angle_start, ang
     [],
     "把極座標影像還原",
     "和 polar_trans_image_ext 相反。角度 0 朝右，正角度順時針。寬高是還原後的直角座標尺寸，會變成之後區域的參考大小。",
-    "polar_trans_image_inv (PolarImage, XYTransImage, 30, 40, 0, rad(360), 0, 20, 80, 60, 'nearest_neighbor')",
+    "Vizion.polar_trans_image_inv (PolarImage, XYTransImage, 30, 40, 0, rad(360), 0, 20, 80, 60, 'nearest_neighbor')",
 )
 def polar_trans_image_inv(image, row, column, angle_start, angle_end, radius_start, radius_end, width, height, interpolation, *, ctx):
     picture = expect_image(image, "PolarImage")
@@ -4174,7 +4443,7 @@ def _compass(gray: np.ndarray, kernels: np.ndarray) -> np.ndarray:
     [],
     "Frei-Chen 邊緣強度",
     "四個邊緣遮罩的能量。平坦是 0。高度 40 的垂直階梯是 49。彩色先轉成亮度。",
-    "frei_amp (Image, ImageEdgeAmp)",
+    "Vizion.frei_amp (Image, ImageEdgeAmp)",
 )
 def frei_amp(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -4190,7 +4459,7 @@ def frei_amp(image, *, ctx):
     [],
     "Robinson 邊緣強度",
     "八個方向取絕對值最大，不另外縮小。高度 40 的垂直階梯是 160。超過 255 會飽和。彩色先轉成亮度。",
-    "robinson_amp (Image, ImageEdgeAmp)",
+    "Vizion.robinson_amp (Image, ImageEdgeAmp)",
 )
 def robinson_amp(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -4206,7 +4475,7 @@ def robinson_amp(image, *, ctx):
     [],
     "Robinson 邊緣方向",
     "和 sobel_dir 同一套：朝右是 128，正角度順時針。平坦時沒有方向，也記成朝右。要搭配 robinson_amp 才知道那裡有沒有邊緣。彩色先轉成亮度。",
-    "robinson_dir (Image, ImageDir)",
+    "Vizion.robinson_dir (Image, ImageDir)",
 )
 def robinson_dir(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -4228,7 +4497,7 @@ def robinson_dir(image, *, ctx):
     [],
     "加上椒鹽雜訊",
     "Percent 0 影像不變。100 時每個像素不是 255 就是 0，兩邊數量一樣。同一個 Seed 每次都一樣。彩色三個通道一起變。",
-    "add_noise_salt_pepper (Image, ImageNoise, 5, 0)",
+    "Vizion.add_noise_salt_pepper (Image, ImageNoise, 5, 0)",
 )
 def add_noise_salt_pepper(image, percent, seed, *, ctx):
     picture = expect_image(image, "Image")
@@ -4263,7 +4532,7 @@ def _bit_pair(left, right):
     [],
     "兩張影像做位元且",
     "每個像素、每個通道各自做 AND。8 位元，超過的位元不保留。定義域沿用第一張。",
-    "bit_and (Image1, Image2, ImageAnd)",
+    "Vizion.bit_and (Image1, Image2, ImageAnd)",
 )
 def bit_and(image1, image2, *, ctx):
     first, second = _bit_pair(image1, image2)
@@ -4278,7 +4547,7 @@ def bit_and(image1, image2, *, ctx):
     [],
     "兩張影像做位元或",
     "每個像素、每個通道各自做 OR。定義域沿用第一張。",
-    "bit_or (Image1, Image2, ImageOr)",
+    "Vizion.bit_or (Image1, Image2, ImageOr)",
 )
 def bit_or(image1, image2, *, ctx):
     first, second = _bit_pair(image1, image2)
@@ -4293,7 +4562,7 @@ def bit_or(image1, image2, *, ctx):
     [],
     "兩張影像做位元互斥或",
     "每個像素、每個通道各自做 XOR。定義域沿用第一張。",
-    "bit_xor (Image1, Image2, ImageXor)",
+    "Vizion.bit_xor (Image1, Image2, ImageXor)",
 )
 def bit_xor(image1, image2, *, ctx):
     first, second = _bit_pair(image1, image2)
@@ -4308,7 +4577,7 @@ def bit_xor(image1, image2, *, ctx):
     [],
     "影像做位元否定",
     "8 位元的 NOT。0 變成 255，10 變成 245。彩色每個通道各自做。",
-    "bit_not (Image, ImageNot)",
+    "Vizion.bit_not (Image, ImageNot)",
 )
 def bit_not(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -4339,7 +4608,7 @@ def _shift_image(image, shift, left: bool):
     [],
     "灰階左移",
     "每個通道乘上 2 的 Shift 次方，只留 8 個位元。1 左移 3 位是 8。移 8 位以上變成 0。",
-    "bit_lshift (Image, ImageShift, 1)",
+    "Vizion.bit_lshift (Image, ImageShift, 1)",
 )
 def bit_lshift(image, shift, *, ctx):
     return _shift_image(image, shift, True)
@@ -4353,7 +4622,7 @@ def bit_lshift(image, shift, *, ctx):
     [],
     "灰階右移",
     "每個通道除以 2 的 Shift 次方，小數直接丟掉。16 右移 2 位是 4。",
-    "bit_rshift (Image, ImageShift, 1)",
+    "Vizion.bit_rshift (Image, ImageShift, 1)",
 )
 def bit_rshift(image, shift, *, ctx):
     return _shift_image(image, shift, False)
@@ -4367,7 +4636,7 @@ def bit_rshift(image, shift, *, ctx):
     [],
     "用對照表換灰階",
     "Lut 要剛好 256 個數，依序對應灰階 0 到 255。超過 0 到 255 會先夾住。彩色每個通道各自查表。",
-    "lut_trans (Image, ImageLut, Lut)",
+    "Vizion.lut_trans (Image, ImageLut, Lut)",
 )
 def lut_trans(image, lut, *, ctx):
     picture = expect_image(image, "Image")
@@ -4411,7 +4680,7 @@ def _pyramid_half(data: np.ndarray, mode: str) -> np.ndarray:
     [],
     "做一層一半大小的金字塔",
     "constant 用高斯再取樣。none 取偶數行列。min 和 max 看每個 2×2。這版只縮成一半，不保留定義域。結果會變成之後區域的參考尺寸。",
-    "gen_gauss_pyramid (Image, ImagePyramid, 'constant', 0.5)",
+    "Vizion.gen_gauss_pyramid (Image, ImagePyramid, 'constant', 0.5)",
 )
 def gen_gauss_pyramid(image, mode, scale, *, ctx):
     picture = expect_image(image, "Image")
@@ -4451,7 +4720,7 @@ def _spectrum_mode(value, name: str) -> str:
     [P("Complex", "複數頻譜")],
     "做傅立葉轉換",
     "正向不除以點數，低頻在左上角。彩色先轉成亮度。反轉換會再除以點數，灰階可以回到原來的值。",
-    "fft_image (Image, Complex)",
+    "Vizion.fft_image (Image, Complex)",
 )
 def fft_image(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -4466,7 +4735,7 @@ def fft_image(image, *, ctx):
     [],
     "傅立葉反轉換",
     "除以點數後四捨五入，再裁到 0 到 255。結果的尺寸就是頻譜的尺寸，也會變成之後區域的參考尺寸。",
-    "fft_image_inv (Image, Complex)",
+    "Vizion.fft_image_inv (Image, Complex)",
 )
 def fft_image_inv(complex_image, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4482,7 +4751,7 @@ def fft_image_inv(complex_image, *, ctx):
     [P("Real", "實部"), P("Imag", "虛部")],
     "讀一個頻譜點",
     "一次讀一個點。原點在左上角。常數影像的能量全在 (0, 0)，數值是灰階乘上寬乘高。",
-    "get_complex (Complex, 0, 0, Real, Imag)",
+    "Vizion.get_complex (Complex, 0, 0, Real, Imag)",
 )
 def get_complex(complex_image, row, column, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4505,7 +4774,7 @@ _FFT_SHIFT = ["'center'", "'corner'"]
     [P("ComplexShifted", "移動後的頻譜")],
     "移動頻譜原點",
     "center 把左上角的低頻搬到中央。corner 做相反的搬移。寬和高都是偶數時，兩種搬法一樣，再做一次就回到原點。奇數時，center 和 corner 會差一點。",
-    "fftshift (Complex, 'center', ComplexShifted)",
+    "Vizion.fftshift (Complex, 'center', ComplexShifted)",
 )
 def fftshift(complex_image, mode, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4527,7 +4796,7 @@ def fftshift(complex_image, mode, *, ctx):
     [P("ComplexScaled", "縮放後的頻譜")],
     "縮放頻譜",
     "每個頻率都乘上同一個數。反轉換後，灰階也變成原來的倍率。",
-    "scale_fft (Complex, 0.5, ComplexScaled)",
+    "Vizion.scale_fft (Complex, 0.5, ComplexScaled)",
 )
 def scale_fft(complex_image, factor, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4542,7 +4811,7 @@ def scale_fft(complex_image, factor, *, ctx):
     [P("Complex", "常數複數影像")],
     "建立常數複數影像",
     "整張都是同一個複數。可用來和頻譜相乘。",
-    "gen_complex_const (1, 0, 80, 60, Complex)",
+    "Vizion.gen_complex_const (1, 0, 80, 60, Complex)",
 )
 def gen_complex_const(real, imag, width, height, *, ctx):
     wide, high = whole(width, "Width"), whole(height, "Height")
@@ -4560,13 +4829,50 @@ def gen_complex_const(real, imag, width, height, *, ctx):
     [P("ComplexProduct", "逐點相乘")],
     "頻譜相乘",
     "尺寸要相同。在頻率相乘就是在空間做循環卷積。",
-    "mult_fft (Complex1, Complex2, ComplexProduct)",
+    "Vizion.mult_fft (Complex1, Complex2, ComplexProduct)",
 )
 def mult_fft(complex1, complex2, *, ctx):
     left, right = _expect_complex(complex1), _expect_complex(complex2)
     if left.data.shape != right.data.shape:
         raise ValueError("兩張複數影像的尺寸要相同")
     return Result([], [ComplexImage(left.data * right.data)])
+
+
+def _phase_peak(first: np.ndarray, second: np.ndarray):
+    """Foroosh subpixel phase correlation. Shifts under 0.02 px snap to an integer."""
+    cross = np.fft.fft2(second) * np.conj(np.fft.fft2(first))
+    magnitude = np.abs(cross)
+    cross = np.divide(cross, magnitude, out=np.zeros_like(cross), where=magnitude > 1e-8)
+    corr = np.fft.ifft2(cross).real
+    row, column = [int(item) for item in np.unravel_index(int(np.argmax(corr)), corr.shape)]
+    height, width = corr.shape
+    center = float(corr[row, column])
+    above = float(corr[(row - 1) % height, column])
+    below = float(corr[(row + 1) % height, column])
+    left = float(corr[row, (column - 1) % width])
+    right = float(corr[row, (column + 1) % width])
+
+    def fraction(positive, negative, peak):
+        if positive >= negative:
+            denom = peak + positive
+            return positive / denom if denom else 0.0
+        denom = peak + negative
+        return -negative / denom if denom else 0.0
+
+    row_part = fraction(below, above, center)
+    col_part = fraction(right, left, center)
+    if abs(row_part) < 0.02:
+        row_part = 0.0
+    if abs(col_part) < 0.02:
+        col_part = 0.0
+
+    def place(index, part, size):
+        value = (index + part) % size
+        if abs(value - round(value)) < 1e-6:
+            return int(round(value)) % size
+        return float(value)
+
+    return place(row, row_part, height), place(column, col_part, width), center
 
 
 @operator(
@@ -4576,20 +4882,39 @@ def mult_fft(complex1, complex2, *, ctx):
     [],
     [P("Row", "列位移"), P("Column", "行位移"), P("Score", "相關峰值")],
     "相位相關找位移",
-    "回傳的是把第一張對到第二張要加的列和行。位移以左上角為原點，超過半張會捲到另一邊。兩張尺寸要相同，彩色先轉成亮度。完全重合時峰值是 1、位移是 0。",
-    "phase_correlation (Image1, Image2, Row, Column, Score)",
+    "回傳的是把第一張對到第二張要加的列和行，可以帶小數。整數平移用峰值旁邊的 Foroosh 比例收到次像素，小於 0.02 像素的零頭收成整數，所以整像素不會漂。"
+    "超過半張會捲到另一邊。完全重合時峰值是 1、位移是 0；差了半個像素時峰值會下降，位置仍然準。兩張尺寸要相同，彩色先轉成亮度。",
+    "Vizion.phase_correlation (Image1, Image2, Row, Column, Score)",
 )
 def phase_correlation(image1, image2, *, ctx):
-    first = expect_image(image1, "Image1").gray().astype(np.float64)
-    second = expect_image(image2, "Image2").gray().astype(np.float64)
-    if first.shape != second.shape:
+    first = expect_image(image1, "Image1")
+    second = expect_image(image2, "Image2")
+    if first.gray().shape != second.gray().shape:
         raise ValueError("兩張影像的尺寸要相同")
-    cross = np.fft.fft2(second) * np.conj(np.fft.fft2(first))
-    magnitude = np.abs(cross)
-    cross = np.divide(cross, magnitude, out=np.zeros_like(cross), where=magnitude > 1e-8)
-    corr = np.fft.ifft2(cross).real
-    row, column = np.unravel_index(int(np.argmax(corr)), corr.shape)
-    return Result([], [int(row), int(column), float(corr[row, column])])
+    row, column, score = _phase_peak(first.gray().astype(np.float64), second.gray().astype(np.float64))
+    return Result([], [row, column, score])
+
+
+@operator(
+    "灰階與濾波",
+    [P("Image", "要拉回去的影像"), P("Reference", "對準的基準")],
+    [P("Aligned", "平移後的影像")],
+    [],
+    [P("Row", "影像相對基準的列位移"), P("Column", "行位移"), P("Score", "相關峰值")],
+    "把平移拉回基準",
+    "用相位相關量 Image 相對 Reference 移了多少，再把 Image 平移回去。拉回用 16 點 Keys 三次內插，半個像素是 112。"
+    "位移超過半張時，拉回用的是捲過一邊的那個數，大平移不要用這個。兩張尺寸要相同。",
+    "Vizion.align_translation (Image, Reference, Aligned, Row, Column, Score)",
+)
+def align_translation(image, reference, *, ctx):
+    moving = expect_image(image, "Image")
+    fixed = expect_image(reference, "Reference")
+    if moving.gray().shape != fixed.gray().shape:
+        raise ValueError("兩張影像的尺寸要相同")
+    row, column, score = _phase_peak(fixed.gray().astype(np.float64), moving.gray().astype(np.float64))
+    matrix = np.array([[1.0, 0.0, -float(column)], [0.0, 1.0, -float(row)]], np.float64)
+    aligned = _warp(moving, matrix, moving.width, moving.height, cv2.INTER_CUBIC)
+    return Result([aligned], [row, column, score])
 
 
 def _same_complex(left: ComplexImage, right: ComplexImage) -> None:
@@ -4605,7 +4930,7 @@ def _same_complex(left: ComplexImage, right: ComplexImage) -> None:
     [P("ComplexConj", "共軛頻譜")],
     "取頻譜的共軛",
     "虛部變號，實部不變。實數影像的頻譜取共軛再反轉換，會得到左右上下都翻轉的循環結果。",
-    "conj_fft (Complex, ComplexConj)",
+    "Vizion.conj_fft (Complex, ComplexConj)",
 )
 def conj_fft(complex_image, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4620,7 +4945,7 @@ def conj_fft(complex_image, *, ctx):
     [P("ComplexSum", "逐點相加")],
     "頻譜相加",
     "尺寸要相同。常數影像的頻譜加自己，反轉換後灰階變成兩倍。",
-    "add_fft (Complex1, Complex2, ComplexSum)",
+    "Vizion.add_fft (Complex1, Complex2, ComplexSum)",
 )
 def add_fft(complex1, complex2, *, ctx):
     left, right = _expect_complex(complex1), _expect_complex(complex2)
@@ -4636,7 +4961,7 @@ def add_fft(complex1, complex2, *, ctx):
     [P("ComplexDiff", "逐點相減")],
     "頻譜相減",
     "尺寸要相同。同一張減自己，反轉換後是全黑。",
-    "sub_fft (Complex1, Complex2, ComplexDiff)",
+    "Vizion.sub_fft (Complex1, Complex2, ComplexDiff)",
 )
 def sub_fft(complex1, complex2, *, ctx):
     left, right = _expect_complex(complex1), _expect_complex(complex2)
@@ -4655,7 +4980,7 @@ _FFT_MASK = ["'dc'", "'no_dc'", "'real'", "'imag'"]
     [P("ComplexMasked", "遮罩後的頻譜")],
     "遮罩頻譜",
     "dc 只留左上角。no_dc 把左上角清成 0。real 去掉虛部，imag 去掉實部。低頻還沒有 fftshift 時，直流就在 (0, 0)。",
-    "mask_fft (Complex, 'dc', ComplexMasked)",
+    "Vizion.mask_fft (Complex, 'dc', ComplexMasked)",
 )
 def mask_fft(complex_image, mode, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4684,7 +5009,7 @@ def mask_fft(complex_image, mode, *, ctx):
     [P("Energy", "能量")],
     "計算頻譜能量",
     "能量是所有頻率絕對值平方的平均，等於空間上每個像素平方的總和。常數灰階 g 的能量是 g 的平方乘上寬乘高。",
-    "fft_energy (Complex, Energy)",
+    "Vizion.fft_energy (Complex, Energy)",
 )
 def fft_energy(complex_image, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4700,7 +5025,7 @@ def fft_energy(complex_image, *, ctx):
     [P("ComplexQuotient", "逐點相除")],
     "頻譜相除",
     "尺寸要相同。除數的絕對值接近 0 時，那個頻率的結果是 0。",
-    "div_fft (Complex1, Complex2, ComplexQuotient)",
+    "Vizion.div_fft (Complex1, Complex2, ComplexQuotient)",
 )
 def div_fft(complex1, complex2, *, ctx):
     left, right = _expect_complex(complex1), _expect_complex(complex2)
@@ -4721,7 +5046,7 @@ _COMPLEX_VIEW = ["'real'", "'imag'", "'abs'", "'log'"]
     [],
     "把頻譜畫成灰階",
     "real、imag、abs 直接四捨五入後裁到 0 到 255，很大的直流會飽和成 255。log 用 log(1+絕對值)，再拉到這張裡的最大值。",
-    "complex_to_image (Image, Complex, 'log')",
+    "Vizion.complex_to_image (Image, Complex, 'log')",
 )
 def complex_to_image(complex_image, mode, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4750,7 +5075,7 @@ def complex_to_image(complex_image, mode, *, ctx):
     [],
     "用傅立葉做循環卷積",
     "核的 (0, 0) 放在影像左上角。核比較小時，其餘補 0。權重不會再除以總和，灰階 1 就是乘 1。超出影像的部分從對面捲回來。彩色先轉成亮度。",
-    "convol_fft (Image, Kernel, ImageResult)",
+    "Vizion.convol_fft (Image, Kernel, ImageResult)",
 )
 def convol_fft(image, kernel, *, ctx):
     picture = expect_image(image, "Image")
@@ -4794,7 +5119,7 @@ def _correlation(image: Image, template: Image) -> np.ndarray:
     [],
     "循環平移影像",
     "位移會四捨五入成整數像素。超出的部分從對面捲回來。定義域一起移。",
-    "shift_image (Image, ImageShifted, 5, 2)",
+    "Vizion.shift_image (Image, ImageShifted, 5, 2)",
 )
 def shift_image(image, row, column, *, ctx):
     picture = expect_image(image, "Image")
@@ -4822,7 +5147,7 @@ _PAD = ["'constant'", "'mirror'", "'cyclic'"]
     [],
     "幫影像補邊",
     "constant 用同一個灰階。mirror 以邊緣為鏡面，不重複邊緣那一點，補邊不能比該邊的影像還長。cyclic 從對面捲過來。補完的定義域是整張新影像，尺寸也會變成之後區域的參考尺寸。",
-    "pad_image (Image, ImagePadded, 1, 0, 0, 0, 0, 'constant')",
+    "Vizion.pad_image (Image, ImagePadded, 1, 0, 0, 0, 0, 'constant')",
 )
 def pad_image(image, top, left, bottom, right, gray, mode, *, ctx):
     picture = expect_image(image, "Image")
@@ -4858,7 +5183,7 @@ def pad_image(image, top, left, bottom, right, gray, mode, *, ctx):
     [P("ComplexShifted", "平移後的頻譜")],
     "在頻率裡平移",
     "用相位把影像平移，可以是小數。整數時結果和 shift_image 一樣，超出的部分從對面捲回來。",
-    "translate_fft (Complex, 5, 2, ComplexShifted)",
+    "Vizion.translate_fft (Complex, 5, 2, ComplexShifted)",
 )
 def translate_fft(complex_image, row, column, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4885,7 +5210,7 @@ _FREQ_PASS = ["'low'", "'high'"]
     [P("ComplexFiltered", "濾波後的頻譜")],
     "用半徑濾頻率",
     "距離從左上角量起，也把對面的低頻算進來。low 留下距離不大於半徑的頻率，high 去掉那些。半徑 0 的 low 只留直流，反轉換後整張都是平均值。",
-    "freq_filter (Complex, 'low', 0, ComplexFiltered)",
+    "Vizion.freq_filter (Complex, 'low', 0, ComplexFiltered)",
 )
 def freq_filter(complex_image, mode, radius, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4908,7 +5233,7 @@ def freq_filter(complex_image, mode, radius, *, ctx):
     [P("Energy", "半徑內的能量")],
     "計算一塊頻率的能量",
     "把距離不大於半徑的頻率，絕對值平方加總後除以整張的點數。半徑 0 只有直流。常數影像的能量全在這裡。",
-    "freq_energy (Complex, 0, Energy)",
+    "Vizion.freq_energy (Complex, 0, Energy)",
 )
 def freq_energy(complex_image, radius, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4929,7 +5254,7 @@ def freq_energy(complex_image, radius, *, ctx):
     [P("ComplexNormalized", "單位振幅頻譜")],
     "把每個頻率變成單位長度",
     "每個不是 0 的頻率都除以自己的絕對值，只留相位。本來是 0 的頻率還是 0。",
-    "normalize_fft (Complex, ComplexNormalized)",
+    "Vizion.normalize_fft (Complex, ComplexNormalized)",
 )
 def normalize_fft(complex_image, *, ctx):
     spectrum = _expect_complex(complex_image)
@@ -4946,7 +5271,7 @@ def normalize_fft(complex_image, *, ctx):
     [P("Row", "樣板左上角的列"), P("Column", "樣板左上角的行"), P("Score", "相關分數")],
     "用循環相關找樣板",
     "樣板的 (0, 0) 放在影像左上角，比較小時其餘補 0。回傳分數最高的位置，分數是灰階乘積的和，不會飽和。樣板不能比影像大。彩色先轉成亮度。",
-    "locate_template (Image, Template, Row, Column, Score)",
+    "Vizion.locate_template (Image, Template, Row, Column, Score)",
 )
 def locate_template(image, template, *, ctx):
     score = _correlation(expect_image(image, "Image"), expect_image(template, "Template"))
@@ -4962,8 +5287,318 @@ def locate_template(image, template, *, ctx):
     [],
     "把循環相關畫成灰階",
     "和 locate_template 同一種相關。負分變成 0，超過 255 會飽和。要看真正的分數請用 locate_template。",
-    "correlation_image (Image, Template, ImageScore)",
+    "Vizion.correlation_image (Image, Template, ImageScore)",
 )
 def correlation_image(image, template, *, ctx):
     score = _correlation(expect_image(image, "Image"), expect_image(template, "Template"))
     return Result([Image(np.clip(np.round(score), 0, 255).astype(np.uint8))], [])
+
+
+def _check_nonneg(value, name: str) -> float:
+    number = scalar(value, name)
+    if number < 0:
+        raise ValueError(f"{name} 不能是負的")
+    return number
+
+
+def _blur_sigma(src: np.ndarray, sigma: float) -> np.ndarray:
+    work = src.astype(np.float32)
+    if sigma == 0:
+        return work
+    kernel = min(31, max(3, int(round(sigma * 6)) | 1))
+    return cv2.GaussianBlur(work, (kernel, kernel), float(sigma), borderType=cv2.BORDER_REFLECT_101)
+
+
+def _grad_mag(blurred: np.ndarray) -> np.ndarray:
+    gx = cv2.Sobel(blurred, cv2.CV_32F, 1, 0, ksize=3, borderType=cv2.BORDER_REFLECT_101)
+    gy = cv2.Sobel(blurred, cv2.CV_32F, 0, 1, ksize=3, borderType=cv2.BORDER_REFLECT_101)
+    return cv2.magnitude(gx, gy)
+
+
+def _shape_boost(boost: np.ndarray, factor: float, threshold: float, limit: float) -> np.ndarray:
+    kept = boost
+    if threshold > 0:
+        kept = np.where(np.abs(boost) >= threshold, boost, 0.0)
+    kept = kept * float(factor)
+    if limit > 0:
+        kept = np.clip(kept, -limit, limit)
+    return kept.astype(np.float32)
+
+
+def _luma_add(picture, boost_of):
+    if picture.channels == 1:
+        src = picture.data.astype(np.float32)
+        out = np.clip(np.round(src + boost_of(src)), 0, 255).astype(np.uint8)
+    else:
+        ycrcb = cv2.cvtColor(picture.data, cv2.COLOR_BGR2YCrCb)
+        luma = ycrcb[:, :, 0].astype(np.float32)
+        boost = boost_of(luma)
+        out = picture.data.copy()
+        changed = np.abs(boost) > 1e-6
+        if np.any(changed):
+            ycrcb = ycrcb.copy()
+            ycrcb[:, :, 0] = np.clip(np.round(luma + boost), 0, 255).astype(np.uint8)
+            converted = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
+            out[changed] = converted[changed]
+    if picture.domain is not None:
+        out = out.copy()
+        outside = picture.domain == 0
+        out[outside] = picture.data[outside]
+    return image_out(picture, out)
+
+
+def _pair_gray(original, enhanced):
+    before = expect_image(original, "Original")
+    after = expect_image(enhanced, "Enhanced")
+    if before.gray().shape != after.gray().shape:
+        raise ValueError("兩張影像的尺寸要相同")
+    return before, after, after.gray().astype(np.float32) - before.gray().astype(np.float32)
+
+
+@operator(
+    "灰階與濾波",
+    [P("Image", "輸入影像")],
+    [P("Enhanced", "邊緣加強後")],
+    [
+        P("Sigma", "邊緣大概多寬，0 是不處理", "1.2"),
+        P("Factor", "加強多少，0 是原圖", "1"),
+        P("Threshold", "比這個小的起伏不加", "2"),
+        P("Limit", "單邊最多加或減多少，0 是不限制", "0"),
+    ],
+    [],
+    "只加強夠明顯的邊緣",
+    "高斯模糊後，把原圖減模糊的差加回去。差的絕對值小於 Threshold 就不加，所以平坦處的小雜訊不會被放大。emphasize 用方框平均而且沒有這道門檻，雜訊也會變銳。Limit 大於 0 時，加回去的量不會超過它，避免白邊黑邊太重。彩色只調亮度，顏色不會被拆開。四個控制都可以不寫。模糊核最大是 31。",
+    "Vizion.edge_enhance (Image, Enhanced, 1.2, 1, 2, 0)",
+)
+def edge_enhance(image, sigma, factor, threshold, limit, *, ctx):
+    picture = expect_image(image, "Image")
+    spread = _check_nonneg(sigma, "Sigma")
+    amount = _check_nonneg(factor, "Factor")
+    gate = _check_nonneg(threshold, "Threshold")
+    cap = _check_nonneg(limit, "Limit")
+
+    def boost_of(src):
+        return _shape_boost(src - _blur_sigma(src, spread), amount, gate, cap)
+
+    return _luma_add(picture, boost_of)
+
+
+@operator(
+    "灰階與濾波",
+    [P("Image", "輸入影像")],
+    [P("Enhanced", "只加強這個粗細的邊緣")],
+    [
+        P("SigmaFine", "比這個更細的起伏不加", "0.8"),
+        P("SigmaCoarse", "比這個更寬的明暗不加", "2.4"),
+        P("Factor", "加強多少，0 是原圖", "1"),
+        P("Threshold", "比這個小的起伏不加", "2"),
+    ],
+    [],
+    "只加強某個粗細的邊緣",
+    "細的高斯減去粗的高斯，得到中間那個尺度的邊緣，再加回原圖。比細尺度更碎的雜訊不會被放大，比粗尺度更慢的照明也不會。粗的尺度必須大於細的。彩色只調亮度。",
+    "Vizion.edge_band (Image, Enhanced, 0.8, 2.4, 1, 2)",
+)
+def edge_band(image, sigma_fine, sigma_coarse, factor, threshold, *, ctx):
+    picture = expect_image(image, "Image")
+    fine = _check_nonneg(sigma_fine, "SigmaFine")
+    coarse = _check_nonneg(sigma_coarse, "SigmaCoarse")
+    if coarse <= fine:
+        raise ValueError("粗的尺度要大於細的")
+    amount = _check_nonneg(factor, "Factor")
+    gate = _check_nonneg(threshold, "Threshold")
+
+    def boost_of(src):
+        band = _blur_sigma(src, fine) - _blur_sigma(src, coarse)
+        return _shape_boost(band, amount, gate, 0.0)
+
+    return _luma_add(picture, boost_of)
+
+
+@operator(
+    "灰階與濾波",
+    [P("Image", "輸入影像")],
+    [P("Enhanced", "只在邊緣上加強")],
+    [
+        P("Sigma", "邊緣大概多寬，0 是不處理", "1.2"),
+        P("Factor", "加強多少，0 是原圖", "1"),
+        P("Level", "梯度達到這個值就全額加強", "30"),
+    ],
+    [],
+    "只在梯度大的地方加強",
+    "和 edge_enhance 一樣把原圖減模糊的差加回去，但先乘上梯度的比例。平坦的地方比例是 0，完全不動。梯度達到 Level 才全額加強。孤立的小亮點梯度也大，仍可能被加強；要壓小雜訊用 edge_enhance 的 Threshold。彩色只調亮度。",
+    "Vizion.edge_masked (Image, Enhanced, 1.2, 1, 30)",
+)
+def edge_masked(image, sigma, factor, level, *, ctx):
+    picture = expect_image(image, "Image")
+    spread = _check_nonneg(sigma, "Sigma")
+    amount = _check_nonneg(factor, "Factor")
+    full = _check_nonneg(level, "Level")
+    if full <= 0:
+        raise ValueError("Level 要大於 0")
+
+    def boost_of(src):
+        blurred = _blur_sigma(src, spread)
+        weight = np.clip(_grad_mag(blurred) / float(full), 0.0, 1.0)
+        return (src - blurred) * weight * float(amount)
+
+    return _luma_add(picture, boost_of)
+
+
+@operator(
+    "灰階與濾波",
+    [P("Image", "輸入影像")],
+    [P("Smoothed", "平坦處變平滑")],
+    [
+        P("Sigma", "平坦處模糊多寬", "1.2"),
+        P("Level", "梯度達到這個值就保留原圖", "30"),
+    ],
+    [],
+    "平坦處平滑，邊緣留著",
+    "梯度小的地方改用高斯模糊，梯度達到 Level 的地方保持原圖。用來在加強邊緣之前先把平坦的雜訊收掉。和 bilateral_filter 不同，這裡的門檻是梯度，不是灰階差。彩色只調亮度。",
+    "Vizion.edge_preserve (Image, Smoothed, 1.2, 30)",
+)
+def edge_preserve(image, sigma, level, *, ctx):
+    picture = expect_image(image, "Image")
+    spread = _check_nonneg(sigma, "Sigma")
+    full = _check_nonneg(level, "Level")
+    if full <= 0:
+        raise ValueError("Level 要大於 0")
+
+    def boost_of(src):
+        blurred = _blur_sigma(src, spread)
+        weight = np.clip(_grad_mag(blurred) / float(full), 0.0, 1.0)
+        return (src - blurred) * weight - (src - blurred)
+
+    return _luma_add(picture, boost_of)
+
+
+@operator(
+    "灰階與濾波",
+    [P("Image", "輸入影像")],
+    [P("Residual", "將被加回去的邊緣")],
+    [
+        P("Sigma", "邊緣大概多寬", "1.2"),
+        P("Threshold", "比這個小的起伏當成 0", "2"),
+    ],
+    [],
+    "看加強時加了什麼",
+    "128 是沒有要加的地方。比 128 大是會變亮，比 128 小是會變暗。這是 edge_enhance 在 Factor 為 1、Limit 為 0 時加回去的量，還沒乘上更大的 Factor。彩色用亮度。",
+    "Vizion.edge_residual (Image, Residual, 1.2, 2)",
+)
+def edge_residual(image, sigma, threshold, *, ctx):
+    picture = expect_image(image, "Image")
+    spread = _check_nonneg(sigma, "Sigma")
+    gate = _check_nonneg(threshold, "Threshold")
+    src = picture.gray().astype(np.float32)
+    boost = _shape_boost(src - _blur_sigma(src, spread), 1.0, gate, 0.0)
+    out = np.clip(np.round(128.0 + boost), 0, 255).astype(np.uint8)
+    return image_out(picture, out)
+
+
+@operator(
+    "灰階與濾波",
+    [P("Original", "原圖"), P("Enhanced", "加強後")],
+    [P("Map", "哪裡變亮、哪裡變暗")],
+    [],
+    [],
+    "看加強前後差在哪",
+    "128 是沒變。比 128 大是變亮，比 128 小是變暗。兩張圖尺寸要相同。彩色比較的是亮度。",
+    "Vizion.enhance_map (Original, Enhanced, Map)",
+)
+def enhance_map(original, enhanced, *, ctx):
+    before, _after, delta = _pair_gray(original, enhanced)
+    out = np.clip(np.round(128.0 + delta), 0, 255).astype(np.uint8)
+    return image_out(before, out)
+
+
+@operator(
+    "灰階與濾波",
+    [P("Original", "原圖"), P("Enhanced", "加強後")],
+    [],
+    [],
+    [P("Mean", "平均變了多少灰階"), P("Maximum", "最多變了多少灰階")],
+    "加強一共動了多少",
+    "兩個數都是絕對值。Mean 小、Maximum 集中在邊緣，表示平坦處沒有被一起放大。兩張圖尺寸要相同。彩色比較的是亮度。",
+    "Vizion.enhance_change (Original, Enhanced, Mean, Maximum)",
+)
+def enhance_change(original, enhanced, *, ctx):
+    _before, _after, delta = _pair_gray(original, enhanced)
+    change = np.abs(delta)
+    return Result([], [float(change.mean()), float(change.max())])
+
+
+@operator(
+    "灰階與濾波",
+    [P("Original", "原圖"), P("Enhanced", "加強後")],
+    [P("Hot", "變動達到門檻的像素")],
+    [P("Limit", "至少變了多少灰階", "10")],
+    [],
+    "標出被加強得最兇的地方",
+    "變化的絕對值達到 Limit 才留下。0 表示只要有變到就算。結果是單一區域，要拆開再呼叫 connection。兩張圖尺寸要相同。",
+    "Vizion.enhance_hot (Original, Enhanced, Hot, 10)",
+)
+def enhance_hot(original, enhanced, limit, *, ctx):
+    before, _after, delta = _pair_gray(original, enhanced)
+    gate = _check_nonneg(limit, "Limit")
+    change = np.abs(delta)
+    if gate == 0:
+        mask = np.where(change > 0, 255, 0).astype(np.uint8)
+    else:
+        mask = np.where(change + 1e-6 >= gate, 255, 0).astype(np.uint8)
+    return region_out(before.width, before.height, mask)
+
+
+def _diff_gray(image, golden):
+    left = expect_image(image, "Image")
+    right = expect_image(golden, "Golden")
+    if left.gray().shape != right.gray().shape:
+        raise ValueError("兩張影像的尺寸要相同")
+    delta = cv2.absdiff(left.gray(), right.gray()).astype(np.float64)
+    mask = np.full(delta.shape, 255, np.uint8)
+    for picture in (left, right):
+        if picture.domain is not None:
+            mask = cv2.bitwise_and(mask, picture.domain)
+    return left, delta, mask
+
+
+@operator(
+    "灰階與濾波",
+    [P("Image", "待測影像"), P("Golden", "黃金標準")],
+    [P("Defects", "差超過門檻的像素")],
+    [P("MinDiff", "至少差幾個灰階才算", "20")],
+    [],
+    "和黃金影像差在哪",
+    "每個像素取絕對差。差不到 MinDiff 的平坦雜訊不算，差到的像素合成一個區域。"
+    "兩張圖要一樣大。彩色先轉灰階。定義域外的像素不算。0 表示只要有差就算。",
+    "Vizion.diff_region (Image, Golden, Defects, 20)",
+)
+def diff_region(image, golden, minimum, *, ctx):
+    left, delta, domain = _diff_gray(image, golden)
+    floor = scalar(minimum, "MinDiff")
+    if floor < 0:
+        raise ValueError("MinDiff 不能是負的")
+    if floor == 0:
+        hot = np.where(delta > 0, 255, 0).astype(np.uint8)
+    else:
+        hot = np.where(delta + 1e-6 >= floor, 255, 0).astype(np.uint8)
+    hot = cv2.bitwise_and(hot, domain)
+    return region_out(left.width, left.height, hot)
+
+
+@operator(
+    "灰階與濾波",
+    [P("Image", "待測影像"), P("Golden", "黃金標準")],
+    [],
+    [],
+    [P("Mean", "平均絕對差"), P("Maximum", "最大絕對差")],
+    "和黃金影像差多少",
+    "Mean 是整張有效像素的平均絕對差，Maximum 是最誇張的那一點。平坦雜訊會拉高 Mean，但不會單獨變成缺陷。"
+    "兩張圖要一樣大。彩色先轉灰階。",
+    "Vizion.diff_amount (Image, Golden, Mean, Maximum)",
+)
+def diff_amount(image, golden, *, ctx):
+    _left, delta, domain = _diff_gray(image, golden)
+    chosen = delta[domain > 0]
+    if chosen.size == 0:
+        return Result([], [0, 0])
+    return Result([], [float(chosen.mean()), float(chosen.max())])

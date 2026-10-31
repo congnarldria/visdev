@@ -19,6 +19,7 @@ from ..operators import (
     REGION_FEATURE_CHOICES,
     object_feature,
     operator,
+    equivalent_ellipse,
     region_measures,
     region_out,
     scalar,
@@ -66,7 +67,7 @@ _STRUCT = "結構元素只取形狀，原點放在它的外接框中心。這和
     [],
     "用任意結構元素侵蝕",
     _STRUCT,
-    "erosion1 (Region, StructElement, RegionErosion)",
+    "Vizion.erosion1 (Region, StructElement, RegionErosion)",
 )
 def erosion1(region, struct_element, *, ctx):
     return _with_kernel(region, struct_element, "erode")
@@ -80,7 +81,7 @@ def erosion1(region, struct_element, *, ctx):
     [],
     "用任意結構元素膨脹",
     _STRUCT,
-    "dilation1 (Region, StructElement, RegionDilation)",
+    "Vizion.dilation1 (Region, StructElement, RegionDilation)",
 )
 def dilation1(region, struct_element, *, ctx):
     return _with_kernel(region, struct_element, "dilate")
@@ -94,7 +95,7 @@ def dilation1(region, struct_element, *, ctx):
     [],
     "用任意結構元素做開運算",
     "先侵蝕再膨脹。" + _STRUCT,
-    "opening (Region, StructElement, RegionOpening)",
+    "Vizion.opening (Region, StructElement, RegionOpening)",
 )
 def opening(region, struct_element, *, ctx):
     return _with_kernel(region, struct_element, "open")
@@ -108,7 +109,7 @@ def opening(region, struct_element, *, ctx):
     [],
     "用任意結構元素做閉運算",
     "先膨脹再侵蝕。" + _STRUCT,
-    "closing (Region, StructElement, RegionClosing)",
+    "Vizion.closing (Region, StructElement, RegionClosing)",
 )
 def closing(region, struct_element, *, ctx):
     return _with_kernel(region, struct_element, "close")
@@ -122,7 +123,7 @@ def closing(region, struct_element, *, ctx):
     [],
     "區域骨架",
     "用形態學細化，留下一條大致在區域中線的骨架。結果是單一區域。",
-    "skeleton (Region, Skeleton)",
+    "Vizion.skeleton (Region, Skeleton)",
 )
 def skeleton(region, *, ctx):
     source = expect_region(region, "Region")
@@ -162,7 +163,7 @@ def _each(region: Region, fn) -> Result:
     [],
     "平移區域",
     "移出影像的部分會被切掉。每個物件各自平移。",
-    "move_region (Region, RegionMoved, 10, 0)",
+    "Vizion.move_region (Region, RegionMoved, 10, 0)",
 )
 def move_region(region, row, column, *, ctx):
     source = expect_region(region, "Region")
@@ -178,7 +179,7 @@ def move_region(region, row, column, *, ctx):
     [],
     "區域鏡像",
     "row 上下對調，column 左右對調，diagonal 轉置。轉置後寬高交換。",
-    "mirror_region (Region, RegionMirror, 'row')",
+    "Vizion.mirror_region (Region, RegionMirror, 'row')",
 )
 def mirror_region(region, mode, *, ctx):
     source = expect_region(region, "Region")
@@ -206,7 +207,7 @@ def mirror_region(region, mode, *, ctx):
     [],
     "依倍率縮放區域",
     "ScaleWidth 乘行數，ScaleHeight 乘列數。用最近鄰，所以邊緣是像素級。",
-    "zoom_region (Region, RegionZoom, 2, 2)",
+    "Vizion.zoom_region (Region, RegionZoom, 2, 2)",
 )
 def zoom_region(region, scale_width, scale_height, *, ctx):
     source = expect_region(region, "Region")
@@ -232,7 +233,7 @@ def zoom_region(region, scale_width, scale_height, *, ctx):
     [],
     "用仿射矩陣轉換區域",
     "矩陣和 affine_trans_image 同一套：x 是列、y 是行。畫布大小不變，轉出去的部分切掉。區域只用最近鄰。",
-    "affine_trans_region (Region, RegionAffineTrans, HomMat2D, 'nearest_neighbor')",
+    "Vizion.affine_trans_region (Region, RegionAffineTrans, HomMat2D, 'nearest_neighbor')",
 )
 def affine_trans_region(region, hom_mat2d, interpolation, *, ctx):
     source = expect_region(region, "Region")
@@ -267,7 +268,7 @@ def _gray_domain(image):
     [],
     "和另一張圖比較的局部閾值",
     "light：原圖 >= 平滑圖 + Offset。dark：原圖 <= 平滑圖 - Offset。equal：兩張差的絕對值不超過 Offset。not_equal 是 equal 的相反。",
-    "dyn_threshold (Image, Smooth, Region, 5, 'light')",
+    "Vizion.dyn_threshold (Image, Smooth, Region, 5, 'light')",
 )
 def dyn_threshold(orig_image, threshold_image, offset, light_dark, *, ctx):
     left, gray, domain = _gray_domain(orig_image)
@@ -306,7 +307,7 @@ def dyn_threshold(orig_image, threshold_image, offset, light_dark, *, ctx):
     [],
     "用局部平均和標準差做閾值",
     "門檻是 max(標準差 × StdDevScale, AbsThreshold)。light 取高於平均加門檻的像素，dark 取低於平均減門檻的像素。",
-    "var_threshold (Image, Region, 15, 15, 0.2, 2, 'light')",
+    "Vizion.var_threshold (Image, Region, 15, 15, 0.2, 2, 'light')",
 )
 def var_threshold(image, mask_width, mask_height, std_dev_scale, abs_threshold, light_dark, *, ctx):
     picture, gray, domain = _gray_domain(image)
@@ -345,7 +346,7 @@ def var_threshold(image, mask_width, mask_height, std_dev_scale, abs_threshold, 
     [],
     "滯後閾值",
     "高門檻以上是種子，低門檻以上而且和種子八連通的像素留下。MaxLength 大於 0 時，種子先膨脹這個半徑再去接低門檻。這是距離膨脹，不是沿細線走的橋接。",
-    "hysteresis_threshold (Image, Region, 20, 40, 0)",
+    "Vizion.hysteresis_threshold (Image, Region, 20, 40, 0)",
 )
 def hysteresis_threshold(image, low, high, max_length, *, ctx):
     picture, gray, domain = _gray_domain(image)
@@ -379,7 +380,7 @@ def hysteresis_threshold(image, low, high, max_length, *, ctx):
     [],
     "從種子做區域成長",
     "只從給的種子開始。八鄰域裡，和已經長到的那個像素灰階差不超過 Tolerance 就加入。每個種子一塊區域，面積小於 MinSize 的丟掉。",
-    "regiongrowing (Image, Regions, 120, 100, 10, 20)",
+    "Vizion.regiongrowing (Image, Regions, 120, 100, 10, 20)",
 )
 def regiongrowing(image, row, column, tolerance, min_size, *, ctx):
     picture, gray, domain = _gray_domain(image)
@@ -509,7 +510,7 @@ def _merge_basins(markers: np.ndarray, gray: np.ndarray, count: int, threshold: 
     [],
     "把太淺的分水嶺合併",
     "先做 watersheds。兩個盆地交界的灰階，減去兩邊裡較低的盆地底，若小過 Threshold 就合成一個。交界像素會併進相鄰盆地。Threshold 0 幾乎不合併。彩色先轉成亮度。",
-    "watersheds_threshold (Image, Basins, 40)",
+    "Vizion.watersheds_threshold (Image, Basins, 40)",
 )
 def watersheds_threshold(image, threshold, *, ctx):
     picture, gray, domain = _gray_domain(image)
@@ -561,9 +562,13 @@ def _shape_mask(mask: np.ndarray, kind: str) -> np.ndarray:
         box = cv2.boxPoints(cv2.minAreaRect(contour))
         cv2.fillConvexPoly(out, np.int32(np.round(box)), 255)
     elif kind == "ellipse":
-        if len(contour) >= 5:
-            cv2.ellipse(out, cv2.fitEllipse(contour), 255, -1)
-        else:
+        moments = cv2.moments(mask)
+        ra, rb, phi = equivalent_ellipse(moments)
+        if moments["m00"] and ra >= 0.5:
+            col = float(moments["m10"] / moments["m00"])
+            row = float(moments["m01"] / moments["m00"])
+            cv2.ellipse(out, ((col, row), (2.0 * ra, 2.0 * rb), math.degrees(phi)), 255, -1)
+        elif contour is not None:
             (cx, cy), radius = cv2.minEnclosingCircle(contour)
             cv2.circle(out, (int(round(cx)), int(round(cy))), max(0, int(round(radius))), 255, -1)
     return out
@@ -580,7 +585,7 @@ _SHAPES = ["'convex'", "'ellipse'", "'outer_circle'", "'inner_circle'", "'rectan
     [],
     "把區域換成規則形狀",
     "每個物件各自轉換。inner_circle 用距離轉換的最大內切圓，半徑無條件捨去。rectangle2 和 ellipse 用 OpenCV 的外接矩形與橢圓。沒有 inner_rectangle1。",
-    "shape_trans (Region, RegionTrans, 'rectangle1')",
+    "Vizion.shape_trans (Region, RegionTrans, 'rectangle1')",
 )
 def shape_trans(region, kind, *, ctx):
     source = expect_region(region, "Region")
@@ -678,7 +683,7 @@ def _sorted_masks(objects: list, mode: str, order: str, axis: str) -> list:
     [],
     "依位置排序區域",
     "character 會把同一列重疊超過一半的物件排成一行，再由左到右。upper_left 和 first_point 這版都用左上角。",
-    "sort_region (Regions, SortedRegions, 'character', 'true', 'row')",
+    "Vizion.sort_region (Regions, SortedRegions, 'character', 'true', 'row')",
 )
 def sort_region(region, sort_mode, order, row_or_col, *, ctx):
     source = expect_region(region, "Regions")
@@ -703,7 +708,7 @@ def sort_region(region, sort_mode, order, row_or_col, *, ctx):
     [],
     "用矩形裁切區域",
     "矩形外的像素清掉。裁完是空的物件會去掉。",
-    "clip_region (Region, RegionClipped, 10, 10, 100, 100)",
+    "Vizion.clip_region (Region, RegionClipped, 10, 10, 100, 100)",
 )
 def clip_region(region, row1, column1, row2, column2, *, ctx):
     source = expect_region(region, "Region")
@@ -761,7 +766,7 @@ def _rect2_polygon(row: float, col: float, phi: float, length1: float, length2: 
     [],
     "產生旋轉矩形區域",
     "尺寸對齊最近一張影像。請先讀圖或 gen_image_const。Phi 為 0 時 Length1 沿水平方向。",
-    "gen_rectangle2 (Rectangle, 100, 150, 0, 40, 15)",
+    "Vizion.gen_rectangle2 (Rectangle, 100, 150, 0, 40, 15)",
 )
 def gen_rectangle2(row, column, phi, length1, length2, *, ctx):
     height, width = _canvas(ctx)
@@ -790,7 +795,7 @@ def gen_rectangle2(row, column, phi, length1, length2, *, ctx):
     [],
     "產生橢圓區域",
     "半徑會四捨五入成像素。正角度在畫面上順時針。尺寸對齊最近一張影像。",
-    "gen_ellipse (Ellipse, 120, 160, 0, 40, 20)",
+    "Vizion.gen_ellipse (Ellipse, 120, 160, 0, 40, 20)",
 )
 def gen_ellipse(row, column, phi, radius1, radius2, *, ctx):
     height, width = _canvas(ctx)
@@ -814,7 +819,7 @@ def gen_ellipse(row, column, phi, radius1, radius2, *, ctx):
     [P("Rows", "前景的列"), P("Columns", "前景的行")],
     "讀出區域裡的像素座標",
     "依列再依行排列。多個物件會接在一起。空區域得到空 tuple。",
-    "get_region_points (Region, Rows, Columns)",
+    "Vizion.get_region_points (Region, Rows, Columns)",
 )
 def get_region_points(region, *, ctx):
     source = expect_region(region, "Region")
@@ -831,7 +836,7 @@ def get_region_points(region, *, ctx):
     [],
     "用多邊形產生區域",
     "至少三個點。尺寸對齊最近一張影像，請先讀圖或 gen_image_const。",
-    "gen_region_polygon (Region, [10, 10, 40], [10, 50, 30])",
+    "Vizion.gen_region_polygon (Region, [10, 10, 40], [10, 50, 30])",
 )
 def gen_region_polygon(rows, columns, *, ctx):
     height, width = _canvas(ctx)
@@ -854,7 +859,7 @@ def gen_region_polygon(rows, columns, *, ctx):
     [],
     "把區域切成矩形格子",
     "沒有像素的格子會丟掉。寬高是每一格的像素數，不是格子的個數。",
-    "partition_rectangle (Region, Partitioned, 20, 20)",
+    "Vizion.partition_rectangle (Region, Partitioned, 20, 20)",
 )
 def partition_rectangle(region, width, height, *, ctx):
     source = expect_region(region, "Region")
@@ -903,7 +908,7 @@ def _gray_stat(mask: np.ndarray, gray: np.ndarray, feature: str) -> float:
     [],
     "依灰階留下物件",
     "一次可以給一個特徵，也可以給 tuple。下限和上限的個數要是 1，或和特徵一樣多。deviation 是母體標準差。",
-    "select_gray (Regions, Image, SelectedRegions, 'mean', 'and', 100, 255)",
+    "Vizion.select_gray (Regions, Image, SelectedRegions, 'mean', 'and', 100, 255)",
 )
 def select_gray(region, image, features, operation, min_value, max_value, *, ctx):
     source = expect_region(region, "Regions")
@@ -941,7 +946,7 @@ def select_gray(region, image, features, operation, min_value, max_value, *, ctx
     [],
     "把區域往外長",
     "每次用 8 鄰域長一像素。不會進入 ForbiddenRegion，也不會讓物件互相覆蓋。Mode 這版只有 image。",
-    "expand_region (Regions, ForbiddenRegion, RegionExpanded, 2, 'image')",
+    "Vizion.expand_region (Regions, ForbiddenRegion, RegionExpanded, 2, 'image')",
 )
 def expand_region(region, forbidden, iterations, mode, *, ctx):
     source = expect_region(region, "Regions")
@@ -991,7 +996,7 @@ def _points_on_canvas(rows, columns, ctx):
     [],
     "用像素點產生區域",
     "所有點合成一個區域。點不相連時，要用 connection 才會拆開。尺寸對齊最近一張影像。",
-    "gen_region_points (Region, [1, 2], [3, 4])",
+    "Vizion.gen_region_points (Region, [1, 2], [3, 4])",
 )
 def gen_region_points(rows, columns, *, ctx):
     height, width, rr, cc = _points_on_canvas(rows, columns, ctx)
@@ -1015,7 +1020,7 @@ def gen_region_points(rows, columns, *, ctx):
     [],
     "產生一像素寬的線段",
     "超出影像的部分會被裁掉。尺寸對齊最近一張影像。",
-    "gen_region_line (Region, 0, 0, 10, 0)",
+    "Vizion.gen_region_line (Region, 0, 0, 10, 0)",
 )
 def gen_region_line(begin_row, begin_col, end_row, end_col, *, ctx):
     height, width = _canvas(ctx)
@@ -1035,7 +1040,7 @@ def gen_region_line(begin_row, begin_col, end_row, end_col, *, ctx):
     [P("IsInside", "1 表示在區域裡")],
     "測試點是否在區域內",
     "多個物件合併判斷。座標會四捨五入。超出影像算不在裡面。一個點回傳 0 或 1，多個點回傳 tuple。",
-    "test_region_point (Regions, 5, 0, IsInside)",
+    "Vizion.test_region_point (Regions, 5, 0, IsInside)",
 )
 def test_region_point(region, row, column, *, ctx):
     source = expect_region(region, "Regions")
@@ -1074,7 +1079,7 @@ def _per_object(region: Region, reader):
     ],
     "區域的最大直徑",
     "在凸包上找最遠的兩個點。每個物件一組，空物件的直徑是 0。",
-    "diameter_region (Regions, Row1, Column1, Row2, Column2, Diameter)",
+    "Vizion.diameter_region (Regions, Row1, Column1, Row2, Column2, Diameter)",
 )
 def diameter_region(region, *, ctx):
     source = expect_region(region, "Regions")
@@ -1113,8 +1118,8 @@ def diameter_region(region, *, ctx):
     [],
     [P("Ra", "長軸半徑"), P("Rb", "短軸半徑"), P("Phi", "長軸角度，弳度")],
     "等效橢圓的兩軸",
-    "每個物件一組。Ra 是長軸。角度 0 大致沿著行，正角度在畫面上順時針。和 HALCON 的軸方向可能差 90 度。",
-    "elliptic_axis (Regions, Ra, Rb, Phi)",
+    "用區域像素的二次矩，不是邊界擬合。0 沿著行往右，正角度在畫面上順時針。橫條是 0，直條是 1.5708。Ra、Rb 是等效橢圓的半徑。每個物件一組。",
+    "Vizion.elliptic_axis (Regions, Ra, Rb, Phi)",
 )
 def elliptic_axis(region, *, ctx):
     source = expect_region(region, "Regions")
@@ -1129,8 +1134,8 @@ def elliptic_axis(region, *, ctx):
     [],
     [P("Phi", "方向，弳度")],
     "區域的方向",
-    "和 elliptic_axis 的 Phi 相同。每個物件一個角度。",
-    "orientation_region (Regions, Phi)",
+    "和 elliptic_axis 的 Phi 相同，用二次矩。橫條是 0，直條是 1.5708。每個物件一個角度。",
+    "Vizion.orientation_region (Regions, Phi)",
 )
 def orientation_region(region, *, ctx):
     source = expect_region(region, "Regions")
@@ -1151,7 +1156,7 @@ _STD_SHAPES = ["'max_area'", "'rectangle'", "'convex'"]
     [],
     "用標準形留下物件",
     "max_area 留下面積達到最大面積這個百分比的物件。rectangle 用矩形度，convex 用凸度，Percent 80 表示至少要有 0.8。",
-    "select_shape_std (Regions, SelectedRegions, 'max_area', 100)",
+    "Vizion.select_shape_std (Regions, SelectedRegions, 'max_area', 100)",
 )
 def select_shape_std(region, shape, percent, *, ctx):
     source = expect_region(region, "Regions")
@@ -1206,7 +1211,7 @@ _FILL_FEATURES = ["'area'", "'circularity'", "'compactness'", "'ra'", "'rb'", "'
     [],
     "依特徵填孔洞",
     "只填不連到影像邊緣、而且特徵落在範圍裡的洞。孔洞面積含內部像素。結果是單一區域。",
-    "fill_up_shape (Region, RegionFillUp, 'area', 1, 99999)",
+    "Vizion.fill_up_shape (Region, RegionFillUp, 'area', 1, 99999)",
 )
 def fill_up_shape(region, feature, min_value, max_value, *, ctx):
     source = expect_region(region, "Region")
@@ -1229,7 +1234,7 @@ def fill_up_shape(region, feature, min_value, max_value, *, ctx):
     [P("DistanceMin", "最近距離"), P("DistanceMax", "最遠距離")],
     "點到區域的最近和最遠距離",
     "點在區域裡時最近距離是 0。最遠距離量到凸包頂點。點必須在影像內。一個點回傳兩個數，多個點回傳 tuple。",
-    "distance_pr (Region, 0, 0, DistanceMin, DistanceMax)",
+    "Vizion.distance_pr (Region, 0, 0, DistanceMin, DistanceMax)",
 )
 def distance_pr(region, row, column, *, ctx):
     source = expect_region(region, "Region")
@@ -1271,7 +1276,7 @@ def _hull_points(mask: np.ndarray) -> np.ndarray:
     [P("DistanceMin", "最近距離"), P("DistanceMax", "最遠距離")],
     "兩個區域的最近和最遠距離",
     "有重疊時最近距離是 0。最遠距離量兩個凸包的頂點。空區域會失敗。",
-    "distance_rr (Region1, Region2, DistanceMin, DistanceMax)",
+    "Vizion.distance_rr (Region1, Region2, DistanceMin, DistanceMax)",
 )
 def distance_rr(region1, region2, *, ctx):
     first = expect_region(region1, "Region1")
@@ -1300,7 +1305,7 @@ def distance_rr(region1, region2, *, ctx):
     [P("Rows", "外輪廓的列"), P("Columns", "外輪廓的行")],
     "讀出區域外輪廓",
     "每個物件取最大的外輪廓，再依序接在一起。不含孔洞。空區域會失敗。",
-    "get_region_contour (Region, Rows, Columns)",
+    "Vizion.get_region_contour (Region, Rows, Columns)",
 )
 def get_region_contour(region, *, ctx):
     source = expect_region(region, "Region")
@@ -1333,7 +1338,7 @@ _PROTO_FEATURES = ["'area'", "'circularity'", "'compactness'", "'ra'", "'rb'", "
     [],
     "和範本比對形狀",
     "比值是物件特徵除以範本特徵。範本有多個物件時只用第一個。範本特徵是 0 會失敗。",
-    "select_shape_proto (Regions, Pattern, SelectedRegions, 'area', 0.5, 1.5)",
+    "Vizion.select_shape_proto (Regions, Pattern, SelectedRegions, 'area', 0.5, 1.5)",
 )
 def select_shape_proto(region, pattern, feature, min_value, max_value, *, ctx):
     source = expect_region(region, "Regions")
@@ -1363,7 +1368,7 @@ def select_shape_proto(region, pattern, feature, min_value, max_value, *, ctx):
     [P("M11", "中心二次矩"), P("M20", "列方向的二次矩"), P("M02", "行方向的二次矩")],
     "區域的中心二次矩",
     "對重心計算，平移不會改變。M20 是列的散布，M02 是行的散布。每個物件一組。",
-    "moments_region_2nd (Regions, M11, M20, M02)",
+    "Vizion.moments_region_2nd (Regions, M11, M20, M02)",
 )
 def moments_region_2nd(region, *, ctx):
     source = expect_region(region, "Regions")
@@ -1387,7 +1392,7 @@ def moments_region_2nd(region, *, ctx):
     [],
     "用投影矩陣轉換區域",
     "和 projective_trans_image 同一套矩陣。6 個數會當成仿射。畫布大小不變，轉出去的部分切掉。區域只用最近鄰。",
-    "projective_trans_region (Region, RegionProjTrans, HomMat2D, 'nearest_neighbor')",
+    "Vizion.projective_trans_region (Region, RegionProjTrans, HomMat2D, 'nearest_neighbor')",
 )
 def projective_trans_region(region, hom_mat2d, interpolation, *, ctx):
     source = expect_region(region, "Region")
@@ -1412,7 +1417,7 @@ def projective_trans_region(region, hom_mat2d, interpolation, *, ctx):
     [],
     "對一條斜軸做轉置",
     "點 (r, c) 會跑到 (Row + c − Column, Column + r − Row)。軸是 (0, 0) 時，列和行對調。轉出影像的點會被丟掉。",
-    "transpose_region (Region, Transposed, 0, 0)",
+    "Vizion.transpose_region (Region, Transposed, 0, 0)",
 )
 def transpose_region(region, row, column, *, ctx):
     source = expect_region(region, "Region")
@@ -1445,7 +1450,7 @@ def transpose_region(region, row, column, *, ctx):
     [],
     "產生格線區域",
     "lines 把間距上的橫線和直線畫成一個區域。rects 每一格是獨立物件，最後一格不滿也會留下。間距至少是 1。",
-    "gen_grid_region (RegionGrid, 10, 10, 'lines', 80, 60)",
+    "Vizion.gen_grid_region (RegionGrid, 10, 10, 'lines', 80, 60)",
 )
 def gen_grid_region(row_steps, column_steps, kind, width, height, *, ctx):
     step_row = whole(row_steps, "RowSteps")
@@ -1480,7 +1485,7 @@ def gen_grid_region(row_steps, column_steps, kind, width, height, *, ctx):
     [],
     "骨架的端點和交叉點",
     "沿著八個鄰居走一圈，0 變 1 的次數是 1 就是端點，3 次以上是交叉。這樣十字中心旁邊的點不會被算成交叉。請先用 skeleton。",
-    "junctions_skeleton (Region, EndPoints, JuncPoints)",
+    "Vizion.junctions_skeleton (Region, EndPoints, JuncPoints)",
 )
 def junctions_skeleton(region, *, ctx):
     source = expect_region(region, "Region")
@@ -1510,7 +1515,7 @@ def junctions_skeleton(region, *, ctx):
     [P("Row", "每一段的列"), P("ColumnBegin", "每一段的起始行"), P("ColumnEnd", "每一段的結束行，含")],
     "讀出區域的水平線段",
     "同一列上連續的像素合成一段。多個物件會先合併。沒有像素時得到空 tuple。",
-    "get_region_runs (Region, Row, ColumnBegin, ColumnEnd)",
+    "Vizion.get_region_runs (Region, Row, ColumnBegin, ColumnEnd)",
 )
 def get_region_runs(region, *, ctx):
     source = expect_region(region, "Region")
@@ -1536,7 +1541,7 @@ def get_region_runs(region, *, ctx):
     [],
     "用水平線段畫區域",
     "三段的長度要相同。超出目前影像的部分會切掉。影像大小沿用已經建立的影像。",
-    "gen_region_runs (Region, Row, ColumnBegin, ColumnEnd)",
+    "Vizion.gen_region_runs (Region, Row, ColumnBegin, ColumnEnd)",
 )
 def gen_region_runs(row, column_begin, column_end, *, ctx):
     rows = [int(round(float(item))) for item in as_list(row)]
@@ -1571,7 +1576,7 @@ def gen_region_runs(row, column_begin, column_end, *, ctx):
     [],
     "依外接矩形的邊距裁切",
     "每個物件用自己的外接矩形。四個邊距不能是負的。切完沒有像素就得到空區域。",
-    "clip_region_rel (Region, RegionClipped, 2, 2, 5, 5)",
+    "Vizion.clip_region_rel (Region, RegionClipped, 2, 2, 5, 5)",
 )
 def clip_region_rel(region, top, bottom, left, right, *, ctx):
     source = expect_region(region, "Region")
@@ -1605,7 +1610,7 @@ def clip_region_rel(region, top, bottom, left, right, *, ctx):
     [P("Row", "圓心列"), P("Column", "圓心行"), P("Radius", "半徑")],
     "區域裡最大的內切圓",
     "用距離轉換找離邊界最遠的點。有多個一樣大時，取掃描時遇到的第一個。空區域會失敗。多個物件會先合併。",
-    "inner_circle (Region, Row, Column, Radius)",
+    "Vizion.inner_circle (Region, Row, Column, Radius)",
 )
 def inner_circle(region, *, ctx):
     source = expect_region(region, "Region")
@@ -1653,7 +1658,7 @@ def _largest_axis_rect(mask: np.ndarray):
     [P("Row1", "上"), P("Column1", "左"), P("Row2", "下"), P("Column2", "右")],
     "區域裡最大的軸對齊內接矩形",
     "矩形必須整塊都在區域裡。每個物件一組。有多個一樣大時，保留掃描時先遇到的那個。空區域會失敗。",
-    "inner_rectangle1 (Region, Row1, Column1, Row2, Column2)",
+    "Vizion.inner_rectangle1 (Region, Row1, Column1, Row2, Column2)",
 )
 def inner_rectangle1(region, *, ctx):
     source = expect_region(region, "Region")
@@ -1681,7 +1686,7 @@ def inner_rectangle1(region, *, ctx):
     [P("Distance", "不一樣的像素數"), P("Similarity", "相似程度，0 到 1")],
     "兩個區域差幾個像素",
     "Distance 是只有一邊有的像素數。Similarity 是 1 減去 Distance 除以兩邊面積的和。多個物件會先合併。尺寸要相同。",
-    "hamming_distance (Regions1, Regions2, Distance, Similarity)",
+    "Vizion.hamming_distance (Regions1, Regions2, Distance, Similarity)",
 )
 def hamming_distance(region1, region2, *, ctx):
     first = expect_region(region1, "Regions1")
@@ -1709,7 +1714,7 @@ def hamming_distance(region1, region2, *, ctx):
     ],
     "區域的中心三次矩",
     "對重心計算。M30 是列的偏斜，M03 是行的偏斜。左右對稱時 M03 接近 0。每個物件一組。",
-    "moments_region_3rd (Regions, M21, M12, M03, M30)",
+    "Vizion.moments_region_3rd (Regions, M21, M12, M03, M30)",
 )
 def moments_region_3rd(region, *, ctx):
     source = expect_region(region, "Regions")
@@ -1759,7 +1764,7 @@ def _partition_ranges(projection: np.ndarray, start: int, end: int, distance: fl
     [],
     "依大約寬度切開區域",
     "沿著較長的那一邊切。會優先切在空隙上。實際寬度大約是 Distance 的上下 Percent%。每個物件分開切。這版沒有斜向切割。",
-    "partition_dynamic (Region, Partitioned, 20, 40)",
+    "Vizion.partition_dynamic (Region, Partitioned, 20, 40)",
 )
 def partition_dynamic(region, distance, percent, *, ctx):
     source = expect_region(region, "Region")
@@ -1798,7 +1803,7 @@ def partition_dynamic(region, distance, percent, *, ctx):
     [P("Area", "孔洞面積")],
     "孔洞的面積",
     "每個物件自己的孔。碰到影像邊緣的缺口不算孔洞。沒有孔時是 0。",
-    "area_holes (Regions, Area)",
+    "Vizion.area_holes (Regions, Area)",
 )
 def area_holes(region, *, ctx):
     source = expect_region(region, "Regions")
@@ -1819,7 +1824,7 @@ def area_holes(region, *, ctx):
     [],
     "留下包含指定點的物件",
     "只要碰到其中一個點就留下。點可以是 tuple。沒有物件含這些點時得到空區域。",
-    "select_region_point (Regions, DestRegions, 10, 20)",
+    "Vizion.select_region_point (Regions, DestRegions, 10, 20)",
 )
 def select_region_point(region, row, column, *, ctx):
     source = expect_region(region, "Regions")
@@ -1845,7 +1850,7 @@ def select_region_point(region, row, column, *, ctx):
     [],
     "產生空區域",
     "沿用目前影像的寬高，裡面沒有物件。還沒有影像時用 480×640。",
-    "gen_empty_region (EmptyRegion)",
+    "Vizion.gen_empty_region (EmptyRegion)",
 )
 def gen_empty_region(*, ctx):
     height, width = _canvas(ctx)
@@ -1860,7 +1865,7 @@ def gen_empty_region(*, ctx):
     [],
     "沿著高梯度補邊緣缺口",
     "Sobel 振幅夠高、而且和原本的邊緣連在一起的像素會補進去。平坦的地方不會被補上。這版沒有另外指定缺口長度。彩色先轉成亮度。",
-    "close_edges (Edges, Image, RegionResult, 20)",
+    "Vizion.close_edges (Edges, Image, RegionResult, 20)",
 )
 def close_edges(edges, image, min_amplitude, *, ctx):
     seeds = expect_region(edges, "Edges")
@@ -1893,7 +1898,7 @@ def close_edges(edges, image, min_amplitude, *, ctx):
     [],
     "兩個區域的對稱差",
     "留下只屬於其中一邊的像素。重疊的部分會拿掉。多個物件會先合併。尺寸要相同。",
-    "symm_difference (Region1, Region2, RegionDifference)",
+    "Vizion.symm_difference (Region1, Region2, RegionDifference)",
 )
 def symm_difference(region1, region2, *, ctx):
     first = expect_region(region1, "Region1")
@@ -1912,7 +1917,7 @@ def symm_difference(region1, region2, *, ctx):
     [P("Index", "物件編號，從 1 開始。沒有是 0")],
     "點落在第幾個物件",
     "重疊時回傳編號最小的那個。一個點回傳一個數字，多個點回傳 tuple。超出影像是 0。",
-    "get_region_index (Regions, 10, 20, Index)",
+    "Vizion.get_region_index (Regions, 10, 20, Index)",
 )
 def get_region_index(region, row, column, *, ctx):
     source = expect_region(region, "Regions")
@@ -1949,7 +1954,7 @@ def _region_gap(mask, other, limit: float) -> bool:
     [],
     "找出距離夠近的物件",
     "某一邊的物件，只要和另一邊的某個物件距離不超過 MaxDistance，就會留下。距離 0 表示要重疊，挨著但沒重疊至少要 1。兩組的尺寸要相同。",
-    "find_neighbors (Regions1, Regions2, Neighbors1, Neighbors2, 5)",
+    "Vizion.find_neighbors (Regions1, Regions2, Neighbors1, Neighbors2, 5)",
 )
 def find_neighbors(region1, region2, max_distance, *, ctx):
     first = expect_region(region1, "Regions1")
@@ -1996,7 +2001,7 @@ def _drop_short_runs(mask: np.ndarray, limit: int) -> np.ndarray:
     [],
     "去掉太短的水平行程",
     "每一列連續的像素是一段。長度小於或等於 ElimShorter 的段會去掉。直的細線每一列都很短，也會被去掉。每個物件分開處理，整段被清掉的物件不會留下。",
-    "eliminate_runs (Region, RegionClipped, 3)",
+    "Vizion.eliminate_runs (Region, RegionClipped, 3)",
 )
 def eliminate_runs(region, elim_shorter, *, ctx):
     source = expect_region(region, "Region")
@@ -2031,7 +2036,7 @@ def _hole_objects(mask: np.ndarray) -> list[np.ndarray]:
     [],
     "拆開物件並取出孔洞",
     "先做八連通。每個物件裡被圍住、而且沒碰到影像邊緣的洞會另外變成物件。碰到邊緣的缺口不算孔。",
-    "connect_and_holes (Region, ConnectedRegions, Holes)",
+    "Vizion.connect_and_holes (Region, ConnectedRegions, Holes)",
 )
 def connect_and_holes(region, *, ctx):
     source = expect_region(region, "Region")
@@ -2056,7 +2061,7 @@ def connect_and_holes(region, *, ctx):
     [],
     "剪掉細線的端點",
     "每一輪拿掉只有一個鄰居的端點。迴圈沒有端點，不會變短。單獨一點也留著。次數 0 到 100。直的細線會從兩頭縮短。",
-    "prune (Region, RegionPrune, 3)",
+    "Vizion.prune (Region, RegionPrune, 3)",
 )
 def prune(region, iterations, *, ctx):
     source = expect_region(region, "Region")
@@ -2084,7 +2089,7 @@ def prune(region, iterations, *, ctx):
     [P("Row", "多邊形的列"), P("Column", "多邊形的行")],
     "把區域外輪廓收成多邊形",
     "每個物件只用最外圈。誤差愈大，點愈少。空區域會失敗。多個物件的點會接在同一個 tuple。",
-    "get_region_polygon (Region, 2, Row, Column)",
+    "Vizion.get_region_polygon (Region, 2, Row, Column)",
 )
 def get_region_polygon(region, tolerance, *, ctx):
     source = expect_region(region, "Region")
@@ -2131,7 +2136,7 @@ def _hitmiss_kernel(hit: Region, miss: Region) -> np.ndarray:
     [],
     "命中不中",
     "前景結構要對上區域，背景結構要對上區域外。原點放在兩個結構合起來的外接框中心。兩者重疊會失敗。多個物件先合成再找。",
-    "hit_or_miss (Region, Foreground, Background, RegionHitMiss)",
+    "Vizion.hit_or_miss (Region, Foreground, Background, RegionHitMiss)",
 )
 def hit_or_miss(region, foreground, background, *, ctx):
     source = expect_region(region, "Region")
@@ -2154,7 +2159,7 @@ def hit_or_miss(region, foreground, background, *, ctx):
     [],
     "產生扇形區域",
     "角度 0 朝右，正角度在畫面上順時針。從起始角順時針畫到結束角，包含圓心。兩角相同得到空區域，相差一整圈就是實心圓。半徑會四捨五入，尺寸對齊最近一張影像。",
-    "gen_circle_sector (CircleSector, 30, 40, 10, 0, rad(90))",
+    "Vizion.gen_circle_sector (CircleSector, 30, 40, 10, 0, rad(90))",
 )
 def gen_circle_sector(row, column, radius, start_angle, end_angle, *, ctx):
     height, width = _canvas(ctx)
@@ -2200,7 +2205,7 @@ def _region_bits(region, name: str) -> np.ndarray:
     [P("IsSubset", "1 表示完全落在範圍裡")],
     "區域是否被包含",
     "多個物件先合成再比較。Region1 的每個像素都在 Region2 裡就是 1。空區域算被包含。",
-    "test_subset_region (Region1, Region2, IsSubset)",
+    "Vizion.test_subset_region (Region1, Region2, IsSubset)",
 )
 def test_subset_region(region1, region2, *, ctx):
     first = _region_bits(region1, "Region1")
@@ -2219,7 +2224,7 @@ def test_subset_region(region1, region2, *, ctx):
     [P("IsEqual", "1 表示像素完全相同")],
     "兩個區域是否相同",
     "多個物件先合成再比較。空區域和空區域相同。",
-    "test_equal_region (Region1, Region2, IsEqual)",
+    "Vizion.test_equal_region (Region1, Region2, IsEqual)",
 )
 def test_equal_region(region1, region2, *, ctx):
     first = _region_bits(region1, "Region1")
@@ -2269,7 +2274,7 @@ def _polar_maps(row, column, angle_start, angle_end, radius_start, radius_end, w
     [],
     "把區域展開成極座標",
     "角度 0 朝右，正角度順時針，取樣方式和 polar_trans_image_ext 相同。用最近鄰，每個物件各自展開。",
-    "polar_trans_region (Region, RegionPolar, 30, 40, 0, rad(360), 0, 20, 40, 20)",
+    "Vizion.polar_trans_region (Region, RegionPolar, 30, 40, 0, rad(360), 0, 20, 40, 20)",
 )
 def polar_trans_region(region, row, column, angle_start, angle_end, radius_start, radius_end, width, height, *, ctx):
     source = expect_region(region, "Region")
@@ -2298,7 +2303,7 @@ def polar_trans_region(region, row, column, angle_start, angle_end, radius_start
     [],
     "產生橢圓扇形",
     "角度 0 沿著第一軸，正角度順時針。兩角相同得到空區域，相差一整圈就是整個橢圓。半徑會四捨五入，尺寸對齊最近一張影像。",
-    "gen_ellipse_sector (EllipseSector, 30, 40, 0, 16, 8, 0, rad(90))",
+    "Vizion.gen_ellipse_sector (EllipseSector, 30, 40, 0, 16, 8, 0, rad(90))",
 )
 def gen_ellipse_sector(row, column, phi, radius1, radius2, start_angle, end_angle, *, ctx):
     height, width = _canvas(ctx)
@@ -2336,7 +2341,7 @@ def gen_ellipse_sector(row, column, phi, radius1, radius2, start_angle, end_angl
     [],
     "頂帽",
     "原區域減去開運算。小亮塊會留下，大塊的內部不會。" + _STRUCT,
-    "top_hat (Region, StructElement, RegionTopHat)",
+    "Vizion.top_hat (Region, StructElement, RegionTopHat)",
 )
 def top_hat(region, struct_element, *, ctx):
     opened = opening(region, struct_element, ctx=ctx).iconic[0]
@@ -2351,7 +2356,7 @@ def top_hat(region, struct_element, *, ctx):
     [],
     "底帽",
     "閉運算減去原區域。比結構元素小的缺口會被補出來。" + _STRUCT,
-    "bottom_hat (Region, StructElement, RegionBottomHat)",
+    "Vizion.bottom_hat (Region, StructElement, RegionBottomHat)",
 )
 def bottom_hat(region, struct_element, *, ctx):
     closed = closing(region, struct_element, ctx=ctx).iconic[0]
@@ -2366,7 +2371,7 @@ def bottom_hat(region, struct_element, *, ctx):
     [],
     "區域編成標籤",
     "背景是 0，物件從 1 開始。後面的物件蓋掉重疊的地方。超過 255 個物件會失敗。",
-    "region_to_label (Regions, ImageLabel)",
+    "Vizion.region_to_label (Regions, ImageLabel)",
 )
 def region_to_label(region, *, ctx):
     source = expect_region(region, "Region")
@@ -2386,7 +2391,7 @@ def region_to_label(region, *, ctx):
     [],
     "標籤編成區域",
     "同一個灰階是一個物件，就算中間斷開。0 是背景。物件依灰階由小到大排列。彩色先轉成亮度，定義域外不算。",
-    "label_to_region (ImageLabel, Region)",
+    "Vizion.label_to_region (ImageLabel, Region)",
 )
 def label_to_region(image, *, ctx):
     picture = expect_image(image, "Image")
@@ -2417,7 +2422,7 @@ def label_to_region(image, *, ctx):
     [],
     "把極座標區域還原",
     "和 polar_trans_region 相反，用最近鄰。角度 0 朝右，正角度順時針。輸出尺寸是 Width 和 Height。",
-    "polar_trans_region_inv (RegionPolar, RegionXY, 30, 40, 0, rad(360), 0, 20, 80, 60)",
+    "Vizion.polar_trans_region_inv (RegionPolar, RegionXY, 30, 40, 0, rad(360), 0, 20, 80, 60)",
 )
 def polar_trans_region_inv(region, row, column, angle_start, angle_end, radius_start, radius_end, width, height, *, ctx):
     source = expect_region(region, "RegionPolar")
@@ -2453,7 +2458,7 @@ def _spatial_hit(row1, col1, row2, col2, ref_row1, ref_col1, ref_row2, ref_col2,
     [],
     "用外接矩形挑方位",
     "left 是候選的右邊界在參考左邊界的左邊，邊貼著不算。above 是列比較小的那一側。和任何一個參考物件成立就留下。",
-    "select_region_spatial (Regions, Reference, Selected, 'left')",
+    "Vizion.select_region_spatial (Regions, Reference, Selected, 'left')",
 )
 def select_region_spatial(regions, reference, direction, *, ctx):
     source = expect_region(regions, "Regions")
@@ -2550,7 +2555,7 @@ def _neck(dist: np.ndarray) -> tuple[int, int, float]:
     [],
     "把厚度畫成影像",
     "每個前景像素的值是到區域外的距離。chessboard 是棋盤步數，邊和角都算一步。區域外是 0。多個物件先合併。超過 255 會被截掉。",
-    "thickness_image (Region, ImageDistance, 'chessboard')",
+    "Vizion.thickness_image (Region, ImageDistance, 'chessboard')",
 )
 def thickness_image(region, metric, *, ctx):
     source = expect_region(region, "Region")
@@ -2569,7 +2574,7 @@ def thickness_image(region, metric, *, ctx):
     [P("Row", "列"), P("Column", "行"), P("Distance", "到區域外的距離")],
     "每個物件離邊界最遠的點",
     "不會把物件合併。一樣遠時留列最小、再來行最小的那一點。一個物件也是 tuple。",
-    "thickness_max (Region, 'chessboard', Row, Column, Distance)",
+    "Vizion.thickness_max (Region, 'chessboard', Row, Column, Distance)",
 )
 def thickness_max(region, metric, *, ctx):
     _source, found = _distance_objects(region, metric)
@@ -2590,7 +2595,7 @@ def thickness_max(region, metric, *, ctx):
     [P("Row", "列"), P("Column", "行"), P("Distance", "最細處的距離")],
     "每個物件最細的中線",
     "中線是距離不比鄰居小的像素。最細處是中線上距離最小的點。一樣細時留列最小、再來行最小的那一點。",
-    "thickness_neck (Region, 'chessboard', Row, Column, Distance)",
+    "Vizion.thickness_neck (Region, 'chessboard', Row, Column, Distance)",
 )
 def thickness_neck(region, metric, *, ctx):
     _source, found = _distance_objects(region, metric)
@@ -2611,7 +2616,7 @@ def thickness_neck(region, metric, *, ctx):
     [P("Mean", "中線距離的平均")],
     "每個物件中線的平均厚度",
     "只平均中線上的距離，不會把整塊區域平均進來。一個物件也是 tuple。",
-    "thickness_mean (Region, 'chessboard', Mean)",
+    "Vizion.thickness_mean (Region, 'chessboard', Mean)",
 )
 def thickness_mean(region, metric, *, ctx):
     _source, found = _distance_objects(region, metric)
@@ -2627,7 +2632,7 @@ def thickness_mean(region, metric, *, ctx):
     [P("Ratio", "最細除以最厚")],
     "每個物件有多細腰",
     "最細處的距離除以最厚處的距離。方塊和直條接近 1，中間變細的會比較小。",
-    "neck_ratio (Region, 'chessboard', Ratio)",
+    "Vizion.neck_ratio (Region, 'chessboard', Ratio)",
 )
 def neck_ratio(region, metric, *, ctx):
     _source, found = _distance_objects(region, metric)
@@ -2647,7 +2652,7 @@ def neck_ratio(region, metric, *, ctx):
     [P("Sum", "距離總和")],
     "每個物件的距離總和",
     "把物件裡每個像素到區域外的距離加起來。一個物件也是 tuple。",
-    "thickness_sum (Region, 'chessboard', Sum)",
+    "Vizion.thickness_sum (Region, 'chessboard', Sum)",
 )
 def thickness_sum(region, metric, *, ctx):
     _source, found = _distance_objects(region, metric)
@@ -2667,7 +2672,7 @@ def thickness_sum(region, metric, *, ctx):
     [],
     "用最細處篩選物件",
     "留下最細處的距離在下限和上限之間的物件，兩端都含在內。寫反了會自動對調。沒有符合的就得到空區域。",
-    "select_neck (Region, Selected, 2, 5, 'chessboard')",
+    "Vizion.select_neck (Region, Selected, 2, 5, 'chessboard')",
 )
 def select_neck(region, low, high, metric, *, ctx):
     source, found = _distance_objects(region, metric)
@@ -2692,7 +2697,7 @@ def select_neck(region, low, high, metric, *, ctx):
     [],
     "留下離邊界一定距離的像素",
     "下限和上限含在內，寫反了會自動對調。多個物件先合併。區域外面的像素不會留下。",
-    "band_thickness (Region, RegionBand, 3, 5, 'chessboard')",
+    "Vizion.band_thickness (Region, RegionBand, 3, 5, 'chessboard')",
 )
 def band_thickness(region, low, high, metric, *, ctx):
     source = expect_region(region, "Region")
@@ -2753,7 +2758,7 @@ def _cover_rows(region1, region2):
     [P("Area", "重疊的像素數")],
     "兩組物件重疊幾個像素",
     "依順序配對。物件數相同，或其中一邊只有一個物件時，那個物件會配對另一邊的每一個。一個結果也是 tuple。",
-    "area_intersection (Region1, Region2, Area)",
+    "Vizion.area_intersection (Region1, Region2, Area)",
 )
 def area_intersection(region1, region2, *, ctx):
     _source, _pairs, rows = _overlap_rows(region1, region2)
@@ -2768,7 +2773,7 @@ def area_intersection(region1, region2, *, ctx):
     [P("Area", "聯集的像素數")],
     "兩組物件合併後有幾個像素",
     "聯集是任一邊有的像素。配對方式和重疊面積相同。",
-    "area_union (Region1, Region2, Area)",
+    "Vizion.area_union (Region1, Region2, Area)",
 )
 def area_union(region1, region2, *, ctx):
     _source, _pairs, rows = _overlap_rows(region1, region2)
@@ -2783,7 +2788,7 @@ def area_union(region1, region2, *, ctx):
     [P("Area", "只在第一組裡的像素數")],
     "第一組比第二組多出來的像素",
     "只算第一組有、第二組沒有的像素。完全蓋住時是 0。",
-    "area_difference (Region1, Region2, Area)",
+    "Vizion.area_difference (Region1, Region2, Area)",
 )
 def area_difference(region1, region2, *, ctx):
     _source, _pairs, rows = _overlap_rows(region1, region2)
@@ -2798,7 +2803,7 @@ def area_difference(region1, region2, *, ctx):
     [P("IoU", "重疊除以聯集")],
     "兩組物件的重疊比例",
     "重疊像素數除以聯集像素數。完全一樣是 1，完全沒碰到是 0。",
-    "region_iou (Region1, Region2, IoU)",
+    "Vizion.region_iou (Region1, Region2, IoU)",
 )
 def region_iou(region1, region2, *, ctx):
     _source, _pairs, rows = _overlap_rows(region1, region2)
@@ -2813,7 +2818,7 @@ def region_iou(region1, region2, *, ctx):
     [P("Cover", "第一組被蓋住的比例")],
     "第一組有多少落在第二組裡",
     "重疊像素數除以第一組的面積。第一組整個被蓋住是 1。這和調換兩組的結果不一樣。",
-    "region_cover (Region1, Region2, Cover)",
+    "Vizion.region_cover (Region1, Region2, Cover)",
 )
 def region_cover(region1, region2, *, ctx):
     _source, _pairs, covers = _cover_rows(region1, region2)
@@ -2828,7 +2833,7 @@ def region_cover(region1, region2, *, ctx):
     [P("Inside", "1 表示整個落在第二組裡")],
     "第一組是否完全落在第二組裡",
     "第一組的每個像素都在第二組裡就是 1，否則是 0。",
-    "region_inside (Region1, Region2, Inside)",
+    "Vizion.region_inside (Region1, Region2, Inside)",
 )
 def region_inside(region1, region2, *, ctx):
     _source, _pairs, rows = _overlap_rows(region1, region2)
@@ -2843,7 +2848,7 @@ def region_inside(region1, region2, *, ctx):
     [],
     "用被蓋住的比例篩選物件",
     "留下第一組裡、被第二組蓋住的比例在下限和上限之間的物件，兩端都含在內。寫反了會自動對調。第二組若只有一個物件，會拿來比對每一個。沒有符合的就得到空區域。",
-    "select_cover (Region1, Region2, Selected, 0.9, 1)",
+    "Vizion.select_cover (Region1, Region2, Selected, 0.9, 1)",
 )
 def select_cover(region1, region2, low, high, *, ctx):
     source, _pairs, covers = _cover_rows(region1, region2)
@@ -2862,7 +2867,7 @@ def select_cover(region1, region2, low, high, *, ctx):
     [],
     "留下只在其中一邊的像素",
     "兩邊都有或兩邊都沒有的像素不會留下。完全一樣就得到空區域。配對方式和重疊面積相同。",
-    "sym_difference (Region1, Region2, RegionDifference)",
+    "Vizion.sym_difference (Region1, Region2, RegionDifference)",
 )
 def sym_difference(region1, region2, *, ctx):
     _source, pairs, _rows = _overlap_rows(region1, region2)
@@ -2931,7 +2936,7 @@ def _centers(one: np.ndarray, other: np.ndarray) -> tuple[float, float, float, f
     [P("Distance", "最近距離")],
     "每個物件到對照區域的最近距離",
     "不會把物件合併。重疊是 0。相鄰但沒重疊是 1。distance_rr 會先把物件合併，再量凸包，和這個不一樣。",
-    "distance_objects (Region1, Region2, 'chessboard', Distance)",
+    "Vizion.distance_objects (Region1, Region2, 'chessboard', Distance)",
 )
 def distance_objects(region1, region2, metric, *, ctx):
     _source, found = _pair_distance(region1, region2, metric)
@@ -2946,7 +2951,7 @@ def distance_objects(region1, region2, metric, *, ctx):
     [P("Distance", "第一組裡離對照區域最遠的距離")],
     "每個物件離對照區域最遠的點有多遠",
     "量的是第一組裡離第二組最遠的那個像素，不是兩個凸包的頂點。",
-    "distance_objects_far (Region1, Region2, 'chessboard', Distance)",
+    "Vizion.distance_objects_far (Region1, Region2, 'chessboard', Distance)",
 )
 def distance_objects_far(region1, region2, metric, *, ctx):
     _source, found = _pair_distance(region1, region2, metric)
@@ -2961,7 +2966,7 @@ def distance_objects_far(region1, region2, metric, *, ctx):
     [P("Row1", "第一組的列"), P("Column1", "第一組的行"), P("Row2", "第二組的列"), P("Column2", "第二組的行"), P("Distance", "距離")],
     "找出兩組物件最接近的像素",
     "一樣近時，第一組留列最小、再來行最小的那一點，第二組也一樣。重疊時兩個點是同一個像素，距離是 0。",
-    "nearest_object_point (Region1, Region2, 'chessboard', Row1, Column1, Row2, Column2, Distance)",
+    "Vizion.nearest_object_point (Region1, Region2, 'chessboard', Row1, Column1, Row2, Column2, Distance)",
 )
 def nearest_object_point(region1, region2, metric, *, ctx):
     _source, found = _pair_distance(region1, region2, metric)
@@ -2985,7 +2990,7 @@ def nearest_object_point(region1, region2, metric, *, ctx):
     [P("Row1", "第一組的列"), P("Column1", "第一組的行"), P("Row2", "第二組的列"), P("Column2", "第二組的行"), P("Distance", "距離")],
     "找出第一組裡離對照區域最遠的像素",
     "一樣遠時留列最小、再來行最小的那一點。第二組回報離這個點最近的像素。",
-    "farthest_object_point (Region1, Region2, 'chessboard', Row1, Column1, Row2, Column2, Distance)",
+    "Vizion.farthest_object_point (Region1, Region2, 'chessboard', Row1, Column1, Row2, Column2, Distance)",
 )
 def farthest_object_point(region1, region2, metric, *, ctx):
     _source, found = _pair_distance(region1, region2, metric)
@@ -3009,7 +3014,7 @@ def farthest_object_point(region1, region2, metric, *, ctx):
     [P("Row", "第二組中心減第一組中心的列"), P("Column", "第二組中心減第一組中心的行")],
     "兩個物件中心的位移",
     "中心是像素座標的平均。列或行是正的，表示第二組在第一組的下方或右方。",
-    "centroid_offset (Region1, Region2, 'chessboard', Row, Column)",
+    "Vizion.centroid_offset (Region1, Region2, 'chessboard', Row, Column)",
 )
 def centroid_offset(region1, region2, metric, *, ctx):
     _source, found = _pair_distance(region1, region2, metric)
@@ -3029,7 +3034,7 @@ def centroid_offset(region1, region2, metric, *, ctx):
     [P("Distance", "兩個中心的距離")],
     "兩個物件中心隔多遠",
     "用選的距離去量兩個中心。方塊的中心是對角的平均。",
-    "centroid_distance (Region1, Region2, 'chessboard', Distance)",
+    "Vizion.centroid_distance (Region1, Region2, 'chessboard', Distance)",
 )
 def centroid_distance(region1, region2, metric, *, ctx):
     _source, found = _pair_distance(region1, region2, metric)
@@ -3052,7 +3057,7 @@ def centroid_distance(region1, region2, metric, *, ctx):
     [],
     "用最近距離篩選物件",
     "留下第一組裡、到第二組的最近距離在下限和上限之間的物件，兩端都含在內。寫反了會自動對調。沒有符合的就得到空區域。",
-    "select_object_distance (Region1, Region2, Selected, 0, 1, 'chessboard')",
+    "Vizion.select_object_distance (Region1, Region2, Selected, 0, 1, 'chessboard')",
 )
 def select_object_distance(region1, region2, low, high, metric, *, ctx):
     source, found = _pair_distance(region1, region2, metric)
@@ -3071,7 +3076,7 @@ def select_object_distance(region1, region2, low, high, metric, *, ctx):
     [],
     "留下每個物件朝向對照區域的那一側",
     "每個物件留下距離等於最近距離的像素。重疊時留下重疊的部分。結果依物件排列。",
-    "facing_region (Region1, Region2, RegionEdge, 'chessboard')",
+    "Vizion.facing_region (Region1, Region2, RegionEdge, 'chessboard')",
 )
 def facing_region(region1, region2, metric, *, ctx):
     source, found = _pair_distance(region1, region2, metric)
@@ -3115,7 +3120,7 @@ def _gap_fields(region1, region2, metric):
     [P("Angle", "物件在參考的哪個方向，度")],
     "物件中心在參考中心的哪個方向",
     "0 度朝右，順時針往下。正下方是 90，正左是 180，正上方是 270。兩個中心重合時是 0。一個物件也是 tuple。",
-    "region_angle (Region1, Region2, Angle)",
+    "Vizion.region_angle (Region1, Region2, Angle)",
 )
 def region_angle(region1, region2, *, ctx):
     _source, pairs = _paired_masks(region1, region2)
@@ -3134,7 +3139,7 @@ def region_angle(region1, region2, *, ctx):
     [],
     "留下參考區域某一側的物件",
     "用中心比較。right 是中心在參考的右方，below 是下方。中心對齊的不算。第二組只有一個物件時，會拿來比對每一個。",
-    "select_side (Region1, Region2, Selected, 'right')",
+    "Vizion.select_side (Region1, Region2, Selected, 'right')",
 )
 def select_side(region1, region2, side, *, ctx):
     source, pairs = _paired_masks(region1, region2)
@@ -3168,7 +3173,7 @@ def select_side(region1, region2, side, *, ctx):
     [],
     "按到參考區域的距離排序",
     "near 把最近的排前面。距離一樣時維持原來的順序。第二組只有一個物件時，會拿來比對每一個。",
-    "sort_distance (Region1, Region2, Sorted, 'near', 'chessboard')",
+    "Vizion.sort_distance (Region1, Region2, Sorted, 'near', 'chessboard')",
 )
 def sort_distance(region1, region2, order, metric, *, ctx):
     source, found = _pair_distance(region1, region2, metric)
@@ -3191,7 +3196,7 @@ def sort_distance(region1, region2, order, metric, *, ctx):
     [],
     "留下離參考區域最近的物件",
     "一樣近時留原來排前面的那個。",
-    "nearest_one (Region1, Region2, Selected, 'chessboard')",
+    "Vizion.nearest_one (Region1, Region2, Selected, 'chessboard')",
 )
 def nearest_one(region1, region2, metric, *, ctx):
     source, found = _pair_distance(region1, region2, metric)
@@ -3215,7 +3220,7 @@ def nearest_one(region1, region2, metric, *, ctx):
     [],
     "留下離參考區域最遠的物件",
     "比的是最近距離，所以整塊都離得比較遠的會被留下。一樣遠時留原來排前面的那個。",
-    "farthest_one (Region1, Region2, Selected, 'chessboard')",
+    "Vizion.farthest_one (Region1, Region2, Selected, 'chessboard')",
 )
 def farthest_one(region1, region2, metric, *, ctx):
     source, found = _pair_distance(region1, region2, metric)
@@ -3239,7 +3244,7 @@ def farthest_one(region1, region2, metric, *, ctx):
     [],
     "留下兩組物件中間的空隙",
     "空隙是兩邊都不在、而且到兩邊的距離加起來等於分隔距離的像素。碰到或重疊時沒有空隙。city-block 在左右並排的方塊之間會是一塊矩形。",
-    "gap_region (Region1, Region2, RegionGap, 'city-block')",
+    "Vizion.gap_region (Region1, Region2, RegionGap, 'city-block')",
 )
 def gap_region(region1, region2, metric, *, ctx):
     source, gaps = _gap_fields(region1, region2, metric)
@@ -3255,7 +3260,7 @@ def gap_region(region1, region2, metric, *, ctx):
     [P("Area", "空隙的像素數")],
     "兩組物件中間的空隙有幾個像素",
     "碰到或重疊是 0。一個結果也是 tuple。",
-    "gap_area (Region1, Region2, 'city-block', Area)",
+    "Vizion.gap_area (Region1, Region2, 'city-block', Area)",
 )
 def gap_area(region1, region2, metric, *, ctx):
     _source, gaps = _gap_fields(region1, region2, metric)
@@ -3270,7 +3275,7 @@ def gap_area(region1, region2, metric, *, ctx):
     [P("Width", "中間空了幾步")],
     "兩組物件中間空了幾步",
     "最近距離減 1。碰到或重疊是 0。一個結果也是 tuple。",
-    "gap_width (Region1, Region2, 'city-block', Width)",
+    "Vizion.gap_width (Region1, Region2, 'city-block', Width)",
 )
 def gap_width(region1, region2, metric, *, ctx):
     _source, gaps = _gap_fields(region1, region2, metric)
@@ -3337,7 +3342,7 @@ def _border_mask(owner: np.ndarray) -> np.ndarray:
     [],
     "把每個像素分給最近的物件",
     "整張影像都會分完。距離相同時算排前面的物件。重疊的地方也是。地盤變成空的不會留下。distance_transform 會先把物件合成一塊，這個不會。",
-    "partition_nearest (Region, Partitioned, 'city-block')",
+    "Vizion.partition_nearest (Region, Partitioned, 'city-block')",
 )
 def partition_nearest(region, metric, *, ctx):
     source, owner, _stack = _owners(region, metric)
@@ -3353,7 +3358,7 @@ def partition_nearest(region, metric, *, ctx):
     [P("Area", "每個物件分到的像素數")],
     "每個物件的地盤有幾個像素",
     "和物件一一對應，沒分到是 0。一個結果也是 tuple。",
-    "partition_area (Region, 'city-block', Area)",
+    "Vizion.partition_area (Region, 'city-block', Area)",
 )
 def partition_area(region, metric, *, ctx):
     _source, owner, stack = _owners(region, metric)
@@ -3369,7 +3374,7 @@ def partition_area(region, metric, *, ctx):
     [],
     "把地盤畫成標籤影像",
     "1 是第一個物件的地盤。距離相同時標前面的號碼。超過 255 個物件會失敗。",
-    "partition_label (Region, ImageLabel, 'city-block')",
+    "Vizion.partition_label (Region, ImageLabel, 'city-block')",
 )
 def partition_label(region, metric, *, ctx):
     source, owner, stack = _owners(region, metric)
@@ -3393,7 +3398,7 @@ def partition_label(region, metric, *, ctx):
     [P("Index", "從 1 開始的物件編號")],
     "這個點分給第幾個物件",
     "距離相同時是排前面的那個。一個點回傳一個數，多個點回傳 tuple。",
-    "owner_index (Region, 10, 20, 'city-block', Index)",
+    "Vizion.owner_index (Region, 10, 20, 'city-block', Index)",
 )
 def owner_index(region, row, column, metric, *, ctx):
     source, owner, _stack = _owners(region, metric)
@@ -3419,7 +3424,7 @@ def owner_index(region, row, column, metric, *, ctx):
     [],
     "留下地盤相接的那一層像素",
     "上下左右有別人的地盤才算。每個還有交界的物件各留一層。距離相同時交界算在前面的物件上。",
-    "partition_border (Region, Border, 'city-block')",
+    "Vizion.partition_border (Region, Border, 'city-block')",
 )
 def partition_border(region, metric, *, ctx):
     source, owner, _stack = _owners(region, metric)
@@ -3443,7 +3448,7 @@ def partition_border(region, metric, *, ctx):
     [],
     "留下地盤最大或最小的物件",
     "留下的是長大之後的地盤，不是原來的形狀。一樣大時留排前面的。",
-    "select_territory (Region, Selected, 'large', 'city-block')",
+    "Vizion.select_territory (Region, Selected, 'large', 'city-block')",
 )
 def select_territory(region, which, metric, *, ctx):
     source, owner, stack = _owners(region, metric)
@@ -3465,7 +3470,7 @@ def select_territory(region, which, metric, *, ctx):
     [],
     "只把指定範圍分給最近的物件",
     "範圍外不屬於任何人。物件可以在範圍外面，仍然用它來算距離。沒分到像素的物件不會留下。",
-    "partition_domain (Region, Domain, Partitioned, 'city-block')",
+    "Vizion.partition_domain (Region, Domain, Partitioned, 'city-block')",
 )
 def partition_domain(region, domain, metric, *, ctx):
     source, owner, _stack = _owners(region, metric, domain)
@@ -3481,7 +3486,7 @@ def partition_domain(region, domain, metric, *, ctx):
     [],
     "留下距離打成平手的像素",
     "這些像素在分地盤時會算給排前面的物件。這裡把它們另外圈出來。沒有平手時區域是空的。",
-    "tie_region (Region, Ties, 'city-block')",
+    "Vizion.tie_region (Region, Ties, 'city-block')",
 )
 def tie_region(region, metric, *, ctx):
     source, _owner, stack = _owners(region, metric)
@@ -3532,7 +3537,7 @@ def _take_objects(source, indexes: list):
     [],
     "依特徵排序物件",
     "特徵和 region_features 相同。一樣大時維持原來的順序。sort_region 仍是依位置排。",
-    "sort_feature (Region, Sorted, 'area', 'down')",
+    "Vizion.sort_feature (Region, Sorted, 'area', 'down')",
 )
 def sort_feature(region, feature, order, *, ctx):
     source, values = _feature_values(region, feature)
@@ -3552,7 +3557,7 @@ def sort_feature(region, feature, order, *, ctx):
     [],
     "留下特徵排在前面的幾個物件",
     "down 時最大的排前面。一樣大時原來排前面的先留下。",
-    "select_top (Region, Selected, 2, 'area', 'down')",
+    "Vizion.select_top (Region, Selected, 2, 'area', 'down')",
 )
 def select_top(region, count, feature, order, *, ctx):
     source, values = _feature_values(region, feature)
@@ -3576,7 +3581,7 @@ def select_top(region, count, feature, order, *, ctx):
     [],
     "留下特徵最大或最小的物件",
     "一樣大時留原來排前面的那個。",
-    "select_extreme (Region, Selected, 'max', 'area')",
+    "Vizion.select_extreme (Region, Selected, 'max', 'area')",
 )
 def select_extreme(region, which, feature, *, ctx):
     source, values = _feature_values(region, feature)
@@ -3598,7 +3603,7 @@ def select_extreme(region, which, feature, *, ctx):
     [P("Rank", "每個物件的名次")],
     "每個物件的名次",
     "名次從 1 開始，順序和原來的物件對齊。一樣大時，原來排前面的名次較小。一個結果也是 tuple。",
-    "feature_rank (Region, 'area', 'down', Rank)",
+    "Vizion.feature_rank (Region, 'area', 'down', Rank)",
 )
 def feature_rank(region, feature, order, *, ctx):
     _source, values = _feature_values(region, feature)
@@ -3620,7 +3625,7 @@ def feature_rank(region, feature, order, *, ctx):
     [],
     "留下指定名次的物件",
     "依你寫的名次順序留下。一樣大時，原來排前面的名次較小。",
-    "select_rank (Region, Selected, 2, 'area', 'down')",
+    "Vizion.select_rank (Region, Selected, 2, 'area', 'down')",
 )
 def select_rank(region, rank, feature, order, *, ctx):
     source, values = _feature_values(region, feature)
@@ -3649,7 +3654,7 @@ def select_rank(region, rank, feature, order, *, ctx):
     [P("Index", "排好後的原來編號")],
     "依特徵排序後的原來編號",
     "編號從 1 開始。可以拿去 select_obj。一樣大時維持原來的順序。一個結果也是 tuple。",
-    "feature_index (Region, 'area', 'down', Index)",
+    "Vizion.feature_index (Region, 'area', 'down', Index)",
 )
 def feature_index(region, feature, order, *, ctx):
     source, values = _feature_values(region, feature)
@@ -3669,7 +3674,7 @@ def feature_index(region, feature, order, *, ctx):
     [],
     "留下高於或低於百分位的物件",
     "50 是中位數。above 留下大於等於這個值的物件，below 留下小於等於的。維持原來的順序。",
-    "select_relative (Region, Selected, 50, 'area', 'above')",
+    "Vizion.select_relative (Region, Selected, 50, 'area', 'above')",
 )
 def select_relative(region, percent, feature, side, *, ctx):
     source, values = _feature_values(region, feature)
@@ -3695,7 +3700,7 @@ def select_relative(region, percent, feature, side, *, ctx):
     [P("Minimum", "最小的那個值"), P("Maximum", "最大的那個值")],
     "全部物件裡這個特徵的最小和最大",
     "看的是物件之間，不是一個物件裡的像素。",
-    "feature_range (Region, 'area', Minimum, Maximum)",
+    "Vizion.feature_range (Region, 'area', Minimum, Maximum)",
 )
 def feature_range(region, feature, *, ctx):
     _source, values = _feature_values(region, feature)
@@ -3748,7 +3753,7 @@ def _defect_parts(region, min_depth, metric):
     [],
     "留下凸包補不上的缺口",
     "每個缺口各自一個物件，用 8 連通。深度是缺口裡的像素到凸包外面的距離。缺一角時凸包是斜線，不會補回整個外接矩形。孔洞也算。比 MinDepth 淺的不算。",
-    "region_defects (Region, Defects, 1, 'city-block')",
+    "Vizion.region_defects (Region, Defects, 1, 'city-block')",
 )
 def region_defects(region, min_depth, metric, *, ctx):
     source, bites, _counts = _defect_parts(region, min_depth, metric)
@@ -3767,7 +3772,7 @@ def region_defects(region, min_depth, metric, *, ctx):
     [P("Count", "每個物件有幾個缺口")],
     "每個物件有幾個缺口",
     "和物件一一對應，沒有缺口是 0。一個結果也是 tuple。",
-    "defect_count (Region, 1, 'city-block', Count)",
+    "Vizion.defect_count (Region, 1, 'city-block', Count)",
 )
 def defect_count(region, min_depth, metric, *, ctx):
     _source, _bites, counts = _defect_parts(region, min_depth, metric)
@@ -3785,7 +3790,7 @@ def defect_count(region, min_depth, metric, *, ctx):
     [P("Area", "每個缺口的像素數")],
     "每個缺口有幾個像素",
     "順序和 region_defects 相同，不是依原物件對齊。沒有缺口時是空 tuple。",
-    "defect_area (Region, 1, 'city-block', Area)",
+    "Vizion.defect_area (Region, 1, 'city-block', Area)",
 )
 def defect_area(region, min_depth, metric, *, ctx):
     _source, bites, _counts = _defect_parts(region, min_depth, metric)
@@ -3803,7 +3808,7 @@ def defect_area(region, min_depth, metric, *, ctx):
     [P("Depth", "每個缺口最深的距離")],
     "每個缺口有多深",
     "順序和 region_defects 相同。一個結果也是 tuple。",
-    "defect_depth (Region, 1, 'city-block', Depth)",
+    "Vizion.defect_depth (Region, 1, 'city-block', Depth)",
 )
 def defect_depth(region, min_depth, metric, *, ctx):
     _source, bites, _counts = _defect_parts(region, min_depth, metric)
@@ -3821,7 +3826,7 @@ def defect_depth(region, min_depth, metric, *, ctx):
     [P("Row", "最深的點的列"), P("Column", "最深的點的行"), P("Depth", "那個點的深度")],
     "每個缺口最深的那個點",
     "一樣深時留列最小、再來行最小的點。順序和 region_defects 相同。",
-    "defect_point (Region, 1, 'city-block', Row, Column, Depth)",
+    "Vizion.defect_point (Region, 1, 'city-block', Row, Column, Depth)",
 )
 def defect_point(region, min_depth, metric, *, ctx):
     _source, bites, _counts = _defect_parts(region, min_depth, metric)
@@ -3842,7 +3847,7 @@ def defect_point(region, min_depth, metric, *, ctx):
     [],
     "留下有夠深缺口的物件",
     "留下的是原來的物件，不是缺口本身。維持原來的順序。",
-    "select_defect (Region, Selected, 1, 'city-block')",
+    "Vizion.select_defect (Region, Selected, 1, 'city-block')",
 )
 def select_defect(region, min_depth, metric, *, ctx):
     source, _bites, counts = _defect_parts(region, min_depth, metric)
@@ -3858,7 +3863,7 @@ def select_defect(region, min_depth, metric, *, ctx):
     [],
     "留下最深的那個缺口",
     "一樣深時留先出現的物件、再來列較小的缺口。沒有缺口時區域是空的。",
-    "deepest_defect (Region, Defect, 'city-block')",
+    "Vizion.deepest_defect (Region, Defect, 'city-block')",
 )
 def deepest_defect(region, metric, *, ctx):
     source, bites, _counts = _defect_parts(region, 0, metric)
@@ -3882,7 +3887,7 @@ def deepest_defect(region, metric, *, ctx):
     [],
     "把夠深的缺口補平",
     "只補深度達到 MinDepth 的缺口，物件的數目和順序不變。沒有缺口的維持原樣。",
-    "fill_defects (Region, Filled, 1, 'city-block')",
+    "Vizion.fill_defects (Region, Filled, 1, 'city-block')",
 )
 def fill_defects(region, min_depth, metric, *, ctx):
     source, bites, _counts = _defect_parts(region, min_depth, metric)
@@ -3959,7 +3964,7 @@ def _nesting(region):
     [],
     "留下被別的物件包住的物件",
     "先把對方的外輪廓填滿，孔洞裡也算裡面。自己不算。兩塊完全一樣大時互不算裡面。維持原來的順序。",
-    "select_inner (Region, Selected)",
+    "Vizion.select_inner (Region, Selected)",
 )
 def select_inner(region, *, ctx):
     source, _holders, _inside, depth = _nesting(region)
@@ -3975,7 +3980,7 @@ def select_inner(region, *, ctx):
     [],
     "留下沒有被包住的物件",
     "最外層，或單獨的一塊，都會留下。",
-    "select_outer (Region, Selected)",
+    "Vizion.select_outer (Region, Selected)",
 )
 def select_outer(region, *, ctx):
     source, _holders, _inside, depth = _nesting(region)
@@ -3991,7 +3996,7 @@ def select_outer(region, *, ctx):
     [],
     "留下裡面還有別的物件的物件",
     "直接包住或透過中間那層包住，都算。",
-    "select_container (Region, Selected)",
+    "Vizion.select_container (Region, Selected)",
 )
 def select_container(region, *, ctx):
     source, _holders, inside, _depth = _nesting(region)
@@ -4007,7 +4012,7 @@ def select_container(region, *, ctx):
     [],
     "留下最裡面的物件",
     "它自己被別的物件包住，而且裡面沒有再包別的物件。",
-    "innermost (Region, Selected)",
+    "Vizion.innermost (Region, Selected)",
 )
 def innermost(region, *, ctx):
     source, _holders, inside, depth = _nesting(region)
@@ -4023,7 +4028,7 @@ def innermost(region, *, ctx):
     [],
     "留下被包住幾層的物件",
     "0 是沒有被包住的。1 是只在一層裡面。數字是包住它的物件有幾個。",
-    "select_depth (Region, Selected, 1)",
+    "Vizion.select_depth (Region, Selected, 1)",
 )
 def select_depth(region, depth, *, ctx):
     source, _holders, _inside, levels = _nesting(region)
@@ -4042,7 +4047,7 @@ def select_depth(region, depth, *, ctx):
     [P("Index", "包住它的最小物件，從 1 開始。沒有是 0")],
     "每個物件被哪一個包住",
     "有好幾層時，留面積最小的那一個。面積一樣留編號較小的。一個結果也是 tuple。",
-    "container_index (Region, Index)",
+    "Vizion.container_index (Region, Index)",
 )
 def container_index(region, *, ctx):
     _source, holders, _inside, _depth = _nesting(region)
@@ -4057,7 +4062,7 @@ def container_index(region, *, ctx):
     [P("Count", "裡面有幾個物件")],
     "每個物件裡面有幾個物件",
     "直接或間接包住的都算。沒有是 0。一個結果也是 tuple。",
-    "inner_count (Region, Count)",
+    "Vizion.inner_count (Region, Count)",
 )
 def inner_count(region, *, ctx):
     _source, _holders, inside, _depth = _nesting(region)
@@ -4072,7 +4077,7 @@ def inner_count(region, *, ctx):
     [P("Depth", "被幾層包住")],
     "每個物件被幾層包住",
     "沒有被包住是 0。一個結果也是 tuple。",
-    "nesting_depth (Region, Depth)",
+    "Vizion.nesting_depth (Region, Depth)",
 )
 def nesting_depth(region, *, ctx):
     _source, _holders, _inside, depth = _nesting(region)
@@ -4123,7 +4128,7 @@ def _border_facts(region):
     [],
     "依有沒有碰到影像邊緣來篩選",
     "touch 留下碰到上、下、左或右邊緣的物件。inner 留下四邊都還有空隙的。",
-    "select_border (Region, Selected, 'inner')",
+    "Vizion.select_border (Region, Selected, 'inner')",
 )
 def select_border(region, mode, *, ctx):
     source, facts = _border_facts(region)
@@ -4142,7 +4147,7 @@ def select_border(region, mode, *, ctx):
     [],
     "留下碰到影像某一邊的物件",
     "一個物件可以同時碰到兩邊，例如左上角。",
-    "select_border_side (Region, Selected, 'top')",
+    "Vizion.select_border_side (Region, Selected, 'top')",
 )
 def select_border_side(region, side, *, ctx):
     source, facts = _border_facts(region)
@@ -4162,7 +4167,7 @@ def select_border_side(region, side, *, ctx):
     [],
     "留下離影像邊緣夠遠的物件",
     "距離小於 Margin 的會去掉。1 會去掉碰到邊緣的。0 會全部留下。",
-    "select_margin (Region, Selected, 1)",
+    "Vizion.select_margin (Region, Selected, 1)",
 )
 def select_margin(region, margin, *, ctx):
     source, facts = _border_facts(region)
@@ -4181,7 +4186,7 @@ def select_margin(region, margin, *, ctx):
     [],
     "留下離邊緣的距離落在範圍裡的物件",
     "比的是到最近那一邊的距離。上下限寫反會自動對調。",
-    "select_border_range (Region, Selected, 1, 10)",
+    "Vizion.select_border_range (Region, Selected, 1, 10)",
 )
 def select_border_range(region, low, high, *, ctx):
     source, facts = _border_facts(region)
@@ -4201,7 +4206,7 @@ def select_border_range(region, low, high, *, ctx):
     [],
     "留下離影像邊緣最遠的物件",
     "一樣遠時留原來排前面的那個。",
-    "farthest_border (Region, Selected)",
+    "Vizion.farthest_border (Region, Selected)",
 )
 def farthest_border(region, *, ctx):
     source, facts = _border_facts(region)
@@ -4220,7 +4225,7 @@ def farthest_border(region, *, ctx):
     [P("Distance", "到最近邊緣的距離")],
     "每個物件離影像邊緣多遠",
     "碰到邊緣是 0。一個結果也是 tuple。",
-    "border_distance (Region, Distance)",
+    "Vizion.border_distance (Region, Distance)",
 )
 def border_distance(region, *, ctx):
     _source, facts = _border_facts(region)
@@ -4240,7 +4245,7 @@ def border_distance(region, *, ctx):
     ],
     "每個物件離影像四邊多遠",
     "0 表示那一邊已經碰到。每個結果都是 tuple。",
-    "border_gap (Region, Top, Bottom, Left, Right)",
+    "Vizion.border_gap (Region, Top, Bottom, Left, Right)",
 )
 def border_gap(region, *, ctx):
     _source, facts = _border_facts(region)
@@ -4255,7 +4260,7 @@ def border_gap(region, *, ctx):
     [P("Row", "最近點的列"), P("Column", "最近點的行"), P("Side", "top、bottom、left 或 right")],
     "每個物件最靠近影像邊緣的點",
     "一樣近時留列最小、再來行最小的點。同一個點離兩邊一樣近時，優先上、下、左、右。",
-    "border_point (Region, Row, Column, Side)",
+    "Vizion.border_point (Region, Row, Column, Side)",
 )
 def border_point(region, *, ctx):
     _source, facts = _border_facts(region)
@@ -4331,7 +4336,7 @@ def _neighbor_counts(fields, masks, limit):
     [P("Distance", "到最近的另一個物件")],
     "每個物件離其他物件多遠",
     "重疊是 0，挨著但沒重疊是 1。斜角在 chessboard 是 1，city-block 是 2。至少要有兩個物件。一個結果也是 tuple。",
-    "neighbor_distance (Region, 'chessboard', Distance)",
+    "Vizion.neighbor_distance (Region, 'chessboard', Distance)",
 )
 def neighbor_distance(region, metric, *, ctx):
     _source, masks, fields = _sibling_views(region, metric)
@@ -4347,7 +4352,7 @@ def neighbor_distance(region, metric, *, ctx):
     [P("Index", "最近的另一個物件，從 1 開始")],
     "每個物件最近的是哪一個",
     "一樣近時留編號較小的。一個結果也是 tuple。",
-    "neighbor_index (Region, 'chessboard', Index)",
+    "Vizion.neighbor_index (Region, 'chessboard', Index)",
 )
 def neighbor_index(region, metric, *, ctx):
     _source, masks, fields = _sibling_views(region, metric)
@@ -4363,7 +4368,7 @@ def neighbor_index(region, metric, *, ctx):
     [P("Row", "最近點的列"), P("Column", "最近點的行"), P("Distance", "到那個物件的距離")],
     "每個物件最靠近其他物件的點",
     "一樣近時留列最小、再來行最小的點。有兩個物件一樣近時，留編號較小的那個。",
-    "neighbor_point (Region, 'chessboard', Row, Column, Distance)",
+    "Vizion.neighbor_point (Region, 'chessboard', Row, Column, Distance)",
 )
 def neighbor_point(region, metric, *, ctx):
     _source, masks, fields = _sibling_views(region, metric)
@@ -4387,7 +4392,7 @@ def neighbor_point(region, metric, *, ctx):
     [P("Count", "鄰居有幾個")],
     "每個物件有幾個鄰居",
     "0 只算重疊。1 連挨著的也算。斜角要不要算，看距離的算法。一個結果也是 tuple。",
-    "neighbor_count (Region, 1, 'chessboard', Count)",
+    "Vizion.neighbor_count (Region, 1, 'chessboard', Count)",
 )
 def neighbor_count(region, max_distance, metric, *, ctx):
     _source, masks, fields = _sibling_views(region, metric)
@@ -4406,7 +4411,7 @@ def neighbor_count(region, max_distance, metric, *, ctx):
     [],
     "留下有鄰居的物件",
     "留下的是原來的物件。維持原來的順序。",
-    "select_touching (Region, Selected, 1, 'chessboard')",
+    "Vizion.select_touching (Region, Selected, 1, 'chessboard')",
 )
 def select_touching(region, max_distance, metric, *, ctx):
     source, masks, fields = _sibling_views(region, metric)
@@ -4426,7 +4431,7 @@ def select_touching(region, max_distance, metric, *, ctx):
     [],
     "留下沒有鄰居的物件",
     "在 MaxDistance 以內沒有別人的會留下。",
-    "select_isolated (Region, Selected, 1, 'chessboard')",
+    "Vizion.select_isolated (Region, Selected, 1, 'chessboard')",
 )
 def select_isolated(region, max_distance, metric, *, ctx):
     source, masks, fields = _sibling_views(region, metric)
@@ -4446,7 +4451,7 @@ def select_isolated(region, max_distance, metric, *, ctx):
     [],
     "留下靠近其他物件的那一層像素",
     "每個有碰到的物件各留一層。完全沒碰到的不會留下。",
-    "contact_region (Region, Contact, 1, 'chessboard')",
+    "Vizion.contact_region (Region, Contact, 1, 'chessboard')",
 )
 def contact_region(region, max_distance, metric, *, ctx):
     source, masks, fields = _sibling_views(region, metric)
@@ -4472,7 +4477,7 @@ def contact_region(region, max_distance, metric, *, ctx):
     [],
     "把互相碰到的物件合成一塊",
     "透過中間的物件間接碰到也會合成同一塊。沒碰到的維持原樣。順序依原來最前面的那個。",
-    "union_touching (Region, Union, 1, 'chessboard')",
+    "Vizion.union_touching (Region, Union, 1, 'chessboard')",
 )
 def union_touching(region, max_distance, metric, *, ctx):
     source, masks, fields = _sibling_views(region, metric)
@@ -4506,3 +4511,2836 @@ def union_touching(region, max_distance, metric, *, ctx):
             piece[masks[index]] = 255
         kept.append(piece)
     return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+_SHAPE_METHOD = ["'i1'", "'i2'", "'i3'"]
+
+
+def _shape_method(method):
+    kind = text(method, "Method").lower()
+    codes = {
+        "i1": cv2.CONTOURS_MATCH_I1,
+        "i2": cv2.CONTOURS_MATCH_I2,
+        "i3": cv2.CONTOURS_MATCH_I3,
+    }
+    if kind not in codes:
+        raise ValueError("Method 只能是 i1、i2 或 i3")
+    return codes[kind]
+
+
+def _outer_contour(mask, index: int, name: str):
+    if int(cv2.countNonZero(mask)) == 0:
+        raise ValueError(f"第 {index + 1} 個{name}是空的")
+    work = np.where(mask > 0, 255, 0).astype(np.uint8)
+    found = cv2.findContours(work, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = found[0] if len(found) == 2 else found[1]
+    if not contours:
+        raise ValueError(f"第 {index + 1} 個{name}太小，無法比較形狀")
+    contour = max(contours, key=cv2.contourArea)
+    if len(contour) < 3:
+        raise ValueError(f"第 {index + 1} 個{name}太小，無法比較形狀")
+    return contour
+
+
+def _shape_jobs(region, pattern, method):
+    source = expect_region(region, "Region")
+    model = expect_region(pattern, "Pattern")
+    if source.count() == 0 or model.count() == 0:
+        raise ValueError("區域是空的")
+    if model.count() != 1 and model.count() != source.count():
+        raise ValueError("範本要只有一個物件，或兩邊物件數相同")
+    code = _shape_method(method)
+    models = [_outer_contour(mask, index, "範本") for index, mask in enumerate(model.objects)]
+    if model.count() == 1:
+        models = models * source.count()
+    jobs = []
+    for index, mask in enumerate(source.objects):
+        jobs.append((mask, _outer_contour(mask, index, "物件"), models[index]))
+    return source, jobs, code
+
+
+def _shape_scores(jobs, code) -> np.ndarray:
+    return np.array([float(cv2.matchShapes(contour, model, code, 0.0)) for _mask, contour, model in jobs], dtype=np.float64)
+
+
+@operator(
+    "區域",
+    [P("Region", "要比較的物件"), P("Pattern", "範本")],
+    [],
+    [P("Method", "i1、i2 或 i3", "'i1'", _SHAPE_METHOD)],
+    [P("Score", "越小越像")],
+    "每個物件和範本有多像",
+    "分數越小越像，0 是同一種輪廓。搬家、旋轉、放大縮小都不影響，所以大小不同的方塊分數接近 0，長條會大很多。i1 最常用，i2、i3 對細節更敏感。範本只有一個時會比對每一個物件；兩邊個數相同才逐一配對。Score[1] 是第一個，從 1 開始。",
+    "Vizion.shape_score (Region, Pattern, 'i1', Score)",
+)
+def shape_score(region, pattern, method, *, ctx):
+    _source, jobs, code = _shape_jobs(region, pattern, method)
+    return Result([], [_shape_scores(jobs, code).tolist()])
+
+
+@operator(
+    "區域",
+    [P("Region", "要比較的物件"), P("Pattern", "範本")],
+    [P("Selected", "夠像的物件")],
+    [
+        P("MaxScore", "分數上限，含"),
+        P("Method", "i1、i2 或 i3", "'i1'", _SHAPE_METHOD),
+    ],
+    [],
+    "留下和範本夠像的物件",
+    "先用 shape_score 看分數，再把 MaxScore 設在要留和要丟之間。0.01 留得下方塊和轉過的方塊，長條約 3.5 會被去掉。留下的仍是原來的順序。",
+    "Vizion.select_similar (Region, Pattern, Selected, 0.1, 'i1')",
+)
+def select_similar(region, pattern, max_score, method, *, ctx):
+    source, jobs, code = _shape_jobs(region, pattern, method)
+    limit = scalar(max_score, "MaxScore")
+    scores = _shape_scores(jobs, code)
+    indexes = [index for index, score in enumerate(scores) if score <= limit + 1e-9]
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "區域",
+    [P("Region", "要比較的物件"), P("Pattern", "範本")],
+    [P("Selected", "最像的物件")],
+    [P("Method", "i1、i2 或 i3", "'i1'", _SHAPE_METHOD)],
+    [],
+    "留下和範本最像的物件",
+    "只要最像的那一個，不必自己找最小分數。一樣像時留原來排前面的。",
+    "Vizion.most_similar (Region, Pattern, Selected, 'i1')",
+)
+def most_similar(region, pattern, method, *, ctx):
+    source, jobs, code = _shape_jobs(region, pattern, method)
+    scores = _shape_scores(jobs, code)
+    best = int(np.argmin(scores))
+    return _take_objects(source, [best])
+
+
+@operator(
+    "區域",
+    [P("Region", "要比較的物件"), P("Pattern", "範本")],
+    [P("Selected", "最不像的物件")],
+    [P("Method", "i1、i2 或 i3", "'i1'", _SHAPE_METHOD)],
+    [],
+    "留下和範本最不像的物件",
+    "只要最不像的那一個。一樣不像時留原來排前面的。",
+    "Vizion.least_similar (Region, Pattern, Selected, 'i1')",
+)
+def least_similar(region, pattern, method, *, ctx):
+    source, jobs, code = _shape_jobs(region, pattern, method)
+    scores = _shape_scores(jobs, code)
+    worst = int(np.argmax(scores))
+    return _take_objects(source, [worst])
+
+
+@operator(
+    "區域",
+    [P("Region", "要比較的物件"), P("Pattern", "範本")],
+    [P("Sorted", "依相似度排好的物件")],
+    [
+        P("Order", "near 最像的在前，far 最不像的在前", "'near'", _NEAR),
+        P("Method", "i1、i2 或 i3", "'i1'", _SHAPE_METHOD),
+    ],
+    [],
+    "依和範本的相似度排序",
+    "near 最像的排前面，far 反過來。方法和順序都可省略，預設 i1、最像的在前。一樣像時維持原來的順序。",
+    "Vizion.sort_shape (Region, Pattern, Sorted, 'near', 'i1')",
+)
+def sort_shape(region, pattern, order, method, *, ctx):
+    source, jobs, code = _shape_jobs(region, pattern, method)
+    kind = text(order, "Order").lower()
+    if kind not in ("near", "far"):
+        raise ValueError("Order 只能是 near 或 far")
+    scores = _shape_scores(jobs, code)
+    rank = np.argsort(scores if kind == "near" else -scores, kind="stable")
+    return _take_objects(source, [int(index) for index in rank])
+
+
+@operator(
+    "區域",
+    [P("Region", "要比較的物件"), P("Pattern", "範本")],
+    [],
+    [P("Method", "i1、i2 或 i3", "'i1'", _SHAPE_METHOD)],
+    [P("Rank", "1 是最像")],
+    "每個物件和範本的名次",
+    "名次對齊原來的物件。Rank[1] 是第一個物件，1 代表最像。一樣像時，原來排前面的名次較小。",
+    "Vizion.shape_rank (Region, Pattern, 'i1', Rank)",
+)
+def shape_rank(region, pattern, method, *, ctx):
+    _source, jobs, code = _shape_jobs(region, pattern, method)
+    scores = _shape_scores(jobs, code)
+    placed = np.argsort(scores, kind="stable")
+    rank = np.empty(len(scores), dtype=np.float64)
+    rank[placed] = np.arange(1, len(scores) + 1)
+    return Result([], [rank.tolist()])
+
+
+@operator(
+    "區域",
+    [P("Region", "要比較的物件"), P("Pattern", "範本")],
+    [],
+    [P("Method", "i1、i2 或 i3", "'i1'", _SHAPE_METHOD)],
+    [P("Index", "由像到不像的原來編號")],
+    "依相似度排序後的原來編號",
+    "由像到不像列出原來的編號，從 1 開始。下一行可寫 Vizion.select_obj (Region, Picked, Index)。一樣像時維持原來的順序。",
+    "Vizion.shape_index (Region, Pattern, 'i1', Index)",
+)
+def shape_index(region, pattern, method, *, ctx):
+    _source, jobs, code = _shape_jobs(region, pattern, method)
+    scores = _shape_scores(jobs, code)
+    indexes = [float(int(index) + 1) for index in np.argsort(scores, kind="stable")]
+    return Result([], [indexes])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [
+        P("Hu1", "第 1 個不變矩"),
+        P("Hu2", "第 2 個不變矩"),
+        P("Hu3", "第 3 個不變矩"),
+        P("Hu4", "第 4 個不變矩"),
+        P("Hu5", "第 5 個不變矩"),
+        P("Hu6", "第 6 個不變矩"),
+        P("Hu7", "第 7 個不變矩"),
+    ],
+    "區域的七個 Hu 不變矩",
+    "七個數描述形狀，不看位置、角度和大小。方塊的 Hu1 約 0.16667。要判斷像不像範本，用 shape_score 比較直接。Hu1[1] 是第一個物件。",
+    "Vizion.hu_moments (Region, Hu1, Hu2, Hu3, Hu4, Hu5, Hu6, Hu7)",
+)
+def hu_moments(region, *, ctx):
+    source = expect_region(region, "Region")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    values = [[] for _ in range(7)]
+    for index, mask in enumerate(source.objects):
+        contour = _outer_contour(mask, index, "物件")
+        hu = cv2.HuMoments(cv2.moments(contour)).reshape(-1)
+        for slot, item in enumerate(hu):
+            values[slot].append(float(item))
+    return Result([], values)
+
+
+_ALIGN = ["'center'", "'rigid'"]
+
+
+def _fold_phi(delta: float) -> float:
+    while delta > math.pi / 2:
+        delta -= math.pi
+    while delta < -math.pi / 2:
+        delta += math.pi
+    return delta
+
+
+def _pose_of(mask: np.ndarray):
+    moments = cv2.moments(mask)
+    if not moments["m00"]:
+        return None
+    row = float(moments["m01"] / moments["m00"])
+    col = float(moments["m10"] / moments["m00"])
+    mu20 = float(moments["mu20"])
+    mu02 = float(moments["mu02"])
+    mu11 = float(moments["mu11"])
+    if mu20 + mu02 < 1e-6:
+        phi = 0.0
+    else:
+        phi = 0.5 * math.atan2(2.0 * mu11, mu20 - mu02)
+    return row, col, phi
+
+
+def _align_mode(mode) -> str:
+    kind = text(mode, "Mode").lower()
+    if kind not in ("center", "rigid"):
+        raise ValueError("Mode 只能是 center 或 rigid")
+    return kind
+
+
+def _align_jobs(region, pattern):
+    source = expect_region(region, "Region")
+    model = expect_region(pattern, "Pattern")
+    if source.count() == 0 or model.count() == 0:
+        raise ValueError("區域是空的")
+    if (source.width, source.height) != (model.width, model.height):
+        raise ValueError("兩個區域的尺寸要相同")
+    if model.count() != 1 and model.count() != source.count():
+        raise ValueError("範本要只有一個物件，或兩邊物件數相同")
+    patterns = []
+    for index, mask in enumerate(model.objects):
+        pose = _pose_of(mask)
+        if pose is None:
+            raise ValueError(f"第 {index + 1} 個範本是空的")
+        patterns.append((mask > 0, pose))
+    if model.count() == 1:
+        patterns = patterns * source.count()
+    jobs = []
+    for index, mask in enumerate(source.objects):
+        pose = _pose_of(mask)
+        if pose is None:
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        pattern_mask, pattern_pose = patterns[index]
+        drow = pattern_pose[0] - pose[0]
+        dcol = pattern_pose[1] - pose[1]
+        dphi = _fold_phi(pattern_pose[2] - pose[2])
+        jobs.append((mask, pose, pattern_mask, pattern_pose, drow, dcol, dphi))
+    return source, jobs
+
+
+def _warp_rigid(mask, obj_row, obj_col, pat_row, pat_col, dphi) -> np.ndarray:
+    cosine = math.cos(dphi)
+    sine = math.sin(dphi)
+    matrix = np.array(
+        [
+            [cosine, -sine, pat_col - cosine * obj_col + sine * obj_row],
+            [sine, cosine, pat_row - sine * obj_col - cosine * obj_row],
+        ],
+        np.float64,
+    )
+    warped = cv2.warpAffine(mask, matrix, (mask.shape[1], mask.shape[0]), flags=cv2.INTER_NEAREST, borderValue=0)
+    return np.where(warped > 0, 255, 0).astype(np.uint8)
+
+
+def _placed(mask, pose, pattern_pose, drow, dcol, dphi, mode: str) -> np.ndarray:
+    if mode == "center":
+        return _shift_mask(mask, int(round(drow)), int(round(dcol)))
+    return _warp_rigid(mask, pose[0], pose[1], pattern_pose[0], pattern_pose[1], dphi)
+
+
+def _placed_stats(aligned: np.ndarray, pattern_mask: np.ndarray):
+    both = (aligned > 0) & pattern_mask
+    either = (aligned > 0) ^ pattern_mask
+    overlap = int(np.count_nonzero(both))
+    mismatch = int(np.count_nonzero(either))
+    total = int(np.count_nonzero(pattern_mask))
+    cover = float(overlap) / float(total) if total else 0.0
+    return overlap, mismatch, cover, either
+
+
+@operator(
+    "區域",
+    [P("Region", "要搬的物件"), P("Pattern", "範本")],
+    [],
+    [],
+    [P("DRow", "還要往下搬的列"), P("DColumn", "還要往右搬的行")],
+    "物件中心要搬多少才對上範本",
+    "正的列往下，正的行往右。這是中心的差，還沒有四捨五入。範本只有一個時會拿來比對每一個。DRow[1] 是第一個物件，從 1 開始。",
+    "Vizion.align_delta (Region, Pattern, DRow, DColumn)",
+)
+def align_delta(region, pattern, *, ctx):
+    _source, jobs = _align_jobs(region, pattern)
+    return Result([], [[item[4] for item in jobs], [item[5] for item in jobs]])
+
+
+@operator(
+    "區域",
+    [P("Region", "要轉的物件"), P("Pattern", "範本")],
+    [],
+    [],
+    [P("DPhi", "還要順時針轉的角度，弳度")],
+    "物件的長軸要轉多少才和範本同向",
+    "0 大致沿著行，正角度在畫面上順時針。長軸顛倒 180 度當成同一個方向，所以結果在 -90 度到 90 度之間。方塊的長軸不穩定，長條才適合看這個角度。",
+    "Vizion.align_angle (Region, Pattern, DPhi)",
+)
+def align_angle(region, pattern, *, ctx):
+    _source, jobs = _align_jobs(region, pattern)
+    return Result([], [[item[6] for item in jobs]])
+
+
+@operator(
+    "區域",
+    [P("Region", "要搬的物件"), P("Pattern", "範本")],
+    [P("Aligned", "搬到範本上的物件")],
+    [P("Mode", "center 只對齊中心，rigid 連長軸一起轉", "'center'", _ALIGN)],
+    [],
+    "把物件搬到範本的位置",
+    "center 只搬中心，位移會四捨五入成整數像素，方塊請用這個。rigid 再把長軸轉成和範本一樣。移出影像的部分會被切掉。",
+    "Vizion.align_region (Region, Pattern, Aligned, 'center')",
+)
+def align_region(region, pattern, mode, *, ctx):
+    source, jobs = _align_jobs(region, pattern)
+    kind = _align_mode(mode)
+    kept = []
+    for mask, pose, _pattern_mask, pattern_pose, drow, dcol, dphi in jobs:
+        moved = _placed(mask, pose, pattern_pose, drow, dcol, dphi, kind)
+        if int(cv2.countNonZero(moved)):
+            kept.append(moved)
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "要搬的物件"), P("Pattern", "範本")],
+    [],
+    [P("Mode", "center 只對齊中心，rigid 連長軸一起轉", "'center'", _ALIGN)],
+    [P("Area", "搬過去之後和範本重疊的像素")],
+    "搬到範本上之後重疊幾個像素",
+    "先對齊再算交集。完全疊上時等於範本的面積。一個結果也是 tuple。",
+    "Vizion.align_overlap (Region, Pattern, 'center', Area)",
+)
+def align_overlap(region, pattern, mode, *, ctx):
+    _source, jobs = _align_jobs(region, pattern)
+    kind = _align_mode(mode)
+    areas = []
+    for mask, pose, pattern_mask, pattern_pose, drow, dcol, dphi in jobs:
+        moved = _placed(mask, pose, pattern_pose, drow, dcol, dphi, kind)
+        areas.append(float(_placed_stats(moved, pattern_mask)[0]))
+    return Result([], [areas])
+
+
+@operator(
+    "區域",
+    [P("Region", "要搬的物件"), P("Pattern", "範本")],
+    [],
+    [P("Mode", "center 只對齊中心，rigid 連長軸一起轉", "'center'", _ALIGN)],
+    [P("Cover", "蓋住範本的比例")],
+    "搬過去之後蓋住範本多少",
+    "1 是完全蓋住範本，0.95 是至少蓋住 95%。分母是範本的像素，不是物件自己的。",
+    "Vizion.align_cover (Region, Pattern, 'center', Cover)",
+)
+def align_cover(region, pattern, mode, *, ctx):
+    _source, jobs = _align_jobs(region, pattern)
+    kind = _align_mode(mode)
+    covers = []
+    for mask, pose, pattern_mask, pattern_pose, drow, dcol, dphi in jobs:
+        moved = _placed(mask, pose, pattern_pose, drow, dcol, dphi, kind)
+        covers.append(_placed_stats(moved, pattern_mask)[2])
+    return Result([], [covers])
+
+
+@operator(
+    "區域",
+    [P("Region", "要搬的物件"), P("Pattern", "範本")],
+    [],
+    [P("Mode", "center 只對齊中心，rigid 連長軸一起轉", "'center'", _ALIGN)],
+    [P("Area", "對齊後只有一邊有的像素")],
+    "搬過去之後還差幾個像素",
+    "物件多出來的和範本沒被蓋到的都算。完全疊上是 0。一個結果也是 tuple。",
+    "Vizion.mismatch_area (Region, Pattern, 'center', Area)",
+)
+def mismatch_area(region, pattern, mode, *, ctx):
+    _source, jobs = _align_jobs(region, pattern)
+    kind = _align_mode(mode)
+    areas = []
+    for mask, pose, pattern_mask, pattern_pose, drow, dcol, dphi in jobs:
+        moved = _placed(mask, pose, pattern_pose, drow, dcol, dphi, kind)
+        areas.append(float(_placed_stats(moved, pattern_mask)[1]))
+    return Result([], [areas])
+
+
+@operator(
+    "區域",
+    [P("Region", "要搬的物件"), P("Pattern", "範本")],
+    [P("Mismatch", "對齊後沒有重疊的像素")],
+    [P("Mode", "center 只對齊中心，rigid 連長軸一起轉", "'center'", _ALIGN)],
+    [],
+    "留下對齊後還沒重疊的像素",
+    "完全疊上的物件不會留下。要看差幾個像素，用 mismatch_area，0 也會留在 tuple 裡。",
+    "Vizion.mismatch_region (Region, Pattern, Mismatch, 'center')",
+)
+def mismatch_region(region, pattern, mode, *, ctx):
+    source, jobs = _align_jobs(region, pattern)
+    kind = _align_mode(mode)
+    kept = []
+    for mask, pose, pattern_mask, pattern_pose, drow, dcol, dphi in jobs:
+        moved = _placed(mask, pose, pattern_pose, drow, dcol, dphi, kind)
+        either = _placed_stats(moved, pattern_mask)[3]
+        if np.any(either):
+            kept.append(either.astype(np.uint8) * 255)
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "要搬的物件"), P("Pattern", "範本")],
+    [P("Selected", "搬過去之後夠重合的物件")],
+    [
+        P("MinCover", "至少要蓋住範本的比例"),
+        P("Mode", "center 只對齊中心，rigid 連長軸一起轉", "'center'", _ALIGN),
+    ],
+    [],
+    "留下搬到範本上之後夠重合的物件",
+    "先看 align_cover。1 表示要完全蓋住，0.95 表示至少 95%。留下的是原來的物件，不是搬完的結果。",
+    "Vizion.select_aligned (Region, Pattern, Selected, 0.95, 'center')",
+)
+def select_aligned(region, pattern, min_cover, mode, *, ctx):
+    source, jobs = _align_jobs(region, pattern)
+    kind = _align_mode(mode)
+    limit = scalar(min_cover, "MinCover")
+    if limit < 0:
+        raise ValueError("MinCover 不能是負的")
+    indexes = []
+    for index, (mask, pose, pattern_mask, pattern_pose, drow, dcol, dphi) in enumerate(jobs):
+        moved = _placed(mask, pose, pattern_pose, drow, dcol, dphi, kind)
+        if _placed_stats(moved, pattern_mask)[2] + 1e-9 >= limit:
+            indexes.append(index)
+    return _take_objects(source, indexes)
+
+
+def _grid_view(region, gap):
+    source = expect_region(region, "Region")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    limit = scalar(gap, "Gap")
+    if limit < 0:
+        raise ValueError("Gap 不能是負的")
+    rows, cols, heights, widths = [], [], [], []
+    for index, mask in enumerate(source.objects):
+        moments = cv2.moments(mask)
+        if not moments["m00"]:
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        rows.append(float(moments["m01"] / moments["m00"]))
+        cols.append(float(moments["m10"] / moments["m00"]))
+        _x, _y, width, height = cv2.boundingRect(mask)
+        heights.append(int(height))
+        widths.append(int(width))
+    if limit == 0:
+        limit = float(np.median(np.asarray(heights, dtype=np.float64)))
+    order = sorted(range(len(rows)), key=lambda index: (rows[index], cols[index], index))
+    clusters = []
+    for index in order:
+        if not clusters or rows[index] - clusters[-1]["anchor"] > limit:
+            clusters.append({"members": [index], "anchor": rows[index]})
+        else:
+            clusters[-1]["members"].append(index)
+    gaps = []
+    for cluster in clusters:
+        members = sorted(cluster["members"], key=lambda index: (cols[index], index))
+        cluster["members"] = members
+        cluster["row"] = float(np.median([rows[index] for index in members]))
+        for left, right in zip(members, members[1:]):
+            delta = cols[right] - cols[left]
+            if delta > 1e-6:
+                gaps.append(delta)
+    pitch = float(min(gaps)) if gaps else 0.0
+    origin = float(min(cols))
+    col_index = [1] * len(rows)
+    if pitch > 1e-6:
+        for index, col in enumerate(cols):
+            col_index[index] = int(round((col - origin) / pitch)) + 1
+    row_index = [1] * len(rows)
+    for number, cluster in enumerate(clusters, start=1):
+        for index in cluster["members"]:
+            row_index[index] = number
+    if len(clusters) >= 2:
+        deltas = [clusters[index + 1]["row"] - clusters[index]["row"] for index in range(len(clusters) - 1)]
+        row_pitch = float(np.median(deltas))
+    else:
+        row_pitch = 0.0
+    return {
+        "source": source,
+        "rows": rows,
+        "cols": cols,
+        "heights": heights,
+        "widths": widths,
+        "clusters": clusters,
+        "row_index": row_index,
+        "col_index": col_index,
+        "row_pitch": row_pitch,
+        "pitch": pitch,
+        "origin": origin,
+        "max_col": max(col_index) if col_index else 1,
+    }
+
+
+def _grid_slot(view, row, column):
+    row_no = whole(row, "Row")
+    col_no = whole(column, "Column")
+    if row_no < 1 or col_no < 1 or row_no > len(view["clusters"]) or col_no > view["max_col"]:
+        raise ValueError(f"第 {row_no} 列第 {col_no} 行超出格子範圍")
+    cluster = view["clusters"][row_no - 1]
+    found = [index for index in cluster["members"] if view["col_index"][index] == col_no]
+    return row_no, col_no, cluster, found
+
+
+def _cell_mask(view, center_row, center_col) -> np.ndarray:
+    source = view["source"]
+    height = int(np.median(np.asarray(view["heights"], dtype=np.float64)))
+    width = int(np.median(np.asarray(view["widths"], dtype=np.float64)))
+    row1 = int(round(center_row - (height - 1) / 2.0))
+    col1 = int(round(center_col - (width - 1) / 2.0))
+    row2 = row1 + height
+    col2 = col1 + width
+    mask = np.zeros((source.height, source.width), np.uint8)
+    row1 = max(0, row1)
+    col1 = max(0, col1)
+    row2 = min(source.height, row2)
+    col2 = min(source.width, col2)
+    if row2 > row1 and col2 > col1:
+        mask[row1:row2, col1:col2] = 255
+    return mask
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [P("Gap", "中心列差超過這個值就換一列。0 用物件高度", "0")],
+    [P("Row", "第幾列，從 1 開始"), P("Column", "這一列的第幾行，從 1 開始")],
+    "每個物件在第幾列第幾行",
+    "由上到下分列，由左到右分行。Gap 填 0 時，用物件高度當門檻，中心列差比高度大就換下一列。行距用最小的相鄰間距，約兩倍就當成中間缺一格。順序和原來的物件對齊，Row[1] 是第一個。",
+    "Vizion.grid_index (Region, Row, Column)",
+)
+def grid_index(region, gap, *, ctx):
+    view = _grid_view(region, gap)
+    return Result([], [[float(item) for item in view["row_index"]], [float(item) for item in view["col_index"]]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Sorted", "由左上到右下排好的物件")],
+    [P("Gap", "中心列差超過這個值就換一列。0 用物件高度", "0")],
+    [],
+    "依格子由左上到右下排序",
+    "先上列再下列，同一列由左到右。缺掉的格子會跳過。Gap 可省略，0 表示用物件高度。",
+    "Vizion.sort_grid (Region, Sorted)",
+)
+def sort_grid(region, gap, *, ctx):
+    view = _grid_view(region, gap)
+    indexes = [index for cluster in view["clusters"] for index in cluster["members"]]
+    return _take_objects(view["source"], indexes)
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [P("Gap", "中心列差超過這個值就換一列。0 用物件高度", "0")],
+    [P("Rows", "有幾列"), P("Columns", "有幾行，含缺格")],
+    "物件排成幾列幾行",
+    "行數含缺掉的格子。上面三格、下面左右各一格、中間空的，仍算 2 列 3 行。Gap 填 0 用物件高度。",
+    "Vizion.grid_size (Region, Rows, Columns)",
+)
+def grid_size(region, gap, *, ctx):
+    view = _grid_view(region, gap)
+    return Result([], [float(len(view["clusters"])), float(view["max_col"])])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [P("Gap", "中心列差超過這個值就換一列。0 用物件高度", "0")],
+    [P("RowPitch", "列距"), P("ColumnPitch", "行距")],
+    "格子的列距和行距",
+    "列距是相鄰兩列中心的差。行距是同一列裡最小的相鄰間距。只有一列或一行時，那個間距是 0。",
+    "Vizion.grid_pitch (Region, RowPitch, ColumnPitch)",
+)
+def grid_pitch(region, gap, *, ctx):
+    view = _grid_view(region, gap)
+    return Result([], [view["row_pitch"], view["pitch"]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Missing", "缺掉的格子")],
+    [P("Gap", "中心列差超過這個值就換一列。0 用物件高度", "0")],
+    [],
+    "補上排程中缺掉的格子",
+    "某一列的間距大約是最小行距的兩倍，中間就補一格，大小用物件的中位數。每一列都缺同一行時看不出來，因為沒有較小的行距可當基準。",
+    "Vizion.missing_cell (Region, Missing)",
+)
+def missing_cell(region, gap, *, ctx):
+    view = _grid_view(region, gap)
+    kept = []
+    for cluster in view["clusters"]:
+        present = {view["col_index"][index] for index in cluster["members"]}
+        for column in range(1, view["max_col"] + 1):
+            if column in present or view["pitch"] <= 1e-6:
+                continue
+            center_col = view["origin"] + (column - 1) * view["pitch"]
+            piece = _cell_mask(view, cluster["row"], center_col)
+            if int(cv2.countNonZero(piece)):
+                kept.append(piece)
+    return Result([Region(view["source"].width, view["source"].height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Selected", "這一格的物件")],
+    [
+        P("Row", "第幾列，從 1 開始"),
+        P("Column", "第幾行，從 1 開始"),
+        P("Gap", "中心列差超過這個值就換一列。0 用物件高度", "0"),
+    ],
+    [],
+    "取出某一列某一行的物件",
+    "編號從 1 開始。這一格是空的會報錯，空格用 missing_cell 看。同一個格子有多個物件時全部留下。",
+    "Vizion.select_grid (Region, Selected, 2, 3)",
+)
+def select_grid(region, row, column, gap, *, ctx):
+    view = _grid_view(region, gap)
+    row_no, col_no, _cluster, found = _grid_slot(view, row, column)
+    if not found:
+        raise ValueError(f"第 {row_no} 列第 {col_no} 行沒有物件")
+    return _take_objects(view["source"], found)
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [
+        P("Row", "第幾列，從 1 開始"),
+        P("Column", "第幾行，從 1 開始"),
+        P("Gap", "中心列差超過這個值就換一列。0 用物件高度", "0"),
+    ],
+    [P("CenterRow", "這一格的中心列"), P("CenterColumn", "這一格的中心行")],
+    "某一格的中心，沒有物件也算",
+    "有物件就用它的中心。沒有物件就用格線算出來的位置，方便把相機或範本移過去。行列超出範圍才會報錯。",
+    "Vizion.cell_center (Region, 2, 2, CenterRow, CenterColumn)",
+)
+def cell_center(region, row, column, gap, *, ctx):
+    view = _grid_view(region, gap)
+    _row_no, col_no, cluster, found = _grid_slot(view, row, column)
+    if found:
+        index = found[0]
+        return Result([], [view["rows"][index], view["cols"][index]])
+    center_col = view["origin"] + (col_no - 1) * view["pitch"]
+    return Result([], [cluster["row"], center_col])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Label", "行號圖")],
+    [P("Gap", "中心列差超過這個值就換一列。0 用物件高度", "0")],
+    [],
+    "把行號畫成灰階",
+    "像素值就是行號，從 1 開始。空白和缺掉的格子是 0。行數超過 255 放不進灰階圖。",
+    "Vizion.grid_label (Region, Label)",
+)
+def grid_label(region, gap, *, ctx):
+    view = _grid_view(region, gap)
+    source = view["source"]
+    if view["max_col"] > 255:
+        raise ValueError("行數超過 255，灰階影像放不下")
+    label = np.zeros((source.height, source.width), np.uint8)
+    for index, mask in enumerate(source.objects):
+        label[mask > 0] = view["col_index"][index]
+    return Result([Image(label)], [])
+
+
+_BRIGHT_SIDE = ["'right'", "'left'", "'below'", "'above'", "'center'"]
+
+
+def _gray_balance(drow, dcol, row1, col1, row2, col2, grow, gcol):
+    distance = math.hypot(drow, dcol)
+    if distance < 1e-9:
+        return 0.0, 1.0, "center"
+    if abs(drow) > abs(dcol):
+        side = "below" if drow > 0 else "above"
+    elif abs(dcol) > abs(drow):
+        side = "right" if dcol > 0 else "left"
+    else:
+        side = "below" if drow > 0 else "above"
+    unit_row = drow / distance
+    unit_col = dcol / distance
+    limits = []
+    if unit_row > 1e-12:
+        limits.append((row2 - grow) / unit_row)
+    elif unit_row < -1e-12:
+        limits.append((row1 - grow) / unit_row)
+    if unit_col > 1e-12:
+        limits.append((col2 - gcol) / unit_col)
+    elif unit_col < -1e-12:
+        limits.append((col1 - gcol) / unit_col)
+    reach = min(limits) if limits else distance
+    balance = 1.0 - distance / reach if reach > 1e-12 else 0.0
+    return distance, float(min(1.0, max(0.0, balance))), side
+
+
+def _gray_facts(region, image):
+    source = expect_region(region, "Region")
+    picture = expect_image(image, "Image")
+    gray = picture.gray().astype(np.float64)
+    if gray.shape[0] != source.height or gray.shape[1] != source.width:
+        raise ValueError("區域和影像的尺寸要相同")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    facts = []
+    for index, mask in enumerate(source.objects):
+        geo = cv2.moments(mask)
+        if not geo["m00"]:
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        grow = float(geo["m01"] / geo["m00"])
+        gcol = float(geo["m10"] / geo["m00"])
+        bright = cv2.moments(np.where(mask > 0, gray, 0.0))
+        total = float(bright["m00"])
+        if total <= 1e-9:
+            drow = dcol = 0.0
+        else:
+            drow = float(bright["m01"] / total) - grow
+            dcol = float(bright["m10"] / total) - gcol
+        _x, _y, width, height = cv2.boundingRect(mask)
+        row1, col1 = float(_y), float(_x)
+        distance, balance, side = _gray_balance(drow, dcol, row1, col1, row1 + height - 1, col1 + width - 1, grow, gcol)
+        facts.append(
+            {
+                "mask": mask,
+                "grow": grow,
+                "gcol": gcol,
+                "drow": drow,
+                "dcol": dcol,
+                "distance": distance,
+                "balance": balance,
+                "side": side,
+                "phi": _bearing(drow, dcol),
+            }
+        )
+    return source, facts
+
+
+def _bright_side(side) -> str:
+    kind = text(side, "Side").lower()
+    if kind not in ("right", "left", "below", "above", "center"):
+        raise ValueError("Side 只能是 right、left、below、above 或 center")
+    return kind
+
+
+def _half_mask(mask, grow, gcol, side, dark: bool) -> np.ndarray:
+    if dark:
+        side = {"right": "left", "left": "right", "below": "above", "above": "below", "center": "center"}[side]
+    if side == "center":
+        return mask.copy()
+    height, width = mask.shape[:2]
+    grid_col = np.arange(width, dtype=np.float64)[None, :]
+    grid_row = np.arange(height, dtype=np.float64)[:, None]
+    inside = mask > 0
+    if side == "right":
+        keep = inside & (grid_col > gcol)
+    elif side == "left":
+        keep = inside & (grid_col < gcol)
+    elif side == "below":
+        keep = inside & (grid_row > grow)
+    else:
+        keep = inside & (grid_row < grow)
+    out = np.zeros_like(mask)
+    out[keep] = 255
+    return out
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("DRow", "亮度重心比形狀中心低多少"), P("DColumn", "亮度重心比形狀中心右多少")],
+    "亮度重心偏離形狀中心多少",
+    "正的列表示亮的部分偏下，正的行表示偏右。0 是亮度正在形狀中間。全黑當成在正中間。彩色先轉成亮度。DRow[1] 是第一個物件。",
+    "Vizion.gray_offset (Region, Image, DRow, DColumn)",
+)
+def gray_offset(region, image, *, ctx):
+    _source, facts = _gray_facts(region, image)
+    return Result([], [[item["drow"] for item in facts], [item["dcol"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Distance", "亮度重心離開形狀中心的距離")],
+    "亮度重心偏了多遠",
+    "就是偏移的直線距離。均勻或全黑是 0。一個結果也是 tuple。",
+    "Vizion.gray_shift (Region, Image, Distance)",
+)
+def gray_shift(region, image, *, ctx):
+    _source, facts = _gray_facts(region, image)
+    return Result([], [[item["distance"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Phi", "偏亮的方向，度。0 向右，順時針")],
+    "亮度往哪個方向偏",
+    "0 度向右，90 度向下，180 度向左，270 度向上。沒有偏移時是 0。",
+    "Vizion.gray_direction (Region, Image, Phi)",
+)
+def gray_direction(region, image, *, ctx):
+    _source, facts = _gray_facts(region, image)
+    return Result([], [[item["phi"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Side", "right、left、below、above 或 center")],
+    "亮的部分在哪一側",
+    "看偏移比較大的那個方向。列和行一樣大時先算上或下。幾乎沒偏就是 center。",
+    "Vizion.bright_side (Region, Image, Side)",
+)
+def bright_side(region, image, *, ctx):
+    _source, facts = _gray_facts(region, image)
+    return Result([], [[item["side"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Balance", "1 在正中間，0 全擠在邊緣")],
+    "亮度有多靠中間",
+    "1 是亮度重心和形狀中心重疊，0 是再偏就出了物件。方塊右半邊較亮時大約是 0.68，不是 0。",
+    "Vizion.gray_balance (Region, Image, Balance)",
+)
+def gray_balance(region, image, *, ctx):
+    _source, facts = _gray_facts(region, image)
+    return Result([], [[item["balance"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Half", "較亮的那一半")],
+    [],
+    [],
+    "留下物件裡較亮的那一半",
+    "用形狀中心切開，留下偏亮的那一側。亮度在中間時留下整個物件。先看 bright_side 再決定要不要用這個結果。",
+    "Vizion.bright_half (Region, Image, Half)",
+)
+def bright_half(region, image, *, ctx):
+    source, facts = _gray_facts(region, image)
+    kept = []
+    for item in facts:
+        piece = _half_mask(item["mask"], item["grow"], item["gcol"], item["side"], False)
+        if int(cv2.countNonZero(piece)):
+            kept.append(piece)
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Half", "較暗的那一半")],
+    [],
+    [],
+    "留下物件裡較暗的那一半",
+    "和 bright_half 相反的那一側。亮度在中間時同樣留下整個物件。",
+    "Vizion.dark_half (Region, Image, Half)",
+)
+def dark_half(region, image, *, ctx):
+    source, facts = _gray_facts(region, image)
+    kept = []
+    for item in facts:
+        piece = _half_mask(item["mask"], item["grow"], item["gcol"], item["side"], True)
+        if int(cv2.countNonZero(piece)):
+            kept.append(piece)
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Selected", "亮部在指定側的物件")],
+    [
+        P("Side", "right、left、below、above 或 center", None, _BRIGHT_SIDE),
+        P("MinShift", "至少要偏這麼遠。center 則是不能超過", "0.5"),
+    ],
+    [],
+    "留下亮部在某一側的物件",
+    "先用 gray_offset 看偏了多少。right 這類方向要偏移至少 MinShift 才留下。center 則是偏移小於 MinShift 才算在中間。留下的是原來的物件。",
+    "Vizion.select_bright (Region, Image, Selected, 'right', 1)",
+)
+def select_bright(region, image, side, min_shift, *, ctx):
+    source, facts = _gray_facts(region, image)
+    kind = _bright_side(side)
+    limit = scalar(min_shift, "MinShift")
+    if limit < 0:
+        raise ValueError("MinShift 不能是負的")
+    indexes = []
+    for index, item in enumerate(facts):
+        if kind == "center":
+            matched = item["distance"] < limit + 1e-9
+        else:
+            matched = item["side"] == kind and item["distance"] + 1e-9 >= limit
+        if matched:
+            indexes.append(index)
+    return _take_objects(source, indexes)
+
+
+_RING = ["'inner'", "'outer'"]
+_EDGE_KERNEL = np.ones((3, 3), np.uint8)
+
+
+def _ring_kind(which) -> str:
+    kind = text(which, "Which").lower()
+    if kind not in ("inner", "outer"):
+        raise ValueError("Which 只能是 inner 或 outer")
+    return kind
+
+
+def _edge_facts(region, image):
+    source = expect_region(region, "Region")
+    picture = expect_image(image, "Image")
+    gray = picture.gray().astype(np.float64)
+    if gray.shape[0] != source.height or gray.shape[1] != source.width:
+        raise ValueError("區域和影像的尺寸要相同")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    facts = []
+    for index, mask in enumerate(source.objects):
+        binary = np.where(mask > 0, 255, 0).astype(np.uint8)
+        if not int(cv2.countNonZero(binary)):
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        eroded = cv2.erode(binary, _EDGE_KERNEL)
+        dilated = cv2.dilate(binary, _EDGE_KERNEL)
+        inner = (binary > 0) & (eroded == 0)
+        outer = (dilated > 0) & (binary == 0)
+        if not np.any(outer):
+            raise ValueError(f"第 {index + 1} 個物件貼滿影像，沒有外側可比較")
+        inner_mean = float(gray[inner].mean()) if np.any(inner) else float(gray[binary > 0].mean())
+        outer_mean = float(gray[outer].mean())
+        facts.append(
+            {
+                "mask": binary,
+                "inner": inner,
+                "outer": outer,
+                "inner_mean": inner_mean,
+                "outer_mean": outer_mean,
+                "contrast": inner_mean - outer_mean,
+            }
+        )
+    return source, facts
+
+
+def _abs_limit(value, name) -> float:
+    limit = scalar(value, name)
+    if limit < 0:
+        raise ValueError(f"{name} 不能是負的")
+    return limit
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Contrast", "內圈減外圈。正的表示物件比較亮")],
+    "邊緣內外側差多少灰階",
+    "內圈是物件最外一像素，外圈是貼在物件外面的一像素。正的表示物件比外面亮，負的表示外面比較亮。0 是這裡沒有邊緣。彩色先轉成亮度。Contrast[1] 是第一個物件。",
+    "Vizion.edge_contrast (Region, Image, Contrast)",
+)
+def edge_contrast(region, image, *, ctx):
+    _source, facts = _edge_facts(region, image)
+    return Result([], [[item["contrast"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Contrast", "內外圈灰階差的絕對值")],
+    "邊緣有多清楚",
+    "不管物件比較亮還是外面比較亮，只看差多少。0 是邊界兩邊一樣，看不出邊緣。",
+    "Vizion.edge_abs (Region, Image, Contrast)",
+)
+def edge_abs(region, image, *, ctx):
+    _source, facts = _edge_facts(region, image)
+    return Result([], [[abs(item["contrast"]) for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Mean", "內圈的平均灰階")],
+    "物件最外一圈的平均灰階",
+    "只看物件自己的最外一像素，不含外面。物件只有一像素厚時，這一圈就是整個物件。",
+    "Vizion.inner_gray (Region, Image, Mean)",
+)
+def inner_gray(region, image, *, ctx):
+    _source, facts = _edge_facts(region, image)
+    return Result([], [[item["inner_mean"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Mean", "外圈的平均灰階")],
+    "貼在物件外面那一圈的平均灰階",
+    "外圈是緊貼物件、不屬於物件的一像素。物件貼滿整張影像時沒有外圈。",
+    "Vizion.outer_gray (Region, Image, Mean)",
+)
+def outer_gray(region, image, *, ctx):
+    _source, facts = _edge_facts(region, image)
+    return Result([], [[item["outer_mean"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Selected", "邊緣夠清楚的物件")],
+    [P("MinContrast", "內外圈至少要差這麼多", "10")],
+    [],
+    "留下邊緣清楚的物件",
+    "用差的絕對值，物件較亮或外面較亮都算。先看 edge_abs 再決定門檻。10 表示兩邊至少差 10 個灰階。留下的是原來的物件。",
+    "Vizion.select_edge (Region, Image, Selected, 10)",
+)
+def select_edge(region, image, min_contrast, *, ctx):
+    source, facts = _edge_facts(region, image)
+    limit = _abs_limit(min_contrast, "MinContrast")
+    indexes = [index for index, item in enumerate(facts) if abs(item["contrast"]) + 1e-9 >= limit]
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Selected", "邊緣不明顯的物件")],
+    [P("MaxContrast", "內外圈差不能超過", "10")],
+    [],
+    "留下邊緣不明顯的物件",
+    "差的絕對值小於等於 MaxContrast 才留下。0 表示邊界兩邊完全一樣。用來抓沒有對到背景的物件。",
+    "Vizion.select_soft (Region, Image, Selected, 10)",
+)
+def select_soft(region, image, max_contrast, *, ctx):
+    source, facts = _edge_facts(region, image)
+    limit = _abs_limit(max_contrast, "MaxContrast")
+    indexes = [index for index, item in enumerate(facts) if abs(item["contrast"]) <= limit + 1e-9]
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Ring", "內圈或外圈")],
+    [P("Which", "inner 物件最外一圈，outer 外面那一圈", "'inner'", _RING)],
+    [],
+    "取出邊緣的內圈或外圈",
+    "inner 是物件自己的最外一像素，outer 是貼在外面的一像素。先看 edge_contrast 知道兩邊差多少，再用這個把那一圈畫出來。",
+    "Vizion.edge_ring (Region, Image, Ring, 'inner')",
+)
+def edge_ring(region, image, which, *, ctx):
+    source, facts = _edge_facts(region, image)
+    kind = _ring_kind(which)
+    kept = []
+    for item in facts:
+        piece = item["inner"] if kind == "inner" else item["outer"]
+        if np.any(piece):
+            kept.append(piece.astype(np.uint8) * 255)
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Selected", "邊緣最清楚的物件")],
+    [],
+    [],
+    "留下邊緣最清楚的那一個",
+    "比的是內外圈灰階差的絕對值。一樣清楚時留原來排前面的。",
+    "Vizion.strongest_edge (Region, Image, Selected)",
+)
+def strongest_edge(region, image, *, ctx):
+    source, facts = _edge_facts(region, image)
+    best = max(range(len(facts)), key=lambda index: (abs(facts[index]["contrast"]), -index))
+    return _take_objects(source, [best])
+
+
+_STEP_NAMES = ("above", "below", "left", "right")
+
+
+def _neighbor_steps(binary: np.ndarray, gray: np.ndarray) -> np.ndarray:
+    inside = binary > 0
+    signed = np.full((4, inside.shape[0], inside.shape[1]), np.inf, dtype=np.float64)
+    shifts = ((-1, 0), (1, 0), (0, -1), (0, 1))
+    for index, (drow, dcol) in enumerate(shifts):
+        valid = np.zeros(inside.shape, dtype=bool)
+        neighbor = np.zeros(gray.shape, dtype=np.float64)
+        if drow == -1:
+            valid[1:, :] = ~inside[:-1, :]
+            neighbor[1:, :] = gray[:-1, :]
+        elif drow == 1:
+            valid[:-1, :] = ~inside[1:, :]
+            neighbor[:-1, :] = gray[1:, :]
+        elif dcol == -1:
+            valid[:, 1:] = ~inside[:, :-1]
+            neighbor[:, 1:] = gray[:, :-1]
+        else:
+            valid[:, :-1] = ~inside[:, 1:]
+            neighbor[:, :-1] = gray[:, 1:]
+        signed[index] = np.where(valid, gray - neighbor, np.inf)
+    return signed
+
+
+def _spot_facts(region, image):
+    source = expect_region(region, "Region")
+    picture = expect_image(image, "Image")
+    gray = picture.gray().astype(np.float64)
+    if gray.shape[0] != source.height or gray.shape[1] != source.width:
+        raise ValueError("區域和影像的尺寸要相同")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    facts = []
+    for index, mask in enumerate(source.objects):
+        binary = np.where(mask > 0, 255, 0).astype(np.uint8)
+        if not int(cv2.countNonZero(binary)):
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        eroded = cv2.erode(binary, _EDGE_KERNEL)
+        inner = (binary > 0) & (eroded == 0)
+        signed = _neighbor_steps(binary, gray)
+        direction = np.argmin(np.abs(signed), axis=0)
+        chosen = np.take_along_axis(signed, direction[None, :, :], axis=0)[0]
+        strength = np.abs(chosen)
+        strength[~inner] = np.inf
+        if not np.isfinite(strength).any():
+            raise ValueError(f"第 {index + 1} 個物件沒有外側可比較")
+        flat = int(np.argmin(strength))
+        row, col = divmod(flat, source.width)
+        facts.append(
+            {
+                "signed": float(chosen[row, col]),
+                "floor": float(strength[row, col]),
+                "row": float(row),
+                "col": float(col),
+                "side": _STEP_NAMES[int(direction[row, col])],
+                "strength": strength,
+            }
+        )
+    return source, facts
+
+
+def _spot_limit(value, name) -> float:
+    limit = scalar(value, name)
+    if limit < 0:
+        raise ValueError(f"{name} 不能是負的")
+    return limit
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Contrast", "最弱那一點的內減外。負的表示外面比較亮")],
+    "邊緣最弱那一點差多少",
+    "edge_contrast 是整圈的平均。這裡只看最弱的一點：物件最外一像素，減掉緊鄰的外側像素。負的表示這一點外面比較亮。外側有好幾個時，先看上、下、左、右。一樣弱時留列最小、再來行最小的那一點。Contrast[1] 是第一個物件。",
+    "Vizion.edge_min (Region, Image, Contrast)",
+)
+def edge_min(region, image, *, ctx):
+    _source, facts = _spot_facts(region, image)
+    return Result([], [[item["signed"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Floor", "最弱那一點的灰階差，不分誰亮")],
+    "邊緣最弱的地方還差多少",
+    "只看強度。0 表示這一點兩邊一樣，邊緣在這裡斷掉。整圈都很清楚時，這個數會接近 edge_abs。",
+    "Vizion.edge_floor (Region, Image, Floor)",
+)
+def edge_floor(region, image, *, ctx):
+    _source, facts = _spot_facts(region, image)
+    return Result([], [[item["floor"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Row", "最弱點的列"), P("Column", "最弱點的行")],
+    "邊緣最弱的那一點在哪",
+    "點在物件自己的最外一像素上，不是外面那一圈。一樣弱時留列最小、再來行最小的。",
+    "Vizion.edge_min_point (Region, Image, Row, Column)",
+)
+def edge_min_point(region, image, *, ctx):
+    _source, facts = _spot_facts(region, image)
+    return Result([], [[item["row"] for item in facts], [item["col"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Side", "弱點朝外的方向：above、below、left 或 right")],
+    "最弱的那一點朝哪邊掉下去",
+    "above 是緊鄰的外側在這個點的上方。外側有好幾個一樣弱時，先看上、下、左、右。",
+    "Vizion.edge_min_side (Region, Image, Side)",
+)
+def edge_min_side(region, image, *, ctx):
+    _source, facts = _spot_facts(region, image)
+    return Result([], [[item["side"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [P("MaxContrast", "差不超過這個值就算弱點", "30")],
+    [P("Count", "弱點有幾個像素")],
+    "邊緣上有幾個弱點",
+    "數的是物件最外圈裡，和外側的差不超過 MaxContrast 的像素。0 表示整圈都比這個門檻清楚。一個結果也是 tuple。",
+    "Vizion.weak_count (Region, Image, 30, Count)",
+)
+def weak_count(region, image, max_contrast, *, ctx):
+    _source, facts = _spot_facts(region, image)
+    limit = _spot_limit(max_contrast, "MaxContrast")
+    counts = [float(np.count_nonzero(item["strength"] <= limit + 1e-9)) for item in facts]
+    return Result([], [counts])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Weak", "弱點像素")],
+    [P("MaxContrast", "差不超過這個值就算弱點", "30")],
+    [],
+    "留下邊緣上的弱點",
+    "整圈都清楚的物件不會留下。要看每一個物件有幾個弱點，用 weak_count，0 也留在 tuple 裡。",
+    "Vizion.weak_edge (Region, Image, Weak, 30)",
+)
+def weak_edge(region, image, max_contrast, *, ctx):
+    source, facts = _spot_facts(region, image)
+    limit = _spot_limit(max_contrast, "MaxContrast")
+    kept = []
+    for item in facts:
+        piece = item["strength"] <= limit + 1e-9
+        if np.any(piece):
+            mask = np.zeros((source.height, source.width), np.uint8)
+            mask[piece] = 255
+            kept.append(mask)
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Selected", "整圈都清楚的物件")],
+    [P("MinContrast", "最弱的地方也至少要差這麼多", "10")],
+    [],
+    "留下整圈都清楚的物件",
+    "看的是最弱那一點，不是整圈平均。最弱的地方也要達到 MinContrast 才留下。先用 edge_floor 看那個數字。",
+    "Vizion.select_closed (Region, Image, Selected, 10)",
+)
+def select_closed(region, image, min_contrast, *, ctx):
+    source, facts = _spot_facts(region, image)
+    limit = _spot_limit(min_contrast, "MinContrast")
+    indexes = [index for index, item in enumerate(facts) if item["floor"] + 1e-9 >= limit]
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Selected", "邊緣有斷掉的物件")],
+    [P("MaxContrast", "最弱的地方不超過這個值", "30")],
+    [],
+    "留下邊緣有弱點的物件",
+    "最弱那一點的差小於等於 MaxContrast 就留下。0 表示有一點兩邊完全一樣。留下的是原來的整個物件，不是只有弱點。",
+    "Vizion.select_broken (Region, Image, Selected, 30)",
+)
+def select_broken(region, image, max_contrast, *, ctx):
+    source, facts = _spot_facts(region, image)
+    limit = _spot_limit(max_contrast, "MaxContrast")
+    indexes = [index for index, item in enumerate(facts) if item["floor"] <= limit + 1e-9]
+    return _take_objects(source, indexes)
+
+
+def _gray_objects(region, image):
+    source = expect_region(region, "Region")
+    picture = expect_image(image, "Image")
+    gray = picture.gray().astype(np.float64)
+    if gray.shape[0] != source.height or gray.shape[1] != source.width:
+        raise ValueError("區域和影像的尺寸要相同")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    objects = []
+    for index, mask in enumerate(source.objects):
+        inside = mask > 0
+        if not np.any(inside):
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        values = gray[inside]
+        objects.append({"inside": inside, "area": int(np.count_nonzero(inside)), "low": float(values.min()), "high": float(values.max())})
+    return source, gray, objects
+
+
+def _band_limits(low, high) -> tuple[float, float]:
+    start = scalar(low, "Low")
+    stop = scalar(high, "High")
+    if start > stop:
+        start, stop = stop, start
+    return start, stop
+
+
+def _in_band(inside: np.ndarray, gray: np.ndarray, low: float, high: float) -> np.ndarray:
+    return inside & (gray >= low) & (gray <= high)
+
+
+def _extreme_point(inside: np.ndarray, gray: np.ndarray, bright: bool):
+    score = np.where(inside, gray, -np.inf if bright else np.inf)
+    flat = int(np.argmax(score) if bright else np.argmin(score))
+    row, col = divmod(flat, gray.shape[1])
+    return float(row), float(col), float(gray[row, col])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [P("Low", "灰階下限，含"), P("High", "灰階上限，含")],
+    [P("Count", "落在這個範圍的像素數")],
+    "物件裡有幾個像素落在這個灰階",
+    "下限和上限含在內，寫反了會自動對調。每個物件各自數。0 表示沒有像素落在這個範圍。彩色先轉成亮度。Count[1] 是第一個物件。",
+    "Vizion.band_count (Region, Image, 100, 255, Count)",
+)
+def band_count(region, image, low, high, *, ctx):
+    _source, gray, objects = _gray_objects(region, image)
+    start, stop = _band_limits(low, high)
+    counts = [float(np.count_nonzero(_in_band(item["inside"], gray, start, stop))) for item in objects]
+    return Result([], [counts])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [P("Low", "灰階下限，含"), P("High", "灰階上限，含")],
+    [P("Ratio", "合格像素佔物件的比例")],
+    "合格像素佔物件多少",
+    "1 是整個物件都落在這個灰階。0 是完全沒有。分母是物件自己的像素，不是整張圖。",
+    "Vizion.band_ratio (Region, Image, 100, 255, Ratio)",
+)
+def band_ratio(region, image, low, high, *, ctx):
+    _source, gray, objects = _gray_objects(region, image)
+    start, stop = _band_limits(low, high)
+    ratios = []
+    for item in objects:
+        count = float(np.count_nonzero(_in_band(item["inside"], gray, start, stop)))
+        ratios.append(count / float(item["area"]))
+    return Result([], [ratios])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Band", "落在範圍裡的像素")],
+    [P("Low", "灰階下限，含"), P("High", "灰階上限，含")],
+    [],
+    "留下物件裡落在這個灰階的像素",
+    "同一個物件裡合格的像素仍算一個物件，中間可以有洞。完全沒有合格像素的物件不會留下。要看個數，用 band_count，0 也留在 tuple 裡。",
+    "Vizion.band_region (Region, Image, Band, 100, 255)",
+)
+def band_region(region, image, low, high, *, ctx):
+    source, gray, objects = _gray_objects(region, image)
+    start, stop = _band_limits(low, high)
+    kept = []
+    for item in objects:
+        piece = _in_band(item["inside"], gray, start, stop)
+        if np.any(piece):
+            mask = np.zeros((source.height, source.width), np.uint8)
+            mask[piece] = 255
+            kept.append(mask)
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Selected", "合格比例夠高的物件")],
+    [
+        P("Low", "灰階下限，含"),
+        P("High", "灰階上限，含"),
+        P("MinRatio", "至少要佔物件的這個比例", "0.5"),
+    ],
+    [],
+    "留下夠亮比例夠高的物件",
+    "先用 band_ratio 看比例。1 是整個物件都要落在範圍裡，0.8 是至少 80%。留下的是原來的整個物件，不是只有合格的像素。",
+    "Vizion.select_band (Region, Image, Selected, 100, 255, 0.8)",
+)
+def select_band(region, image, low, high, min_ratio, *, ctx):
+    source, gray, objects = _gray_objects(region, image)
+    start, stop = _band_limits(low, high)
+    limit = scalar(min_ratio, "MinRatio")
+    if limit < 0:
+        raise ValueError("MinRatio 不能是負的")
+    indexes = []
+    for index, item in enumerate(objects):
+        count = float(np.count_nonzero(_in_band(item["inside"], gray, start, stop)))
+        if count / float(item["area"]) + 1e-9 >= limit:
+            indexes.append(index)
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Row", "最亮點的列"), P("Column", "最亮點的行"), P("Gray", "這一點的灰階")],
+    "物件裡最亮的那一點",
+    "一樣亮時留列最小、再來行最小的。每個物件一點。Gray[1] 是第一個物件的灰階。",
+    "Vizion.bright_point (Region, Image, Row, Column, Gray)",
+)
+def bright_point(region, image, *, ctx):
+    _source, gray, objects = _gray_objects(region, image)
+    rows, cols, values = [], [], []
+    for item in objects:
+        row, col, value = _extreme_point(item["inside"], gray, True)
+        rows.append(row)
+        cols.append(col)
+        values.append(value)
+    return Result([], [rows, cols, values])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Row", "最暗點的列"), P("Column", "最暗點的行"), P("Gray", "這一點的灰階")],
+    "物件裡最暗的那一點",
+    "一樣暗時留列最小、再來行最小的。整個物件同一個灰階時，最暗點和最亮點是同一點。",
+    "Vizion.dark_point (Region, Image, Row, Column, Gray)",
+)
+def dark_point(region, image, *, ctx):
+    _source, gray, objects = _gray_objects(region, image)
+    rows, cols, values = [], [], []
+    for item in objects:
+        row, col, value = _extreme_point(item["inside"], gray, False)
+        rows.append(row)
+        cols.append(col)
+        values.append(value)
+    return Result([], [rows, cols, values])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Peak", "最亮的那些像素")],
+    [],
+    [],
+    "留下物件裡最亮的像素",
+    "只留等於這個物件最大灰階的像素。整個物件一樣亮時，就是整個物件。一樣亮的點全部留下，不只是第一點。",
+    "Vizion.peak_region (Region, Image, Peak)",
+)
+def peak_region(region, image, *, ctx):
+    source, gray, objects = _gray_objects(region, image)
+    kept = []
+    for item in objects:
+        piece = item["inside"] & (gray == item["high"])
+        mask = np.zeros((source.height, source.width), np.uint8)
+        mask[piece] = 255
+        kept.append(mask)
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Selected", "灰階幾乎一樣的物件")],
+    [P("MaxSpan", "最亮和最暗最多差這麼多", "0")],
+    [],
+    "留下灰階很均勻的物件",
+    "0 是整個物件同一個灰階。10 表示最亮和最暗最多差 10。min_max_gray 是把全部物件合在一起，這裡是每個物件各自看。",
+    "Vizion.select_uniform (Region, Image, Selected, 0)",
+)
+def select_uniform(region, image, max_span, *, ctx):
+    source, _gray, objects = _gray_objects(region, image)
+    limit = scalar(max_span, "MaxSpan")
+    if limit < 0:
+        raise ValueError("MaxSpan 不能是負的")
+    indexes = [index for index, item in enumerate(objects) if item["high"] - item["low"] <= limit + 1e-9]
+    return _take_objects(source, indexes)
+
+
+def _gray_modes(inside: np.ndarray, gray: np.ndarray):
+    hist = np.bincount(gray[inside].astype(np.int32), minlength=256)
+    mode = int(np.argmax(hist))
+    count = int(hist[mode])
+    hist[mode] = 0
+    second = int(np.argmax(hist))
+    second_count = int(hist[second])
+    if second_count == 0:
+        second = mode
+    return mode, count, second, second_count
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Gray", "出現最多次的灰階")],
+    "物件主要是哪個灰階",
+    "數的是出現最多次的灰階，不是最亮的那一點。最亮用 bright_point。兩種灰階一樣多時，留較暗的那個。Gray[1] 是第一個物件。彩色先轉成亮度。",
+    "Vizion.gray_mode (Region, Image, Gray)",
+)
+def gray_mode(region, image, *, ctx):
+    _source, gray, objects = _gray_objects(region, image)
+    values = [float(_gray_modes(item["inside"], gray)[0]) for item in objects]
+    return Result([], [values])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Count", "主要灰階有幾個像素")],
+    "主要灰階佔了幾個像素",
+    "和 gray_mode 是同一種灰階。一個結果也是 tuple。",
+    "Vizion.mode_count (Region, Image, Count)",
+)
+def mode_count(region, image, *, ctx):
+    _source, gray, objects = _gray_objects(region, image)
+    values = [float(_gray_modes(item["inside"], gray)[1]) for item in objects]
+    return Result([], [values])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Ratio", "主要灰階佔物件的比例")],
+    "主要灰階佔物件多少",
+    "1 是整個物件同一個灰階。分母是物件自己的像素。",
+    "Vizion.mode_ratio (Region, Image, Ratio)",
+)
+def mode_ratio(region, image, *, ctx):
+    _source, gray, objects = _gray_objects(region, image)
+    ratios = []
+    for item in objects:
+        _mode, count, _second, _second_count = _gray_modes(item["inside"], gray)
+        ratios.append(float(count) / float(item["area"]))
+    return Result([], [ratios])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Gray", "個數次多的灰階"), P("Count", "這一種有幾個像素")],
+    "第二多的是哪個灰階",
+    "比的是個數，不是灰階的大小。一樣多時留較暗的。只有一種灰階時，個數是 0，灰階仍回傳那一個，才不會和黑色搞混。",
+    "Vizion.second_mode (Region, Image, Gray, Count)",
+)
+def second_mode(region, image, *, ctx):
+    _source, gray, objects = _gray_objects(region, image)
+    values, counts = [], []
+    for item in objects:
+        _mode, _count, second, second_count = _gray_modes(item["inside"], gray)
+        values.append(float(second))
+        counts.append(float(second_count))
+    return Result([], [values, counts])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [],
+    [],
+    [P("Gap", "第二種灰階減主要灰階")],
+    "兩種主要灰階差多少",
+    "正的表示第二種比較亮。只有一種灰階時是 0。",
+    "Vizion.mode_gap (Region, Image, Gap)",
+)
+def mode_gap(region, image, *, ctx):
+    _source, gray, objects = _gray_objects(region, image)
+    gaps = []
+    for item in objects:
+        mode, _count, second, second_count = _gray_modes(item["inside"], gray)
+        gaps.append(0.0 if second_count == 0 else float(second - mode))
+    return Result([], [gaps])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Main", "主要灰階的像素")],
+    [],
+    [],
+    "留下主要灰階的像素",
+    "等於 gray_mode 的那些像素。兩種一樣多時，留較暗的那一種。整個物件同一個灰階時，就是整個物件。",
+    "Vizion.mode_region (Region, Image, Main)",
+)
+def mode_region(region, image, *, ctx):
+    source, gray, objects = _gray_objects(region, image)
+    kept = []
+    for item in objects:
+        mode, _count, _second, _second_count = _gray_modes(item["inside"], gray)
+        piece = item["inside"] & (gray == mode)
+        mask = np.zeros((source.height, source.width), np.uint8)
+        mask[piece] = 255
+        kept.append(mask)
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Selected", "主要灰階落在範圍裡的物件")],
+    [P("Low", "灰階下限，含"), P("High", "灰階上限，含")],
+    [],
+    "留下主要灰階在這個範圍的物件",
+    "看的是出現最多次的灰階，不是平均，也不是最亮。下限和上限含在內，寫反了會自動對調。留下的是原來的整個物件。",
+    "Vizion.select_mode (Region, Image, Selected, 150, 255)",
+)
+def select_mode(region, image, low, high, *, ctx):
+    source, gray, objects = _gray_objects(region, image)
+    start, stop = _band_limits(low, high)
+    indexes = []
+    for index, item in enumerate(objects):
+        mode = _gray_modes(item["inside"], gray)[0]
+        if start <= mode <= stop:
+            indexes.append(index)
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件"), P("Image", "灰階影像")],
+    [P("Selected", "有兩種主要灰階的物件")],
+    [P("MinCount", "第二種至少要有幾個像素", "1")],
+    [],
+    "留下灰階混在一起的物件",
+    "第二多的灰階至少要有 MinCount 個像素。1 表示只要有第二種就算。0 會全部留下。整個物件同一個灰階時不會留下。",
+    "Vizion.select_mixed (Region, Image, Selected, 1)",
+)
+def select_mixed(region, image, min_count, *, ctx):
+    source, gray, objects = _gray_objects(region, image)
+    limit = scalar(min_count, "MinCount")
+    if limit < 0:
+        raise ValueError("MinCount 不能是負的")
+    indexes = []
+    for index, item in enumerate(objects):
+        _mode, _count, _second, second_count = _gray_modes(item["inside"], gray)
+        if second_count + 1e-9 >= limit:
+            indexes.append(index)
+    return _take_objects(source, indexes)
+
+
+_STRIPE = ["'row'", "'column'"]
+
+
+def _stripe_axis(direction) -> str:
+    kind = text(direction, "Direction").lower()
+    if kind not in ("row", "column"):
+        raise ValueError("Direction 只能是 row 或 column")
+    return kind
+
+
+def _occupied_runs(mask: np.ndarray, direction: str):
+    occupied = np.any(mask > 0, axis=1 if direction == "row" else 0)
+    padded = np.concatenate([np.array([False]), occupied, np.array([False])])
+    change = np.diff(padded.astype(np.int8))
+    starts = np.flatnonzero(change == 1)
+    ends = np.flatnonzero(change == -1)
+    return starts, ends - starts
+
+
+def _stripe_facts(region):
+    source = expect_region(region, "Region")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    facts = []
+    for index, mask in enumerate(source.objects):
+        if not int(cv2.countNonZero(mask)):
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        row_starts, row_lengths = _occupied_runs(mask, "row")
+        col_starts, col_lengths = _occupied_runs(mask, "column")
+        facts.append({"mask": mask, "row_starts": row_starts, "row_lengths": row_lengths, "col_starts": col_starts, "col_lengths": col_lengths})
+    return source, facts
+
+
+def _longest(starts: np.ndarray, lengths: np.ndarray):
+    best = int(np.argmax(lengths))
+    return int(starts[best]), int(starts[best] + lengths[best]), int(lengths[best])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Count", "有幾條橫的")],
+    "有幾條橫向的條帶",
+    "同一列上只要有像素就算，左右分開仍是同一條。中間空一列才算斷開。實心方塊是 1。Count[1] 是第一個物件。",
+    "Vizion.row_runs (Region, Count)",
+)
+def row_runs(region, *, ctx):
+    _source, facts = _stripe_facts(region)
+    return Result([], [[float(len(item["row_lengths"])) for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Count", "有幾條直的")],
+    "有幾條直向的條帶",
+    "同一行上只要有像素就算，上下分開仍是同一條。中間空一行才算斷開。實心方塊是 1。",
+    "Vizion.col_runs (Region, Count)",
+)
+def col_runs(region, *, ctx):
+    _source, facts = _stripe_facts(region)
+    return Result([], [[float(len(item["col_lengths"])) for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Length", "最長的橫條有幾列")],
+    "最長的橫條有多高",
+    "單位是列數。一樣高時，這個數字不分辨是哪一條。要取出那一條，用 stripe_region。",
+    "Vizion.longest_rows (Region, Length)",
+)
+def longest_rows(region, *, ctx):
+    _source, facts = _stripe_facts(region)
+    return Result([], [[float(int(item["row_lengths"].max())) for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Length", "最長的直條有幾行")],
+    "最長的直條有多寬",
+    "單位是行數。一樣寬時，這個數字不分辨是哪一條。",
+    "Vizion.longest_cols (Region, Length)",
+)
+def longest_cols(region, *, ctx):
+    _source, facts = _stripe_facts(region)
+    return Result([], [[float(int(item["col_lengths"].max())) for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Count", "橫條之間有幾個空隙")],
+    "橫條中間空了幾次",
+    "是條數減 1，不是空隙的列數。實心方塊是 0。上下貼著影像邊緣也不算空隙。",
+    "Vizion.row_gaps (Region, Count)",
+)
+def row_gaps(region, *, ctx):
+    _source, facts = _stripe_facts(region)
+    return Result([], [[float(max(0, len(item["row_lengths"]) - 1)) for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Count", "直條之間有幾個空隙")],
+    "直條中間空了幾次",
+    "是條數減 1，不是空隙的行數。實心方塊是 0。",
+    "Vizion.col_gaps (Region, Count)",
+)
+def col_gaps(region, *, ctx):
+    _source, facts = _stripe_facts(region)
+    return Result([], [[float(max(0, len(item["col_lengths"]) - 1)) for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Selected", "正好有這麼多條的物件")],
+    [
+        P("Direction", "row 橫條，column 直條", None, _STRIPE),
+        P("Count", "正好要有幾條"),
+    ],
+    [],
+    "留下正好有幾條的物件",
+    "row 看橫條，column 看直條。要比至少幾條，先用 row_runs 或 col_runs 自己比。Count 至少要 1。",
+    "Vizion.select_stripes (Region, Selected, 'row', 3)",
+)
+def select_stripes(region, direction, count, *, ctx):
+    source, facts = _stripe_facts(region)
+    kind = _stripe_axis(direction)
+    need = whole(count, "Count")
+    if need < 1:
+        raise ValueError("Count 至少要 1")
+    indexes = []
+    for index, item in enumerate(facts):
+        found = len(item["row_lengths"] if kind == "row" else item["col_lengths"])
+        if found == need:
+            indexes.append(index)
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Stripe", "最長的那一條")],
+    [P("Direction", "row 橫條，column 直條", "'row'", _STRIPE)],
+    [],
+    "留下最長的那一條",
+    "row 留下最高的橫條，column 留下最寬的直條。一樣長時留上面或左邊的那一條。留下的是原來的像素，不會把中間的空白補上。",
+    "Vizion.stripe_region (Region, Stripe, 'row')",
+)
+def stripe_region(region, direction, *, ctx):
+    source, facts = _stripe_facts(region)
+    kind = _stripe_axis(direction)
+    kept = []
+    for item in facts:
+        starts = item["row_starts"] if kind == "row" else item["col_starts"]
+        lengths = item["row_lengths"] if kind == "row" else item["col_lengths"]
+        start, stop, _length = _longest(starts, lengths)
+        piece = np.zeros_like(item["mask"])
+        if kind == "row":
+            piece[start:stop] = item["mask"][start:stop]
+        else:
+            piece[:, start:stop] = item["mask"][:, start:stop]
+        if int(cv2.countNonZero(piece)):
+            kept.append(piece)
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+_MIRROR = ["'column'", "'row'", "'both'"]
+
+
+def _mirror_axis(axis) -> str:
+    kind = text(axis, "Axis").lower()
+    if kind not in ("column", "row", "both"):
+        raise ValueError("Axis 只能是 column、row 或 both")
+    return kind
+
+
+def _mirror_parts(mask: np.ndarray, axis: str):
+    rows, cols = np.nonzero(mask)
+    if len(rows) == 0:
+        return None
+    row1, row2 = int(rows.min()), int(rows.max())
+    col1, col2 = int(cols.min()), int(cols.max())
+    mirror_row = (row1 + row2) - rows if axis in ("row", "both") else rows
+    mirror_col = (col1 + col2) - cols if axis in ("column", "both") else cols
+    height, width = mask.shape[:2]
+    inside = (mirror_row >= 0) & (mirror_row < height) & (mirror_col >= 0) & (mirror_col < width)
+    partner = np.zeros(len(rows), dtype=bool)
+    partner[inside] = mask[mirror_row[inside], mirror_col[inside]] > 0
+    missing = np.zeros_like(mask)
+    missing[rows[~partner], cols[~partner]] = 255
+    core = np.zeros_like(mask)
+    core[rows[partner], cols[partner]] = 255
+    reflected = np.zeros_like(mask)
+    reflected[mirror_row[inside], mirror_col[inside]] = 255
+    return {
+        "score": float(partner.sum()) / float(len(rows)),
+        "miss": float((~partner).sum()),
+        "missing": missing,
+        "core": core,
+        "reflected": reflected,
+        "row": (row1 + row2) / 2.0,
+        "col": (col1 + col2) / 2.0,
+    }
+
+
+def _mirror_facts(region, axis: str):
+    source = expect_region(region, "Region")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    facts = []
+    for index, mask in enumerate(source.objects):
+        item = _mirror_parts(mask, axis)
+        if item is None:
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        facts.append(item)
+    return source, facts
+
+
+def _score_limit(value, name) -> float:
+    limit = scalar(value, name)
+    if limit < 0:
+        raise ValueError(f"{name} 不能是負的")
+    return limit
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [P("Axis", "column 左右，row 上下，both 轉 180 度", "'column'", _MIRROR)],
+    [P("Score", "1 是完全對稱")],
+    "對不對稱",
+    "以物件外框的中心翻面，看有多少像素翻過去還落在自己身上。1 是完全對稱。column 左右對調，row 上下對調，both 轉 180 度。中心用外框，不是像素平均，所以缺一塊但外框還在時，中心不會跑掉。Score[1] 是第一個物件。",
+    "Vizion.symmetry_score (Region, 'column', Score)",
+)
+def symmetry_score(region, axis, *, ctx):
+    _source, facts = _mirror_facts(region, _mirror_axis(axis))
+    return Result([], [[item["score"] for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [P("Axis", "column 左右，row 上下，both 轉 180 度", "'column'", _MIRROR)],
+    [P("Count", "翻過去對不到的像素")],
+    "有幾個像素對不上",
+    "這些像素的對面沒有東西。0 是完全對稱。一個結果也是 tuple。",
+    "Vizion.symmetry_miss (Region, 'column', Count)",
+)
+def symmetry_miss(region, axis, *, ctx):
+    _source, facts = _mirror_facts(region, _mirror_axis(axis))
+    return Result([], [[item["miss"] for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Asymmetry", "對不上的像素")],
+    [P("Axis", "column 左右，row 上下，both 轉 180 度", "'column'", _MIRROR)],
+    [],
+    "留下對不上的像素",
+    "完全對稱的物件不會留下。要看有幾個對不上，用 symmetry_miss，0 也留在 tuple 裡。",
+    "Vizion.asymmetry_region (Region, Asymmetry, 'column')",
+)
+def asymmetry_region(region, axis, *, ctx):
+    source, facts = _mirror_facts(region, _mirror_axis(axis))
+    kept = [item["missing"] for item in facts if int(cv2.countNonZero(item["missing"]))]
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Core", "翻過去還在的像素")],
+    [P("Axis", "column 左右，row 上下，both 轉 180 度", "'column'", _MIRROR)],
+    [],
+    "留下翻過去還對得上的像素",
+    "完全對稱時就是整個物件。和 asymmetry_region 加起來是原來的物件。",
+    "Vizion.symmetry_core (Region, Core, 'column')",
+)
+def symmetry_core(region, axis, *, ctx):
+    source, facts = _mirror_facts(region, _mirror_axis(axis))
+    kept = [item["core"] for item in facts if int(cv2.countNonZero(item["core"]))]
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Reflected", "以自己的中心翻面")],
+    [P("Axis", "column 左右，row 上下，both 轉 180 度", "'column'", _MIRROR)],
+    [],
+    "以物件自己的中心翻面",
+    "翻的是這個物件，不是整張圖。整張圖翻面用 mirror_region。翻出影像的部分會被切掉。",
+    "Vizion.reflect_region (Region, Reflected, 'column')",
+)
+def reflect_region(region, axis, *, ctx):
+    source, facts = _mirror_facts(region, _mirror_axis(axis))
+    kept = [item["reflected"] for item in facts if int(cv2.countNonZero(item["reflected"]))]
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Row", "外框中心列"), P("Column", "外框中心行")],
+    "對稱用的中心在哪",
+    "是外框兩邊的平均，不是像素平均。缺一角但外框的角還在時，這個中心不會移動。",
+    "Vizion.symmetry_center (Region, Row, Column)",
+)
+def symmetry_center(region, *, ctx):
+    _source, facts = _mirror_facts(region, "both")
+    return Result([], [[item["row"] for item in facts], [item["col"] for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Selected", "夠對稱的物件")],
+    [
+        P("Axis", "column 左右，row 上下，both 轉 180 度", "'column'", _MIRROR),
+        P("MinScore", "至少要有多對稱", "0.95"),
+    ],
+    [],
+    "留下夠對稱的物件",
+    "1 是完全對稱。0.95 表示至少有 95% 的像素翻過去還在。先用 symmetry_score 看分數。留下的是原來的物件。",
+    "Vizion.select_symmetric (Region, Selected, 'column', 0.95)",
+)
+def select_symmetric(region, axis, min_score, *, ctx):
+    source, facts = _mirror_facts(region, _mirror_axis(axis))
+    limit = _score_limit(min_score, "MinScore")
+    indexes = [index for index, item in enumerate(facts) if item["score"] + 1e-9 >= limit]
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Selected", "不夠對稱的物件")],
+    [
+        P("Axis", "column 左右，row 上下，both 轉 180 度", "'column'", _MIRROR),
+        P("MaxScore", "對稱分數不能超過", "0.95"),
+    ],
+    [],
+    "留下不夠對稱的物件",
+    "分數小於等於 MaxScore 才留下。0.95 表示還不到 95% 就算不對稱。留下的是原來的物件。",
+    "Vizion.select_asymmetric (Region, Selected, 'column', 0.95)",
+)
+def select_asymmetric(region, axis, max_score, *, ctx):
+    source, facts = _mirror_facts(region, _mirror_axis(axis))
+    limit = _score_limit(max_score, "MaxScore")
+    indexes = [index for index, item in enumerate(facts) if item["score"] <= limit + 1e-9]
+    return _take_objects(source, indexes)
+
+
+def _end_facts(region):
+    source = expect_region(region, "Region")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    facts = []
+    for index, mask in enumerate(source.objects):
+        rows, cols = np.nonzero(mask)
+        if len(rows) == 0:
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        top = int(rows.min())
+        bottom = int(rows.max())
+        left = int(cols.min())
+        right = int(cols.max())
+        facts.append(
+            {
+                "mask": mask,
+                "top": (float(top), float(cols[rows == top].min())),
+                "bottom": (float(bottom), float(cols[rows == bottom].min())),
+                "left": (float(rows[cols == left].min()), float(left)),
+                "right": (float(rows[cols == right].min()), float(right)),
+            }
+        )
+    return source, facts
+
+
+def _end_line(mask: np.ndarray, kind: str) -> np.ndarray:
+    rows, cols = np.nonzero(mask)
+    out = np.zeros_like(mask)
+    if kind == "top":
+        line = int(rows.min())
+        out[line, cols[rows == line]] = 255
+    elif kind == "bottom":
+        line = int(rows.max())
+        out[line, cols[rows == line]] = 255
+    elif kind == "left":
+        line = int(cols.min())
+        out[rows[cols == line], line] = 255
+    else:
+        line = int(cols.max())
+        out[rows[cols == line], line] = 255
+    return out
+
+
+def _point_result(region, kind: str):
+    _source, facts = _end_facts(region)
+    return Result([], [[item[kind][0] for item in facts], [item[kind][1] for item in facts]])
+
+
+def _edge_result(region, kind: str):
+    source, facts = _end_facts(region)
+    kept = [_end_line(item["mask"], kind) for item in facts]
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Row", "最上點的列"), P("Column", "最上點的行")],
+    "最上的那一點",
+    "列最小的像素。同一列有很多點時，留最左邊的。外框的左上角不一定有像素，這裡給的是真的有像素的點。Row[1] 是第一個物件。",
+    "Vizion.top_point (Region, Row, Column)",
+)
+def top_point(region, *, ctx):
+    return _point_result(region, "top")
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Row", "最下點的列"), P("Column", "最下點的行")],
+    "最下的那一點",
+    "列最大的像素。同一列有很多點時，留最左邊的。",
+    "Vizion.bottom_point (Region, Row, Column)",
+)
+def bottom_point(region, *, ctx):
+    return _point_result(region, "bottom")
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Row", "最左點的列"), P("Column", "最左點的行")],
+    "最左的那一點",
+    "行最小的像素。同一行有很多點時，留最上面的。",
+    "Vizion.left_point (Region, Row, Column)",
+)
+def left_point(region, *, ctx):
+    return _point_result(region, "left")
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Row", "最右點的列"), P("Column", "最右點的行")],
+    "最右的那一點",
+    "行最大的像素。同一行有很多點時，留最上面的。",
+    "Vizion.right_point (Region, Row, Column)",
+)
+def right_point(region, *, ctx):
+    return _point_result(region, "right")
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Edge", "最上的那一列")],
+    [],
+    [],
+    "留下最上的一整列",
+    "不是只有 top_point 那一點。這一列上有的像素全部留下。要點用 top_point，要整條邊用這個。",
+    "Vizion.top_edge (Region, Edge)",
+)
+def top_edge(region, *, ctx):
+    return _edge_result(region, "top")
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Edge", "最下的那一列")],
+    [],
+    [],
+    "留下最下的一整列",
+    "這一列上有的像素全部留下。同一列最左邊的點是 bottom_point。",
+    "Vizion.bottom_edge (Region, Edge)",
+)
+def bottom_edge(region, *, ctx):
+    return _edge_result(region, "bottom")
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Edge", "最左的那一行")],
+    [],
+    [],
+    "留下最左的一整行",
+    "這一行上有的像素全部留下。最上面的點是 left_point。",
+    "Vizion.left_edge (Region, Edge)",
+)
+def left_edge(region, *, ctx):
+    return _edge_result(region, "left")
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Edge", "最右的那一行")],
+    [],
+    [],
+    "留下最右的一整行",
+    "這一行上有的像素全部留下。最上面的點是 right_point。",
+    "Vizion.right_edge (Region, Edge)",
+)
+def right_edge(region, *, ctx):
+    return _edge_result(region, "right")
+
+
+def _enclosed_holes(mask: np.ndarray) -> list:
+    if int(cv2.countNonZero(mask)) == 0:
+        return []
+    padded = np.pad(np.where(mask > 0, 255, 0).astype(np.uint8), 1)
+    flood = np.zeros((padded.shape[0] + 2, padded.shape[1] + 2), np.uint8)
+    cv2.floodFill(padded, flood, (0, 0), 128)
+    holes = np.where(padded[1:-1, 1:-1] == 0, 255, 0).astype(np.uint8)
+    count, labels = cv2.connectedComponents(holes, connectivity=8)
+    pieces = []
+    for label in range(1, int(count)):
+        pieces.append(np.where(labels == label, 255, 0).astype(np.uint8))
+    return pieces
+
+
+def _hole_parts(region):
+    source = expect_region(region, "Region")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    parts = []
+    for index, mask in enumerate(source.objects):
+        if int(cv2.countNonZero(mask)) == 0:
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        holes = _enclosed_holes(mask)
+        hole_area = int(sum(cv2.countNonZero(piece) for piece in holes))
+        solid = int(cv2.countNonZero(mask))
+        parts.append(
+            {
+                "mask": mask,
+                "holes": holes,
+                "ratio": 0.0 if solid + hole_area == 0 else hole_area / (solid + hole_area),
+            }
+        )
+    return source, parts
+
+
+def _biggest_hole(pieces: list):
+    best = None
+    best_area = -1
+    for piece in pieces:
+        area = int(cv2.countNonZero(piece))
+        if area > best_area:
+            best = piece
+            best_area = area
+    return best
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Count", "每個物件有幾個洞")],
+    "數每個物件有幾個洞",
+    "洞是被這個物件完全包住的空白。缺口連到外面，或連到影像邊緣，都不算。沒有洞是 0，0 也留在 tuple 裡。斜角碰到的兩塊空白算同一個洞。Count[1] 是第一個物件。",
+    "Vizion.hole_count (Region, Count)",
+)
+def hole_count(region, *, ctx):
+    _source, parts = _hole_parts(region)
+    return Result([], [[len(item["holes"]) for item in parts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Ratio", "洞占補滿後的比例")],
+    "洞占整個物件多少",
+    "洞的像素除以補滿之後的像素。0 是實心。數字愈大，洞愈大。缺口連到外面不算在裡面。Ratio[1] 是第一個物件。",
+    "Vizion.hole_ratio (Region, Ratio)",
+)
+def hole_ratio(region, *, ctx):
+    _source, parts = _hole_parts(region)
+    return Result([], [[item["ratio"] for item in parts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Holes", "一個洞一個物件")],
+    [],
+    [],
+    "把每個洞拆開",
+    "每個洞自己一個物件。順序是原來的物件順序，同一個物件裡較上面、再來較左邊的洞先出來。沒有洞的物件不會留下。要面積和中心再呼叫 area_center。",
+    "Vizion.hole_region (Region, Holes)",
+)
+def hole_region(region, *, ctx):
+    source, parts = _hole_parts(region)
+    kept = [piece for item in parts for piece in item["holes"]]
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Hole", "每個物件最大的洞")],
+    [],
+    [],
+    "留下每個物件最大的洞",
+    "一個物件留一個洞。一樣大時留較上面、再來較左邊的。沒有洞的物件不會留下。",
+    "Vizion.largest_hole (Region, Hole)",
+)
+def largest_hole(region, *, ctx):
+    source, parts = _hole_parts(region)
+    kept = [_biggest_hole(item["holes"]) for item in parts if item["holes"]]
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Filled", "補好洞的物件")],
+    [],
+    [],
+    "每個物件自己補洞",
+    "只補被完全包住的洞，物件數不變。缺口連到外面不會被補上。fill_up 會先把全部物件合成一個再補，這個不會。",
+    "Vizion.fill_object (Region, Filled)",
+)
+def fill_object(region, *, ctx):
+    source, parts = _hole_parts(region)
+    kept = []
+    for item in parts:
+        filled = item["mask"].copy()
+        for piece in item["holes"]:
+            filled = cv2.bitwise_or(filled, piece)
+        kept.append(filled)
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Selected", "有夠多洞的物件")],
+    [P("MinCount", "至少幾個洞", "1")],
+    [],
+    "留下洞夠多的物件",
+    "洞的個數達到 MinCount 才留下。1 表示至少要有一個洞。留下的是原來的物件，不是洞本身。",
+    "Vizion.select_holed (Region, Selected, 1)",
+)
+def select_holed(region, min_count, *, ctx):
+    number = scalar(min_count, "MinCount")
+    if number < 0:
+        raise ValueError("MinCount 不能是負的")
+    need = int(round(number))
+    source, parts = _hole_parts(region)
+    indexes = [index for index, item in enumerate(parts) if len(item["holes"]) >= need]
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Selected", "沒有洞的物件")],
+    [],
+    [],
+    "留下沒有洞的物件",
+    "一個洞都沒有才留下，包含缺口連到外面的物件。留下的是原來的物件。",
+    "Vizion.select_solid (Region, Selected)",
+)
+def select_solid(region, *, ctx):
+    source, parts = _hole_parts(region)
+    indexes = [index for index, item in enumerate(parts) if not item["holes"]]
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Selected", "夠空的物件")],
+    [P("MinRatio", "洞至少占多少", "0.1")],
+    [],
+    "留下洞占得夠多的物件",
+    "hole_ratio 達到 MinRatio 才留下。0.1 表示洞至少占補滿後的一成。留下的是原來的物件。",
+    "Vizion.select_hole_ratio (Region, Selected, 0.1)",
+)
+def select_hole_ratio(region, min_ratio, *, ctx):
+    limit = scalar(min_ratio, "MinRatio")
+    if limit < 0:
+        raise ValueError("MinRatio 不能是負的")
+    source, parts = _hole_parts(region)
+    indexes = [index for index, item in enumerate(parts) if item["ratio"] + 1e-9 >= limit]
+    return _take_objects(source, indexes)
+
+
+_WINDOW_METRIC = ["'chessboard'", "'city-block'"]
+
+
+def _window_box(row1, column1, row2, column2):
+    r1 = whole(row1, "Row1")
+    c1 = whole(column1, "Column1")
+    r2 = whole(row2, "Row2")
+    c2 = whole(column2, "Column2")
+    if r2 < r1 or c2 < c1:
+        raise ValueError("矩形座標不正確")
+    return r1, c1, r2, c2
+
+
+def _window_metric(metric) -> str:
+    name = text(metric, "Metric").lower()
+    if name not in ("chessboard", "city-block"):
+        raise ValueError("Metric 只能是 chessboard 或 city-block")
+    return name
+
+
+def _window_facts(region, row1, column1, row2, column2, metric: str):
+    source = expect_region(region, "Region")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    r1, c1, r2, c2 = _window_box(row1, column1, row2, column2)
+    facts = []
+    for index, mask in enumerate(source.objects):
+        rows, cols = np.nonzero(mask)
+        if len(rows) == 0:
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        inside = (rows >= r1) & (rows <= r2) & (cols >= c1) & (cols <= c2)
+        in_count = int(inside.sum())
+        out_count = int(len(rows) - in_count)
+        outside = np.zeros_like(mask)
+        depth = 0
+        if out_count:
+            orows = rows[~inside]
+            ocols = cols[~inside]
+            outside[orows, ocols] = 255
+            dr = np.maximum(np.maximum(r1 - orows, 0), orows - r2)
+            dc = np.maximum(np.maximum(c1 - ocols, 0), ocols - c2)
+            depth = int((dr + dc).max() if metric == "city-block" else np.maximum(dr, dc).max())
+        facts.append(
+            {
+                "inside": in_count,
+                "outside": out_count,
+                "ratio": in_count / float(len(rows)),
+                "depth": depth,
+                "mask": outside,
+            }
+        )
+    return source, facts
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [P("Row1", "方框上"), P("Column1", "方框左"), P("Row2", "方框下"), P("Column2", "方框右")],
+    [P("Area", "方框裡的像素")],
+    "方框裡有多少像素",
+    "方框的邊算在裡面。上要小於等於下，左要小於等於右。整個在外面時是 0，0 也留在 tuple 裡。Area[1] 是第一個物件。clip_region 是把外面裁掉，這個只回報有多少留在裡面。",
+    "Vizion.window_inside (Region, 20, 20, 39, 39, Area)",
+)
+def window_inside(region, row1, column1, row2, column2, *, ctx):
+    _source, facts = _window_facts(region, row1, column1, row2, column2, "chessboard")
+    return Result([], [[item["inside"] for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [P("Row1", "方框上"), P("Column1", "方框左"), P("Row2", "方框下"), P("Column2", "方框右")],
+    [P("Area", "方框外的像素")],
+    "方框外有多少像素",
+    "跑出方框的像素數。完全在裡面時是 0。方框的邊算在裡面，不算跑出去。",
+    "Vizion.window_outside (Region, 20, 20, 39, 39, Area)",
+)
+def window_outside(region, row1, column1, row2, column2, *, ctx):
+    _source, facts = _window_facts(region, row1, column1, row2, column2, "chessboard")
+    return Result([], [[item["outside"] for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [P("Row1", "方框上"), P("Column1", "方框左"), P("Row2", "方框下"), P("Column2", "方框右")],
+    [P("Ratio", "留在方框裡的比例")],
+    "有多少比例留在方框裡",
+    "方框裡的像素除以物件自己的像素。1 是整個在裡面，0 是整個在外面。Ratio[1] 是第一個物件。",
+    "Vizion.window_ratio (Region, 20, 20, 39, 39, Ratio)",
+)
+def window_ratio(region, row1, column1, row2, column2, *, ctx):
+    _source, facts = _window_facts(region, row1, column1, row2, column2, "chessboard")
+    return Result([], [[item["ratio"] for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [],
+    [
+        P("Row1", "方框上"),
+        P("Column1", "方框左"),
+        P("Row2", "方框下"),
+        P("Column2", "方框右"),
+        P("Metric", "距離算法", "'chessboard'", _WINDOW_METRIC),
+    ],
+    [P("Depth", "跑出方框多遠")],
+    "跑出方框多遠",
+    "跑出去的像素裡，離方框最遠的那段。完全在裡面是 0。chessboard 是列和行取較遠的那個，斜著出去不會把兩個相加。city-block 才是列加行。方框的邊算在裡面。",
+    "Vizion.window_depth (Region, 20, 20, 39, 39, 'chessboard', Depth)",
+)
+def window_depth(region, row1, column1, row2, column2, metric, *, ctx):
+    _source, facts = _window_facts(region, row1, column1, row2, column2, _window_metric(metric))
+    return Result([], [[item["depth"] for item in facts]])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Outside", "跑出方框的像素")],
+    [P("Row1", "方框上"), P("Column1", "方框左"), P("Row2", "方框下"), P("Column2", "方框右")],
+    [],
+    "留下跑出方框的像素",
+    "只留方框外面的像素。完全在裡面的物件不會留下。整個在外面的物件會整塊留下。clip_region 是留下裡面的部分。",
+    "Vizion.overflow_region (Region, Outside, 20, 20, 39, 39)",
+)
+def overflow_region(region, row1, column1, row2, column2, *, ctx):
+    source, facts = _window_facts(region, row1, column1, row2, column2, "chessboard")
+    kept = [item["mask"] for item in facts if item["outside"]]
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Selected", "整個在方框裡的物件")],
+    [P("Row1", "方框上"), P("Column1", "方框左"), P("Row2", "方框下"), P("Column2", "方框右")],
+    [],
+    "留下整個在方框裡的物件",
+    "一個像素都沒有跑出去才留下。留下的是原來的物件。方框的邊算在裡面。",
+    "Vizion.select_inside (Region, Selected, 20, 20, 39, 39)",
+)
+def select_inside(region, row1, column1, row2, column2, *, ctx):
+    source, facts = _window_facts(region, row1, column1, row2, column2, "chessboard")
+    indexes = [index for index, item in enumerate(facts) if item["outside"] == 0]
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Selected", "整個在方框外的物件")],
+    [P("Row1", "方框上"), P("Column1", "方框左"), P("Row2", "方框下"), P("Column2", "方框右")],
+    [],
+    "留下整個在方框外的物件",
+    "一個像素都沒有在方框裡才留下。留下的是原來的物件。",
+    "Vizion.select_outside (Region, Selected, 20, 20, 39, 39)",
+)
+def select_outside(region, row1, column1, row2, column2, *, ctx):
+    source, facts = _window_facts(region, row1, column1, row2, column2, "chessboard")
+    indexes = [index for index, item in enumerate(facts) if item["inside"] == 0]
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "區域",
+    [P("Region", "物件")],
+    [P("Selected", "跨在方框邊上的物件")],
+    [P("Row1", "方框上"), P("Column1", "方框左"), P("Row2", "方框下"), P("Column2", "方框右")],
+    [],
+    "留下跨在方框邊上的物件",
+    "一部分在裡面、一部分在外面才留下。留下的是原來的物件，不是裁切後的形狀。",
+    "Vizion.select_crossing (Region, Selected, 20, 20, 39, 39)",
+)
+def select_crossing(region, row1, column1, row2, column2, *, ctx):
+    source, facts = _window_facts(region, row1, column1, row2, column2, "chessboard")
+    indexes = [index for index, item in enumerate(facts) if item["inside"] and item["outside"]]
+    return _take_objects(source, indexes)
+
+
+_AXIS = ["'horizontal'", "'vertical'", "'diagonal'"]
+
+
+def _axis_facts(region):
+    source = expect_region(region, "Region")
+    if source.count() == 0:
+        raise ValueError("區域是空的")
+    facts = []
+    for index, mask in enumerate(source.objects):
+        pose = _pose_of(mask)
+        if pose is None:
+            raise ValueError(f"第 {index + 1} 個物件是空的")
+        row, col, phi = pose
+        rows, cols = np.nonzero(mask)
+        cosine = math.cos(phi)
+        sine = math.sin(phi)
+        along = cols.astype(np.float64) * cosine + rows.astype(np.float64) * sine
+        across = -cols.astype(np.float64) * sine + rows.astype(np.float64) * cosine
+        center_across = -col * sine + row * cosine
+        dist = np.abs(across - center_across)
+        spine = np.zeros_like(mask)
+        spine[rows[dist <= float(dist.min()) + 1e-6], cols[dist <= float(dist.min()) + 1e-6]] = 255
+        ends = []
+        for target in (float(along.min()), float(along.max())):
+            penalty = np.where(np.abs(along - target) <= 1e-6, dist, np.inf)
+            chosen = int(np.lexsort((cols, rows, penalty))[0])
+            ends.append((int(rows[chosen]), int(cols[chosen])))
+        ends.sort()
+        major = float(along.max() - along.min() + 1.0)
+        minor = float(across.max() - across.min() + 1.0)
+        facts.append(
+            {
+                "phi": float(phi),
+                "major": major,
+                "minor": minor,
+                "ratio": major / minor,
+                "ends": ends,
+                "spine": spine,
+            }
+        )
+    return source, facts
+
+
+def _axis_direction(direction) -> str:
+    kind = text(direction, "Direction").lower()
+    if kind not in ("horizontal", "vertical", "diagonal"):
+        raise ValueError("Direction 只能是 horizontal、vertical 或 diagonal")
+    return kind
+
+
+def _axis_match(phi: float, kind: str, tolerance: float) -> bool:
+    horizontal = abs(phi) <= tolerance + 1e-9
+    vertical = math.pi / 2 - abs(phi) <= tolerance + 1e-9
+    if kind == "horizontal":
+        return horizontal
+    if kind == "vertical":
+        return vertical
+    return not horizontal and not vertical
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Phi", "長軸角度，弳度")],
+    "長軸朝哪",
+    "用像素的二次矩，和 orientation_region、elliptic_axis 的角度相同。0 沿著行往右，正角度在畫面上順時針，直的是 1.5708。範圍在 -90 度到 90 度。接近正方形時角度會落在 0，不代表它是橫的，請看 major_ratio。Phi[1] 是第一個物件。",
+    "Vizion.major_phi (Region, Phi)",
+)
+def major_phi(region, *, ctx):
+    _source, facts = _axis_facts(region)
+    return Result([], [[item["phi"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Length", "沿著長軸的長度")],
+    "沿著長軸有多長",
+    "兩端像素中心的距離再加 1。橫向 20 個像素、厚 5 的長條，長度是 20。斜的物件會帶小數。",
+    "Vizion.major_length (Region, Length)",
+)
+def major_length(region, *, ctx):
+    _source, facts = _axis_facts(region)
+    return Result([], [[item["major"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Length", "沿著短軸的厚度")],
+    "沿著短軸有多厚",
+    "和 major_length 同一把尺，只是換成短軸。厚 5 的長條是 5。",
+    "Vizion.minor_length (Region, Length)",
+)
+def minor_length(region, *, ctx):
+    _source, facts = _axis_facts(region)
+    return Result([], [[item["minor"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Ratio", "長除以厚")],
+    "長軸是短軸的幾倍",
+    "major_length 除以 minor_length。正方形是 1。20×5 的長條是 4。接近 1 時長軸不可靠。",
+    "Vizion.major_ratio (Region, Ratio)",
+)
+def major_ratio(region, *, ctx):
+    _source, facts = _axis_facts(region)
+    return Result([], [[item["ratio"] for item in facts]])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件")],
+    [],
+    [],
+    [
+        P("Row1", "一端的列"),
+        P("Column1", "一端的行"),
+        P("Row2", "另一端的列"),
+        P("Column2", "另一端的行"),
+    ],
+    "長軸的兩個端點",
+    "端點落在物件上，平的那一頭留最靠近軸線的像素。先給較上面的端點，同一列再給較左邊的。Row1[1] 是第一個物件。",
+    "Vizion.axis_ends (Region, Row1, Column1, Row2, Column2)",
+)
+def axis_ends(region, *, ctx):
+    _source, facts = _axis_facts(region)
+    return Result(
+        [],
+        [
+            [item["ends"][0][0] for item in facts],
+            [item["ends"][0][1] for item in facts],
+            [item["ends"][1][0] for item in facts],
+            [item["ends"][1][1] for item in facts],
+        ],
+    )
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件")],
+    [P("Axis", "長軸上的像素")],
+    [],
+    [],
+    "留下長軸上的那一層像素",
+    "每個物件留離長軸最近的那一層。橫條是中間那一列，直條是中間那一行。正方形會留下中間的兩列。",
+    "Vizion.axis_region (Region, Axis)",
+)
+def axis_region(region, *, ctx):
+    source, facts = _axis_facts(region)
+    kept = [item["spine"] for item in facts]
+    return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件")],
+    [P("Selected", "方向符合的物件")],
+    [
+        P("Direction", "要留的方向", "'horizontal'", _AXIS),
+        P("Tolerance", "允許差幾度", "15"),
+    ],
+    [],
+    "依長軸方向留下物件",
+    "horizontal 離 0 度在 Tolerance 以內，vertical 離 90 度在 Tolerance 以內，diagonal 是兩邊都超過。15 度是預設。接近正方形時角度會是 0，要先看 major_ratio。留下的是原來的物件。",
+    "Vizion.select_axis (Region, Selected, 'horizontal', 15)",
+)
+def select_axis(region, direction, tolerance, *, ctx):
+    kind = _axis_direction(direction)
+    degrees = scalar(tolerance, "Tolerance")
+    if degrees < 0:
+        raise ValueError("Tolerance 不能是負的")
+    limit = math.radians(degrees)
+    source, facts = _axis_facts(region)
+    indexes = [index for index, item in enumerate(facts) if _axis_match(item["phi"], kind, limit)]
+    return _take_objects(source, indexes)
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件")],
+    [P("Selected", "夠細長的物件")],
+    [P("MinRatio", "長至少是厚的幾倍", "2")],
+    [],
+    "留下夠細長的物件",
+    "major_ratio 達到 MinRatio 才留下。2 表示至少是兩倍長。正方形是 1，不會留下。留下的是原來的物件。",
+    "Vizion.select_long (Region, Selected, 2)",
+)
+def select_long(region, min_ratio, *, ctx):
+    limit = scalar(min_ratio, "MinRatio")
+    if limit < 0:
+        raise ValueError("MinRatio 不能是負的")
+    source, facts = _axis_facts(region)
+    indexes = [index for index, item in enumerate(facts) if item["ratio"] + 1e-9 >= limit]
+    return _take_objects(source, indexes)
