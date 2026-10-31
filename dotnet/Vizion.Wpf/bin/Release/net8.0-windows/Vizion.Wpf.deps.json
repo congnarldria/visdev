@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "Vizion.Wpf/1.0.0": {
+        "dependencies": {
+          "Vizion.Display": "1.0.0"
+        },
+        "runtime": {
+          "Vizion.Wpf.dll": {}
+        }
+      },
+      "Vizion.Display/1.0.0": {
+        "runtime": {
+          "Vizion.Display.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Vizion.Wpf/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Vizion.Display/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

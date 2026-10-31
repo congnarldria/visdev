@@ -1,0 +1,25 @@
+* 平滑平移的列是 39.23
+* 教導框中心是列 39.5、行 47.5。圖案往上 0.25、往右 0.35，真的中心在列 39.25、行 47.85。
+* 整數峰停在列 40。列 39 的分數更高，三點拋物線卻會停在 40。
+* Keys 三次內插沿著這段分數把列修到 39.23、行修到 47.86。峰頂幾乎一樣高時，位置留在整數。
+Vizion.gen_image_const (Base, 'byte', 96, 80)
+Vizion.gen_image_proto (Base, Sheet, 30)
+Vizion.gen_rectangle1 (A, 18, 20, 33, 43)
+Vizion.paint_region (A, Sheet, P1, 200, 'fill')
+Vizion.gen_rectangle1 (B, 36, 40, 57, 69)
+Vizion.paint_region (B, P1, P2, 90, 'fill')
+Vizion.gen_rectangle1 (C, 22, 60, 29, 79)
+Vizion.paint_region (C, P2, P3, 240, 'fill')
+Vizion.gen_rectangle1 (D, 48, 12, 69, 27)
+Vizion.paint_region (D, P3, Sharp, 150, 'fill')
+Vizion.gauss_image (Sharp, Image, 5)
+Vizion.teach_ncc_model (Image, 10, 10, 69, 85, 1, 0, 0, 0, 'use_polarity', ModelID)
+Vizion.hom_mat2d_identity (Id)
+Vizion.hom_mat2d_translate (Id, -0.25, 0.35, Shift)
+Vizion.affine_trans_image (Image, Moved, Shift, 'bicubic', 'false')
+Vizion.find_ncc_model (Moved, ModelID, 0, 0, 0.5, 1, 0.5, 'none', 1, NRow, NCol, NAng, NScore)
+Vizion.find_ncc_model (Moved, ModelID, 0, 0, 0.5, 1, 0.5, 'interpolation', 1, IRow, ICol, IAng, IScore)
+Still := NRow[1]
+SRow := IRow[1]
+SCol := ICol[1]
+Vizion.dev_display (Moved)

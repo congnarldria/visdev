@@ -1,0 +1,16 @@
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\bin\Release\net8.0-windows\Vizion.Wpf.deps.json
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\bin\Release\net8.0-windows\Vizion.Wpf.dll
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\bin\Release\net8.0-windows\Vizion.Wpf.pdb
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\bin\Release\net8.0-windows\Vizion.Display.dll
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\bin\Release\net8.0-windows\Vizion.Display.pdb
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net8.0-windows\Vizion.Wpf.csproj.AssemblyReference.cache
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net8.0-windows\Vizion.Wpf.GeneratedMSBuildEditorConfig.editorconfig
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net8.0-windows\Vizion.Wpf.AssemblyInfoInputs.cache
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net8.0-windows\Vizion.Wpf.AssemblyInfo.cs
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net8.0-windows\Vizion.Wpf.csproj.CoreCompileInputs.cache
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net8.0-windows\Vizion.Wpf.sourcelink.json
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net8.0-windows\Vizion.Wpf.csproj.Up2Date
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net8.0-windows\Vizion.Wpf.dll
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net8.0-windows\refint\Vizion.Wpf.dll
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net8.0-windows\Vizion.Wpf.pdb
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net8.0-windows\ref\Vizion.Wpf.dll

@@ -1,0 +1,28 @@
+* 邊緣在兩個像素中間
+* edges_sub_pix 用高斯導數的梯度，沿法線做拋物線內插，不再描整數像素的外框。
+* 左半灰階 40、右半 200，真正的邊界在行 39.5。edge_region 落在第 40 行那個整數像素。
+* edge_response 的灰階就是門檻。黑白階躍大約 58，差 10 個灰階的方塊不會超過 20。
+* Phi 為 0 朝右，垂直是 1.5708。Length 是次像素點距。
+Vizion.gen_image_const (Base, 'byte', 80, 60)
+Vizion.gen_image_proto (Base, Left, 40)
+Vizion.gen_rectangle1 (Right, 0, 40, 59, 79)
+Vizion.paint_region (Right, Left, Step, 200, 'fill')
+Vizion.edge_region (Step, Edge, 1, 20)
+Vizion.area_center (Edge, Area, Row, Column)
+Vizion.edge_response (Step, Response, 1)
+Vizion.get_grayval (Response, 30, 40, Peak)
+Vizion.get_grayval (Response, 30, 39, Side)
+Vizion.edge_stats (Step, 1, 20, Count, Length, Phi, CenterRow, CenterCol)
+Vizion.edges_sub_pix (Step, Lines, 'canny', 1, 20, 40)
+Vizion.length_xld (Lines, LineLen)
+Vizion.tuple_max (LineLen, Longest)
+Vizion.gen_image_proto (Base, Top, 40)
+Vizion.gen_rectangle1 (Bottom, 30, 0, 59, 79)
+Vizion.paint_region (Bottom, Top, Band, 200, 'fill')
+Vizion.edge_stats (Band, 1, 20, AcrossCount, AcrossLength, AcrossPhi, AcrossRow, AcrossCol)
+Vizion.gen_image_proto (Base, Plain, 100)
+Vizion.gen_rectangle1 (Box, 20, 20, 39, 39)
+Vizion.paint_region (Box, Plain, Soft, 110, 'fill')
+Vizion.edge_stats (Soft, 1, 20, SoftCount, SoftLength, SoftPhi, SoftRow, SoftCol)
+Vizion.edge_stats (Left, 1, 20, FlatCount, FlatLength, FlatPhi, FlatRow, FlatCol)
+Vizion.dev_display (Edge)

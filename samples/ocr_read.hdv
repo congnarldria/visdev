@@ -1,7 +1,7 @@
 * 讀出圖上的文字，每個字塊一個外框
-read_image (Image, 'samples/ocr_label.png')
-ocr_find (Image, Words, 'auto', Text, Row, Column, Score)
-dev_display (Image)
-dev_set_line_width (2)
-dev_set_color ('#e6b800')
-dev_display (Words)
+Vizion.read_image (Image, 'samples/ocr_label.png')
+Vizion.ocr_find (Image, Words, 'auto', Text, Row, Column, Score)
+Vizion.dev_display (Image)
+Vizion.dev_set_line_width (2)
+Vizion.dev_set_color ('#e6b800')
+Vizion.dev_display (Words)

@@ -1,0 +1,10 @@
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net48\Vizion.Display.csproj.AssemblyReference.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net48\Vizion.Display.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net48\Vizion.Display.AssemblyInfoInputs.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net48\Vizion.Display.AssemblyInfo.cs
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net48\Vizion.Display.csproj.CoreCompileInputs.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net48\Vizion.Display.sourcelink.json
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\bin\Release\net48\Vizion.Display.dll
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\bin\Release\net48\Vizion.Display.pdb
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net48\Vizion.Display.dll
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net48\Vizion.Display.pdb

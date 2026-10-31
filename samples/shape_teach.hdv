@@ -1,13 +1,13 @@
 * 兩張圖：part_template.png 是要教導的鑰匙，part_scene.png 是搜尋畫面
 * 教導框包住整支鑰匙。畫面裡有四支不同位置、不同角度的鑰匙，圓環不是目標
-read_image (Template, 'samples/part_template.png')
-read_image (Scene, 'samples/part_scene.png')
-teach_shape_model (Template, 18, 18, 181, 181, 0, rad(-180), rad(360), 0, 'use_polarity', 40, 10, ModelID)
-find_shape_model (Scene, ModelID, rad(-180), rad(360), 0.8, 0, 0.4, 'interpolation', 0, 0.5, Row, Column, Angle, Score)
-dev_display (Scene)
-dev_set_line_width (2)
-dev_display_shape_matching_results (ModelID, Row, Column, Angle)
+Vizion.read_image (Template, 'samples/part_template.png')
+Vizion.read_image (Scene, 'samples/part_scene.png')
+Vizion.teach_shape_model (Template, 18, 18, 181, 181, 0, rad(-180), rad(360), 0, 'use_polarity', 40, 10, ModelID)
+Vizion.find_shape_model (Scene, ModelID, rad(-180), rad(360), 0.8, 0, 0.4, 'interpolation', 0, 0.5, Row, Column, Angle, Score)
+Vizion.dev_display (Scene)
+Vizion.dev_set_line_width (2)
+Vizion.dev_display_shape_matching_results (ModelID, Row, Column, Angle)
 Count := |Row|
 Label := '找到 ' + Count
-dev_set_color ('white')
-dev_disp_text (Label, 28, 16)
+Vizion.dev_set_color ('white')
+Vizion.dev_disp_text (Label, 28, 16)

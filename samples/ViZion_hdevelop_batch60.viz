@@ -1,0 +1,64 @@
+* 邊緣哪裡最弱
+* 用法：edge_contrast 是整圈平均。這裡只看最弱的一點，物件最外一像素減掉緊鄰的外側。
+* 負的表示這一點外面比較亮。edge_floor 只看差多少，不管誰亮。0 是這一點兩邊一樣。
+* 外側有好幾個時，先看上、下、左、右。一樣弱時留列最小、再來行最小的那一點。
+* 門檻可省略。weak_count 和 select_broken 預設 30，select_closed 預設 10。
+Vizion.gen_image_const (Blank, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Gap, 15, 15, 34, 34)
+Vizion.paint_region (Gap, Blank, Step1, 200, 'fill')
+Vizion.gen_rectangle1 (Patch, 20, 35, 24, 35)
+Vizion.paint_region (Patch, Step1, Step2, 210, 'fill')
+Vizion.gen_rectangle1 (Sharp, 15, 50, 34, 69)
+Vizion.paint_region (Sharp, Step2, Step3, 200, 'fill')
+Vizion.gen_rectangle1 (FlatBig, 36, 6, 59, 29)
+Vizion.paint_region (FlatBig, Step3, Picture, 100, 'fill')
+Vizion.gen_rectangle1 (Flat, 38, 8, 57, 27)
+Vizion.concat_obj (Gap, Sharp, Pair)
+Vizion.concat_obj (Pair, Flat, Parts)
+* 缺口那點外面是 210，物件是 200，所以是 -10。清楚的整圈最弱也有 200。融在背景裡的是 0
+Vizion.edge_min (Parts, Picture, Contrast)
+M1 := Contrast[1]
+M2 := Contrast[2]
+M3 := Contrast[3]
+Vizion.edge_floor (Parts, Picture, Floor)
+F1 := Floor[1]
+F2 := Floor[2]
+F3 := Floor[3]
+Vizion.edge_min_point (Parts, Picture, MinRow, MinCol)
+MR1 := MinRow[1]
+MC1 := MinCol[1]
+MR2 := MinRow[2]
+MC2 := MinCol[2]
+MR3 := MinRow[3]
+MC3 := MinCol[3]
+Vizion.edge_min_side (Parts, Picture, Side)
+Side1 := Side[1]
+Side2 := Side[2]
+Side3 := Side[3]
+* 差不超過 30 的點。缺口有 5 個，清楚的是 0，融在背景裡的整圈都算
+Vizion.weak_count (Parts, Picture, 30, WeakN)
+N1 := WeakN[1]
+N2 := WeakN[2]
+N3 := WeakN[3]
+Vizion.weak_edge (Parts, Picture, Weak, 30)
+Vizion.count_obj (Weak, WeakObj)
+Vizion.area_center (Weak, WeakArea, WeakRow, WeakCol)
+WA1 := WeakArea[1]
+WR1 := WeakRow[1]
+WC1 := WeakCol[1]
+WA2 := WeakArea[2]
+* 最弱的地方也要達到 100，才算整圈都清楚。30 以下當成有斷掉
+Vizion.select_closed (Parts, Picture, Closed, 100)
+Vizion.count_obj (Closed, ClosedN)
+Vizion.area_center (Closed, ClosedArea, ClosedRow, ClosedCol)
+ClosedA := ClosedArea[1]
+ClosedR := ClosedRow[1]
+ClosedC := ClosedCol[1]
+Vizion.select_broken (Parts, Picture, Broken, 30)
+Vizion.count_obj (Broken, BrokenN)
+Vizion.area_center (Broken, BrokenArea, BrokenRow, BrokenCol)
+BR1 := BrokenRow[1]
+BR2 := BrokenRow[2]
+Vizion.get_grayval (Picture, 20, 34, EdgeGray)
+Vizion.get_grayval (Picture, 20, 35, LeakGray)
+Vizion.dev_display (Picture)

@@ -1,0 +1,48 @@
+* Harris 角點修進像素裡面
+* points_harris 用高斯導數的結構張量算 Harris 回應，不是方框加 Sobel。SubPixel 為 true 時，在整數峰上解加權最小二乘。
+* 方塊左上角的整數峰停在列 25、行 37。次像素把它拉到 24.13、36.13。
+* 整張圖往下 0.4、往右 0.35 之後，整數峰還是 25、37。次像素跟到 24.41、36.39，比整數峰更靠近平移後的角。
+Vizion.gen_image_const (Base, 'byte', 120, 90)
+Vizion.gen_image_proto (Base, Sheet, 20)
+Vizion.gen_rectangle1 (Box, 24, 36, 64, 84)
+Vizion.paint_region (Box, Sheet, Image, 220, 'fill')
+Vizion.points_harris (Image, 1.2, 0.04, 0.04, 'false', IRow, ICol)
+StillIRow := 0
+StillICol := 0
+for Index := 1 to |IRow| by 1
+if (IRow[Index] < 40 and ICol[Index] < 50)
+StillIRow := IRow[Index]
+StillICol := ICol[Index]
+endif
+endfor
+Vizion.points_harris (Image, 1.2, 0.04, 0.04, 'true', Row, Col)
+StillRow := 0
+StillCol := 0
+for Index := 1 to |Row| by 1
+if (Row[Index] < 40 and Col[Index] < 50)
+StillRow := Row[Index]
+StillCol := Col[Index]
+endif
+endfor
+Vizion.hom_mat2d_identity (Id)
+Vizion.hom_mat2d_translate (Id, 0.4, 0.35, Shift)
+Vizion.affine_trans_image (Image, Moved, Shift, 'bicubic', 'false')
+Vizion.points_harris (Moved, 1.2, 0.04, 0.04, 'false', MIRow, MICol)
+MoveIRow := 0
+MoveICol := 0
+for Index := 1 to |MIRow| by 1
+if (MIRow[Index] < 40 and MICol[Index] < 50)
+MoveIRow := MIRow[Index]
+MoveICol := MICol[Index]
+endif
+endfor
+Vizion.points_harris (Moved, 1.2, 0.04, 0.04, 'true', MRow, MCol)
+CornerRow := 0
+CornerCol := 0
+for Index := 1 to |MRow| by 1
+if (MRow[Index] < 40 and MCol[Index] < 50)
+CornerRow := MRow[Index]
+CornerCol := MCol[Index]
+endif
+endfor
+Vizion.dev_display (Moved)

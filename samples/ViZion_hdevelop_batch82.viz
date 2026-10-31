@@ -1,0 +1,15 @@
+* 最小二乘把形狀對準
+* find_shape_model 的 interpolation 只在分數曲面上做拋物線。least_squares 再沿邊緣法線修列、行和角度。
+* 方塊的教導中心是列 44.5、行 59.5。整張圖往右移 0.4 像素後，真的中心在行 59.9。
+* interpolation 會偏到大約 60.27。least_squares 落在 59.85，比較靠近 59.9。角度仍是 0。
+Vizion.gen_image_const (Base, 'byte', 120, 90)
+Vizion.gen_image_proto (Base, Sheet, 20)
+Vizion.gen_rectangle1 (Box, 25, 35, 64, 84)
+Vizion.paint_region (Box, Sheet, Image, 220, 'fill')
+Vizion.teach_shape_model (Image, 20, 30, 69, 89, 1, 0, 0, 0, 'use_polarity', 30, 10, ModelID)
+Vizion.hom_mat2d_identity (Id)
+Vizion.hom_mat2d_translate (Id, 0, 0.4, Shift)
+Vizion.affine_trans_image (Image, Moved, Shift, 'bicubic', 'false')
+Vizion.find_shape_model (Moved, ModelID, 0, 0, 0.5, 1, 0.5, 'interpolation', 0, 0.8, IRow, ICol, IAng, IScore)
+Vizion.find_shape_model (Moved, ModelID, 0, 0, 0.5, 1, 0.5, 'least_squares', 0, 0.8, LRow, LCol, LAng, LScore)
+Vizion.dev_display (Moved)

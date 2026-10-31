@@ -1,0 +1,10 @@
+* 有一個飛點也不歪
+* fit_line_contour_xld 先擬合，再丟掉離直線超過約 1 像素的點，重擬到方向穩定。
+* 線段只覆蓋留下來的點，飛點不會把線拉長，也不會把整條線抬起來。
+* 四個點在列 10、行 0、10、20、30。中間飛點在列 18、行 15。直線仍是列 10，行從 0 到 30。
+* 斜線上的飛點也一樣：點在 (0,0) 到 (30,30)，飛點 (15,28) 被丟掉，端點仍是這兩個角。
+Vizion.gen_contour_polygon_xld (Edge, [10, 10, 10, 10, 18], [0, 10, 20, 30, 15])
+Vizion.fit_line_contour_xld (Edge, Line, Row1, Col1, Row2, Col2)
+Vizion.gen_contour_polygon_xld (Diag, [0, 10, 20, 30, 15], [0, 10, 20, 30, 28])
+Vizion.fit_line_contour_xld (Diag, Line2, D1, C1, D2, C2)
+Vizion.dev_display (Line)

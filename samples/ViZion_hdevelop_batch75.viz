@@ -1,0 +1,30 @@
+* 平移不到一個像素
+* Vizion.phase_correlation (第一張, 第二張, 列, 行, 峰值) 回傳把第一張對到第二張要加的位移，可以是小數。
+* 兩張完全一樣時，列和行都是 0，峰值接近 1。整數平移會收成整數，這裡是列 3、行 4。
+* 不到一個像素時，用峰值旁邊兩個格子的比例算出來。影像外補黑，所以 1.5 會落在 1.50 附近，誤差在 0.02 以內。
+* Vizion.align_translation (要拉的影像, 基準, 拉回後, 列, 行, 峰值) 量完就把影像平移回去。中間灰階 200 會回到原位。
+Vizion.gen_image_const (Base, 'byte', 96, 80)
+Vizion.gen_image_proto (Base, Sheet, 30)
+Vizion.gen_rectangle1 (A, 18, 20, 33, 43)
+Vizion.paint_region (A, Sheet, P1, 200, 'fill')
+Vizion.gen_rectangle1 (B, 36, 40, 57, 69)
+Vizion.paint_region (B, P1, P2, 90, 'fill')
+Vizion.gen_rectangle1 (C, 22, 60, 29, 79)
+Vizion.paint_region (C, P2, P3, 240, 'fill')
+Vizion.gen_rectangle1 (D, 48, 12, 69, 27)
+Vizion.paint_region (D, P3, Image, 150, 'fill')
+Vizion.hom_mat2d_identity (Id)
+Vizion.hom_mat2d_translate (Id, 1.5, 0, Down)
+Vizion.affine_trans_image (Image, Moved, Down, 'bicubic', 'false')
+Vizion.phase_correlation (Image, Moved, Row, Column, Score)
+Vizion.phase_correlation (Image, Image, SameRow, SameCol, SameScore)
+Vizion.hom_mat2d_translate (Id, 0, 1.5, Right)
+Vizion.affine_trans_image (Image, Side, Right, 'bicubic', 'false')
+Vizion.phase_correlation (Image, Side, SideRow, SideCol, SideScore)
+Vizion.hom_mat2d_translate (Id, 3, 4, Far)
+Vizion.affine_trans_image (Image, FarImage, Far, 'bicubic', 'false')
+Vizion.phase_correlation (Image, FarImage, FarRow, FarCol, FarScore)
+Vizion.align_translation (Moved, Image, Back, BackRow, BackCol, BackScore)
+Vizion.get_grayval (Image, 25, 30, Orig)
+Vizion.get_grayval (Back, 25, 30, Restored)
+Vizion.dev_display (Back)

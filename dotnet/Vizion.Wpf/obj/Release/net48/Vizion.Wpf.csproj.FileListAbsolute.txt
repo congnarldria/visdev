@@ -1,0 +1,13 @@
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\bin\Release\net48\Vizion.Wpf.dll
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\bin\Release\net48\Vizion.Wpf.pdb
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\bin\Release\net48\Vizion.Display.dll
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\bin\Release\net48\Vizion.Display.pdb
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net48\Vizion.Wpf.csproj.AssemblyReference.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net48\Vizion.Wpf.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net48\Vizion.Wpf.AssemblyInfoInputs.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net48\Vizion.Wpf.AssemblyInfo.cs
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net48\Vizion.Wpf.csproj.CoreCompileInputs.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net48\Vizion.Wpf.sourcelink.json
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net48\Vizion.Wpf.csproj.Up2Date
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net48\Vizion.Wpf.dll
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Wpf\obj\Release\net48\Vizion.Wpf.pdb

@@ -1,0 +1,69 @@
+* 把物件搬到範本上
+* 用法：shape_score 看像不像。這裡把物件搬到範本中心，看蓋住多少、還差幾個像素。
+* center 只搬位置，位移四捨五入成整數像素。方塊請用 center。
+* rigid 再把長軸轉到和範本一樣。長條才用這個。長軸顛倒 180 度當成同一個方向。
+* 正的列往下搬，正的行往右搬。DRow[1] 從 1 開始。Cover 為 1 是完全蓋住範本。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Template, 10, 10, 19, 19)
+Vizion.gen_rectangle1 (Shifted, 10, 40, 19, 49)
+Vizion.gen_rectangle1 (Small, 40, 40, 45, 45)
+Vizion.gen_rectangle1 (Bar, 30, 50, 34, 69)
+Vizion.concat_obj (Shifted, Small, Pair)
+Vizion.concat_obj (Pair, Bar, Parts)
+* 要搬的量。右邊那塊方塊往左 30 像素，長條的列還有半個像素
+Vizion.align_delta (Parts, Template, DRow, DColumn)
+DR1 := DRow[1]
+DC1 := DColumn[1]
+DR2 := DRow[2]
+DC2 := DColumn[2]
+DR3 := DRow[3]
+DC3 := DColumn[3]
+* 搬完之後重疊幾個像素，以及蓋住範本的比例
+Vizion.align_overlap (Parts, Template, 'center', Overlap)
+O1 := Overlap[1]
+O2 := Overlap[2]
+O3 := Overlap[3]
+Vizion.align_cover (Parts, Template, 'center', Cover)
+C1 := Cover[1]
+C2 := Cover[2]
+C3 := Cover[3]
+* 完全疊上是 0。小方塊差 64，長條差 100
+Vizion.mismatch_area (Parts, Template, 'center', Miss)
+MA1 := Miss[1]
+MA2 := Miss[2]
+MA3 := Miss[3]
+Vizion.mismatch_region (Parts, Template, Mismatch, 'center')
+Vizion.count_obj (Mismatch, MissN)
+Vizion.area_center (Mismatch, MissArea, MissRow, MissCol)
+MissA1 := MissArea[1]
+MissA2 := MissArea[2]
+* 0.95 只留下幾乎完全蓋住的那一塊，留下的仍是原來的位置
+Vizion.select_aligned (Parts, Template, Kept, 0.95, 'center')
+Vizion.count_obj (Kept, KeepN)
+Vizion.area_center (Kept, KeepArea, KeepRow, KeepCol)
+KeepA := KeepArea[1]
+KeepC := KeepCol[1]
+Vizion.align_region (Parts, Template, Moved, 'center')
+Vizion.area_center (Moved, MoveArea, MoveRow, MoveCol)
+Move1 := MoveArea[1]
+MoveR := MoveRow[1]
+MoveC := MoveCol[1]
+* 直的長條轉到橫的長條上。center 只會交錯 25 像素，rigid 轉完重疊 100
+Vizion.gen_rectangle1 (Wide, 50, 10, 54, 29)
+Vizion.gen_rectangle1 (Tall, 10, 70, 29, 74)
+Vizion.align_angle (Tall, Wide, DPhi)
+Phi := DPhi[1]
+Vizion.align_overlap (Tall, Wide, 'center', Cross)
+CrossN := Cross[1]
+Vizion.align_overlap (Tall, Wide, 'rigid', TurnedOver)
+TurnN := TurnedOver[1]
+Vizion.align_region (Tall, Wide, Turned, 'rigid')
+Vizion.area_center (Turned, TurnArea, TurnRow, TurnCol)
+TurnA := TurnArea[1]
+TurnR := TurnRow[1]
+TurnC := TurnCol[1]
+Vizion.select_obj (Moved, First, 1)
+Vizion.paint_region (First, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 14, 14, OnGray)
+Vizion.get_grayval (Shown, 14, 44, OffGray)
+Vizion.dev_display (Shown)

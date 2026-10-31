@@ -1,0 +1,143 @@
+{
+  "version": 4,
+  "targets": {
+    "net48": {
+      "Vizion.Display/1.0.0": {
+        "type": "project",
+        "framework": ".NETFramework,Version=v4.8",
+        "compile": {
+          "bin/placeholder/Vizion.Display.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Vizion.Display.dll": {}
+        }
+      }
+    },
+    "net8.0-windows": {
+      "Vizion.Display/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/Vizion.Display.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Vizion.Display.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Vizion.Display/1.0.0": {
+      "type": "project",
+      "path": "../Vizion.Display/Vizion.Display.csproj",
+      "msbuildProject": "../Vizion.Display/Vizion.Display.csproj"
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net48": [
+      "Vizion.Display >= 1.0.0"
+    ],
+    "net8.0-windows": [
+      "Vizion.Display >= 1.0.0"
+    ]
+  },
+  "packageFolders": {
+    "C:\\Users\\Administrator\\AppData\\Local\\Temp\\cursor-sandbox-cache\\20ac6bd9ebc257459c68d41081aabe13\\nuget": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {},
+    "C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "C:\\Users\\Administrator\\Desktop\\visdev\\dotnet\\Vizion.Wpf\\Vizion.Wpf.csproj",
+      "projectName": "Vizion.Wpf",
+      "projectPath": "C:\\Users\\Administrator\\Desktop\\visdev\\dotnet\\Vizion.Wpf\\Vizion.Wpf.csproj",
+      "packagesPath": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\cursor-sandbox-cache\\20ac6bd9ebc257459c68d41081aabe13\\nuget",
+      "outputPath": "C:\\Users\\Administrator\\Desktop\\visdev\\dotnet\\Vizion.Wpf\\obj\\",
+      "projectStyle": "PackageReference",
+      "crossTargeting": true,
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages",
+        "C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder"
+      ],
+      "configFilePaths": [
+        "C:\\Users\\Administrator\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\dmv-sdk.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+      ],
+      "originalTargetFrameworks": [
+        "net48",
+        "net8.0-windows"
+      ],
+      "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "C:\\Program Files\\Delta Industrial Automation\\DIAVision\\DMV-SDK\\Development\\.NET\\nuget": {},
+        "C:\\Program Files\\dotnet\\library-packs": {},
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net48": {
+          "framework": "net48",
+          "targetAlias": "net48",
+          "projectReferences": {
+            "C:\\Users\\Administrator\\Desktop\\visdev\\dotnet\\Vizion.Display\\Vizion.Display.csproj": {
+              "projectPath": "C:\\Users\\Administrator\\Desktop\\visdev\\dotnet\\Vizion.Display\\Vizion.Display.csproj"
+            }
+          }
+        },
+        "net8.0-windows": {
+          "framework": "net8.0-windows7.0",
+          "targetAlias": "net8.0-windows",
+          "projectReferences": {
+            "C:\\Users\\Administrator\\Desktop\\visdev\\dotnet\\Vizion.Display\\Vizion.Display.csproj": {
+              "projectPath": "C:\\Users\\Administrator\\Desktop\\visdev\\dotnet\\Vizion.Display\\Vizion.Display.csproj"
+            }
+          }
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "11.0.100"
+    },
+    "frameworks": {
+      "net48": {
+        "framework": "net48",
+        "targetAlias": "net48",
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\11.0.100-rc.3.26522.148\\RuntimeIdentifierGraph.json"
+      },
+      "net8.0-windows": {
+        "framework": "net8.0-windows7.0",
+        "targetAlias": "net8.0-windows",
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          },
+          "Microsoft.WindowsDesktop.App.WPF": {
+            "privateAssets": "none"
+          }
+        },
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\11.0.100-rc.3.26522.148/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+* 點雲交集、格子和主軸長度
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_object_model_3d_from_points ([0, 1, 2], 0, 0, Line)
+Vizion.gen_object_model_3d_from_points (1, 0, 0, Hit)
+Vizion.intersect_object_model_3d (Line, Hit, 0, Common)
+Vizion.get_object_model_3d_points (Common, CommonX, CommonY, CommonZ)
+Vizion.gen_object_model_3d_from_points ([0, 2], 0, 0, Pair)
+Vizion.center_object_model_3d (Pair, Mid)
+Vizion.get_object_model_3d_points (Mid, MidX, MidY, MidZ)
+MidX0 := MidX[1]
+MidX1 := MidX[2]
+Vizion.gen_object_model_3d_from_points ([0, 2, 5], 0, 0, Wide)
+Vizion.clip_object_model_3d (Wide, 1, 0, 0, 3, 0, 0, Cut)
+Vizion.get_object_model_3d_points (Cut, CutX, CutY, CutZ)
+Vizion.gen_object_model_3d_from_points ([0, 0.5, 3], 0, 0, Dots)
+Vizion.voxel_object_model_3d (Dots, 2, 'point', Sparse)
+Vizion.get_object_model_3d_points (Sparse, SparseX, SparseY, SparseZ)
+SparseX0 := SparseX[1]
+SparseX1 := SparseX[2]
+Vizion.voxel_object_model_3d (Dots, 2, 'center', Cells)
+Vizion.get_object_model_3d_points (Cells, CellX, CellY, CellZ)
+CellX0 := CellX[1]
+CellX1 := CellX[2]
+Vizion.gen_object_model_3d_from_points ([0, 10], 0, 0, Far)
+Vizion.gen_object_model_3d_from_points ([0, 1], 0, 0, Near)
+Vizion.max_distance_object_model_3d (Far, Near, Gap)
+Vizion.gen_plane_object_model_3d (0, 0, 3, 2, 2, 1, Sheet)
+Vizion.get_object_model_3d_params (Sheet, 'num_points', SheetCount)
+Vizion.get_object_model_3d_points (Sheet, SheetX, SheetY, SheetZ)
+SheetX0 := SheetX[1]
+SheetX1 := SheetX[2]
+SheetY2 := SheetY[3]
+SheetZ0 := SheetZ[1]
+Vizion.gen_object_model_3d_from_points ([0, 2, 4], 0, 0, Shaft)
+Vizion.principal_spread_object_model_3d (Shaft, Spread1, Spread2, Spread3)
+Vizion.dev_display (Image)

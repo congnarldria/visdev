@@ -1,0 +1,13 @@
+* 高斯導數把峰修到 30.33298
+* 同一列上，行 30 是 200、行 31 是 100。亮度加權的中心在行 30.33333。
+* facet 的 3×3 只看旁邊一格，停在 30.16667。gauss 用和 derivate_gauss 同一套導數，Sigma 是 3，峰在 30.33298。
+Vizion.gen_image_const (Base, 'byte', 48, 48)
+Vizion.set_grayval (Base, Image, 20, 30, 200)
+Vizion.set_grayval (Image, Image, 20, 31, 100)
+Vizion.local_max_sub_pix (Image, 'facet', 1, 5, FacetRow, FacetCol)
+Vizion.local_max_sub_pix (Image, 'gauss', 3, 5, GaussRow, GaussCol)
+FRow := FacetRow[1]
+FCol := FacetCol[1]
+GRow := GaussRow[1]
+GCol := GaussCol[1]
+Vizion.dev_display (Image)

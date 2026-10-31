@@ -1,0 +1,72 @@
+* 有沒有碰到影像邊緣
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (TouchTop, 0, 20, 9, 29)
+Vizion.gen_rectangle1 (TouchLeft, 20, 0, 29, 4)
+Vizion.gen_rectangle1 (Center, 25, 35, 34, 44)
+Vizion.gen_rectangle1 (NearRight, 40, 70, 49, 77)
+Vizion.concat_obj (TouchTop, TouchLeft, Pair)
+Vizion.concat_obj (Pair, Center, Three)
+Vizion.concat_obj (Three, NearRight, Parts)
+Vizion.select_border (Parts, Touched, 'touch')
+Vizion.count_obj (Touched, TouchN)
+Vizion.area_center (Touched, TouchArea, TouchRow, TouchCol)
+Touch1 := TouchArea[1]
+Touch2 := TouchArea[2]
+Vizion.select_border (Parts, Inside, 'inner')
+Vizion.count_obj (Inside, InnerN)
+Vizion.area_center (Inside, InnerArea, InnerRow, InnerCol)
+Inner1 := InnerArea[1]
+Inner2 := InnerArea[2]
+Vizion.select_border_side (Parts, TopSide, 'top')
+Vizion.count_obj (TopSide, TopN)
+Vizion.area_center (TopSide, TopArea, TopRow, TopCol)
+TopA := TopArea[1]
+Vizion.select_border_side (Parts, RightSide, 'right')
+Vizion.count_obj (RightSide, RightN)
+Vizion.select_margin (Parts, Kept, 3)
+Vizion.count_obj (Kept, KeepN)
+Vizion.area_center (Kept, KeepArea, KeepRow, KeepCol)
+KeepA := KeepArea[1]
+Vizion.select_border_range (Parts, Band, 1, 10)
+Vizion.count_obj (Band, BandN)
+Vizion.area_center (Band, BandArea, BandRow, BandCol)
+BandA := BandArea[1]
+Vizion.farthest_border (Parts, Far)
+Vizion.area_center (Far, FarArea, FarRow, FarCol)
+FarN := FarArea[1]
+FarR := FarRow[1]
+FarC := FarCol[1]
+Vizion.border_distance (Parts, Distance)
+D1 := Distance[1]
+D2 := Distance[2]
+D3 := Distance[3]
+D4 := Distance[4]
+Vizion.border_gap (Parts, GapTop, GapBottom, GapLeft, GapRight)
+GT1 := GapTop[1]
+GT2 := GapTop[2]
+GT3 := GapTop[3]
+GT4 := GapTop[4]
+GB1 := GapBottom[1]
+GB3 := GapBottom[3]
+GB4 := GapBottom[4]
+GL2 := GapLeft[2]
+GL3 := GapLeft[3]
+GR2 := GapRight[2]
+GR4 := GapRight[4]
+Vizion.border_point (Parts, PointRow, PointCol, PointSide)
+PR1 := PointRow[1]
+PC1 := PointCol[1]
+PS1 := PointSide[1]
+PR2 := PointRow[2]
+PC2 := PointCol[2]
+PS2 := PointSide[2]
+PR3 := PointRow[3]
+PC3 := PointCol[3]
+PS3 := PointSide[3]
+PR4 := PointRow[4]
+PC4 := PointCol[4]
+PS4 := PointSide[4]
+Vizion.paint_region (Touched, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 0, 20, EdgeGray)
+Vizion.get_grayval (Shown, 25, 35, MidGray)
+Vizion.dev_display (Shown)

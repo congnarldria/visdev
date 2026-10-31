@@ -1,0 +1,48 @@
+* 把邊緣銳利、平坦留著
+* 用法：edge_enhance 用高斯，起伏小於 Threshold 就不加。平坦處的小雜訊不會變銳。
+* emphasize 用方框平均、沒有門檻，小亮點也會被放大。彩色只調亮度，四個控制都可以不寫，預設 1.2、1、2、0。
+* edge_band 只加強兩個尺度中間的邊緣。edge_masked 只在梯度大的地方加。edge_preserve 把平坦的雜訊收掉，邊緣留著。
+* Limit 大於 0 時，單邊最多只加或減這個量。edge_residual 和 enhance_map 以 128 為沒變，比 128 大是變亮。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (All, 0, 0, 59, 79)
+Vizion.paint_region (All, Image, Base, 100, 'fill')
+Vizion.gen_rectangle1 (Right, 0, 40, 59, 79)
+Vizion.paint_region (Right, Base, Step, 180, 'fill')
+Vizion.set_grayval (Step, Spiked, 30, 10, 106)
+Vizion.edge_enhance (Step, Sharp, 1.2, 1, 8, 0)
+Vizion.edge_enhance (Spiked, Gated, 1.2, 1, 8, 0)
+Vizion.edge_enhance (Spiked, Open, 1.2, 1, 0, 0)
+Vizion.edge_enhance (Step, Capped, 1.2, 3, 8, 12)
+Vizion.edge_band (Step, Band, 0.8, 2.4, 1, 2)
+Vizion.edge_masked (Step, Masked, 1.2, 1, 30)
+Vizion.edge_preserve (Spiked, Kept, 1.2, 30)
+Vizion.edge_residual (Step, Residual, 1.2, 8)
+Vizion.enhance_map (Step, Sharp, Map)
+Vizion.enhance_change (Step, Sharp, MeanS, MaxS)
+Vizion.enhance_change (Step, Band, MeanB, MaxB)
+Vizion.enhance_hot (Step, Sharp, Hot, 10)
+Vizion.count_obj (Hot, HotN)
+Vizion.area_center (Hot, HotArea, HotRow, HotCol)
+HotA := HotArea[1]
+HotR := HotRow[1]
+HotC := HotCol[1]
+Vizion.get_grayval (Sharp, 30, 5, Flat)
+Vizion.get_grayval (Sharp, 30, 39, DarkSharp)
+Vizion.get_grayval (Sharp, 30, 40, BrightSharp)
+Vizion.get_grayval (Gated, 30, 10, SpikeGate)
+Vizion.get_grayval (Open, 30, 10, SpikeOpen)
+Vizion.get_grayval (Capped, 30, 39, DarkCap)
+Vizion.get_grayval (Capped, 30, 40, BrightCap)
+Vizion.get_grayval (Band, 30, 5, BandFlat)
+Vizion.get_grayval (Band, 30, 39, DarkBand)
+Vizion.get_grayval (Band, 30, 40, BrightBand)
+Vizion.get_grayval (Masked, 30, 5, MaskFlat)
+Vizion.get_grayval (Masked, 30, 39, DarkMask)
+Vizion.get_grayval (Kept, 30, 10, SpikeKept)
+Vizion.get_grayval (Kept, 30, 40, EdgeKept)
+Vizion.get_grayval (Residual, 30, 5, ResFlat)
+Vizion.get_grayval (Residual, 30, 39, ResDark)
+Vizion.get_grayval (Map, 30, 40, MapBright)
+Vizion.emphasize (Spiked, Box, 7, 7, 1)
+Vizion.get_grayval (Box, 30, 10, SpikeBox)
+Vizion.dev_display (Sharp)

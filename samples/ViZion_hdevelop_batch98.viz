@@ -1,0 +1,15 @@
+* 拉回去的半個像素是 112
+* 仿射和對齊拉回的 bicubic 都用 16 點 Keys 三次內插。64×64 只有列 32、行 32 是 200。
+* 行減 0.5 之後，列 32、行 32 落在半個像素上，得到 112。bilinear 仍是 100。
+* align_translation 把原圖對到這張往左半個像素的基準，同一個位置也是 112。
+Vizion.gen_image_const (Base, 'byte', 64, 64)
+Vizion.set_grayval (Base, Dot, 32, 32, 200)
+Vizion.hom_mat2d_identity (Id)
+Vizion.hom_mat2d_translate (Id, 0, -0.5, Left)
+Vizion.affine_trans_image (Dot, Cubic, Left, 'bicubic', 'false')
+Vizion.get_grayval (Cubic, 32, 32, Mid)
+Vizion.affine_trans_image (Dot, Linear, Left, 'bilinear', 'false')
+Vizion.get_grayval (Linear, 32, 32, Average)
+Vizion.align_translation (Dot, Cubic, Aligned, Row, Column, Score)
+Vizion.get_grayval (Aligned, 32, 32, Pulled)
+Vizion.dev_display (Cubic)

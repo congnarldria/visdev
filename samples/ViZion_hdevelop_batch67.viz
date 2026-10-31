@@ -1,0 +1,60 @@
+* 有沒有跑出這個方框
+* 用法：方框的邊算在裡面。上要小於等於下，左要小於等於右。
+* window_ratio 是方框裡的像素除以物件自己的像素。1 是整個在裡面，0 是整個在外面。
+* window_depth 是跑出去最遠的距離。chessboard 列和行取較遠的那個，city-block 才把兩個相加。完全在裡面是 0。
+* overflow_region 只留跑出去的像素。完全在裡面的物件不會留下。clip_region 是把外面裁掉。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (InBox, 22, 22, 31, 31)
+Vizion.gen_rectangle1 (Cross, 10, 30, 29, 39)
+Vizion.gen_rectangle1 (Far, 45, 45, 54, 54)
+Vizion.concat_obj (InBox, Cross, Two)
+Vizion.concat_obj (Two, Far, Parts)
+Vizion.window_inside (Parts, 20, 20, 39, 39, InArea)
+IA1 := InArea[1]
+IA2 := InArea[2]
+IA3 := InArea[3]
+Vizion.window_outside (Parts, 20, 20, 39, 39, OutArea)
+OA1 := OutArea[1]
+OA2 := OutArea[2]
+OA3 := OutArea[3]
+Vizion.window_ratio (Parts, 20, 20, 39, 39, Ratio)
+R1 := Ratio[1]
+R2 := Ratio[2]
+R3 := Ratio[3]
+Vizion.window_depth (Parts, 20, 20, 39, 39, Depth)
+D1 := Depth[1]
+D2 := Depth[2]
+D3 := Depth[3]
+Vizion.window_depth (Parts, 20, 20, 39, 39, 'city-block', City)
+CD2 := City[2]
+CD3 := City[3]
+Vizion.overflow_region (Parts, Overflow, 20, 20, 39, 39)
+Vizion.count_obj (Overflow, OverN)
+Vizion.area_center (Overflow, OverArea, OverRow, OverCol)
+OVA1 := OverArea[1]
+OVR1 := OverRow[1]
+OVC1 := OverCol[1]
+OVA2 := OverArea[2]
+OVR2 := OverRow[2]
+Vizion.select_inside (Parts, Inside, 20, 20, 39, 39)
+Vizion.count_obj (Inside, InsideN)
+Vizion.area_center (Inside, InsideArea, InsideRow, InsideCol)
+InA := InsideArea[1]
+InR := InsideRow[1]
+InC := InsideCol[1]
+Vizion.select_outside (Parts, Outside, 20, 20, 39, 39)
+Vizion.count_obj (Outside, OutsideN)
+Vizion.area_center (Outside, OutsideArea, OutsideRow, OutsideCol)
+OutA := OutsideArea[1]
+OutR := OutsideRow[1]
+Vizion.select_crossing (Parts, Crossing, 20, 20, 39, 39)
+Vizion.count_obj (Crossing, CrossN)
+Vizion.area_center (Crossing, CrossArea, CrossRow, CrossCol)
+CA := CrossArea[1]
+CR := CrossRow[1]
+CC := CrossCol[1]
+Vizion.select_obj (Overflow, FirstOver, 1)
+Vizion.paint_region (FirstOver, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 14, 34, OutGray)
+Vizion.get_grayval (Shown, 24, 34, InGray)
+Vizion.dev_display (Shown)

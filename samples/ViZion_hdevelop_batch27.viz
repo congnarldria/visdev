@@ -1,0 +1,33 @@
+* 函數積分、導數和反函數
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.create_funct_1d_pairs ([0, 2], [10, 30], Curve)
+Vizion.integrate_funct_1d (Curve, 0, 2, Area)
+Vizion.derivate_funct_1d (Curve, 'second', Curve2)
+Vizion.get_y_value_funct_1d (Curve2, 1, 'constant', Flat2)
+Vizion.invert_funct_1d (Curve, Inv)
+Vizion.get_y_value_funct_1d (Inv, 20, 'constant', InvY)
+Vizion.create_funct_1d_pairs ([0, 2], [0, 2], Ident)
+Vizion.compose_funct_1d (Curve, Ident, 'constant', Mixed)
+Vizion.get_y_value_funct_1d (Mixed, 1, 'constant', MixedY)
+Vizion.create_funct_1d_array ([4, 8, 6], ArrayFn)
+Vizion.funct_1d_to_pairs (ArrayFn, ArrayX, ArrayY)
+ArrayX0 := ArrayX[1]
+ArrayY1 := ArrayY[2]
+Vizion.get_y_value_funct_1d (ArrayFn, 1, 'constant', ArrayMid)
+Vizion.create_funct_1d_pairs ([0, 1, 2], [0, 2, 2], Kink)
+Vizion.derivate_funct_1d (Kink, 'first', Slope)
+Vizion.get_y_value_funct_1d (Slope, 0, 'constant', Slope0)
+Vizion.get_y_value_funct_1d (Slope, 1, 'constant', Slope1)
+Vizion.get_y_value_funct_1d (Slope, 2, 'constant', Slope2)
+Vizion.derivate_funct_1d (Kink, 'second', Bend2)
+Vizion.get_y_value_funct_1d (Bend2, 1, 'constant', SecondMid)
+Vizion.create_funct_1d_pairs ([0, 1, 2, 3], [0, 2, -1, 0], Bend)
+Vizion.local_min_max_funct_1d (Bend, MinX, MaxX)
+MinAt := MinX[1]
+MaxAt := MaxX[1]
+Vizion.create_funct_1d_pairs ([0, 2], [-1, 1], Line)
+Vizion.abs_funct_1d (Line, AbsLine)
+Vizion.get_y_value_funct_1d (AbsLine, 0, 'constant', Abs0)
+Vizion.get_y_value_funct_1d (AbsLine, 1, 'constant', AbsMid)
+Vizion.get_y_value_funct_1d (AbsLine, 2, 'constant', Abs2)
+Vizion.dev_display (Image)

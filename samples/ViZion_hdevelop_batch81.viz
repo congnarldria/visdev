@@ -1,0 +1,12 @@
+* 半個像素不是兩點的平均
+* get_grayval_interpolated 的 bicubic 用周圍 16 個像素的三次內插。bilinear 只看 4 個。
+* 量測矩形和圓弧選 bicubic 時，剖面用同一套。整數座標讀到像素本身。
+* 行 10、列 10 的灰階是 200，旁邊是 0。讀列 10、行 10.5：bilinear 是 100，bicubic 是 112.5。
+* 三次核在半像素的權重是 0.5625，200 乘 0.5625 就是 112.5。nearest 的 .5 會進到下一個像素，這裡是 0。
+Vizion.gen_image_const (Base, 'byte', 32, 32)
+Vizion.set_grayval (Base, Image, 10, 10, 200)
+Vizion.get_grayval_interpolated (Image, 10, 10, 'bicubic', OnPixel)
+Vizion.get_grayval_interpolated (Image, 10, 10.5, 'bicubic', Cubic)
+Vizion.get_grayval_interpolated (Image, 10, 10.5, 'bilinear', Linear)
+Vizion.get_grayval_interpolated (Image, 10, 10.5, 'nearest', Near)
+Vizion.dev_display (Image)

@@ -1,0 +1,65 @@
+* 物件有沒有互相碰到
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Block, 10, 10, 19, 19)
+Vizion.gen_rectangle1 (Beside, 10, 20, 19, 24)
+Vizion.gen_rectangle1 (Below, 20, 20, 24, 24)
+Vizion.gen_rectangle1 (Far, 40, 40, 44, 44)
+Vizion.concat_obj (Block, Beside, Pair)
+Vizion.concat_obj (Pair, Below, Three)
+Vizion.concat_obj (Three, Far, Parts)
+Vizion.neighbor_distance (Parts, 'chessboard', Distance)
+D1 := Distance[1]
+D2 := Distance[2]
+D3 := Distance[3]
+D4 := Distance[4]
+Vizion.neighbor_index (Parts, 'chessboard', NearIndex)
+I1 := NearIndex[1]
+I2 := NearIndex[2]
+I3 := NearIndex[3]
+I4 := NearIndex[4]
+Vizion.neighbor_point (Parts, 'chessboard', NearRow, NearCol, NearGap)
+NR1 := NearRow[1]
+NC1 := NearCol[1]
+NG1 := NearGap[1]
+NR2 := NearRow[2]
+NC2 := NearCol[2]
+NR4 := NearRow[4]
+NC4 := NearCol[4]
+NG4 := NearGap[4]
+Vizion.neighbor_count (Parts, 1, 'chessboard', TouchCount)
+K1 := TouchCount[1]
+K2 := TouchCount[2]
+K3 := TouchCount[3]
+K4 := TouchCount[4]
+Vizion.select_touching (Parts, Touched, 1, 'chessboard')
+Vizion.count_obj (Touched, TouchN)
+Vizion.area_center (Touched, TouchArea, TouchRow, TouchCol)
+Touch1 := TouchArea[1]
+Touch2 := TouchArea[2]
+Touch3 := TouchArea[3]
+Vizion.select_isolated (Parts, Alone, 1, 'chessboard')
+Vizion.count_obj (Alone, AloneN)
+Vizion.area_center (Alone, AloneArea, AloneRow, AloneCol)
+AloneA := AloneArea[1]
+AloneR := AloneRow[1]
+AloneC := AloneCol[1]
+Vizion.contact_region (Parts, Contact, 1, 'chessboard')
+Vizion.count_obj (Contact, ContactN)
+Vizion.area_center (Contact, ContactArea, ContactRow, ContactCol)
+CA1 := ContactArea[1]
+CA2 := ContactArea[2]
+CA3 := ContactArea[3]
+CR1 := ContactRow[1]
+CC1 := ContactCol[1]
+Vizion.union_touching (Parts, Merged, 1, 'chessboard')
+Vizion.count_obj (Merged, MergeN)
+Vizion.area_center (Merged, MergeArea, MergeRow, MergeCol)
+M1 := MergeArea[1]
+M2 := MergeArea[2]
+MR := MergeRow[1]
+MC := MergeCol[1]
+Vizion.paint_region (Contact, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 14, 19, TouchGray)
+Vizion.get_grayval (Shown, 14, 18, BodyGray)
+Vizion.get_grayval (Shown, 42, 42, FarGray)
+Vizion.dev_display (Shown)

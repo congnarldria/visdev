@@ -1,0 +1,13 @@
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\bin\Release\net8.0\Vizion.Display.deps.json
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\bin\Release\net8.0\Vizion.Display.dll
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\bin\Release\net8.0\Vizion.Display.pdb
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net8.0\Vizion.Display.GeneratedMSBuildEditorConfig.editorconfig
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net8.0\Vizion.Display.AssemblyInfoInputs.cache
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net8.0\Vizion.Display.AssemblyInfo.cs
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net8.0\Vizion.Display.csproj.CoreCompileInputs.cache
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net8.0\Vizion.Display.sourcelink.json
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net8.0\Vizion.Display.dll
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net8.0\refint\Vizion.Display.dll
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net8.0\Vizion.Display.pdb
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net8.0\ref\Vizion.Display.dll
+c:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display\obj\Release\net8.0\Vizion.D.5DF336AB.Up2Date

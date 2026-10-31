@@ -1,0 +1,17 @@
+* 尺度修到 1.07505
+* 教導的尺度是 0.8、1.0、1.2。模板方塊高 30，場景方塊高 33，真正的尺度是 1.1。
+* 不修尺度時停在 1。least_squares 沿邊緣法線把尺度修到 1.07505，比 1 更靠近 1.1。
+Vizion.gen_image_const (Base, 'byte', 80, 80)
+Vizion.gen_image_proto (Base, Sheet, 30)
+Vizion.gen_rectangle1 (Box, 20, 20, 49, 49)
+Vizion.paint_region (Box, Sheet, Template, 220, 'fill')
+Vizion.gen_image_const (SceneBase, 'byte', 120, 120)
+Vizion.gen_image_proto (SceneBase, SceneSheet, 30)
+Vizion.gen_rectangle1 (Big, 24, 24, 56, 56)
+Vizion.paint_region (Big, SceneSheet, Scene, 220, 'fill')
+Vizion.create_scaled_shape_model (Template, 2, 0, 0, 0.2, 0.8, 1.2, 0.2, 'none', 'use_polarity', 30, 10, ModelID)
+Vizion.find_scaled_shape_model (Scene, ModelID, 0, 0, 0.8, 1.2, 0.4, 1, 0.5, 'least_squares', 0, 0.6, Row, Column, Angle, Scale, Score)
+Vizion.find_scaled_shape_model (Scene, ModelID, 0, 0, 0.8, 1.2, 0.4, 1, 0.5, 'none', 0, 0.6, NRow, NCol, NAngle, NScale, NScore)
+S := Scale[1]
+Still := NScale[1]
+Vizion.dev_display (Scene)

@@ -1,0 +1,23 @@
+* 程序算完再接住錯誤
+* procedure 寫在最外層。呼叫順序跟算子一樣：圖像輸入、圖像輸出、控制輸入、控制輸出。
+* 程序裡的變數是自己的。這裡 Temp 在程序裡被改成 1，外面的 Temp 仍是 9。
+* try 和 catch 之間出錯會進 catch，Exception 放錯誤文字，整支程式不會中止。
+* 沒有出錯就跳過 catch，直接做 endtry 後面。
+procedure box (: Region : Row1, Col1, Row2, Col2 :)
+    Vizion.gen_rectangle1 (Region, Row1, Col1, Row2, Col2)
+endprocedure
+box (Blob, 10, 10, 29, 29)
+Vizion.area_center (Blob, Area, Row, Column)
+Temp := 9
+procedure twice (: : Value : Result)
+    Temp := 1
+    Result := Value * 2
+endprocedure
+twice (21, Answer)
+try
+    Bad := Missing + 1
+catch (Exception)
+    Safe := 1
+endtry
+Kept := Answer + Safe
+Vizion.dev_display (Blob)

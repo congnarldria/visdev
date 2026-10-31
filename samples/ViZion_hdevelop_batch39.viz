@@ -1,0 +1,31 @@
+* 抛物線和二次曲面
+Vizion.gen_image_gray_ramp (Ramp, 0, 1, 0, 0, 0, 80, 60)
+Vizion.gen_rectangle1 (Bowl, 20, 10, 22, 14)
+Vizion.set_grayval (Ramp, Peak, [20, 20, 20, 20, 20, 21, 21, 21, 21, 21, 22, 22, 22, 22, 22], [10, 11, 12, 13, 14, 10, 11, 12, 13, 14, 10, 11, 12, 13, 14], [0, 1, 4, 9, 16, 0, 1, 4, 9, 16, 0, 1, 4, 9, 16])
+Vizion.fit_quad_region (Bowl, Peak, A, B, C, D, E, F)
+Vizion.fit_quad_objects (Bowl, Peak, OA, OB, OC, OD, OE, OF)
+OB1 := OB[1]
+OE1 := OE[1]
+OF1 := OF[1]
+Vizion.flatness_quad_objects (Bowl, Peak, QFlat)
+QF1 := QFlat[1]
+Vizion.flatness_objects (Bowl, Peak, PFlat)
+PF1 := PFlat[1]
+Vizion.deviation_quad_region (Bowl, Peak, 0, 1, 0, 0, -20, 100, Dev0)
+Vizion.deviation_quad_region (Bowl, Peak, 0, 1, 0, 0, -20, 101, Dev1)
+Vizion.quad_gray (0, 1, 0, 0, -20, 100, 21, 12, OneG)
+Vizion.quad_gray (0, 1, 0, 0, -20, 100, [20, 22], [10, 14], Many)
+Many0 := Many[1]
+Many1 := Many[2]
+Vizion.sub_quad_image (Peak, Subtracted, 0, 1, 0, 0, -20, 100, 128)
+Vizion.get_grayval (Subtracted, 21, 12, SubGray)
+Vizion.level_quad_objects (Bowl, Peak, Leveled, 128)
+Vizion.get_grayval (Leveled, 21, 12, LevelGray)
+Vizion.get_grayval (Leveled, 0, 30, OutGray)
+Vizion.select_quad_flatness (Bowl, Peak, Kept, 0, 0.001)
+Vizion.count_obj (Kept, KeptCount)
+Vizion.select_quad_flatness (Bowl, Peak, Swapped, 0.001, 0)
+Vizion.count_obj (Swapped, SwapCount)
+Vizion.select_quad_flatness (Bowl, Peak, Dropped, 1, 10)
+Vizion.count_obj (Dropped, DropCount)
+Vizion.dev_display (Leveled)

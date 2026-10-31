@@ -1,0 +1,18 @@
+* 橫條是 0、直條是 90 度
+* elliptic_axis 和 orientation_region 用像素的二次矩。OpenCV 的邊界擬合對橫條和直條都回 -90 度，所以不再用它。
+* 寬 20、高 5 的長條，長軸半徑是 11.53256，短軸是 2.82843，角度是 0。直的那條角度是 1.5708。
+* major_phi 和這兩個角度相同。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Wide, 10, 10, 14, 29)
+Vizion.gen_rectangle1 (Tall, 10, 50, 29, 54)
+Vizion.elliptic_axis (Wide, WideRa, WideRb, WidePhi)
+Vizion.orientation_region (Wide, WideAngle)
+WideP := WidePhi[1]
+WideA := WideAngle[1]
+WRa := WideRa[1]
+WRb := WideRb[1]
+Vizion.elliptic_axis (Tall, TallRa, TallRb, TallPhi)
+Vizion.orientation_region (Tall, TallAngle)
+TallP := TallPhi[1]
+TallA := TallAngle[1]
+Vizion.dev_display (Wide)

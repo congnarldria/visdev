@@ -1,0 +1,20 @@
+* 斜率 1 的導數是 129
+* derivate_gauss 用可分離的高斯導數，不是先模糊再做 Sobel。
+* 有號導數以 128 為 0。影像往右每一行灰階加 1 時，x 是 129，y 是 128。
+* 往下每一列加 1 時，y 是 129，x 是 128。二階導數在直線斜坡上是 128。
+* gradient 是振幅，不加 128，所以這個斜坡大約是 1。
+Vizion.gen_image_gray_ramp (Ramp, 0, 1, 0, 0, 0, 64, 48)
+Vizion.derivate_gauss (Ramp, Dx, 1, 'x')
+Vizion.derivate_gauss (Ramp, Dy, 1, 'y')
+Vizion.derivate_gauss (Ramp, Dxx, 1, 'xx')
+Vizion.derivate_gauss (Ramp, Grad, 1, 'gradient')
+Vizion.get_grayval (Dx, 24, 32, Deriv)
+Vizion.get_grayval (Dy, 24, 32, ZeroY)
+Vizion.get_grayval (Dxx, 24, 32, Deriv2)
+Vizion.get_grayval (Grad, 24, 32, Amp)
+Vizion.gen_image_gray_ramp (Down, 1, 0, 0, 0, 0, 64, 48)
+Vizion.derivate_gauss (Down, Vy, 1, 'y')
+Vizion.derivate_gauss (Down, Vx, 1, 'x')
+Vizion.get_grayval (Vy, 24, 32, DerivY)
+Vizion.get_grayval (Vx, 24, 32, ZeroX)
+Vizion.dev_display (Dx)

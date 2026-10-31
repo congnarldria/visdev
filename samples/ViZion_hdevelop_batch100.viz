@@ -1,0 +1,17 @@
+* 方塊的角修進像素裡面
+* 方塊左上角在列 24、行 36。OpenCV 的 FAST 在這張圖上一個角都沒有。
+* 圓周上連續 9 點夠亮或夠暗就留下，再把整數位置修進像素。左上角是列 24.09426、行 36.09426。
+Vizion.gen_image_const (Base, 'byte', 90, 120)
+Vizion.gen_image_proto (Base, Sheet, 20)
+Vizion.gen_rectangle1 (Box, 24, 36, 64, 84)
+Vizion.paint_region (Box, Sheet, Image, 220, 'fill')
+Vizion.points_lepetit (Image, 30, 'true', Row, Column)
+Best := 100
+BRow := 0
+BCol := 0
+for Index := 1 to |Row| by 1
+Dist := (Row[Index] - 24) * (Row[Index] - 24) + (Column[Index] - 36) * (Column[Index] - 36)
+if (Dist < Best)
+Best := Dist
+BRow := Row[Index]
+Vizion.dev_display (Image)

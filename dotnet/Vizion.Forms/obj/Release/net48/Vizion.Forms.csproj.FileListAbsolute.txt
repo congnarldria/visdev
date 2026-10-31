@@ -1,0 +1,13 @@
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\bin\Release\net48\Vizion.Forms.dll
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\bin\Release\net48\Vizion.Forms.pdb
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\bin\Release\net48\Vizion.Display.dll
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\bin\Release\net48\Vizion.Display.pdb
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\obj\Release\net48\Vizion.Forms.csproj.AssemblyReference.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\obj\Release\net48\Vizion.Forms.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\obj\Release\net48\Vizion.Forms.AssemblyInfoInputs.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\obj\Release\net48\Vizion.Forms.AssemblyInfo.cs
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\obj\Release\net48\Vizion.Forms.csproj.CoreCompileInputs.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\obj\Release\net48\Vizion.Forms.sourcelink.json
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\obj\Release\net48\Vizion.F.2DCD88F4.Up2Date
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\obj\Release\net48\Vizion.Forms.dll
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Forms\obj\Release\net48\Vizion.Forms.pdb

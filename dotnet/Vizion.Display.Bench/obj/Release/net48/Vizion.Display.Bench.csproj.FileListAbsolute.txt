@@ -1,0 +1,14 @@
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\bin\Release\net48\Vizion.Display.Bench.exe.config
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\bin\Release\net48\Vizion.Display.Bench.exe
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\bin\Release\net48\Vizion.Display.Bench.pdb
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\bin\Release\net48\Vizion.Display.dll
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\bin\Release\net48\Vizion.Display.pdb
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\obj\Release\net48\Vizion.Display.Bench.csproj.AssemblyReference.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\obj\Release\net48\Vizion.Display.Bench.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\obj\Release\net48\Vizion.Display.Bench.AssemblyInfoInputs.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\obj\Release\net48\Vizion.Display.Bench.AssemblyInfo.cs
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\obj\Release\net48\Vizion.Display.Bench.csproj.CoreCompileInputs.cache
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\obj\Release\net48\Vizion.Display.Bench.sourcelink.json
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\obj\Release\net48\Vizion.D.AA129374.Up2Date
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\obj\Release\net48\Vizion.Display.Bench.exe
+C:\Users\Administrator\Desktop\visdev\dotnet\Vizion.Display.Bench\obj\Release\net48\Vizion.Display.Bench.pdb

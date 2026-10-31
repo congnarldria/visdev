@@ -1,0 +1,68 @@
+* 這個物件主要是哪個灰階
+* 用法：數出現最多次的灰階，不是最亮的那一點。最亮用 bright_point。
+* 兩種一樣多時，留較暗的那個。第二個比的是個數，不是灰階的大小。
+* 只有一種灰階時，第二個的個數是 0，灰階仍回傳那一個。差是 0。
+* select_mode 的門檻含在內，寫反了會自動對調。select_mixed 可省略，預設第二種至少 1 個像素。
+Vizion.gen_image_const (Blank, 'byte', 80, 60)
+Vizion.gen_rectangle1 (ALeft, 10, 10, 19, 19)
+Vizion.paint_region (ALeft, Blank, Step1, 40, 'fill')
+Vizion.gen_rectangle1 (ARight, 10, 20, 19, 29)
+Vizion.paint_region (ARight, Step1, Step2, 180, 'fill')
+Vizion.union2 (ALeft, ARight, BlockA)
+Vizion.gen_rectangle1 (BlockB, 30, 10, 39, 19)
+Vizion.paint_region (BlockB, Step2, Step3, 200, 'fill')
+Vizion.gen_rectangle1 (BlockC, 30, 40, 39, 59)
+Vizion.paint_region (BlockC, Step3, Step4, 20, 'fill')
+Vizion.gen_rectangle1 (Hot, 30, 40, 31, 41)
+Vizion.paint_region (Hot, Step4, Picture, 255, 'fill')
+Vizion.concat_obj (BlockA, BlockB, Pair)
+Vizion.concat_obj (Pair, BlockC, Parts)
+* 左右各半時，主要是較暗的 40。整塊 200 的沒有第二種。小亮點只有 4 個，主要仍是 20
+Vizion.gray_mode (Parts, Picture, Mode)
+G1 := Mode[1]
+G2 := Mode[2]
+G3 := Mode[3]
+Vizion.mode_count (Parts, Picture, ModeN)
+C1 := ModeN[1]
+C2 := ModeN[2]
+C3 := ModeN[3]
+Vizion.mode_ratio (Parts, Picture, ModeR)
+R1 := ModeR[1]
+R2 := ModeR[2]
+R3 := ModeR[3]
+Vizion.second_mode (Parts, Picture, Second, SecondN)
+H1 := Second[1]
+H2 := Second[2]
+H3 := Second[3]
+S1 := SecondN[1]
+S2 := SecondN[2]
+S3 := SecondN[3]
+Vizion.mode_gap (Parts, Picture, Gap)
+D1 := Gap[1]
+D2 := Gap[2]
+D3 := Gap[3]
+Vizion.mode_region (Parts, Picture, Main)
+Vizion.area_center (Main, MainArea, MainRow, MainCol)
+MA1 := MainArea[1]
+MR1 := MainRow[1]
+MC1 := MainCol[1]
+MA3 := MainArea[3]
+MR3 := MainRow[3]
+MC3 := MainCol[3]
+* 主要灰階在 150 到 255 的，只有整塊 200 的那一個
+Vizion.select_mode (Parts, Picture, Kept, 150, 255)
+Vizion.count_obj (Kept, KeepN)
+Vizion.area_center (Kept, KeepArea, KeepRow, KeepCol)
+KeepA := KeepArea[1]
+KeepR := KeepRow[1]
+KeepC := KeepCol[1]
+Vizion.select_mode (Parts, Picture, SwapKept, 255, 150)
+Vizion.count_obj (SwapKept, SwapN)
+* 第二種至少 10 個像素。小亮點只有 4 個，不算混在一起
+Vizion.select_mixed (Parts, Picture, Mixed, 10)
+Vizion.count_obj (Mixed, MixN)
+Vizion.area_center (Mixed, MixArea, MixRow, MixCol)
+MixA := MixArea[1]
+MixR := MixRow[1]
+MixC := MixCol[1]
+Vizion.dev_display (Picture)

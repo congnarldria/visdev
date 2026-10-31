@@ -1,0 +1,10 @@
+* 印一張 QR 再讀回來
+* gen_qrcode 做出白底黑點，四周留白，find_data_code_2d 才讀得到。
+* 先 create_data_code_2d_model。QR 的 SymbolType 是 QR Code。
+* Decoded 是字串 tuple，第一個用 [1]。找不到時字串是空的。
+* PDF417 和 Aztec 這版不讀。Data Matrix 用 gen_datamatrix。
+Vizion.gen_qrcode (Code, 'VISDEV')
+Vizion.create_data_code_2d_model ('QR Code', '', '', Handle)
+Vizion.find_data_code_2d (Code, Symbol, Handle, '', '', Ids, Decoded)
+Text := Decoded[1]
+Vizion.dev_display (Code)

@@ -1,0 +1,12 @@
+* 灰階侵蝕、橢圓和對比
+Vizion.gen_image_const (Image, 'byte', 160, 120)
+Vizion.gen_rectangle1 (Box, 30, 40, 90, 120)
+Vizion.paint_region (Box, Image, Painted, 200, 'fill')
+Vizion.gray_erosion_rect (Painted, Eroded, 5, 5)
+Vizion.scale_image_max (Eroded, Stretched)
+Vizion.gen_ellipse (Oval, 60, 80, 0, 30, 12)
+Vizion.distance_ps (0, 0, 0, 10, 0, 20, Dist)
+Vizion.projection_pl (5, 4, 0, 0, 0, 10, RowProj, ColProj)
+Vizion.dev_display (Stretched)
+Vizion.dev_set_color ('green')
+Vizion.dev_display (Oval)

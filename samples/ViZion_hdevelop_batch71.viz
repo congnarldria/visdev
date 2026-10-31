@@ -1,0 +1,15 @@
+* 和黃金影像差在哪
+* Golden 是標準灰階 100。Scene 有一塊 180，還有一點只差 10 的雜訊。
+* diff_region 的 MinDiff 是 20，差不到 20 的雜訊不算缺陷。
+* diff_amount 的 Mean 是整張平均絕對差，Maximum 是差最多的那一點。
+* 兩張圖要一樣大。彩色會先轉成灰階再比。
+Vizion.gen_image_const (Base, 'byte', 80, 60)
+Vizion.gen_image_proto (Base, Golden, 100)
+Vizion.gen_image_proto (Base, Scene, 100)
+Vizion.gen_rectangle1 (Block, 10, 10, 19, 19)
+Vizion.paint_region (Block, Scene, Scene, 180, 'fill')
+Vizion.set_grayval (Scene, Scene, 30, 30, 110)
+Vizion.diff_region (Scene, Golden, Defects, 20)
+Vizion.diff_amount (Scene, Golden, Mean, Maximum)
+Vizion.area_center (Defects, Area, Row, Column)
+Vizion.dev_display (Defects)

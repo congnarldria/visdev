@@ -1,0 +1,45 @@
+* 點雲和影像對齊
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Rect, 10, 20, 12, 22)
+Vizion.gen_object_model_3d_from_region (Rect, RegionCloud)
+Vizion.get_object_model_3d_params (RegionCloud, 'num_points', RegionCount)
+Vizion.get_object_model_3d_points (RegionCloud, Rx, Ry, Rz)
+Rx0 := Rx[1]
+Ry0 := Ry[1]
+Rz0 := Rz[1]
+Vizion.gen_region_object_model_3d (Back, RegionCloud, 80, 60)
+Vizion.area_center (Back, Area, AreaRow, AreaCol)
+BackArea := Area[1]
+Vizion.gen_contour_polygon_xld (Contour, [10, 30], [20, 40])
+Vizion.gen_object_model_3d_from_xld (Contour, XldCloud)
+Vizion.get_object_model_3d_points (XldCloud, Xx, Xy, Xz)
+Xx0 := Xx[1]
+Xy0 := Xy[1]
+Xx1 := Xx[2]
+Xy1 := Xy[2]
+Vizion.gen_image_const (Tiny, 'byte', 2, 2)
+Vizion.set_grayval (Tiny, Marked, 0, 1, 40)
+Vizion.set_grayval (Marked, Marked2, 1, 0, 10)
+Vizion.gen_object_model_3d_from_image (Marked2, ImageCloud)
+Vizion.get_object_model_3d_params (ImageCloud, 'num_points', ImageCount)
+Vizion.get_object_model_3d_points (ImageCloud, PixX, PixY, PixZ)
+PixZ1 := PixZ[2]
+PixY2 := PixY[3]
+PixZ2 := PixZ[3]
+Vizion.gen_object_model_3d_from_points (5, 6, 200, Spot)
+Vizion.paint_object_model_3d (Image, Painted, Spot, 0, 'z')
+Vizion.get_grayval (Painted, 6, 5, PaintZ)
+Vizion.paint_object_model_3d (Image, PaintedGray, Spot, 80, 'gray')
+Vizion.get_grayval (PaintedGray, 6, 5, PaintGray)
+Vizion.get_grayval_object_model_3d (Painted, Spot, ReadZ)
+Vizion.select_object_model_3d_region (Rect, RegionCloud, 'inside', Inside)
+Vizion.get_object_model_3d_params (Inside, 'num_points', InsideCount)
+Vizion.gen_object_model_3d_from_points (0, 0, 0, Origin)
+Vizion.select_object_model_3d_region (Rect, Origin, 'outside', Outside)
+Vizion.get_object_model_3d_params (Outside, 'num_points', OutsideCount)
+Vizion.select_object_model_3d_region (Rect, Origin, 'inside', Miss)
+Vizion.get_object_model_3d_params (Miss, 'num_points', MissCount)
+Vizion.gen_object_model_3d_from_points (1, 0, 0, Seed)
+Vizion.set_object_model_3d_z (Marked2, Seed, Lifted)
+Vizion.get_object_model_3d_points (Lifted, LiftX, LiftY, LiftZ)
+Vizion.dev_display (Painted)

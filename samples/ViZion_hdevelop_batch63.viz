@@ -1,0 +1,70 @@
+* 有幾條橫的、幾條直的
+* 用法：看物件的剪影分成幾條。同一列上左右分開仍算同一條橫的，中間空一列才算斷開。
+* 直的也一樣，上下分開仍是同一條，空一行才斷開。實心方塊是 1 條、0 個空隙。
+* 空隙個數是條數減 1，不是空隙有幾列。最長的一樣長時，留上面或左邊的那一條。
+* select_stripes 要比正好幾條。方向是下拉選單。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (All, 10, 10, 29, 29)
+Vizion.gen_rectangle1 (Gap1, 13, 10, 16, 29)
+Vizion.gen_rectangle1 (Gap2, 20, 10, 23, 29)
+Vizion.union2 (Gap1, Gap2, Gaps)
+Vizion.difference (All, Gaps, Bars)
+Vizion.gen_rectangle1 (Tall, 40, 10, 54, 29)
+Vizion.gen_rectangle1 (Hole1, 40, 14, 54, 16)
+Vizion.gen_rectangle1 (Hole2, 40, 21, 54, 23)
+Vizion.union2 (Hole1, Hole2, Holes)
+Vizion.difference (Tall, Holes, Verts)
+Vizion.gen_rectangle1 (Solid, 10, 40, 19, 49)
+Vizion.concat_obj (Bars, Verts, Pair)
+Vizion.concat_obj (Pair, Solid, Parts)
+* 橫條三條，最高 6 列，中間空兩次。直條只有 1 條，寬 20
+Vizion.row_runs (Parts, RowN)
+RN1 := RowN[1]
+RN2 := RowN[2]
+RN3 := RowN[3]
+Vizion.col_runs (Parts, ColN)
+CN1 := ColN[1]
+CN2 := ColN[2]
+CN3 := ColN[3]
+Vizion.longest_rows (Parts, RowL)
+RL1 := RowL[1]
+RL2 := RowL[2]
+RL3 := RowL[3]
+Vizion.longest_cols (Parts, ColL)
+CL1 := ColL[1]
+CL2 := ColL[2]
+CL3 := ColL[3]
+Vizion.row_gaps (Parts, RowG)
+RG1 := RowG[1]
+RG2 := RowG[2]
+Vizion.col_gaps (Parts, ColG)
+CG2 := ColG[2]
+CG3 := ColG[3]
+* 正好 3 條橫的是第一塊。正好 3 條直的是第二塊
+Vizion.select_stripes (Parts, Row3, 'row', 3)
+Vizion.count_obj (Row3, RowKeep)
+Vizion.area_center (Row3, RowArea, RowRow, RowCol)
+RowA := RowArea[1]
+RowR := RowRow[1]
+RowC := RowCol[1]
+Vizion.select_stripes (Parts, Col3, 'column', 3)
+Vizion.count_obj (Col3, ColKeep)
+Vizion.area_center (Col3, ColArea, ColRow, ColCol)
+ColA := ColArea[1]
+ColR := ColRow[1]
+ColC := ColCol[1]
+* 最高的橫條在下面，120 像素。最寬的直條在右邊，90 像素
+Vizion.stripe_region (Parts, RowStripe, 'row')
+Vizion.select_obj (RowStripe, Thick, 1)
+Vizion.area_center (Thick, ThickArea, ThickRow, ThickCol)
+TA := ThickArea[1]
+TR := ThickRow[1]
+TC := ThickCol[1]
+Vizion.stripe_region (Parts, ColStripe, 'column')
+Vizion.select_obj (ColStripe, Wide, 2)
+Vizion.area_center (Wide, WideArea, WideRow, WideCol)
+WA := WideArea[1]
+WR := WideRow[1]
+WC := WideCol[1]
+Vizion.paint_region (Thick, Image, Shown, 255, 'fill')
+Vizion.dev_display (Shown)

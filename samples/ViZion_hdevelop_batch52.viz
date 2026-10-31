@@ -1,0 +1,58 @@
+* 誰包住誰
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Outer, 5, 5, 44, 44)
+Vizion.gen_rectangle1 (Hole, 15, 15, 34, 34)
+Vizion.difference (Outer, Hole, Frame)
+Vizion.gen_rectangle1 (Middle, 18, 18, 31, 31)
+Vizion.gen_rectangle1 (Tiny, 22, 22, 25, 25)
+Vizion.gen_rectangle1 (Out, 50, 50, 54, 54)
+Vizion.concat_obj (Frame, Middle, Pair)
+Vizion.concat_obj (Pair, Tiny, Three)
+Vizion.concat_obj (Three, Out, Parts)
+Vizion.select_inner (Parts, Inner)
+Vizion.count_obj (Inner, InnerN)
+Vizion.area_center (Inner, InnerArea, InnerRow, InnerCol)
+In1 := InnerArea[1]
+In2 := InnerArea[2]
+Vizion.select_outer (Parts, OuterKept)
+Vizion.count_obj (OuterKept, OuterN)
+Vizion.area_center (OuterKept, OuterArea, OuterRow, OuterCol)
+Out1 := OuterArea[1]
+Out2 := OuterArea[2]
+Vizion.select_container (Parts, Holders)
+Vizion.count_obj (Holders, HolderN)
+Vizion.area_center (Holders, HolderArea, HolderRow, HolderCol)
+Hold1 := HolderArea[1]
+Hold2 := HolderArea[2]
+Vizion.innermost (Parts, Leaf)
+Vizion.area_center (Leaf, LeafArea, LeafRow, LeafCol)
+LeafN := LeafArea[1]
+LeafR := LeafRow[1]
+LeafC := LeafCol[1]
+Vizion.select_depth (Parts, Level1, 1)
+Vizion.area_center (Level1, L1Area, L1Row, L1Col)
+MidN := L1Area[1]
+MidR := L1Row[1]
+Vizion.select_depth (Parts, Level2, 2)
+Vizion.count_obj (Level2, DeepN)
+Vizion.select_depth (Parts, Level0, 0)
+Vizion.count_obj (Level0, TopN)
+Vizion.container_index (Parts, Holder)
+H1 := Holder[1]
+H2 := Holder[2]
+H3 := Holder[3]
+H4 := Holder[4]
+Vizion.inner_count (Parts, InsideCount)
+K1 := InsideCount[1]
+K2 := InsideCount[2]
+K3 := InsideCount[3]
+K4 := InsideCount[4]
+Vizion.nesting_depth (Parts, NestLevel)
+D1 := NestLevel[1]
+D2 := NestLevel[2]
+D3 := NestLevel[3]
+D4 := NestLevel[4]
+Vizion.paint_region (Leaf, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 23, 23, LeafGray)
+Vizion.get_grayval (Shown, 10, 10, FrameGray)
+Vizion.dev_display (Shown)
