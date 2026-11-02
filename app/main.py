@@ -191,8 +191,14 @@ def session_display(sid: str, displayRev: int | None = None):
 
 
 @app.get("/api/session/{sid}/state")
-def session_state(sid: str, displayRev: int | None = None, varRev: int | None = None, logRev: int | None = None):
-    return omit_known_state(_snapshot(_session_or_404(sid)), displayRev, varRev, logRev)
+def session_state(
+    sid: str,
+    displayRev: int | None = None,
+    varRev: int | None = None,
+    logRev: int | None = None,
+    logAt: int | None = None,
+):
+    return omit_known_state(_snapshot(_session_or_404(sid)), displayRev, varRev, logRev, logAt)
 
 
 @app.get("/api/operators")

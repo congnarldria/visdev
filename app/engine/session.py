@@ -177,6 +177,7 @@ class Session:
         self.try_stack: list = []
         self.proc_depth = 0
         self.proc_stack = []
+        self.proc_names = []
         self.step_into = False
         self.cancel = False
         self.defer_wait = False
@@ -486,8 +487,14 @@ class Session:
         return [MATCH_COLORS[index % limit] for index in range(count)]
 
     def trace_line(self, stmt, message: str):
-        if self.trace:
-            self.log.append(f"{stmt.line:>4}  {message}")
+        if not self.trace:
+            return
+        name = self.proc_names[-1] if self.proc_names else None
+        if name is None and self.proc_stack:
+            name = self.proc_stack[-1]["proc"].name
+        if name:
+            message = f"{name}: {message}"
+        self.log.append(f"{stmt.line:>4}  {message}")
 
     def _on_breakpoint(self) -> bool:
         if self.pc >= len(self.stmts) or not self.breakpoints:
@@ -769,6 +776,7 @@ class Session:
             local[name] = pythonize(eval_expr(expr, outer))
         saved_pc = self.pc
         self.proc_depth += 1
+        self.proc_names.append(proc.name)
         self.vars = local
         self.pc = proc_index + 1
         end = self.proc_end[proc_index]
@@ -794,6 +802,7 @@ class Session:
             self.vars = outer
             self.pc = saved_pc
             self.proc_depth -= 1
+            self.proc_names.pop()
         if waiting or breaking:
             self._park_wait({
                 "local": local,
@@ -829,7 +838,15 @@ class Session:
             if src not in local:
                 raise RuntimeError(f"程序 {proc.name} 沒有設定輸出 {src}")
             self.vars[name] = pythonize(local[src])
-        self.trace_line(stmt, stmt.name)
+        returned = []
+        for name, src in zip(stmt.iconic_out, proc.iconic_out):
+            if src in local:
+                returned.append(f"{name} := {fmt_value(local[src])}")
+        for name, src in zip(stmt.control_out, proc.control_out):
+            if src in local:
+                returned.append(f"{name} := {fmt_value(self.vars[name])}")
+        call = stmt.name if not returned else stmt.name + " → " + ", ".join(returned)
+        self.trace_line(stmt, call)
 
     def _park_wait(self, frame) -> None:
         """Remember a procedure paused on wait. A caller stays linked behind the inner one."""
@@ -852,6 +869,7 @@ class Session:
         self.vars = frame["local"]
         self.pc = start_pc
         self.proc_depth += 1
+        self.proc_names.append(frame["proc"].name)
         try:
             steps = 0
             while self.pc < frame["end"] and not self.error and self.paused not in ("stop", "breakpoint", "stopped", "wait"):
@@ -873,6 +891,7 @@ class Session:
             self.vars = caller_vars
             self.pc = frame["saved_pc"]
             self.proc_depth -= 1
+            self.proc_names.pop()
         if waiting or breaking:
             frame["local"] = local
             frame["pc"] = inner_pc
@@ -1098,6 +1117,7 @@ class Session:
             "errorLine": self.error_line,
             "paused": self.paused,
             "log": self.log[-300:],
+            "logSize": len(self.log),
             "iconic": iconic,
             "control": control,
             "display": display,
@@ -1159,7 +1179,13 @@ def omit_known_display(state: dict, have: int | None) -> dict:
     return _omit_when(state, have, "displayRev", {"display": None, "displayKept": True})
 
 
-def omit_known_state(state: dict, display_rev: int | None, var_rev: int | None, log_rev: int | None) -> dict:
+def omit_known_state(
+    state: dict,
+    display_rev: int | None,
+    var_rev: int | None,
+    log_rev: int | None,
+    log_at: int | None = None,
+) -> dict:
     state = omit_known_display(state, display_rev)
     state = _omit_when(
         state,
@@ -1167,7 +1193,21 @@ def omit_known_state(state: dict, display_rev: int | None, var_rev: int | None, 
         "varRev",
         {"iconic": None, "control": None, "iconicKept": True, "controlKept": True},
     )
-    return _omit_when(state, log_rev, "logRev", {"log": None, "logKept": True})
+    if log_rev is not None and state.get("logRev") == log_rev:
+        return _omit_when(state, log_rev, "logRev", {"log": None, "logKept": True})
+    shown = state.get("log")
+    size = state.get("logSize")
+    if log_at is None or not isinstance(shown, list) or not isinstance(size, int):
+        return state
+    if log_at < 0 or log_at > size:
+        return state
+    start = size - len(shown)
+    if log_at < start:
+        return state
+    trimmed = dict(state)
+    trimmed["log"] = shown[log_at - start :]
+    trimmed["logFrom"] = log_at
+    return trimmed
 
 
 def _num_literal(text: str) -> bool:

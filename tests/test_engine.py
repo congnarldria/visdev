@@ -4972,6 +4972,70 @@ def test_run_stops_inside_a_procedure_breakpoint():
     assert session.done
 
 
+def test_trace_names_each_line_inside_a_procedure():
+    source = "\n".join([
+        "procedure add (: : Value : Result)",
+        "    Result := Value + 1",
+        "    Result := Result + 1",
+        "endprocedure",
+        "Ready := 3",
+        "add (4, Out)",
+    ])
+    session = Session(source, ROOT)
+    session.trace = True
+    session.run()
+    assert session.error is None, session.error
+    assert session.vars["Out"] == 6
+    body = [line for line in session.log if "add:" in line]
+    assert any(line.endswith("add: Result := 5") for line in body)
+    assert any(line.endswith("add: Result := 6") for line in body)
+    assert any(line.endswith("add → Out := 6") for line in session.log)
+    assert any(line.endswith("Ready := 3") and "add:" not in line for line in session.log)
+    nested = "\n".join([
+        "procedure inner (: : Value : Result)",
+        "    Result := Value + 2",
+        "endprocedure",
+        "procedure outer (: : Value : Result)",
+        "    inner (Value, Mid)",
+        "    Result := Mid + 3",
+        "endprocedure",
+        "outer (4, Out)",
+    ])
+    deep = Session(nested, ROOT)
+    deep.trace = True
+    deep.run()
+    assert deep.vars["Out"] == 9
+    assert any(line.endswith("inner: Result := 6") for line in deep.log)
+    assert any(line.endswith("outer: inner → Mid := 6") for line in deep.log)
+    assert any(line.endswith("outer: Result := 9") for line in deep.log)
+    stepped = Session(source, ROOT)
+    stepped.trace = True
+    stepped.step()
+    stepped.step()
+    stepped.step()
+    assert stepped.public_state()["procedure"] == "add"
+    stepped.step()
+    assert any(line.endswith("add: Result := 5") for line in stepped.log)
+
+
+def test_trace_log_sends_only_new_lines():
+    from app.engine.session import omit_known_state
+
+    session = Session("Ready := 1\nAfter := Ready + 1\n", ROOT)
+    session.trace = True
+    session.step()
+    first = session.public_state()
+    session.step()
+    second = session.public_state()
+    assert second["logRev"] != first["logRev"]
+    assert second["logSize"] == first["logSize"] + 1
+    tail = omit_known_state(second, None, None, first["logRev"], first["logSize"])
+    assert tail["logFrom"] == first["logSize"]
+    assert tail["log"] == [second["log"][-1]]
+    same = omit_known_state(second, None, None, second["logRev"], second["logSize"])
+    assert same["log"] is None and same["logKept"] is True
+
+
 def test_wait_inside_procedure_resumes():
     import time
 

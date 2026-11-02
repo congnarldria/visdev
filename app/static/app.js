@@ -529,6 +529,7 @@ let liveDisplayStamp = null;
 let liveDisplayRev = null;
 let liveVarRev = null;
 let liveLogRev = null;
+let liveLogSize = null;
 let liveDisplaySession = null;
 
 function absorbKept(data) {
@@ -536,6 +537,14 @@ function absorbKept(data) {
   if (data.iconicKept) data.iconic = server.iconic;
   if (data.controlKept) data.control = server.control;
   if (data.logKept) data.log = server.log;
+  else if (
+    data.logFrom != null
+    && Array.isArray(data.log)
+    && liveLogSize === data.logFrom
+    && Array.isArray(server.log)
+  ) {
+    data.log = server.log.concat(data.log).slice(-300);
+  }
   if (data.displayKept && server.display) data.display = server.display;
 }
 
@@ -545,12 +554,14 @@ function takeDisplay(data) {
     liveDisplayRev = null;
     liveVarRev = null;
     liveLogRev = null;
+    liveLogSize = null;
   }
   const rev = data.displayRev;
   const same = rev != null && rev === liveDisplayRev;
   if (rev != null) liveDisplayRev = rev;
   if (data.varRev != null) liveVarRev = data.varRev;
   if (data.logRev != null) liveLogRev = data.logRev;
+  if (data.logSize != null) liveLogSize = data.logSize;
   if (data.displayStamp != null) liveDisplayStamp = data.displayStamp;
   if (data.displayKept || same) return;
   if (data.display) loadDisplay(data.display);
@@ -612,6 +623,7 @@ async function exec(action, line) {
         liveDisplayRev = null;
         liveVarRev = null;
         liveLogRev = null;
+        liveLogSize = null;
       }
       sessionId = data.id;
       while (true) {
@@ -619,6 +631,7 @@ async function exec(action, line) {
         if (liveDisplayRev != null) query.set("displayRev", String(liveDisplayRev));
         if (liveVarRev != null) query.set("varRev", String(liveVarRev));
         if (liveLogRev != null) query.set("logRev", String(liveLogRev));
+        if (liveLogSize != null) query.set("logAt", String(liveLogSize));
         const qs = query.toString();
         const stateRes = await fetch(`/api/session/${encodeURIComponent(sessionId)}/state${qs ? `?${qs}` : ""}`);
         const state = await stateRes.json();
