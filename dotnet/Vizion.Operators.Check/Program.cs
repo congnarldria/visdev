@@ -140,6 +140,12 @@ static void RunOp(Op item)
                 "close" => Operators.CloseRectangle(region, item.KernelWidth, item.KernelHeight),
                 "fill" => Operators.FillUp(region),
                 "complement" => Operators.Complement(region),
+                "dilateCircle" => Operators.DilateCircle(region, item.Distance),
+                "erodeCircle" => Operators.ErodeCircle(region, item.Distance),
+                "openCircle" => Operators.OpenCircle(region, item.Distance),
+                "closeCircle" => Operators.CloseCircle(region, item.Distance),
+                "inner" => Operators.Boundary(region, "inner"),
+                "outer" => Operators.Boundary(region, "outer"),
                 _ => throw new InvalidOperationException(name),
             };
             ExpectSameRuns(result, item.Out, name);

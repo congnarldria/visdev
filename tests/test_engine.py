@@ -5435,6 +5435,18 @@ def test_csharp_export_matches_python_threshold_and_connection():
     assert distance_session.error is None, distance_session.error
     assert distance_session.vars["Number"] >= 1
     assert "Operators.DilateRectangle(Big, 3, 3)" in export_csharp(distance_program)
+    circle_program = """
+Vizion.read_image (Image, 'samples/parts.png')
+Vizion.threshold (Image, Region, 60, 255)
+Vizion.opening_circle (Region, Opened, 2.5)
+Vizion.dilation_circle (Opened, Grown, 1)
+Vizion.boundary (Grown, Edge, 'outer')
+Vizion.connection (Opened, Parts)
+"""
+    circle_code = export_csharp(circle_program)
+    assert "Operators.OpenCircle(Region, 2.5)" in circle_code
+    assert "Operators.DilateCircle(Opened, 1.0)" in circle_code
+    assert 'Operators.Boundary(Grown, "outer")' in circle_code
     domain_program = """
 Vizion.read_image (Image, 'samples/parts.png')
 Vizion.gen_rectangle1 (Window, 40, 80, 200, 300)
@@ -5560,6 +5572,11 @@ Vizion.crop_rectangle1 (Limited, Part, 40, 80, 80, 120)
         reduce_domain,
         crop_rectangle1,
         get_domain,
+        dilation_circle,
+        erosion_circle,
+        opening_circle,
+        closing_circle,
+        boundary,
     )
     from app.engine.chapters.image_ops import change_domain, overpaint_region, paint_region
     from app.engine.render import apply_domain_dim
@@ -5633,6 +5650,46 @@ Vizion.crop_rectangle1 (Limited, Part, 40, 80, 80, 120)
                 "out": one_runs(fn(block_region, 4, 3, ctx=Ctx())),
             }
         )
+    for mode, fn, radius in (
+        ("dilateCircle", dilation_circle, 1),
+        ("erodeCircle", erosion_circle, 1.5),
+        ("openCircle", opening_circle, 2.5),
+        ("closeCircle", closing_circle, 3.5),
+    ):
+        ops.append(
+            {
+                "op": "morph",
+                "name": mode,
+                "mode": mode,
+                "width": 16,
+                "height": 12,
+                "distance": radius,
+                "runs": run_list(block),
+                "out": one_runs(fn(block_region, radius, ctx=Ctx())),
+            }
+        )
+    ops.append(
+        {
+            "op": "morph",
+            "name": "inner",
+            "mode": "inner",
+            "width": 16,
+            "height": 12,
+            "runs": run_list(block),
+            "out": one_runs(boundary(block_region, "inner", ctx=Ctx())),
+        }
+    )
+    ops.append(
+        {
+            "op": "morph",
+            "name": "outer",
+            "mode": "outer",
+            "width": 16,
+            "height": 12,
+            "runs": run_list(block),
+            "out": one_runs(boundary(block_region, "outer", ctx=Ctx())),
+        }
+    )
     other = np.zeros_like(block)
     other[5:9, 7:12] = 255
     other_region = Region(16, 12, [other])

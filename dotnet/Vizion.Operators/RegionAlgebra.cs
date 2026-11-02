@@ -305,6 +305,26 @@ public static partial class Operators
     public static Region CloseRectangle(IReadOnlyList<Region> regions, int width, int height) =>
         Morphology(regions, width, height, "close");
 
+    public static Region DilateCircle(Region region, double radius) => Circle(new[] { region }, radius, "dilate");
+
+    public static Region DilateCircle(IReadOnlyList<Region> regions, double radius) => Circle(regions, radius, "dilate");
+
+    public static Region ErodeCircle(Region region, double radius) => Circle(new[] { region }, radius, "erode");
+
+    public static Region ErodeCircle(IReadOnlyList<Region> regions, double radius) => Circle(regions, radius, "erode");
+
+    public static Region OpenCircle(Region region, double radius) => Circle(new[] { region }, radius, "open");
+
+    public static Region OpenCircle(IReadOnlyList<Region> regions, double radius) => Circle(regions, radius, "open");
+
+    public static Region CloseCircle(Region region, double radius) => Circle(new[] { region }, radius, "close");
+
+    public static Region CloseCircle(IReadOnlyList<Region> regions, double radius) => Circle(regions, radius, "close");
+
+    public static Region Boundary(Region region, string kind) => BoundaryOf(new[] { region }, kind);
+
+    public static Region Boundary(IReadOnlyList<Region> regions, string kind) => BoundaryOf(regions, kind);
+
     static Region[] MergeWithin(Region[] objects, double distance)
     {
         int count = objects.Length;
@@ -685,6 +705,101 @@ public static partial class Operators
             _ => throw new ArgumentException(mode),
         };
         return FromRuns(regions[0].Width, regions[0].Height, result);
+    }
+
+    static Region Circle(IReadOnlyList<Region> regions, double radius, string mode)
+    {
+        if (regions == null || regions.Count == 0)
+            throw new ArgumentException("沒有區域");
+        if (radius < 0)
+            throw new ArgumentOutOfRangeException(nameof(radius), "半徑不能是負的");
+        var offsets = DiskOffsets(radius);
+        int width = regions[0].Width;
+        int height = regions[0].Height;
+        var source = RunsOf(regions.Count == 1 ? regions[0] : Union(regions));
+        List<Run> result = mode switch
+        {
+            "dilate" => DilateOffsets(source, offsets, width, height),
+            "erode" => ErodeOffsets(source, offsets, width, height),
+            "open" => DilateOffsets(ErodeOffsets(source, offsets, width, height), offsets, width, height),
+            "close" => ErodeOffsets(DilateOffsets(source, offsets, width, height), offsets, width, height),
+            _ => throw new ArgumentException(mode),
+        };
+        return FromRuns(width, height, result);
+    }
+
+    static Region BoundaryOf(IReadOnlyList<Region> regions, string kind)
+    {
+        if (regions == null || regions.Count == 0)
+            throw new ArgumentException("沒有區域");
+        string mode = (kind ?? "").Trim().Trim('\'').ToLowerInvariant();
+        Region source = regions.Count == 1 ? regions[0] : Union(regions);
+        if (mode == "inner")
+            return Difference(source, ErodeRectangle(source, 3, 3));
+        if (mode == "outer")
+            return Difference(DilateRectangle(source, 3, 3), source);
+        throw new ArgumentException("BoundaryType 只能是 inner 或 outer");
+    }
+
+    static List<(int Dy, int Dx)> DiskOffsets(double radius)
+    {
+        int size = (int)Math.Round(radius * 2.0, MidpointRounding.ToEven);
+        if (size < 1)
+            size = 1;
+        if (size % 2 == 0)
+            size += 1;
+        int center = size / 2;
+        double inverse = center == 0 ? 0 : 1.0 / (center * center);
+        var offsets = new List<(int, int)>();
+        for (int row = 0; row < size; row++)
+        {
+            double dy = row - center;
+            if (Math.Abs(dy) > center)
+                continue;
+            int reach = center == 0 ? 0 : (int)Math.Round(center * Math.Sqrt(Math.Max(0, 1.0 - dy * dy * inverse)), MidpointRounding.ToEven);
+            int start = Math.Max(center - reach, 0);
+            int end = Math.Min(center + reach + 1, size);
+            for (int column = start; column < end; column++)
+                offsets.Add((row - center, column - center));
+        }
+        return offsets;
+    }
+
+    static List<Run> ShiftRuns(List<Run> runs, int dy, int dx, int width, int height)
+    {
+        var shifted = new List<Run>();
+        foreach (var run in runs)
+        {
+            int row = run.Row + dy;
+            if ((uint)row >= (uint)height)
+                continue;
+            int start = Math.Max(0, run.Start + dx);
+            int end = Math.Min(width - 1, run.End + dx);
+            if (start <= end)
+                shifted.Add(new Run(row, start, end));
+        }
+        return shifted;
+    }
+
+    static List<Run> DilateOffsets(List<Run> runs, List<(int Dy, int Dx)> offsets, int width, int height)
+    {
+        var expanded = new List<Run>();
+        foreach (var offset in offsets)
+            expanded.AddRange(ShiftRuns(runs, offset.Dy, offset.Dx, width, height));
+        return expanded;
+    }
+
+    static List<Run> ErodeOffsets(List<Run> runs, List<(int Dy, int Dx)> offsets, int width, int height)
+    {
+        if (offsets.Count == 0 || runs.Count == 0)
+            return new List<Run>();
+        Region current = FromRuns(width, height, ShiftRuns(runs, -offsets[0].Dy, -offsets[0].Dx, width, height));
+        for (int index = 1; index < offsets.Count; index++)
+        {
+            var shifted = FromRuns(width, height, ShiftRuns(runs, -offsets[index].Dy, -offsets[index].Dx, width, height));
+            current = Intersection(current, shifted);
+        }
+        return RunsOf(current);
     }
 
     static int OddSize(int size, string name)

@@ -13,6 +13,7 @@ _SUPPORTED = {
     "select_shape", "select_obj", "concat_obj", "union1", "union2", "intersection", "difference",
     "gen_rectangle1", "smallest_rectangle1", "get_image_size", "get_grayval", "test_region_point",
     "intensity", "dilation_rectangle1", "erosion_rectangle1", "opening_rectangle1", "closing_rectangle1",
+    "dilation_circle", "erosion_circle", "opening_circle", "closing_circle", "boundary",
     "fill_up", "complement", "reduce_domain", "change_domain", "get_domain", "crop_rectangle1",
     "gen_image_const", "gen_image_proto", "paint_region", "overpaint_region", "set_grayval",
 }
@@ -307,7 +308,7 @@ def _emit(source: str, program: Program, class_name: str) -> str:
             images.discard(name)
             last_region = name
             continue
-        if bare in ("union1", "dilation_rectangle1", "erosion_rectangle1", "opening_rectangle1", "closing_rectangle1", "fill_up", "complement"):
+        if bare in ("union1", "dilation_rectangle1", "erosion_rectangle1", "opening_rectangle1", "closing_rectangle1", "fill_up", "complement", "dilation_circle", "erosion_circle", "opening_circle", "closing_circle", "boundary"):
             source_name = stmt.iconic_in[0]
             if source_name not in regions:
                 raise ExportError(f"找不到區域 {source_name}", stmt.line)
@@ -319,6 +320,25 @@ def _emit(source: str, program: Program, class_name: str) -> str:
                 call = f"Operators.FillUp({_ident(source_name)})"
             elif bare == "complement":
                 call = f"Operators.Complement({_ident(source_name)})"
+            elif bare in ("dilation_circle", "erosion_circle", "opening_circle", "closing_circle"):
+                try:
+                    radius = scalar(_literal(stmt.control_in[0], constants, stmt.line), "Radius")
+                except ValueError as exc:
+                    raise ExportError(str(exc), stmt.line) from exc
+                if radius < 0:
+                    raise ExportError("半徑不能是負的", stmt.line)
+                method = {
+                    "dilation_circle": "DilateCircle",
+                    "erosion_circle": "ErodeCircle",
+                    "opening_circle": "OpenCircle",
+                    "closing_circle": "CloseCircle",
+                }[bare]
+                call = f"Operators.{method}({_ident(source_name)}, {_cs_double(radius)})"
+            elif bare == "boundary":
+                kind = str(_literal(stmt.control_in[0], constants, stmt.line)).strip().strip("'\"").lower()
+                if kind not in ("inner", "outer"):
+                    raise ExportError("BoundaryType 只能是 inner 或 outer", stmt.line)
+                call = f"Operators.Boundary({_ident(source_name)}, {_cs_string(kind)})"
             else:
                 wide = number(_literal(stmt.control_in[0], constants, stmt.line), "Width", stmt.line)
                 high = number(_literal(stmt.control_in[1], constants, stmt.line), "Height", stmt.line)

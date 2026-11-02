@@ -1,0 +1,10 @@
+* 圓形開運算清掉細雜點，再膨脹一點，並取出外邊界。
+Vizion.read_image (Image, 'samples/parts.png')
+Vizion.threshold (Image, Region, 60, 255)
+Vizion.opening_circle (Region, Opened, 2.5)
+Vizion.dilation_circle (Opened, Grown, 1)
+Vizion.boundary (Grown, Edge, 'outer')
+Vizion.connection (Opened, Parts)
+Vizion.count_obj (Parts, Number)
+Vizion.dev_display (Image)
+Vizion.dev_display (Edge)
