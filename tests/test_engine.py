@@ -3360,6 +3360,47 @@ def test_three_checkerboard_views_share_one_calib():
     assert int(still.vars["Count"]) == 0
 
 
+def test_calibration_draws_points_and_errors():
+    found = run_source(
+        "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')\n"
+    )
+    assert found.error is None, found.error
+    first = found.public_state()["display"]
+    assert first and first["width"] == 428 and first["height"] == 356
+    texts = [shape["text"] for shape in first["shapes"] if shape["type"] == "text"]
+    assert any("35 點" in text for text in texts)
+    assert sum(1 for shape in first["shapes"] if shape["type"] == "polyline") == 70
+
+    calibrated = run_source(
+        "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"
+        "Vizion.read_image (Left, 'samples/calib_board_left.png')\n"
+        "Vizion.read_image (Right, 'samples/calib_board_right.png')\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.find_calib_object (Left, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.find_calib_object (Right, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.calibrate_cameras (CalibDataID, Error)\n"
+    )
+    assert calibrated.error is None, calibrated.error
+    calib = calibrated.vars["CalibDataID"]
+    assert float(calibrated.vars["Error"]) < 5
+    assert len(calib.observation_errors) == 3
+    assert all(item is not None and item < 5 for item in calib.observation_errors)
+    assert "誤差" in calib.summary()
+    assert calib.observations[0][2:] == (428, 356)
+    assert any(line.startswith("標定誤差") for line in calibrated.log)
+    drawn = calibrated.public_state()["display"]
+    assert drawn["height"] > 356
+    labels = [shape["text"] for shape in drawn["shapes"] if shape["type"] == "text"]
+    assert any(text.startswith("平均誤差") for text in labels)
+    assert sum("誤差" in text for text in labels) >= 3
+    assert sum(1 for shape in drawn["shapes"] if shape["type"] == "polyline") > 200
+
+
 def test_plate_file_and_two_cameras():
     import cv2
     import numpy as np
@@ -3655,6 +3696,24 @@ def test_live_camera_reads_a_new_frame_each_grab():
         raise AssertionError("a closed camera should fail")
 
 
+def test_camera_failures_say_what_to_do_next():
+    missing = run_source("Vizion.open_framegrabber ('File', 'samples/no-such-camera.png', Acq)\n")
+    assert missing.error and "找不到" in missing.error and "選檔" in missing.error
+    folder = ROOT / "workspace" / "empty_camera_dir"
+    folder.mkdir(parents=True, exist_ok=True)
+    for child in folder.iterdir():
+        if child.is_file():
+            child.unlink()
+    empty = run_source("Vizion.open_framegrabber ('File', 'workspace/empty_camera_dir', Acq)\n")
+    assert empty.error and "沒有影像" in empty.error and "png" in empty.error
+    done = run_source(
+        "Vizion.open_framegrabber ('File', 'samples/code39.png', Acq)\n"
+        "Vizion.grab_image (Image, Acq)\n"
+        "Vizion.grab_image (Image2, Acq)\n"
+    )
+    assert done.error and "重新 open_framegrabber" in done.error
+
+
 def test_unopened_camera_error_stays_the_same():
     from app.engine.chapters import camera_ops
     import app.engine.dshow as dshow
@@ -3678,7 +3737,7 @@ def test_unopened_camera_error_stays_the_same():
         try:
             camera_ops._open_camera(0, 0, 0)
         except RuntimeError as exc:
-            assert str(exc) == "打不開相機 0"
+            assert str(exc) == "打不開相機 0。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。"
         else:
             raise AssertionError("camera should not open")
     finally:

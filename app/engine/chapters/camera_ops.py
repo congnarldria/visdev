@@ -75,7 +75,7 @@ def _device_path(ctx, device: str) -> Path:
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    raise FileNotFoundError(f"找不到 {device}")
+    raise FileNotFoundError(f"找不到 {device}。路徑請寫 samples 或 workspace 裡的檔，或在參數窗按選檔。")
 
 
 def _image_paths(folder: Path) -> list[Path]:
@@ -152,7 +152,7 @@ def _open_camera(index: int, width: int, height: int):
         cap.release()
         cap = cv2.VideoCapture(index)
     if not cap.isOpened():
-        raise RuntimeError(f"打不開相機 {index}")
+        raise RuntimeError(f"打不開相機 {index}。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。")
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if width > 0:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -175,19 +175,19 @@ def _note_image(ctx) -> None:
 
 def _load_file(handle: AcqHandle) -> np.ndarray:
     if handle.cursor >= len(handle.paths):
-        raise RuntimeError("沒有下一張影像")
+        raise RuntimeError("沒有下一張影像。這個檔案或資料夾已經讀完，請重新 open_framegrabber，或把 start_index 設回 0。")
     path = handle.paths[handle.cursor]
     handle.cursor += 1
     data = read_cv_image(path)
     if data is None:
-        raise RuntimeError(f"無法讀取影像 {path}")
+        raise RuntimeError(f"無法讀取影像 {path}。檔案可能壞了，請改用 png 或 jpg。")
     return _paint(data, handle.color, handle.width, handle.height)
 
 
 def _load_camera(handle: AcqHandle, flush: bool) -> np.ndarray:
     cap = handle.cap
     if cap is None or not cap.isOpened():
-        raise RuntimeError("相機沒有打開")
+        raise RuntimeError("相機沒有打開。請先 open_framegrabber。若已經關閉，要重新開啟才能再抓圖。")
     frame = None
     pulls = 2 if flush else 1
     for _ in range(pulls):
@@ -195,7 +195,7 @@ def _load_camera(handle: AcqHandle, flush: bool) -> np.ndarray:
         if ok and grabbed is not None:
             frame = grabbed
     if frame is None:
-        raise RuntimeError("讀不到畫面")
+        raise RuntimeError("讀不到畫面。請確認相機還接著、沒有被別的程式占用，然後再抓一次。")
     return _paint(frame, handle.color, handle.width, handle.height)
 
 
@@ -236,7 +236,7 @@ def open_framegrabber(name, device, color_space, width, height, *, ctx):
         path = _device_path(ctx, device_text)
         handle.paths = [path] if path.is_file() else _image_paths(path)
         if not handle.paths:
-            raise RuntimeError(f"{path} 裡沒有影像")
+            raise RuntimeError(f"{path} 裡沒有影像。請放進 png、jpg、bmp 或 tif，資料夾裡的圖會按檔名排序。")
     else:
         try:
             index = int(device_text)
@@ -350,7 +350,7 @@ def set_framegrabber_param(handle, param, value, *, ctx):
         path = _device_path(ctx, text(value, "Value").strip().strip("'\""))
         handle.paths = [path] if path.is_file() else _image_paths(path)
         if not handle.paths:
-            raise RuntimeError(f"{path} 裡沒有影像")
+            raise RuntimeError(f"{path} 裡沒有影像。請放進 png、jpg、bmp 或 tif，資料夾裡的圖會按檔名排序。")
         handle.device = str(path)
         handle.cursor = 0
     else:
