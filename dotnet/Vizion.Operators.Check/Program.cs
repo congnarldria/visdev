@@ -211,6 +211,57 @@ static void RunOp(Op item)
             ExpectSameRuns(rect, item.Out, name);
             break;
         }
+        case "reduce":
+        {
+            var pixels = Convert.FromBase64String(item.Pixels ?? "");
+            var image = item.Channels == 1
+                ? ImageBuffer.Gray(item.Width, item.Height, pixels)
+                : ImageBuffer.Bgr(item.Width, item.Height, pixels);
+            var window = RegionFrom(item.Width, item.Height, item.Runs);
+            var reduced = item.Mode == "change" ? Operators.ChangeDomain(image, window) : Operators.ReduceDomain(image, window);
+            if (item.Second != null)
+                reduced = Operators.ReduceDomain(reduced, RegionFrom(item.Width, item.Height, item.Second));
+            if (item.Min != 0 || item.Max != 0)
+                ExpectSameRuns(Operators.Threshold(reduced, item.Min, item.Max), item.Out, name);
+            if (!string.IsNullOrEmpty(item.Display))
+            {
+                var shown = reduced.ForDisplay();
+                var expected = Convert.FromBase64String(item.Display);
+                if (shown.Length != expected.Length || !shown.AsSpan().SequenceEqual(expected))
+                    throw new InvalidOperationException($"{name} 的顯示像素和 Python 不同");
+            }
+            break;
+        }
+        case "paint":
+        {
+            var pixels = Convert.FromBase64String(item.Pixels ?? "");
+            var image = item.Channels == 1
+                ? ImageBuffer.Gray(item.Width, item.Height, pixels)
+                : ImageBuffer.Bgr(item.Width, item.Height, pixels);
+            if (item.Runs != null)
+                image = Operators.ReduceDomain(image, RegionFrom(item.Width, item.Height, item.Runs));
+            var area = RegionFrom(item.Width, item.Height, item.Left);
+            var painted = item.Mode == "over"
+                ? Operators.Overpaint(area, image, item.Gray, item.Feature ?? "fill")
+                : Operators.Paint(area, image, item.Gray, item.Feature ?? "fill");
+            var expected = Convert.FromBase64String(item.Display ?? "");
+            if (!painted.Pixels.AsSpan().SequenceEqual(expected))
+                throw new InvalidOperationException($"{name} 塗完的像素和 Python 不同");
+            break;
+        }
+        case "crop":
+        {
+            var pixels = Convert.FromBase64String(item.Pixels ?? "");
+            var image = ImageBuffer.Gray(item.Width, item.Height, pixels);
+            if (item.Runs != null)
+                image = Operators.ReduceDomain(image, RegionFrom(item.Width, item.Height, item.Runs));
+            var cropped = Operators.Crop(image, item.Row1, item.Column1, item.Row2, item.Column2);
+            var expected = Convert.FromBase64String(item.Display ?? "");
+            if (cropped.Width != item.KernelWidth || cropped.Height != item.KernelHeight || !cropped.Pixels.AsSpan().SequenceEqual(expected))
+                throw new InvalidOperationException($"{name} 裁切後的像素和 Python 不同");
+            ExpectSameRuns(cropped.Domain ?? Operators.DomainOf(cropped), item.Out, name + " 定義域");
+            break;
+        }
         case "bounds":
         {
             var objects = ObjectsFrom(item.Width, item.Height, item.Objects);
@@ -313,6 +364,11 @@ sealed class Op
     public double Maximum { get; set; }
     public string? Pixels { get; set; }
     public int[][]? Runs { get; set; }
+    public int[][]? Second { get; set; }
+    public string? Display { get; set; }
+    public int Min { get; set; }
+    public int Max { get; set; }
+    public int Gray { get; set; }
     public int[][]? Left { get; set; }
     public int[][]? Right { get; set; }
     public int[][]? Out { get; set; }

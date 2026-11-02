@@ -87,7 +87,10 @@ public static partial class Operators
                 lengths.Add(column - start);
             }
         }
-        return new Region(image.Width, image.Height, rows.ToArray(), columns.ToArray(), lengths.ToArray());
+        var region = new Region(image.Width, image.Height, rows.ToArray(), columns.ToArray(), lengths.ToArray());
+        if (image.Domain != null)
+            return Intersection(region, image.Domain);
+        return region;
     }
 
     /// <summary>八連通。距離小於 2 不合併斜角以外的空隙。物件依掃描遇到的第一個像素排序。</summary>

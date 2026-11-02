@@ -5372,7 +5372,7 @@ def test_csharp_export_matches_python_threshold_and_connection():
     assert "Operators.Threshold(Image, 60, 255)" in code
     assert "Operators.Connection(Region)" in code
     assert "Operators.Overlays(Parts)" in code
-    assert "view(Image.Width, Image.Height, Image.Pixels, Image.Layout," in code
+    assert "view(Image.Width, Image.Height, Image.ForDisplay(), Image.Layout," in code
     assert "ExportedProgram.Run(window.Show)" in code
     counted = export_csharp(
         "Vizion.read_image (Image, 'samples/parts.png')\n"
@@ -5435,6 +5435,22 @@ def test_csharp_export_matches_python_threshold_and_connection():
     assert distance_session.error is None, distance_session.error
     assert distance_session.vars["Number"] >= 1
     assert "Operators.DilateRectangle(Big, 3, 3)" in export_csharp(distance_program)
+    domain_program = """
+Vizion.read_image (Image, 'samples/parts.png')
+Vizion.gen_rectangle1 (Window, 40, 80, 200, 300)
+Vizion.reduce_domain (Image, Window, Limited)
+Vizion.threshold (Limited, Region, 60, 255)
+Vizion.get_domain (Limited, Domain)
+Vizion.change_domain (Image, Window, Replaced)
+Vizion.crop_rectangle1 (Limited, Part, 40, 80, 80, 120)
+"""
+    domain_code = export_csharp(domain_program)
+    assert "Operators.ReduceDomain(Image, Window)" in domain_code
+    assert "Operators.Threshold(Limited, 60, 255)" in domain_code
+    assert "Operators.DomainOf(Limited)" in domain_code
+    assert "Operators.ChangeDomain(Image, Window)" in domain_code
+    assert "Operators.Crop(Limited, 40, 80, 80, 120)" in domain_code
+    assert "ForDisplay()" in domain_code
 
     def digest(masks):
         hasher = hashlib.sha256()
@@ -5541,7 +5557,12 @@ def test_csharp_export_matches_python_threshold_and_connection():
         gen_rectangle1,
         fill_up,
         complement,
+        reduce_domain,
+        crop_rectangle1,
+        get_domain,
     )
+    from app.engine.chapters.image_ops import change_domain, overpaint_region, paint_region
+    from app.engine.render import apply_domain_dim
 
     class RectCtx(Ctx):
         ref_shape = (8, 10)
@@ -5766,6 +5787,115 @@ def test_csharp_export_matches_python_threshold_and_connection():
             "row": 0,
             "column": 0,
             "values": [30, 20, 10],
+        }
+    )
+    field = np.full((6, 8), 200, np.uint8)
+    field[0, 0] = 10
+    window = np.zeros((6, 8), np.uint8)
+    window[1:4, 2:6] = 255
+    window_region = Region(8, 6, [window])
+    limited = reduce_domain(Image(field), window_region, ctx=Ctx()).iconic[0]
+    kept = threshold(limited, 100, 255, ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "reduce",
+            "name": "threshold-inside",
+            "width": 8,
+            "height": 6,
+            "channels": 1,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "runs": run_list(window),
+            "min": 100,
+            "max": 255,
+            "out": [] if kept.count() == 0 else run_list(kept.union_mask()),
+            "display": base64.b64encode(np.ascontiguousarray(apply_domain_dim(limited)).tobytes()).decode("ascii"),
+        }
+    )
+    inner = np.zeros((6, 8), np.uint8)
+    inner[2:3, 3:5] = 255
+    limited_again = reduce_domain(limited, Region(8, 6, [inner]), ctx=Ctx()).iconic[0]
+    kept_again = threshold(limited_again, 100, 255, ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "reduce",
+            "name": "threshold-intersect",
+            "width": 8,
+            "height": 6,
+            "channels": 1,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "runs": run_list(window),
+            "second": run_list(inner),
+            "min": 100,
+            "max": 255,
+            "out": [] if kept_again.count() == 0 else run_list(kept_again.union_mask()),
+        }
+    )
+    replaced = change_domain(limited, Region(8, 6, [inner]), ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "reduce",
+            "name": "change",
+            "mode": "change",
+            "width": 8,
+            "height": 6,
+            "channels": 1,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "runs": run_list(inner),
+            "min": 100,
+            "max": 255,
+            "out": one_runs(threshold(replaced, 100, 255, ctx=Ctx())),
+        }
+    )
+    cropped = crop_rectangle1(limited, 1, 2, 3, 5, ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "crop",
+            "name": "domain",
+            "width": 8,
+            "height": 6,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "runs": run_list(window),
+            "row1": 1,
+            "column1": 2,
+            "row2": 3,
+            "column2": 5,
+            "kernelWidth": cropped.width,
+            "kernelHeight": cropped.height,
+            "display": base64.b64encode(np.ascontiguousarray(cropped.data).tobytes()).decode("ascii"),
+            "out": one_runs(get_domain(cropped, ctx=Ctx())),
+        }
+    )
+    painted = overpaint_region(window_region, limited, 40, "fill", ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "paint",
+            "name": "over",
+            "mode": "over",
+            "feature": "fill",
+            "gray": 40,
+            "width": 8,
+            "height": 6,
+            "channels": 1,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "runs": run_list(window),
+            "left": run_list(window),
+            "display": base64.b64encode(np.ascontiguousarray(painted.data).tobytes()).decode("ascii"),
+        }
+    )
+    edged = paint_region(window_region, Image(field), 255, "margin", ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "paint",
+            "name": "margin",
+            "mode": "fill",
+            "feature": "margin",
+            "gray": 255,
+            "width": 8,
+            "height": 6,
+            "channels": 1,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "left": run_list(window),
+            "display": base64.b64encode(np.ascontiguousarray(edged.data).tobytes()).decode("ascii"),
         }
     )
     spec = folder / "cases.json"

@@ -1,0 +1,9 @@
+* 只在矩形裡二值化。定義域外面顯示會變暗。
+Vizion.read_image (Image, 'samples/parts.png')
+Vizion.gen_rectangle1 (Window, 40, 80, 200, 300)
+Vizion.reduce_domain (Image, Window, Limited)
+Vizion.threshold (Limited, Region, 60, 255)
+Vizion.connection (Region, Parts)
+Vizion.count_obj (Parts, Number)
+Vizion.dev_display (Limited)
+Vizion.dev_display (Parts)

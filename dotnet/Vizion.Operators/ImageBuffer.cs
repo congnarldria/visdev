@@ -9,12 +9,16 @@ public sealed class ImageBuffer
     public byte[] Pixels { get; }
     public PixelLayout Layout => Channels == 1 ? PixelLayout.Gray : PixelLayout.Bgr;
 
-    private ImageBuffer(int width, int height, int channels, byte[] pixels)
+    /// <summary>沒有做過 reduce_domain 時是 null，表示整張都有效。</summary>
+    public Region? Domain { get; }
+
+    private ImageBuffer(int width, int height, int channels, byte[] pixels, Region? domain)
     {
         Width = width;
         Height = height;
         Channels = channels;
         Pixels = pixels;
+        Domain = domain;
     }
 
     public static ImageBuffer Gray(int width, int height, byte[] pixels) => From(width, height, 1, pixels);
@@ -34,11 +38,28 @@ public sealed class ImageBuffer
             throw new ArgumentException("像素緩衝比寬高還短");
         var copy = new byte[need];
         Buffer.BlockCopy(pixels, 0, copy, 0, need);
-        return new ImageBuffer(width, height, channels, copy);
+        return new ImageBuffer(width, height, channels, copy, null);
     }
 
-    internal static ImageBuffer Wrap(int width, int height, int channels, byte[] pixels) =>
-        new(width, height, channels, pixels);
+    internal static ImageBuffer Wrap(int width, int height, int channels, byte[] pixels, Region? domain = null) =>
+        new(width, height, channels, pixels, domain);
+
+    /// <summary>定義域外面的像素變成原來的三分之一，和圖形視窗相同。沒有定義域時就是原圖。</summary>
+    public byte[] ForDisplay()
+    {
+        if (Domain == null)
+            return Pixels;
+        var faded = new byte[Pixels.Length];
+        for (int i = 0; i < Pixels.Length; i++)
+            faded[i] = (byte)(Pixels[i] / 3);
+        for (int i = 0; i < Domain.Rows.Length; i++)
+        {
+            int length = Domain.Lengths[i] * Channels;
+            int offset = (Domain.Rows[i] * Width + Domain.Columns[i]) * Channels;
+            Buffer.BlockCopy(Pixels, offset, faded, offset, length);
+        }
+        return faded;
+    }
 
     /// <summary>灰階影像回傳自己的緩衝。彩色先轉成和 threshold 相同的灰階。</summary>
     public byte[] GrayBytes()

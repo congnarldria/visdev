@@ -13,7 +13,8 @@ _SUPPORTED = {
     "select_shape", "select_obj", "concat_obj", "union1", "union2", "intersection", "difference",
     "gen_rectangle1", "smallest_rectangle1", "get_image_size", "get_grayval", "test_region_point",
     "intensity", "dilation_rectangle1", "erosion_rectangle1", "opening_rectangle1", "closing_rectangle1",
-    "fill_up", "complement",
+    "fill_up", "complement", "reduce_domain", "change_domain", "get_domain", "crop_rectangle1",
+    "gen_image_const", "gen_image_proto", "paint_region", "overpaint_region", "set_grayval",
 }
 _SHAPE = {"area", "row", "column", "width", "height", "ratio", "center_row", "center_column", "center_col"}
 _KEYWORDS = {
@@ -171,6 +172,103 @@ def _emit(source: str, program: Program, class_name: str) -> str:
                 raise ExportError("FileName 要是字串", stmt.line)
             name = stmt.iconic_out[0]
             assign(name, f"Operators.ReadImage({_cs_string(filename)})", "image", stmt.line)
+            images.add(name)
+            regions.pop(name, None)
+            last_image = name
+            continue
+        if bare == "gen_image_const":
+            kind = str(_literal(stmt.control_in[0], constants, stmt.line)).strip().strip("'\"").lower()
+            if kind != "byte":
+                raise ExportError("C# 的 gen_image_const 目前只做 byte", stmt.line)
+            wide = number(_literal(stmt.control_in[1], constants, stmt.line), "Width", stmt.line)
+            high = number(_literal(stmt.control_in[2], constants, stmt.line), "Height", stmt.line)
+            name = stmt.iconic_out[0]
+            assign(name, f"Operators.Constant({wide}, {high})", "image", stmt.line)
+            images.add(name)
+            regions.pop(name, None)
+            last_image = name
+            continue
+        if bare == "gen_image_proto":
+            source_name = stmt.iconic_in[0]
+            if source_name not in images:
+                raise ExportError(f"找不到影像 {source_name}", stmt.line)
+            gray = number(_literal(stmt.control_in[0], constants, stmt.line), "Grayval", stmt.line)
+            name = stmt.iconic_out[0]
+            assign(name, f"Operators.Proto({_ident(source_name)}, {gray})", "image", stmt.line)
+            images.add(name)
+            regions.pop(name, None)
+            last_image = name
+            continue
+        if bare in ("reduce_domain", "change_domain"):
+            image_name, region_name = stmt.iconic_in
+            if image_name not in images:
+                raise ExportError(f"找不到影像 {image_name}", stmt.line)
+            if region_name not in regions:
+                raise ExportError(f"找不到區域 {region_name}", stmt.line)
+            name = stmt.iconic_out[0]
+            method = "ReduceDomain" if bare == "reduce_domain" else "ChangeDomain"
+            assign(name, f"Operators.{method}({_ident(image_name)}, {_ident(region_name)})", "image", stmt.line)
+            images.add(name)
+            regions.pop(name, None)
+            last_image = name
+            continue
+        if bare == "get_domain":
+            source_name = stmt.iconic_in[0]
+            if source_name not in images:
+                raise ExportError(f"找不到影像 {source_name}", stmt.line)
+            name = stmt.iconic_out[0]
+            assign(name, f"Operators.DomainOf({_ident(source_name)})", "region", stmt.line)
+            regions[name] = "one"
+            images.discard(name)
+            last_region = name
+            continue
+        if bare == "crop_rectangle1":
+            source_name = stmt.iconic_in[0]
+            if source_name not in images:
+                raise ExportError(f"找不到影像 {source_name}", stmt.line)
+            coords = [number(_literal(expr, constants, stmt.line), label, stmt.line) for expr, label in zip(stmt.control_in, ("Row1", "Column1", "Row2", "Column2"))]
+            name = stmt.iconic_out[0]
+            assign(name, f"Operators.Crop({_ident(source_name)}, {', '.join(str(item) for item in coords)})", "image", stmt.line)
+            images.add(name)
+            regions.pop(name, None)
+            last_image = name
+            continue
+        if bare in ("paint_region", "overpaint_region"):
+            region_name, image_name = stmt.iconic_in
+            if region_name not in regions:
+                raise ExportError(f"找不到區域 {region_name}", stmt.line)
+            if image_name not in images:
+                raise ExportError(f"找不到影像 {image_name}", stmt.line)
+            gray = _literal(stmt.control_in[0], constants, stmt.line)
+            mode = str(_literal(stmt.control_in[1], constants, stmt.line)).strip().strip("'\"").lower()
+            if mode not in ("fill", "margin"):
+                raise ExportError("Type 只能是 fill 或 margin", stmt.line)
+            if isinstance(gray, (list, tuple)):
+                raise ExportError("匯出的塗色目前用一個灰階", stmt.line)
+            value = number(gray, "Grayval", stmt.line)
+            name = stmt.iconic_out[0]
+            method = "Paint" if bare == "paint_region" else "Overpaint"
+            assign(name, f"Operators.{method}({_ident(region_name)}, {_ident(image_name)}, {value}, {_cs_string(mode)})", "image", stmt.line)
+            images.add(name)
+            regions.pop(name, None)
+            last_image = name
+            continue
+        if bare == "set_grayval":
+            source_name = stmt.iconic_in[0]
+            if source_name not in images:
+                raise ExportError(f"找不到影像 {source_name}", stmt.line)
+            row = _literal(stmt.control_in[0], constants, stmt.line)
+            column = _literal(stmt.control_in[1], constants, stmt.line)
+            gray = _literal(stmt.control_in[2], constants, stmt.line)
+            if isinstance(row, (list, tuple)) or isinstance(column, (list, tuple)) or isinstance(gray, (list, tuple)):
+                raise ExportError("匯出的 set_grayval 一次改一個灰階點", stmt.line)
+            name = stmt.iconic_out[0]
+            assign(
+                name,
+                f"Operators.SetGray({_ident(source_name)}, {int(round(float(row)))}, {int(round(float(column)))}, {number(gray, 'Grayval', stmt.line)})",
+                "image",
+                stmt.line,
+            )
             images.add(name)
             regions.pop(name, None)
             last_image = name
@@ -424,7 +522,7 @@ def _emit(source: str, program: Program, class_name: str) -> str:
     else:
         overlay = "System.Array.Empty<Overlay>()"
     image = _ident(shown_image)
-    body.append(f"        view({image}.Width, {image}.Height, {image}.Pixels, {image}.Layout, {overlay});")
+    body.append(f"        view({image}.Width, {image}.Height, {image}.ForDisplay(), {image}.Layout, {overlay});")
     joined = "\n".join(body)
     return (
         "using System;\n"
