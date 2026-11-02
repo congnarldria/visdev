@@ -3354,6 +3354,45 @@ def test_code2of5_odd_length_pads_a_zero():
     assert rejected.error is not None and "只能是數字" in rejected.error
 
 
+def test_code128_digits_use_code_set_c():
+    from app.engine.chapters.code_ops import _code128_values, render_code128
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_code128_digits_use_code_set_c.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["DigitsText"] == "123456"
+    assert sample.vars["PaddedText"] == "0123"
+    assert sample.vars["WordText"] == "Hi"
+    assert sample.vars["OddText"] == "12345"
+    assert _code128_values("Hi")[0] == 104
+    assert _code128_values("123456")[0] == 105
+    assert _code128_values("123456")[1:] == [12, 34, 56]
+    assert render_code128("ABCDEF").shape[1] - render_code128("123456").shape[1] == 66
+    assert render_code128("Hi").shape[1] == render_code128("AB").shape[1]
+    try:
+        render_code128("Hi\n")
+    except ValueError as exc:
+        assert "Code 128" in str(exc)
+    else:
+        raise AssertionError("控制字元應該被拒絕")
+
+
+def test_get_text_result_num_counts_words():
+    from app.engine.chapters.code_ops import TextResult
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_get_text_result_blank_image_num_is_0.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert int(sample.vars["Count"]) == 0
+    assert sample.vars["Words"] == []
+    read = REGISTRY["get_text_result"].fn
+    one = TextResult(10, 10, [{"text": "A", "score": 0.5, "row": 1.0, "column": 2.0}])
+    assert read(one, "num", ctx=None).control[0] == 1
+    assert read(one, "class", ctx=None).control[0] == ["A"]
+    assert read(TextResult(10, 10, []), "num", ctx=None).control[0] == 0
+
+
 def test_hdevelop_batch102():
     import numpy as np
 

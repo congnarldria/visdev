@@ -1,0 +1,16 @@
+* Code 128 純數字用字元集 C
+* 123456 用字元集 C，讀回來仍是 123456。前面有 0 也留著。Hi 仍用字元集 B，讀回來是 Hi。奇數位 12345 讀回來也是 12345。
+Vizion.gen_code128 (Digits, '123456')
+Vizion.create_bar_code_model (Handle)
+Vizion.find_bar_code (Digits, Symbol, Handle, 'Code 128', Decoded)
+DigitsText := Decoded[1]
+Vizion.gen_code128 (Padded, '0123')
+Vizion.find_bar_code (Padded, Symbol2, Handle, 'Code 128', Decoded2)
+PaddedText := Decoded2[1]
+Vizion.gen_code128 (Word, 'Hi')
+Vizion.find_bar_code (Word, Symbol3, Handle, 'Code 128', Decoded3)
+WordText := Decoded3[1]
+Vizion.gen_code128 (Odd, '12345')
+Vizion.find_bar_code (Odd, Symbol4, Handle, 'Code 128', Decoded4)
+OddText := Decoded4[1]
+Vizion.dev_display (Digits)

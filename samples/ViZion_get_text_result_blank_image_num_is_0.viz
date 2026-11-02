@@ -1,0 +1,10 @@
+* 空白影像的文字塊個數是 0
+* num 是字塊個數。全白的影像沒有字，所以是 0。class、confidence、row、column 仍是原來的結果。
+Vizion.gen_image_const (Base, 'byte', 80, 40)
+Vizion.gen_rectangle1 (All, 0, 0, 39, 79)
+Vizion.paint_region (All, Base, Image, 255, 'fill')
+Vizion.create_text_model_reader ('auto', 'auto', TextModel)
+Vizion.find_text (Image, TextModel, TextResultID)
+Vizion.get_text_result (TextResultID, 'num', Count)
+Vizion.get_text_result (TextResultID, 'class', Words)
+Vizion.dev_display (Image)

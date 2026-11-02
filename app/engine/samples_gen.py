@@ -128,6 +128,8 @@ SAMPLE_ORDER = (
     "ViZion_find_calib_object_three_views_one_board.viz",
     "ViZion_gen_code93_lowercase_reads_VISDEV.viz",
     "ViZion_gen_code2of5_odd_length_reads_012345.viz",
+    "ViZion_gen_code128_digits_use_code_set_c.viz",
+    "ViZion_get_text_result_blank_image_num_is_0.viz",
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz",
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz",
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz",
@@ -5072,6 +5074,38 @@ Vizion.dev_display (Odd)
 """
 
 
+HDEVELOP_BATCH101I_PROGRAM = """* Code 128 純數字用字元集 C
+* 123456 用字元集 C，讀回來仍是 123456。前面有 0 也留著。Hi 仍用字元集 B，讀回來是 Hi。奇數位 12345 讀回來也是 12345。
+Vizion.gen_code128 (Digits, '123456')
+Vizion.create_bar_code_model (Handle)
+Vizion.find_bar_code (Digits, Symbol, Handle, 'Code 128', Decoded)
+DigitsText := Decoded[1]
+Vizion.gen_code128 (Padded, '0123')
+Vizion.find_bar_code (Padded, Symbol2, Handle, 'Code 128', Decoded2)
+PaddedText := Decoded2[1]
+Vizion.gen_code128 (Word, 'Hi')
+Vizion.find_bar_code (Word, Symbol3, Handle, 'Code 128', Decoded3)
+WordText := Decoded3[1]
+Vizion.gen_code128 (Odd, '12345')
+Vizion.find_bar_code (Odd, Symbol4, Handle, 'Code 128', Decoded4)
+OddText := Decoded4[1]
+Vizion.dev_display (Digits)
+"""
+
+
+HDEVELOP_BATCH101J_PROGRAM = """* 空白影像的文字塊個數是 0
+* num 是字塊個數。全白的影像沒有字，所以是 0。class、confidence、row、column 仍是原來的結果。
+Vizion.gen_image_const (Base, 'byte', 80, 40)
+Vizion.gen_rectangle1 (All, 0, 0, 39, 79)
+Vizion.paint_region (All, Base, Image, 255, 'fill')
+Vizion.create_text_model_reader ('auto', 'auto', TextModel)
+Vizion.find_text (Image, TextModel, TextResultID)
+Vizion.get_text_result (TextResultID, 'num', Count)
+Vizion.get_text_result (TextResultID, 'class', Words)
+Vizion.dev_display (Image)
+"""
+
+
 HDEVELOP_BATCH102_PROGRAM = """* 平滑平移的列是 39.23
 * 教導框中心是列 39.5、行 47.5。圖案往上 0.25、往右 0.35，真的中心在列 39.25、行 47.85。
 * 整數峰停在列 40。列 39 的分數更高，三點拋物線卻會停在 40。
@@ -5992,6 +6026,8 @@ GENERATED_PROGRAMS = {
     "ViZion_find_calib_object_three_views_one_board.viz": HDEVELOP_BATCH101F_PROGRAM,
     "ViZion_gen_code93_lowercase_reads_VISDEV.viz": HDEVELOP_BATCH101G_PROGRAM,
     "ViZion_gen_code2of5_odd_length_reads_012345.viz": HDEVELOP_BATCH101H_PROGRAM,
+    "ViZion_gen_code128_digits_use_code_set_c.viz": HDEVELOP_BATCH101I_PROGRAM,
+    "ViZion_get_text_result_blank_image_num_is_0.viz": HDEVELOP_BATCH101J_PROGRAM,
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz": HDEVELOP_BATCH102_PROGRAM,
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz": HDEVELOP_BATCH103_PROGRAM,
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz": HDEVELOP_BATCH104_PROGRAM,

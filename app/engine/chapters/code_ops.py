@@ -44,7 +44,7 @@ _CODE_TYPES = [
 ]
 _SYMBOLS = ["'QR Code'", "'Data Matrix'", "'PDF417'", "'Aztec'"]
 _TEXT_MODE = ["'auto'", "'manual'"]
-_TEXT_RESULT = ["'class'", "'confidence'", "'row'", "'column'"]
+_TEXT_RESULT = ["'class'", "'confidence'", "'row'", "'column'", "'num'"]
 
 _L_REV = {bits: digit for digit, bits in _L.items()}
 _G_REV = {bits: digit for digit, bits in _G.items()}
@@ -264,11 +264,26 @@ def render_code39(payload: str, module: int = 2, height: int = 120, quiet: int =
     return np.tile(row, (height, 1))
 
 
-def render_code128(payload: str, module: int = 2, height: int = 120, quiet: int = 24) -> np.ndarray:
-    if not payload or any(ord(char) < 32 or ord(char) > 126 for char in payload):
-        raise ValueError("Code 128 這版用字元集 B，只接受可列印 ASCII")
+def _code128_values(payload: str) -> list[int]:
+    """Printable text stays on code set B. An all-digit string uses code set C."""
+    if payload.isdigit() and len(payload) >= 2 and len(payload) % 2 == 0:
+        values = [105]
+        values.extend(int(payload[index : index + 2]) for index in range(0, len(payload), 2))
+        return values
+    if payload.isdigit() and len(payload) >= 3:
+        values = [104, ord(payload[0]) - 32, 99]
+        rest = payload[1:]
+        values.extend(int(rest[index : index + 2]) for index in range(0, len(rest), 2))
+        return values
     values = [104]
     values.extend(ord(char) - 32 for char in payload)
+    return values
+
+
+def render_code128(payload: str, module: int = 2, height: int = 120, quiet: int = 24) -> np.ndarray:
+    if not payload or any(ord(char) < 32 or ord(char) > 126 for char in payload):
+        raise ValueError("Code 128 只接受可列印 ASCII。偶數位純數字用字元集 C。")
+    values = _code128_values(payload)
     checksum = values[0]
     for index, value in enumerate(values[1:], start=1):
         checksum += index * value
@@ -725,6 +740,20 @@ def _gen_bar(image: np.ndarray) -> Result:
 @operator(
     "條碼",
     [],
+    [P("Image", "白底黑條的 Code 128")],
+    [P("Text", "可列印 ASCII。偶數位純數字用字元集 C")],
+    [],
+    "做出一張 Code 128",
+    "有字母或符號時用字元集 B，和以前的 Hi 是同一張條碼。偶數位純數字用字元集 C，兩位合成一個碼，讀回來仍是原來的數字。奇數位純數字先用 B 寫第一位，再轉到 C。",
+    "Vizion.gen_code128 (Image, '123456')",
+)
+def gen_code128(message, *, ctx):
+    return _gen_bar(render_code128(text(message, "Text")))
+
+
+@operator(
+    "條碼",
+    [],
     [P("Image", "白底黑條的 EAN-8")],
     [P("Text", "7 或 8 位數字")],
     [],
@@ -990,11 +1019,11 @@ def find_text(image, model, *, ctx):
     [],
     [
         P("TextResultID", "文字結果"),
-        P("ResultName", "class、confidence、row 或 column", "'class'", _TEXT_RESULT),
+        P("ResultName", "class、confidence、row、column 或 num", "'class'", _TEXT_RESULT),
     ],
     [P("ResultValue", "結果")],
     "讀取文字結果",
-    "class 是每個字塊的字。confidence 是 0 到 1。row 和 column 是字塊中心。",
+    "class 是每個字塊的字。confidence 是 0 到 1。row 和 column 是字塊中心。num 是字塊個數，沒有字時是 0。",
     "Vizion.get_text_result (TextResultID, 'class', ResultValue)",
 )
 def get_text_result(result, result_name, *, ctx):
@@ -1009,8 +1038,10 @@ def get_text_result(result, result_name, *, ctx):
         values = [item["score"] for item in result.words]
     elif name in ("row", "column"):
         values = [item[name] for item in result.words]
+    elif name == "num":
+        return Result([], [len(result.words)])
     else:
-        raise ValueError("ResultName 只能是 class、confidence、row 或 column")
+        raise ValueError("ResultName 只能是 class、confidence、row、column 或 num")
     return Result([], [values])
 
 
