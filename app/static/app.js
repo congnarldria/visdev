@@ -2074,6 +2074,10 @@ function syncViewMenu() {
 }
 
 window.VisDevCommands = {
+  async inspectTemplate() {
+    await openProgram("samples", "inspect_parts.viz");
+    stLine.textContent = "這是零件檢測範本。改 MinGray 和面積下限，再按執行。";
+  },
   new() {
     code.value = "* 新程式\n";
     document.getElementById("progName").value = "untitled.viz";

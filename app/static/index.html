@@ -13,6 +13,7 @@
       <button type="button">檔案</button>
       <div class="menu-drop" hidden>
         <button type="button" data-cmd="new">新增<span class="menu-kbd">Ctrl+N</span></button>
+        <button type="button" data-cmd="inspectTemplate">檢測範本</button>
         <button type="button" data-cmd="open">開啟<span class="menu-kbd">Ctrl+O</span></button>
         <button type="button" data-cmd="save">儲存<span class="menu-kbd">Ctrl+S</span></button>
         <button type="button" data-cmd="saveAs">另存新檔</button>
@@ -256,7 +257,7 @@ endfor</pre>
 
   <div id="aboutDialog" class="modal" hidden>
     <div class="dialog about" role="dialog" aria-labelledby="aboutTitle">
-      <h2 id="aboutTitle">VisDev</h2>
+      <h2 id="aboutTitle">VisDev 1.0</h2>
       <p>視覺開發環境。程式寫法接近 HDevelop，影像計算用 OpenCV。</p>
       <p>上方選單：檔案可以新增、開啟、儲存、載入影像，也可以把讀圖、定義域、二值化、連通、篩選、矩形和圓形形態學、個數和重心匯出成 C#。編輯可以復原、剪貼。檢視可以開關窗格和縮放。執行是 F5、F6、F7。運算子依分類列出，點了會開參數窗再插入程式。工具會另開二值化、次像素、特徵和 OCR。</p>
       <div class="actions"><button id="aboutOk" type="button">確定</button></div>
@@ -303,6 +304,6 @@ endfor</pre>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
   <script src="/static/run_source.js?v=1"></script>
-  <script src="/static/app.js?v=72"></script>
+  <script src="/static/app.js?v=73"></script>
 </body>
 </html>

@@ -3417,6 +3417,86 @@ def test_clicking_a_calib_panel_shows_that_image():
     assert float(session.vars["Error"]) == mean_error
 
 
+def test_inspect_parts_template_counts_eight_parts():
+    session = run_source((ROOT / "samples" / "inspect_parts.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 8
+    areas = session.vars["Area"]
+    assert areas[0] == 2988
+    assert len(areas) == 8
+    assert session.display.base is not None
+
+
+def test_second_camera_pose_is_the_baseline():
+    import cv2
+    import numpy as np
+
+    from app.engine.chapters.calib_ops import (
+        calibrate_cameras,
+        create_calib_data,
+        get_calib_data,
+        set_calib_data_calib_object,
+        set_calib_data_observ_points,
+    )
+
+    class Ctx:
+        pass
+
+    ctx = Ctx()
+    rows, cols, square = 4, 5, 0.01
+    obj = np.zeros((rows * cols, 3), np.float64)
+    obj[:, 0] = np.tile(np.arange(cols), rows) * square
+    obj[:, 1] = np.repeat(np.arange(rows), cols) * square
+    matrix = np.array([[900.0, 0, 320.0], [0, 900.0, 240.0], [0, 0, 1]])
+    views = [
+        (np.array([[0.15], [-0.08], [0.05]]), np.array([[-0.02], [0.01], [0.45]])),
+        (np.array([[-0.20], [0.12], [-0.04]]), np.array([[0.015], [-0.02], [0.55]])),
+        (np.array([[0.05], [0.18], [0.10]]), np.array([[0.0], [0.02], [0.62]])),
+    ]
+    baseline = np.array([0.04, -0.01, 0.005])
+    relative_rotation = cv2.Rodrigues(np.array([[0.02], [-0.03], [0.04]]))[0]
+    model = create_calib_data("calibration_object", 2, 1, ctx=ctx).control[0]
+    set_calib_data_calib_object(model, 0, "4,5,0.01", ctx=ctx)
+
+    def project(rvec, tvec):
+        points, _ = cv2.projectPoints(obj, rvec, tvec, matrix, np.zeros(5))
+        return points.reshape(-1, 2)
+
+    for rvec, tvec in views:
+        image = project(rvec, tvec)
+        set_calib_data_observ_points(model, 0, 0, image[:, 1].tolist(), image[:, 0].tolist(), ctx=ctx)
+    for rvec, tvec in views:
+        rotation, _ = cv2.Rodrigues(rvec)
+        moved = relative_rotation @ rotation
+        shifted = relative_rotation @ tvec.reshape(3) + baseline
+        rvec_cam, _ = cv2.Rodrigues(moved)
+        image = project(rvec_cam, shifted.reshape(3, 1))
+        set_calib_data_observ_points(model, 1, 0, image[:, 1].tolist(), image[:, 0].tolist(), ctx=ctx)
+    error = float(calibrate_cameras(model, ctx=ctx).control[0])
+    assert error < 1.0, error
+    pose0 = get_calib_data(model, "camera", 0, "pose", ctx=ctx).control[0]
+    pose1 = get_calib_data(model, "camera", 1, "pose", ctx=ctx).control[0]
+    assert [float(item) for item in pose0] == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    assert abs(float(pose1[0]) - baseline[0]) < 0.008
+    assert abs(float(pose1[1]) - baseline[1]) < 0.008
+    assert abs(float(pose1[2]) - baseline[2]) < 0.008
+    assert max(abs(float(item)) for item in pose1[3:6]) < 0.08
+    assert "相機1相對" in model.summary()
+    params0 = get_calib_data(model, "camera", 0, "params", ctx=ctx).control[0]
+    params1 = get_calib_data(model, "camera", 1, "params", ctx=ctx).control[0]
+    assert len(params0) == 9 and len(params1) == 9
+
+    alone = create_calib_data("calibration_object", 1, 1, ctx=ctx).control[0]
+    set_calib_data_calib_object(alone, 0, "4,5,0.01", ctx=ctx)
+    for rvec, tvec in views:
+        image = project(rvec, tvec)
+        set_calib_data_observ_points(alone, 0, 0, image[:, 1].tolist(), image[:, 0].tolist(), ctx=ctx)
+    alone_error = float(calibrate_cameras(alone, ctx=ctx).control[0])
+    alone_pose = get_calib_data(alone, "camera", 0, "pose", ctx=ctx).control[0]
+    assert alone_error < 0.05
+    assert [float(item) for item in alone_pose] == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+
 def test_calibration_draws_points_and_errors():
     found = run_source(
         "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"

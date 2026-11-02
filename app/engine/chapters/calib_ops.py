@@ -47,6 +47,7 @@ class CalibData:
     height: int = 0
     camera: list | None = None
     cameras: list | None = None
+    camera_poses: list | None = None
     poses: list = field(default_factory=list)
     error: float | None = None
     observation_errors: list = field(default_factory=list)
@@ -64,9 +65,12 @@ class CalibData:
         points = f"{self.rows}x{self.cols}" if self.rows else "尚未設定標定板"
         kind = "圓點" if self.plate == "circles" else "棋盤"
         counted = f"標定  {kind} {points}  {self.num_cameras} 台相機  {len(self.observations)} 組"
-        if self.error is None:
-            return counted
-        return f"{counted}  誤差 {self.error:.3f} 像素"
+        if self.error is not None:
+            counted += f"  誤差 {self.error:.3f} 像素"
+        relative = self.camera_poses[1] if self.num_cameras > 1 and self.camera_poses and len(self.camera_poses) > 1 else None
+        if relative:
+            counted += f"  相機1相對 ({relative[0]:.3f}, {relative[1]:.3f}, {relative[2]:.3f})"
+        return counted
 
 
 def _alive(model, name: str) -> CalibData:
@@ -228,7 +232,7 @@ def _pose_from_vectors(rvec, tvec) -> list:
     ],
     [P("CalibDataID", "標定資料")],
     "建立標定資料",
-    "可以有多台相機，標定物仍是一塊。每台相機用自己的影像各自估計 fx、fy、cx、cy、k1、k2、p1、p2、k3。姿態在該相機的座標裡，不是相機彼此的相對姿態。",
+    "可以有多台相機，標定物仍是一塊。每台相機用自己的影像各自估計九個參數。標完之後，camera/pose 是這台相機相對第 0 台的姿態。每一台的第 k 組要是同時看到的同一塊板。第 0 台的相對姿態是 0。",
     "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)",
 )
 def create_calib_data(setup, num_cameras, num_objects, *, ctx):
@@ -277,6 +281,7 @@ def set_calib_data_calib_object(model, index, descr, *, ctx):
     calib.poses.clear()
     calib.camera = None
     calib.cameras = None
+    calib.camera_poses = None
     calib.error = None
     calib.width = 0
     calib.height = 0
@@ -668,6 +673,61 @@ def show_saved_calibration(ctx, index: int | None) -> None:
     _show_calib_index(ctx, calib, owners, int(index))
 
 
+def _relative_motion(pose_ref: list, pose_cam: list) -> tuple[np.ndarray, np.ndarray]:
+    """Map a point in camera 0 into this camera: X_i = R @ X_0 + t."""
+    reference = _pose_matrix(_pose_numbers(pose_ref))
+    current = _pose_matrix(_pose_numbers(pose_cam))
+    rotation_ref = reference[:3, :3]
+    translation_ref = reference[:3, 3]
+    rotation_cam = current[:3, :3]
+    translation_cam = current[:3, 3]
+    rotation = rotation_cam @ rotation_ref.T
+    translation = translation_cam - rotation @ translation_ref
+    return rotation, translation
+
+
+def _mean_motion(motions: list[tuple[np.ndarray, np.ndarray]]) -> list:
+    rotation_sum = np.zeros((3, 3), np.float64)
+    translation_sum = np.zeros(3, np.float64)
+    for rotation, translation in motions:
+        rotation_sum += rotation
+        translation_sum += translation
+    left, _, right = np.linalg.svd(rotation_sum)
+    rotation = left @ right
+    if np.linalg.det(rotation) < 0:
+        left = left.copy()
+        left[:, -1] *= -1
+        rotation = left @ right
+    translation = translation_sum / len(motions)
+    rx, ry, rz = _angles_gba(rotation)
+    return [float(translation[0]), float(translation[1]), float(translation[2]), float(rx), float(ry), float(rz), 0]
+
+
+def _store_camera_poses(calib: CalibData) -> None:
+    poses: list = [None] * calib.num_cameras
+    if calib.num_cameras < 1:
+        calib.camera_poses = poses
+        return
+    poses[0] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0]
+    if calib.num_cameras == 1:
+        calib.camera_poses = poses
+        return
+    grouped: dict[int, list[int]] = defaultdict(list)
+    owners = calib.observation_cameras or [0] * len(calib.observations)
+    for index, camera in enumerate(owners):
+        grouped[int(camera)].append(index)
+    reference = grouped.get(0, [])
+    for camera in range(1, calib.num_cameras):
+        paired = []
+        for ref_index, cam_index in zip(reference, grouped.get(camera, [])):
+            if ref_index >= len(calib.poses) or cam_index >= len(calib.poses):
+                continue
+            paired.append(_relative_motion(calib.poses[ref_index], calib.poses[cam_index]))
+        if paired:
+            poses[camera] = _mean_motion(paired)
+    calib.camera_poses = poses
+
+
 def _record_fit(calib: CalibData, indexed: list, width: int, height: int):
     error, params, poses, views = _fit_camera([item[1] for item in indexed], width, height)
     if len(calib.poses) != len(calib.observations):
@@ -686,7 +746,7 @@ def _record_fit(calib: CalibData, indexed: list, width: int, height: int):
     [P("CalibDataID", "標定資料")],
     [P("Error", "平均重投影誤差，像素")],
     "標定相機",
-    "每一台有影像的相機至少要三組點。誤差是各相機重投影誤差的平均。算完會把每張圖的點、重投影位置和這張的誤差畫在圖形視窗。點總覽裡的某一張會改看那張原圖，偏差特別大的點用紅色。變數視窗也看得到平均誤差。姿態在該張影像所屬相機的座標：x 向右、y 向下、z 朝前。",
+    "每一台有影像的相機至少要三組點。誤差是各相機重投影誤差的平均。多台相機時，每一台的第 k 組要是同時看到的同一塊板，camera/pose 才是相對第 0 台的姿態。算完會把點和誤差畫在圖形視窗。姿態在該張影像所屬相機的座標：x 向右、y 向下、z 朝前。",
     "Vizion.calibrate_cameras (CalibDataID, Error)",
 )
 def calibrate_cameras(model, *, ctx):
@@ -706,6 +766,7 @@ def calibrate_cameras(model, *, ctx):
         calib.camera = params
         calib.cameras = [params]
         calib.error = error
+        _store_camera_poses(calib)
         _present_calibration(ctx, calib, [int(item) for item in owners])
         return Result([], [error])
     cameras: list = [None] * calib.num_cameras
@@ -723,6 +784,7 @@ def calibrate_cameras(model, *, ctx):
     calib.cameras = cameras
     calib.camera = cameras[0]
     calib.error = float(sum(errors) / len(errors))
+    _store_camera_poses(calib)
     _present_calibration(ctx, calib, [int(item) for item in owners])
     return Result([], [calib.error])
 
@@ -735,11 +797,11 @@ def calibrate_cameras(model, *, ctx):
         P("CalibDataID", "標定資料"),
         P("ItemType", "camera、calib_obj_pose 或 model", "'camera'", _ITEMS),
         P("ItemIdx", "camera 時是第幾台相機，從 0 開始，一台就填 0。讀姿態或影像尺寸時是放進去的順序", "0"),
-        P("DataName", "params、pose、error、num_poses 或 image_size", "'params'", _DATA),
+        P("DataName", "params、pose、error、num_poses 或 image_size", "'params'", ["'params'", "'pose'", "'error'", "'num_poses'", "'image_size'"]),
     ],
     [P("DataValue", "結果")],
     "讀出標定結果",
-    "camera/params 仍是九個數：fx、fy、cx、cy、k1、k2、p1、p2、k3，不含影像尺寸。calib_obj_pose/pose 是七個數的姿態，編號是放進去的順序。model/error 是重投影誤差。model/num_poses 是已經放進這份標定的影像張數。model/image_size 是該張影像的寬和高，編號對應放進去的順序，還沒標定也能讀。",
+    "camera/params 仍是九個數：fx、fy、cx、cy、k1、k2、p1、p2、k3，不含影像尺寸。camera/pose 是這台相機相對第 0 台的七個數，第 0 台是 0。每一台的第 k 組要是同時看到的同一塊板。calib_obj_pose/pose 是該張影像裡標定板的姿態。model/error 是重投影誤差。model/num_poses 是影像張數。model/image_size 是寬和高。",
     "Vizion.get_calib_data (CalibDataID, 'camera', 0, 'params', CamParam)",
 )
 def get_calib_data(model, item_type, item_idx, data_name, *, ctx):
@@ -758,6 +820,12 @@ def get_calib_data(model, item_type, item_idx, data_name, *, ctx):
         if params is None:
             raise RuntimeError("還沒有 calibrate_cameras")
         return Result([], [params])
+    if kind == "camera" and name == "pose":
+        if not calib.camera_poses:
+            raise RuntimeError("還沒有 calibrate_cameras")
+        if index < 0 or index >= len(calib.camera_poses) or calib.camera_poses[index] is None:
+            raise RuntimeError("這台相機還沒有相對姿態。每一台的第 k 組要是同時看到的同一塊板。")
+        return Result([], [calib.camera_poses[index]])
     if kind == "calib_obj_pose" and name == "pose":
         if index < 0 or index >= len(calib.poses):
             raise ValueError("這個編號還沒有姿態")
@@ -909,6 +977,7 @@ def clear_calib_data(model, *, ctx):
     calib.poses.clear()
     calib.camera = None
     calib.cameras = None
+    calib.camera_poses = None
     calib.width = 0
     calib.height = 0
     calib.closed = True

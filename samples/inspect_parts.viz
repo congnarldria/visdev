@@ -1,0 +1,12 @@
+* 零件檢測範本。打開就能跑，再改門檻和面積。
+* 讀 samples/parts.png。灰階從 MinGray 到 255 當成零件，八連通後留下面積 80 以上的。
+* Count 是個數。Area、Row、Column 從 1 開始，Area[1] 是第一個零件的面積。
+Vizion.read_image (Image, 'samples/parts.png')
+MinGray := 60
+Vizion.threshold (Image, Region, MinGray, 255)
+Vizion.connection (Region, Parts, 1)
+Vizion.select_shape (Parts, Kept, 'area', 'and', 80, 99999)
+Vizion.count_obj (Kept, Count)
+Vizion.area_center (Kept, Area, Row, Column)
+Vizion.dev_display (Image)
+Vizion.dev_display (Kept)

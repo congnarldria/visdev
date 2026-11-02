@@ -1,20 +1,21 @@
-# VisDev
+# VisDev 1.0
 
-VisDev 是一套桌面視覺開發環境。程式由 HALCON 風格的呼叫組成，算子名稱前面加 `Vizion.`：
+VisDev 是一套桌面視覺開發環境。程式寫法接近 HDevelop，算子名稱前面加 `Vizion.`，影像計算用 OpenCV。
 
 ```
 Vizion.read_image (Image, 'samples/parts.png')
-Vizion.threshold (Image, Region, 60, 255)
-Vizion.connection (Region, Parts)
+MinGray := 60
+Vizion.threshold (Image, Region, MinGray, 255)
+Vizion.connection (Region, Parts, 1)
 ```
 
-指定用 `:=`。註解以 `*` 開頭。範例在 `samples/`，副檔名是 `.hdv` 和 `.viz`。
+指定用 `:=`。註解以 `*` 開頭。`T[1]` 從 1 開始。範例在 `samples/`，副檔名是 `.hdv` 和 `.viz`。
 
-## 執行
+## 怎麼開始
 
-在 Windows 上，`run.bat` 會用本機虛擬環境啟動 `app/desktop.py`，並打開編輯視窗。
+在 Windows 上，`run.bat` 會用本機虛擬環境啟動，並打開編輯視窗。視窗標題是 VisDev 1.0。
 
-裝好 `requirements.txt` 之後，也可以從殼層啟動：
+裝好 `requirements.txt` 之後，也可以：
 
 ```
 python -m app.desktop
@@ -26,9 +27,36 @@ python -m app.desktop
 uvicorn app.main:app --host 127.0.0.1 --port 8765
 ```
 
-瀏覽器打開 `http://127.0.0.1:8765/`。存檔放在 `workspace/`。
+瀏覽器打開 `http://127.0.0.1:8765/`。
 
-COM 埠和 DirectShow 相機使用 Windows API。在其他系統上，這些呼叫會像裝置不存在一樣失敗。`loopback` 序列埠、檔案、socket，以及其他視覺算子仍然可以跑。形狀和 NCC 匹配若找得到 `visdev_match.pyd` 就用它，否則用 Python 實作。
+檔案選單：
+
+- **檢測範本**會打開 `samples/inspect_parts.viz`。它讀 `samples/parts.png`，用灰階 60 到 255 取零件，八連通後留下面積 80 以上的，再算個數和重心。這張圖是 8 個零件。改 `MinGray` 和面積下限即可換成自己的工件。
+- **新增、開啟、儲存**。存檔在 `workspace/`。
+- **載入影像**把圖放進 `workspace/`，路徑可寫進 `read_image`。
+- **匯出 C#** 涵蓋讀圖、定義域、二值化、連通、篩選、矩形和圓形形態學、個數和重心。
+
+執行是 F5，單步是 F6，步進程序是 F7。點算子名稱可改參數。有座標的算子可在圖上框選。
+
+要在 Windows 上打包，執行 `build_windows.bat`。需要 Python 3.9 或更新版本、`app/engine/visdev_match.pyd`，以及 PyInstaller。腳本會分別說明缺哪一個。執行檔在使用者的電腦上產出，是 `dist\VisDev\VisDev.exe`。
+
+## 標定
+
+`set_calib_data_calib_object` 接受棋盤三個數，例如 `'5,7,10'`（內角點 5 列、7 行、方格邊長 10），也接受 `.cpd` 或 `.descr`。圓點板用 `findCirclesGrid`，亮標記會先反相。範例描述檔是 `samples/calplate_4x5.cpd`。
+
+`create_calib_data` 的相機數可以大於 1。每台相機用自己的影像估計九個參數：fx、fy、cx、cy、k1、k2、p1、p2、k3。標完之後，`get_calib_data` 的 `camera/pose` 是這台相機相對第 0 台的姿態，七個數是 Tx、Ty、Tz、Rx、Ry、Rz、0。第 0 台是 0。每一台的第 k 組必須是同時看到的同一塊板。
+
+標定結束時，圖形視窗會畫出找到的點和誤差。多張由上到下排在一起，點某一張可看原圖，再點一下回到全部。偏差特別大的點是紅色。
+
+## 已知限制
+
+- 六角形標定板的尋找標記還沒有對位。`'5,7,10'` 和矩形圓點板可以用。
+- 相對姿態只在各相機的第 k 組是同一次擺放時才有意義。張數對不上的相機不會得到姿態。
+- 標定物這版只能一塊。
+- 形狀匹配在 Windows 使用 `app/engine/visdev_match.pyd`。Linux 的 `visdev_match.so` 不進版控，要在本機編譯。
+- COM 埠和 DirectShow 相機使用 Windows API。其他系統上這些呼叫會像裝置不存在一樣失敗。檔案相機、`loopback` 序列埠和其餘視覺算子仍然可以跑。
+- 本機 OCR 需要已安裝的 RapidOCR。沒有安裝時，自動模式不會用到它。
+- C# 專案有 `net48` 與 `net8.0`。這份環境只保證 `net8.0` 能建置。
 
 ## 測試
 
@@ -36,5 +64,3 @@ COM 埠和 DirectShow 相機使用 Windows API。在其他系統上，這些呼�
 python -m pytest tests/test_engine.py
 node tests/test_view_key.js
 ```
-
-預設本機 OCR 的測試需要已安裝的 RapidOCR。其餘測試不用。
