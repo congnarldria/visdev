@@ -126,6 +126,7 @@ SAMPLE_ORDER = (
     "ViZion_convert_image_type_real_byte_roundtrip.viz",
     "ViZion_gen_image_surface_real_keeps_310.viz",
     "ViZion_find_calib_object_three_views_one_board.viz",
+    "ViZion_set_calib_data_observ_points_image_size_is_extent.viz",
     "ViZion_gen_code93_lowercase_reads_VISDEV.viz",
     "ViZion_gen_code2of5_odd_length_reads_012345.viz",
     "ViZion_gen_code128_digits_use_code_set_c.viz",
@@ -5030,6 +5031,7 @@ Vizion.dev_display (BytePlane)
 
 HDEVELOP_BATCH101F_PROGRAM = """* 三張同一塊棋盤放進同一個標定
 * 內角點是 5 列 7 行，格子邊長 36。仍是一台相機、一塊板。第一張放進去之後是 1，三張都放進去是 3。
+* 每張影像的寬高用 image_size 讀，不放進相機的九個參數。這三張都是寬 428、高 356。
 Vizion.read_image (Front, 'samples/calib_board_front.png')
 Vizion.read_image (Left, 'samples/calib_board_left.png')
 Vizion.read_image (Right, 'samples/calib_board_right.png')
@@ -5044,7 +5046,25 @@ Vizion.calibrate_cameras (CalibDataID, Error)
 Vizion.get_calib_data (CalibDataID, 'calib_obj_pose', 0, 'pose', Pose0)
 Vizion.get_calib_data (CalibDataID, 'calib_obj_pose', 2, 'pose', Pose2)
 Vizion.get_calib_data (CalibDataID, 'camera', 0, 'params', CamParam)
+Vizion.get_calib_data (CalibDataID, 'model', 0, 'image_size', Size0)
+Vizion.get_calib_data (CalibDataID, 'model', 2, 'image_size', Size2)
+ImageWidth := Size0[1]
+ImageHeight := Size0[2]
+LastWidth := Size2[1]
+LastHeight := Size2[2]
 Vizion.dev_display (Front)
+"""
+
+
+HDEVELOP_BATCH101F2_PROGRAM = """* 手動角點的影像尺寸是外框
+* 2×2 的角點，列最大是 10、行最大是 20。image_size 是寬 21、高 11，不放進相機參數。
+Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)
+Vizion.set_calib_data_calib_object (CalibDataID, 0, '2,2,10')
+Vizion.set_calib_data_observ_points (CalibDataID, 0, 0, [0, 0, 10, 10], [0, 20, 0, 20], Index, Pose)
+Vizion.get_calib_data (CalibDataID, 'model', 0, 'image_size', Size)
+Width := Size[1]
+Height := Size[2]
+Vizion.get_calib_data (CalibDataID, 'model', 0, 'num_poses', Count)
 """
 
 
@@ -5076,6 +5096,7 @@ Vizion.dev_display (Odd)
 
 HDEVELOP_BATCH101I_PROGRAM = """* Code 128 純數字用字元集 C
 * 123456 用字元集 C，讀回來仍是 123456。前面有 0 也留著。Hi 仍用字元集 B，讀回來是 Hi。奇數位 12345 讀回來也是 12345。
+* 字母和數字夾雜的 A12 整段仍用字元集 B，讀回來是 A12。
 Vizion.gen_code128 (Digits, '123456')
 Vizion.create_bar_code_model (Handle)
 Vizion.find_bar_code (Digits, Symbol, Handle, 'Code 128', Decoded)
@@ -5089,6 +5110,9 @@ WordText := Decoded3[1]
 Vizion.gen_code128 (Odd, '12345')
 Vizion.find_bar_code (Odd, Symbol4, Handle, 'Code 128', Decoded4)
 OddText := Decoded4[1]
+Vizion.gen_code128 (Mixed, 'A12')
+Vizion.find_bar_code (Mixed, Symbol5, Handle, 'Code 128', Decoded5)
+MixedText := Decoded5[1]
 Vizion.dev_display (Digits)
 """
 
@@ -6024,6 +6048,7 @@ GENERATED_PROGRAMS = {
     "ViZion_convert_image_type_real_byte_roundtrip.viz": HDEVELOP_BATCH101D_PROGRAM,
     "ViZion_gen_image_surface_real_keeps_310.viz": HDEVELOP_BATCH101E_PROGRAM,
     "ViZion_find_calib_object_three_views_one_board.viz": HDEVELOP_BATCH101F_PROGRAM,
+    "ViZion_set_calib_data_observ_points_image_size_is_extent.viz": HDEVELOP_BATCH101F2_PROGRAM,
     "ViZion_gen_code93_lowercase_reads_VISDEV.viz": HDEVELOP_BATCH101G_PROGRAM,
     "ViZion_gen_code2of5_odd_length_reads_012345.viz": HDEVELOP_BATCH101H_PROGRAM,
     "ViZion_gen_code128_digits_use_code_set_c.viz": HDEVELOP_BATCH101I_PROGRAM,

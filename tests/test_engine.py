@@ -3311,7 +3311,10 @@ def test_three_checkerboard_views_share_one_calib():
     assert float(sample.vars["Error"]) < 5
     assert len(sample.vars["Pose0"]) == 7
     assert len(sample.vars["Pose2"]) == 7
+    assert len(sample.vars["CamParam"]) == 9
     assert float(sample.vars["CamParam"][0]) > 200
+    assert int(sample.vars["ImageWidth"]) == 428 and int(sample.vars["ImageHeight"]) == 356
+    assert int(sample.vars["LastWidth"]) == 428 and int(sample.vars["LastHeight"]) == 356
     again = run_source(
         "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"
         "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
@@ -3322,6 +3325,39 @@ def test_three_checkerboard_views_share_one_calib():
     )
     assert again.error is None, again.error
     assert int(again.vars["Count"]) == 0
+    missing = run_source(
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.get_calib_data (CalibDataID, 'model', 0, 'image_size', Size)\n"
+    )
+    assert missing.error is not None and "還沒有影像" in missing.error
+    extent = run_source((ROOT / "samples" / "ViZion_set_calib_data_observ_points_image_size_is_extent.viz").read_text(encoding="utf-8"))
+    assert extent.error is None, extent.error
+    assert int(extent.vars["Width"]) == 21 and int(extent.vars["Height"]) == 11
+    assert int(extent.vars["Count"]) == 1
+    kept = run_source(
+        "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"
+        "Vizion.gen_image_const (Blank, 'byte', 80, 40)\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.find_calib_object (Blank, CalibDataID, 0, 0, '', '')\n"
+    )
+    assert kept.error is not None and "找不到棋盤格" in kept.error
+    assert len(kept.vars["CalibDataID"].observations) == 1
+    assert kept.vars["CalibDataID"].observations[0][2:] == (428, 356)
+    descr = run_source(
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, 'board.cpd')\n"
+    )
+    assert descr.error is not None and "不讀描述檔" in descr.error
+    still = run_source(
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,10')\n"
+        "Vizion.get_calib_data (CalibDataID, 'model', 0, 'num_poses', Count)\n"
+    )
+    assert still.error is None, still.error
+    assert int(still.vars["Count"]) == 0
 
 
 def test_code93_lowercase_reads_as_uppercase():
@@ -3364,7 +3400,9 @@ def test_code128_digits_use_code_set_c():
     assert sample.vars["PaddedText"] == "0123"
     assert sample.vars["WordText"] == "Hi"
     assert sample.vars["OddText"] == "12345"
+    assert sample.vars["MixedText"] == "A12"
     assert _code128_values("Hi")[0] == 104
+    assert _code128_values("A12") == [104, ord("A") - 32, ord("1") - 32, ord("2") - 32]
     assert _code128_values("123456")[0] == 105
     assert _code128_values("123456")[1:] == [12, 34, 56]
     assert render_code128("ABCDEF").shape[1] - render_code128("123456").shape[1] == 66

@@ -20,7 +20,7 @@ from ..operators import P, as_list, expect_image, operator, scalar, text, whole
 
 _SETUPS = ["'calibration_object'"]
 _ITEMS = ["'camera'", "'calib_obj_pose'", "'model'"]
-_DATA = ["'params'", "'pose'", "'error'", "'num_poses'"]
+_DATA = ["'params'", "'pose'", "'error'", "'num_poses'", "'image_size'"]
 
 
 @dataclass
@@ -138,6 +138,8 @@ def set_calib_data_calib_object(model, index, descr, *, ctx):
     calib.poses.clear()
     calib.camera = None
     calib.error = None
+    calib.width = 0
+    calib.height = 0
     return Result([], [])
 
 
@@ -146,9 +148,11 @@ def _store_observation(calib: CalibData, rows: np.ndarray, cols: np.ndarray, wid
     if len(rows) != expected:
         raise ValueError(f"點數要是 {expected}")
     image_points = np.column_stack([cols, rows]).astype(np.float64)
-    calib.observations.append((_object_points(calib), image_points))
-    calib.width = max(calib.width, int(width))
-    calib.height = max(calib.height, int(height))
+    stored_width = int(width)
+    stored_height = int(height)
+    calib.observations.append((_object_points(calib), image_points, stored_width, stored_height))
+    calib.width = max(calib.width, stored_width)
+    calib.height = max(calib.height, stored_height)
     return len(calib.observations) - 1
 
 
@@ -263,11 +267,11 @@ def calibrate_cameras(model, *, ctx):
         P("CalibDataID", "標定資料"),
         P("ItemType", "camera、calib_obj_pose 或 model", "'camera'", _ITEMS),
         P("ItemIdx", "編號，從 0 開始", "0"),
-        P("DataName", "params、pose 或 error", "'params'", _DATA),
+        P("DataName", "params、pose、error、num_poses 或 image_size", "'params'", _DATA),
     ],
     [P("DataValue", "結果")],
     "讀出標定結果",
-    "camera/params 是九個數：fx、fy、cx、cy、k1、k2、p1、p2、k3。calib_obj_pose/pose 是七個數的姿態，編號是放進去的順序。model/error 是重投影誤差。model/num_poses 是已經放進這份標定的影像張數，還沒標定也能讀。",
+    "camera/params 仍是九個數：fx、fy、cx、cy、k1、k2、p1、p2、k3，不含影像尺寸。calib_obj_pose/pose 是七個數的姿態，編號是放進去的順序。model/error 是重投影誤差。model/num_poses 是已經放進這份標定的影像張數。model/image_size 是該張影像的寬和高，編號對應放進去的順序，還沒標定也能讀。",
     "Vizion.get_calib_data (CalibDataID, 'camera', 0, 'params', CamParam)",
 )
 def get_calib_data(model, item_type, item_idx, data_name, *, ctx):
@@ -291,6 +295,11 @@ def get_calib_data(model, item_type, item_idx, data_name, *, ctx):
         if index != 0:
             raise ValueError("這版的編號只能是 0")
         return Result([], [len(calib.observations)])
+    if kind == "model" and name == "image_size":
+        if index < 0 or index >= len(calib.observations):
+            raise ValueError("這個編號還沒有影像")
+        _points, _image, width, height = calib.observations[index]
+        return Result([], [[int(width), int(height)]])
     raise ValueError("這組 ItemType 和 DataName 沒有對應的結果")
 
 
@@ -420,6 +429,8 @@ def clear_calib_data(model, *, ctx):
     calib.observations.clear()
     calib.poses.clear()
     calib.camera = None
+    calib.width = 0
+    calib.height = 0
     calib.closed = True
     return Result([], [])
 
