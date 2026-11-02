@@ -48,6 +48,7 @@ class Param:
     desc: str
     default: str | None = None
     choices: list[str] | None = None
+    browse: str | None = None
 
 
 @dataclass
@@ -83,6 +84,7 @@ class Operator:
                     "desc": item.desc,
                     "default": item.default,
                     "choices": item.choices or [],
+                    "browse": item.browse or "",
                 }
                 for item in params
             ]
@@ -138,8 +140,8 @@ class Operator:
         return "\n".join(lines)
 
 
-def P(name: str, desc: str, default: str | None = None, choices: list[str] | None = None) -> Param:
-    return Param(name, desc, default, choices)
+def P(name: str, desc: str, default: str | None = None, choices: list[str] | None = None, browse: str | None = None) -> Param:
+    return Param(name, desc, default, choices, browse)
 
 
 def operator(group, iconic_in, iconic_out, control_in, control_out, short, detail, example, note=""):
@@ -676,7 +678,7 @@ def numbers_of(value) -> list[float]:
     "檔案",
     [],
     [P("Image", "讀入的影像")],
-    [P("FileName", "檔案路徑")],
+    [P("FileName", "檔案路徑。可按選檔，從 samples 或 workspace 挑", browse="image")],
     [],
     "讀取影像",
     "讀取灰階或彩色圖。相對路徑會依專案、samples、workspace 的順序尋找。路徑請用斜線，例如 samples/parts.png。",
@@ -704,7 +706,7 @@ def read_image(filename, *, ctx):
     "檔案",
     [P("Image", "要儲存的影像")],
     [],
-    [P("FileName", "輸出路徑")],
+    [P("FileName", "輸出路徑。選檔會填入現有影像的路徑", browse="image")],
     [],
     "儲存影像",
     "把影像寫到磁碟。相對路徑以專案目錄為起點。這版不使用 HALCON 的 Format 與 FillColor 參數。",

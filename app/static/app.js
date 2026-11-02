@@ -129,12 +129,14 @@ async function pushBreakpoints() {
 }
 
 function programArrow() {
-  if (!server.line) return null;
-  if (runningSource == null) return server.line;
-  return VisdevRun.arrowLine(runningSource, code.value, server.line);
+  const line = server.errorLine || server.line;
+  if (!line) return null;
+  if (runningSource == null) return line;
+  return VisdevRun.arrowLine(runningSource, code.value, line);
 }
 
 function noteRunningProgram() {
+  if (server.error) return;
   if (runningSource == null || server.arrowNote) return;
   const note = VisdevRun.statusText(runningSource, code.value, server.line, !!server.running, server.paused);
   if (!note) {
@@ -228,14 +230,16 @@ function renderEditor() {
 }
 
 function renderVars() {
-  iconicCount.textContent = server.iconic.length ? String(server.iconic.length) : "";
-  iconicList.innerHTML = server.iconic.map((item) => `
+  const iconic = server.iconic || [];
+  const control = server.control || [];
+  iconicCount.textContent = iconic.length ? String(iconic.length) : "";
+  iconicList.innerHTML = iconic.map((item) => `
     <button class="var ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="iconic">
       <img alt="" src="${item.thumb || ""}">
       <span class="vn">${esc(item.name)}</span>
       <span class="vm">${esc(item.scope ? item.scope + " · " : "")}${esc(item.role && item.role !== item.kind ? item.role + " · " + item.kind : item.kind)} · ${esc(item.info)}</span>
     </button>`).join("") || `<div class="hint">還沒有圖像變數</div>`;
-  controlList.innerHTML = server.control.map((item) => `
+  controlList.innerHTML = control.map((item) => `
     <button class="var ctrl ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="control" title="${esc(item.full || item.text)}">
       <span class="vn">${esc(item.name)}<small>${esc(item.scope ? item.scope + " " : "")}${esc(item.type)}</small></span>
       <span class="vm">${esc(item.text)}</span>
@@ -434,7 +438,8 @@ function setStatus() {
     stState.textContent = "就緒";
   }
   const proc = server.procedure ? `程序 ${server.procedure} · ` : "";
-  if (server.arrowNote) stLine.textContent = server.arrowNote;
+  if (server.error) stLine.textContent = `${proc}${server.error}`;
+  else if (server.arrowNote) stLine.textContent = server.arrowNote;
   else if (server.line && server.paused === "breakpoint") stLine.textContent = `${proc}中斷於第 ${server.line} 行`;
   else if (server.line && server.done) stLine.textContent = `${proc}結束於第 ${server.line} 行`;
   else if (server.line) stLine.textContent = `${proc}下一行 ${server.line}`;
@@ -462,6 +467,11 @@ function applyState(data) {
   renderLog();
   setStatus();
   takeDisplay(data);
+  if (data.error && data.display) {
+    gfxBanner.hidden = false;
+    const where = data.errorLine ? `第 ${data.errorLine} 行出錯。` : "這一步出錯。";
+    gfxBanner.textContent = `${where}畫面留著前面已經算出的結果`;
+  }
   if (localStorage.getItem("visdev.contourWidth") == null && data.display) {
     const xld = (data.display.shapes || []).find((shape) => shape.kind === "xld" && shape.width);
     const box = document.getElementById("contourWidth");
@@ -471,7 +481,8 @@ function applyState(data) {
   if (imageChanged) clearPick();
   if (data.error) {
     showTab("problems");
-    showErrorDialog(data.error, data.errorLine);
+    const kept = Boolean(data.display || (data.iconic && data.iconic.length) || (data.control && data.control.length));
+    showErrorDialog(data.error, data.errorLine, kept);
   } else {
     closeErrorDialog();
   }
@@ -501,10 +512,12 @@ function errorText(message) {
   return { text: message?.error || "請求失敗", line: message?.line || null };
 }
 
-function showErrorDialog(text, line) {
+function showErrorDialog(text, line, kept) {
   const box = document.getElementById("errDialog");
   document.getElementById("errText").textContent = text || "發生錯誤";
-  document.getElementById("errWhere").textContent = line ? `第 ${line} 行` : "";
+  const where = line ? `第 ${line} 行` : "";
+  const stay = kept ? "已經算出的圖和變數還留著" : "";
+  document.getElementById("errWhere").textContent = [where, stay].filter(Boolean).join("。");
   box.hidden = false;
   document.getElementById("errOk").focus();
 }
@@ -828,6 +841,8 @@ function openOperatorForm(name, preset, lineIndex) {
   if (!op) return;
   activeOperator = op;
   editingLine = Number.isInteger(lineIndex) ? lineIndex : null;
+  const fileMenu = document.getElementById("opFileMenu");
+  if (fileMenu) fileMenu.hidden = true;
   showOp(name);
   const saved = readJson(OP_MEMORY, {})[op.name];
   const plan = VisdevCall.dialogValues(op, { preset: preset || null, lineIndex: editingLine, memory: saved });
@@ -853,6 +868,9 @@ function openOperatorForm(name, preset, lineIndex) {
     const choices = param.choices || [];
     const current = values[index];
     let control = `<input data-index="${index}" value="${esc(current)}" spellcheck="false">`;
+    if (param.browse) {
+      control = `<div class="op-path">${control}<button type="button" data-browse="${esc(param.browse)}" data-index="${index}">選檔</button></div>`;
+    }
     if (param.role === "控制輸入" && choices.length) {
       const known = choices.includes(current);
       const extras = !known && current !== undefined && current !== "" ? [current] : [];
@@ -873,6 +891,8 @@ function openOperatorForm(name, preset, lineIndex) {
 }
 
 function closeOperatorDialog() {
+  const menu = document.getElementById("opFileMenu");
+  if (menu) menu.hidden = true;
   document.getElementById("opDialog").hidden = true;
   editingLine = null;
   const ok = document.getElementById("opDialogOk");
@@ -1881,6 +1901,49 @@ function desktopApi() {
   return window.pywebview && window.pywebview.api;
 }
 
+function quoteProgramPath(path) {
+  const text = String(path || "").replaceAll("\\", "/");
+  if (!text || text.includes("'") || text.includes("\n") || text.includes("\r")) return "";
+  return `'${text}'`;
+}
+
+function fillOperatorPath(index, path) {
+  const quoted = quoteProgramPath(path);
+  const field = document.querySelector(`#opForm [data-index="${index}"]`);
+  if (!quoted || !field) {
+    stLine.textContent = "這個路徑沒辦法放進程式";
+    return;
+  }
+  field.value = quoted;
+  refreshOpPreview();
+}
+
+async function browseOperatorFile(button) {
+  const kind = button.dataset.browse;
+  const index = button.dataset.index;
+  const menu = document.getElementById("opFileMenu");
+  if (menu) menu.hidden = true;
+  const api = desktopApi();
+  if (api && api.pick_data_file) {
+    const picked = await api.pick_data_file(kind);
+    if (picked && !picked.cancelled && picked.path) fillOperatorPath(index, picked.path);
+    return;
+  }
+  const res = await fetch(`/api/data-files?kind=${encodeURIComponent(kind)}`);
+  const files = await res.json();
+  if (!res.ok) {
+    showDetail(files);
+    return;
+  }
+  menu.innerHTML = (files || []).map((file) => `<button type="button" data-path="${esc(file.path)}">${esc(file.path)}</button>`).join("")
+    || `<div class="hint">samples 和 workspace 裡沒有這種檔。路徑仍可以直接打。</div>`;
+  menu.dataset.index = index;
+  const rect = button.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, rect.left)}px`;
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.hidden = false;
+}
+
 async function saveToWorkspace(name, copy) {
   const res = await fetch("/api/programs", {
     method: "POST",
@@ -2127,6 +2190,23 @@ document.getElementById("opDialog").addEventListener("keydown", (event) => {
 });
 document.getElementById("opForm").addEventListener("input", refreshOpPreview);
 document.getElementById("opForm").addEventListener("change", refreshOpPreview);
+document.getElementById("opForm").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-browse]");
+  if (!button) return;
+  event.stopPropagation();
+  browseOperatorFile(button).catch((err) => showDetail({ error: String(err.message || err) }));
+});
+document.getElementById("opFileMenu").addEventListener("click", (event) => {
+  const node = event.target.closest("[data-path]");
+  if (!node) return;
+  event.stopPropagation();
+  fillOperatorPath(document.getElementById("opFileMenu").dataset.index, node.dataset.path);
+  document.getElementById("opFileMenu").hidden = true;
+});
+document.addEventListener("click", () => {
+  const menu = document.getElementById("opFileMenu");
+  if (menu) menu.hidden = true;
+});
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "F5") { event.preventDefault(); exec("run"); }

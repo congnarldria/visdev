@@ -217,7 +217,7 @@ def _pose_from_vectors(rvec, tvec) -> list:
     [],
     [
         P("CalibSetup", "這版只做一塊標定板", "'calibration_object'", _SETUPS),
-        P("NumCameras", "相機數，從 1 起", "1"),
+        P("NumCameras", "相機數。一台填 1。兩台填 2，每張影像的 CameraIdx 再用 0 或 1", "1"),
         P("NumCalibObjects", "標定物數，這版必須是 1", "1"),
     ],
     [P("CalibDataID", "標定資料")],
@@ -245,7 +245,7 @@ def create_calib_data(setup, num_cameras, num_objects, *, ctx):
     [
         P("CalibDataID", "標定資料"),
         P("CalibObjIdx", "標定物編號，從 0 開始", "0"),
-        P("CalibObjDescr", "內角點列數,行數,邊長，或 .cpd / .descr", "'5,7,10'"),
+        P("CalibObjDescr", "棋盤寫 '5,7,10'：內角點 5 列、7 行、方格邊長 10。描述檔寫路徑，例如 'samples/calplate_4x5.cpd'", "'5,7,10'", browse="plate"),
     ],
     [],
     "設定標定板",
@@ -303,7 +303,7 @@ def _store_observation(calib: CalibData, rows: np.ndarray, cols: np.ndarray, wid
     [],
     [
         P("CalibDataID", "標定資料"),
-        P("CameraIdx", "相機編號", "0"),
+        P("CameraIdx", "第幾台相機，從 0 開始。只有一台就填 0", "0"),
         P("CalibObjIdx", "標定物編號", "0"),
         P("GenParamName", "這版不使用", "''"),
         P("GenParamValue", "這版不使用", "''"),
@@ -333,7 +333,7 @@ def find_calib_object(image, model, camera_idx, object_idx, _name, _value, *, ct
     [],
     [
         P("CalibDataID", "標定資料"),
-        P("CameraIdx", "相機編號", "0"),
+        P("CameraIdx", "第幾台相機，從 0 開始。只有一台就填 0", "0"),
         P("CalibObjIdx", "標定物編號", "0"),
         P("Row", "角點的列"),
         P("Column", "角點的行"),
@@ -430,7 +430,7 @@ def calibrate_cameras(model, *, ctx):
     [
         P("CalibDataID", "標定資料"),
         P("ItemType", "camera、calib_obj_pose 或 model", "'camera'", _ITEMS),
-        P("ItemIdx", "編號，從 0 開始", "0"),
+        P("ItemIdx", "camera 時是第幾台相機，從 0 開始，一台就填 0。讀姿態或影像尺寸時是放進去的順序", "0"),
         P("DataName", "params、pose、error、num_poses 或 image_size", "'params'", _DATA),
     ],
     [P("DataValue", "結果")],

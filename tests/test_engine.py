@@ -4605,6 +4605,113 @@ def test_arrow_into_procedure_stops_at_the_header():
     assert stopped.vars["Value"] == 4
 
 
+def test_failed_run_keeps_results_and_names_the_line():
+    source = "\n".join([
+        "Vizion.gen_image_const (Image, 'byte', 32, 24)",
+        "Vizion.threshold (Image, Region, 0, 255)",
+        "Count := 7",
+        "Count := Missing + 1",
+    ])
+    session = run_source(source)
+    assert session.error_line == 4
+    assert session.current_line() == 4
+    assert "第 4 行" in session.error
+    assert "Missing" in session.error
+    assert sum(1 for line in session.log if str(line).startswith("錯誤")) == 1
+    assert "第 4 行" in session.log[-1]
+    assert session.vars["Count"] == 7
+    assert session.display.base is not None
+    assert session.display.base.width == 32
+    state = session.public_state()
+    assert state["line"] == 4
+    assert state["errorLine"] == 4
+    assert state["display"] and state["display"].get("image")
+    iconic = {item["name"] for item in state["iconic"]}
+    assert iconic == {"Image", "Region"}
+    assert any(item["name"] == "Count" and "7" in item["text"] for item in state["control"])
+
+
+def test_failed_procedure_keeps_local_results():
+    source = "\n".join([
+        "Ready := 3",
+        "procedure work (: : : )",
+        "    Vizion.gen_image_const (Image, 'byte', 16, 16)",
+        "    Vizion.threshold (Image, Region, 0, 255)",
+        "    Area := 12",
+        "    Area := Missing",
+        "endprocedure",
+        "work ()",
+        "After := 1",
+    ])
+    session = run_source(source)
+    assert session.error_line == 6
+    assert session.current_line() == 6
+    assert "第 6 行" in session.error
+    assert "Missing" in session.error
+    assert sum(1 for line in session.log if str(line).startswith("錯誤")) == 1
+    assert "Image" not in session.vars
+    assert "After" not in session.vars
+    assert session.vars["Ready"] == 3
+    assert session.display.base is not None
+    assert session.display.base.width == 16
+    state = session.public_state()
+    assert state["procedure"] == "work"
+    assert state["line"] == 6
+    iconic = {item["name"]: item["scope"] for item in state["iconic"]}
+    assert iconic["Image"] == "程序"
+    assert iconic["Region"] == "程序"
+    control = {item["name"]: item for item in state["control"]}
+    assert control["Area"]["scope"] == "程序"
+    assert "12" in control["Area"]["text"]
+    assert control["Ready"]["scope"] == "呼叫端"
+    assert "After" not in control
+
+
+def test_path_fields_list_project_files():
+    from fastapi import HTTPException
+
+    from app.desktop import DesktopApi
+    from app.engine.operators import REGISTRY
+    from app.main import data_files
+
+    read = next(param for param in REGISTRY["read_image"].control_in if param.name == "FileName")
+    plate = next(param for param in REGISTRY["set_calib_data_calib_object"].control_in if param.name == "CalibObjDescr")
+    assert read.browse == "image"
+    assert plate.browse == "plate"
+    written = next(param for param in REGISTRY["write_image"].control_in if param.name == "FileName")
+    device = next(param for param in REGISTRY["open_framegrabber"].control_in if param.name == "Device")
+    assert written.browse == "image"
+    assert device.browse == "image"
+    listed = data_files("plate")
+    assert any(item["path"] == "samples/calplate_4x5.cpd" for item in listed)
+    images = data_files("image")
+    assert any(item["path"] == "samples/parts.png" for item in images)
+    assert all(not item["name"].startswith(".") for item in images + listed)
+    try:
+        data_files("nope")
+    except HTTPException as exc:
+        assert exc.status_code == 400
+    else:
+        raise AssertionError("不認識的種類應該拒絕")
+    api = DesktopApi()
+    assert api._portable_path(str(ROOT / "samples" / "calplate_4x5.cpd")) == "samples/calplate_4x5.cpd"
+    assert api._portable_path("/tmp/board.cpd") == "/tmp/board.cpd"
+
+
+def test_calib_fields_say_how_to_fill_them():
+    from app.engine.operators import REGISTRY
+
+    plate = REGISTRY["set_calib_data_calib_object"].setup_text()
+    assert "'5,7,10'" in plate
+    assert "calplate_4x5.cpd" in plate
+    camera = REGISTRY["find_calib_object"].setup_text()
+    assert "只有一台就填 0" in camera
+    created = REGISTRY["create_calib_data"].setup_text()
+    assert "兩台填 2" in created
+    readout = REGISTRY["get_calib_data"].setup_text()
+    assert "第幾台相機" in readout
+
+
 def test_procedure_error_marks_the_inner_line():
     source = "\n".join([
         "procedure add (: : Value : Result)",

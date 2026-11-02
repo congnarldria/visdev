@@ -211,7 +211,7 @@ def _grab(handle: AcqHandle, flush: bool, ctx) -> Result:
     [],
     [
         P("Name", "File 讀資料夾或單張圖，OpenCV 開本機相機", "'File'", _NAMES),
-        P("Device", "檔案路徑，或相機編號", "'0'"),
+        P("Device", "影像路徑，或相機編號。選檔會填路徑；資料夾請自己打", "'0'", browse="image"),
         P("ColorSpace", "gray、rgb 或 default", "'gray'", _COLORS),
         P("Width", "0 表示維持原寬", "0"),
         P("Height", "0 表示維持原高", "0"),

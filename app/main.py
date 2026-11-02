@@ -243,6 +243,30 @@ def _program_title(path: Path) -> str:
     return path.stem
 
 
+_DATA_SUFFIX = {
+    "image": (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"),
+    "plate": (".cpd", ".descr"),
+}
+
+
+@app.get("/api/data-files")
+def data_files(kind: str = "image"):
+    suffixes = _DATA_SUFFIX.get(kind)
+    if suffixes is None:
+        raise HTTPException(400, "不認識的檔案種類")
+    found = []
+    for folder, prefix in ((ROOT / "samples", "samples"), (ROOT / "workspace", "workspace")):
+        if not folder.is_dir():
+            continue
+        for path in sorted(folder.iterdir()):
+            if not path.is_file() or path.name.startswith("."):
+                continue
+            if path.suffix.lower() not in suffixes:
+                continue
+            found.append({"name": path.name, "path": f"{prefix}/{path.name}"})
+    return found
+
+
 @app.get("/api/files")
 def list_files():
     from app.engine.samples_gen import SAMPLE_ORDER

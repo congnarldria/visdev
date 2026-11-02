@@ -142,6 +142,37 @@ class DesktopApi:
             return str(chosen[0]) if chosen else ""
         return str(chosen)
 
+    def _portable_path(self, path: str) -> str:
+        file = Path(path).expanduser()
+        try:
+            resolved = file.resolve()
+        except OSError:
+            resolved = file
+        for folder, prefix in ((ROOT / "samples", "samples"), (ROOT / "workspace", "workspace")):
+            try:
+                rel = resolved.relative_to(folder.resolve())
+            except ValueError:
+                continue
+            if rel.parts:
+                return f"{prefix}/{rel.as_posix()}"
+        return resolved.as_posix()
+
+    def pick_data_file(self, kind: str = "image") -> dict:
+        import webview
+
+        window = self._main_window()
+        if window is None:
+            return {"cancelled": True}
+        filters = {
+            "image": ("影像 (*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff)", "All files (*.*)"),
+            "plate": ("標定描述檔 (*.cpd;*.descr)", "All files (*.*)"),
+        }.get(str(kind), ("All files (*.*)",))
+        chosen = window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=filters)
+        path = self._picked_path(chosen)
+        if not path:
+            return {"cancelled": True}
+        return {"cancelled": False, "path": self._portable_path(path)}
+
     def open_program_dialog(self) -> dict:
         import webview
 

@@ -163,13 +163,43 @@ class Session:
         for value in list(getattr(self, "vars", {}).values()):
             _release_external(value)
 
+    def _release_error_frames(self) -> None:
+        seen = {id(value) for value in getattr(self, "vars", {}).values()}
+        for frame in getattr(self, "error_frames", ()) or ():
+            for value in frame.get("vars", {}).values():
+                if id(value) in seen:
+                    continue
+                seen.add(id(value))
+                _release_external(value)
+
+    def _remember_failed_proc(self, proc, local: dict) -> None:
+        if not self.error:
+            return
+        frames = getattr(self, "error_frames", None)
+        if frames is None:
+            self.error_frames = []
+            frames = self.error_frames
+        frames.append({"procedure": getattr(proc, "name", None) or str(proc), "vars": dict(local)})
+
+    def _set_error(self, exc, line, *, log: bool) -> None:
+        number = int(line) if isinstance(line, int) else None
+        text = str(exc)
+        if number and f"第 {number} 行" not in text:
+            text = f"第 {number} 行：{text}"
+        self.error = text
+        self.error_line = number
+        if log:
+            self.log.append(text if text.startswith("錯誤") else f"錯誤 {text}")
+
     def reset(self):
+        self._release_error_frames()
         self._release_handles()
         self.pc = 0
         self.vars: dict = {}
         self.done = False
         self.error = None
         self.error_line = None
+        self.error_frames = []
         self.paused = None
         self.log: list[str] = []
         self.display = Display()
@@ -206,6 +236,8 @@ class Session:
             self.done = True
 
     def current_line(self):
+        if self.error and self.error_line:
+            return self.error_line
         frame = getattr(self, "_wait_frame", None)
         if frame is not None and self.paused in ("breakpoint", "wait"):
             inner = frame.get("pc")
@@ -223,6 +255,9 @@ class Session:
             proc = frame.get("proc")
             if proc is not None:
                 return proc.name
+        frames = getattr(self, "error_frames", None) or []
+        if self.error and frames:
+            return frames[0].get("procedure")
         return None
 
     def _scoped_vars(self) -> tuple[dict, set]:
@@ -235,7 +270,20 @@ class Session:
                 layers.append(frame.get("caller_vars") or {})
                 frame = frame.get("caller")
         if not layers:
-            return self.vars, set()
+            frames = getattr(self, "error_frames", None) or []
+            if not (self.error and frames):
+                return self.vars, set()
+            local_names: set = set()
+            merged = {}
+            for frame in frames:
+                for name, value in frame.get("vars", {}).items():
+                    local_names.add(name)
+                    if name not in merged:
+                        merged[name] = value
+            for name, value in self.vars.items():
+                if name not in merged:
+                    merged[name] = value
+            return merged, local_names
         local_names = set(self.vars)
         merged = dict(self.vars)
         for layer in layers:
@@ -258,6 +306,8 @@ class Session:
             if stmt.line >= int(line):
                 target = index
                 break
+        self._release_error_frames()
+        self.error_frames = []
         self.error = None
         self.error_line = None
         self.paused = None
@@ -601,8 +651,7 @@ class Session:
             if stop_now:
                 return
         with self.lock:
-            self.error = "超過最大步數，可能有無窮迴圈"
-            self.log.append(self.error)
+            self._set_error(RuntimeError("超過最大步數，可能有無窮迴圈"), self.current_line(), log=True)
 
     def _execute_current(self):
         index = self.pc
@@ -623,17 +672,19 @@ class Session:
                 self.pc = catch_index + 1
                 self.log.append(f"catch {var} 第 {stmt.line} 行：{exc}")
             elif self.proc_depth:
-                if getattr(exc, "line", None):
+                line = getattr(exc, "line", None) or stmt.line
+                if getattr(exc, "already_reported", False):
                     self.error = str(exc)
-                    self.error_line = exc.line
+                    self.error_line = line
                 else:
-                    self.error = f"程序第 {stmt.line} 行：{exc}"
-                    self.error_line = stmt.line
+                    self._set_error(exc, line, log=True)
             else:
                 line = getattr(exc, "line", None) or stmt.line
-                self.error = str(exc)
-                self.error_line = line
-                self.log.append(f"錯誤 第 {line} 行：{exc}")
+                if getattr(exc, "already_reported", False):
+                    self.error = str(exc)
+                    self.error_line = line
+                else:
+                    self._set_error(exc, line, log=True)
         finally:
             self._note_time(stmt, time.perf_counter() - started)
 
@@ -806,6 +857,7 @@ class Session:
             inner_pc = self.pc
             waiting = self.paused == "wait"
             breaking = self.paused == "breakpoint"
+            self._remember_failed_proc(proc, local)
             self.vars = outer
             self.pc = saved_pc
             self.proc_depth -= 1
@@ -830,6 +882,7 @@ class Session:
             self.error_line = None
             err = RuntimeError(message)
             err.line = line
+            err.already_reported = True
             raise err
         self._export_proc(stmt, proc, local)
 
@@ -888,13 +941,14 @@ class Session:
                 self._execute_current()
                 steps += 1
                 if steps > 100000:
-                    self.error = "程序超過 100000 步"
+                    self._set_error(RuntimeError("程序超過 100000 步"), self.current_line(), log=True)
                     break
         finally:
             local = self.vars
             inner_pc = self.pc
             waiting = self.paused == "wait"
             breaking = self.paused == "breakpoint"
+            self._remember_failed_proc(frame["proc"], local)
             self.vars = caller_vars
             self.pc = frame["saved_pc"]
             self.proc_depth -= 1
