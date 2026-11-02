@@ -59,7 +59,7 @@ function refreshDirty() {
   const button = document.getElementById("btnSave");
   if (button) button.textContent = dirty ? "儲存 *" : "儲存";
   const name = document.getElementById("progName").value.trim() || "程式";
-  document.title = `${dirty ? "* " : ""}${name} — VisDev`;
+  document.title = `${dirty ? "* " : ""}${name} — VisDev beta`;
 }
 
 function markSaved() {

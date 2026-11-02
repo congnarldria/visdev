@@ -1,4 +1,6 @@
-# VisDev 1.1
+# VisDev 1.1 beta
+
+這是 beta，不是正式版。完成度夠了才會拿掉 beta。
 
 VisDev 是一套桌面視覺開發環境。程式寫法接近 HDevelop，算子名稱前面加 `Vizion.`，影像計算用 OpenCV。
 
@@ -13,7 +15,7 @@ Vizion.connection (Region, Parts, 1)
 
 ## 怎麼開始
 
-在 Windows 上，`run.bat` 會用本機虛擬環境啟動，並打開編輯視窗。視窗標題是 VisDev 1.1。
+在 Windows 上，`run.bat` 會用本機虛擬環境啟動，並打開編輯視窗。視窗標題是 VisDev 1.1 beta。
 
 裝好 `requirements.txt` 之後，也可以：
 

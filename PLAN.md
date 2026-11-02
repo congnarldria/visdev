@@ -1,6 +1,6 @@
 # 改進計畫
 
-從 VisDev 1.1 接著做日常會用到的大項。Windows 仍用 `app/engine/visdev_match.pyd`。Linux 的 `visdev_match.so` 不進版控。
+從 VisDev 1.1 beta 接著做日常會用到的大項。這還不是正式版。Windows 仍用 `app/engine/visdev_match.pyd`。Linux 的 `visdev_match.so` 不進版控。
 
 ## 已完成
 
