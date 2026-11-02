@@ -9,7 +9,12 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <immintrin.h>
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <pthread.h>
+#include <unistd.h>
+#endif
 
 #include <math.h>
 #include <stdint.h>
@@ -715,7 +720,11 @@ typedef struct {
     float* map;
 } NccJob;
 
+#ifdef _WIN32
 static DWORD WINAPI ncc_worker(LPVOID param) {
+#else
+static void* ncc_worker(void* param) {
+#endif
     NccJob* job = (NccJob*)param;
     const NccLevel* level = job->level;
     int a;
@@ -773,7 +782,11 @@ static DWORD WINAPI ncc_worker(LPVOID param) {
             }
         }
     }
+#ifdef _WIN32
     return 0;
+#else
+    return NULL;
+#endif
 }
 
 static int local_peaks_from_jobs(NccJob* jobs, int njobs, Pose* dst, int cap) {
@@ -826,7 +839,12 @@ static PyObject* ncc_find(PyObject* self, PyObject* args) {
     Pose* refined = NULL;
     int nfound = 0;
     NccJob jobs[8];
+#ifdef _WIN32
     HANDLE threads[8];
+#else
+    pthread_t threads[8];
+    int thread_live[8];
+#endif
     (void)self;
     if (!PyArg_ParseTuple(args, "OOdddidii", &cap, &image_obj, &angle_start, &angle_extent, &min_score, &num_matches,
                           &max_overlap, &subpixel, &num_levels))
@@ -857,7 +875,11 @@ static PyObject* ncc_find(PyObject* self, PyObject* args) {
         goto fail;
     }
     memset(jobs, 0, sizeof(jobs));
+#ifdef _WIN32
     nthreads = (int)GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+#else
+    nthreads = (int)sysconf(_SC_NPROCESSORS_ONLN);
+#endif
     if (nthreads < 1) nthreads = 1;
     if (nthreads > 8) nthreads = 8;
     if (nthreads > model->levels[coarse].nangles) nthreads = model->levels[coarse].nangles;
@@ -890,18 +912,32 @@ static PyObject* ncc_find(PyObject* self, PyObject* args) {
         alive = 0;
         for (t = 0; t < nthreads; t++) {
             if (jobs[t].a0 >= jobs[t].a1) {
+#ifdef _WIN32
                 threads[t] = NULL;
+#else
+                thread_live[t] = 0;
+#endif
                 continue;
             }
+#ifdef _WIN32
             threads[t] = CreateThread(NULL, 0, ncc_worker, &jobs[t], 0, NULL);
             if (threads[t]) alive++;
             else ncc_worker(&jobs[t]);
+#else
+            thread_live[t] = pthread_create(&threads[t], NULL, ncc_worker, &jobs[t]) == 0;
+            if (thread_live[t]) alive++;
+            else ncc_worker(&jobs[t]);
+#endif
         }
         for (t = 0; t < nthreads; t++) {
+#ifdef _WIN32
             if (threads[t]) {
                 WaitForSingleObject(threads[t], INFINITE);
                 CloseHandle(threads[t]);
             }
+#else
+            if (thread_live[t]) pthread_join(threads[t], NULL);
+#endif
         }
         Py_END_ALLOW_THREADS
         nfound = local_peaks_from_jobs(jobs, nthreads, found, 8192);
@@ -1317,7 +1353,11 @@ static float shape_int(const float* ux, const float* uy, const float* valid, int
     return sum / (float)okc;
 }
 
+#ifdef _WIN32
 static DWORD WINAPI shape_worker(LPVOID param) {
+#else
+static void* shape_worker(void* param) {
+#endif
     ShapeJob* job = (ShapeJob*)param;
     const ShapeLevel* level = job->level;
     int a;
@@ -1391,7 +1431,11 @@ static DWORD WINAPI shape_worker(LPVOID param) {
             }
         }
     }
+#ifdef _WIN32
     return 0;
+#else
+    return NULL;
+#endif
 }
 
 static PyObject* shape_find(PyObject* self, PyObject* args) {
@@ -1410,7 +1454,12 @@ static PyObject* shape_find(PyObject* self, PyObject* args) {
     Pose *found = NULL, *refined = NULL;
     int nfound = 0;
     ShapeJob jobs[8];
+#ifdef _WIN32
     HANDLE threads[8];
+#else
+    pthread_t threads[8];
+    int thread_live[8];
+#endif
     (void)self;
     memset(gray, 0, sizeof(gray));
     memset(gx, 0, sizeof(gx));
@@ -1466,7 +1515,11 @@ static PyObject* shape_find(PyObject* self, PyObject* args) {
         PyErr_NoMemory();
         goto fail;
     }
+#ifdef _WIN32
     nthreads = (int)GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+#else
+    nthreads = (int)sysconf(_SC_NPROCESSORS_ONLN);
+#endif
     if (nthreads < 1) nthreads = 1;
     if (nthreads > 8) nthreads = 8;
     if (nthreads > model->levels[coarse].nangles) nthreads = model->levels[coarse].nangles;
@@ -1503,17 +1556,30 @@ static PyObject* shape_find(PyObject* self, PyObject* args) {
         Py_BEGIN_ALLOW_THREADS
         for (t = 0; t < nthreads; t++) {
             if (jobs[t].a0 >= jobs[t].a1) {
+#ifdef _WIN32
                 threads[t] = NULL;
+#else
+                thread_live[t] = 0;
+#endif
                 continue;
             }
+#ifdef _WIN32
             threads[t] = CreateThread(NULL, 0, shape_worker, &jobs[t], 0, NULL);
             if (!threads[t]) shape_worker(&jobs[t]);
+#else
+            thread_live[t] = pthread_create(&threads[t], NULL, shape_worker, &jobs[t]) == 0;
+            if (!thread_live[t]) shape_worker(&jobs[t]);
+#endif
         }
         for (t = 0; t < nthreads; t++) {
+#ifdef _WIN32
             if (threads[t]) {
                 WaitForSingleObject(threads[t], INFINITE);
                 CloseHandle(threads[t]);
             }
+#else
+            if (thread_live[t]) pthread_join(threads[t], NULL);
+#endif
         }
         Py_END_ALLOW_THREADS
         nfound = 0;

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import re
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -483,30 +485,48 @@ def set_region_color(body: RegionColorIn):
 
 
 @app.post("/api/exec")
-def exec_program(body: ExecIn):
+async def exec_program(body: ExecIn):
     try:
         current = session_for(body)
     except ParseError as exc:
         raise HTTPException(status_code=400, detail={"error": str(exc), "line": exc.line}) from exc
-    with current.lock:
-        if body.regionColor:
-            try:
-                current.region_color = normalize_color(body.regionColor)
-            except ValueError:
-                current.region_color = "#ff3b30"
-        if body.action == "reset":
-            current.reset()
-        elif body.action == "step":
-            current.step()
-        elif body.action == "run":
-            current.run()
-        elif body.action == "goto":
-            if body.line is None:
-                raise HTTPException(400, "沒有指定要移到的行")
-            current.set_line(int(body.line))
-        else:
-            raise HTTPException(400, "未知動作")
-        return current.public_state()
+
+    def drive(resume: bool):
+        with current.lock:
+            if not resume:
+                if body.regionColor:
+                    try:
+                        current.region_color = normalize_color(body.regionColor)
+                    except ValueError:
+                        current.region_color = "#ff3b30"
+                if body.action == "reset":
+                    current.reset()
+                elif body.action == "step":
+                    current.step()
+                elif body.action == "run":
+                    current.defer_wait = True
+                    current.run()
+                elif body.action == "goto":
+                    if body.line is None:
+                        raise HTTPException(400, "沒有指定要移到的行")
+                    current.set_line(int(body.line))
+                else:
+                    raise HTTPException(400, "未知動作")
+            else:
+                current.run(resume=True)
+            return current.public_state()
+
+    await asyncio.to_thread(drive, False)
+    while current.paused == "wait" and not current.cancel:
+        left = float(getattr(current, "wait_until", 0.0)) - time.monotonic()
+        if left <= 0:
+            await asyncio.to_thread(drive, True)
+            continue
+        await asyncio.sleep(min(0.05, left))
+    if current.cancel and current.paused == "wait":
+        current.paused = "stopped"
+        current.log.append("已停止")
+    return current.public_state()
 
 
 @app.post("/api/stop/{sid}")

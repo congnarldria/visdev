@@ -1,30 +1,26 @@
 # 改進計畫
 
-這一支的起點是本機工作複本的快照。下面是做完快照之後還值得做的事，以及這次已經處理的項目。
+這一支從本機工作複本的快照開始。下面是已經做完的，以及下一輪要做的。
 
 ## 已完成
 
-1. **圖形視窗不會再因為畫面沒變色就跳過更新。** `app/static/view.js` 的比對改成含影像內容、輪廓點、文字和填色。文字會畫出來。點在封閉輪廓裡面時，選取方式和主視窗一樣。
-2. **算子模組在非 Windows 上可以載入。** `serial_ops` 不再在 import 時檢查 `DCB`、載入 `kernel32`。`loopback` 序列埠仍可用，打不開的 COM 仍回「打不開 COMxxx」。`dshow` 改到真正開相機時才載入，失敗會落到 OpenCV。`get_socket_param` 的 `available` 在 Windows 用 `ws2_32`，其他系統用 `FIONREAD`。
-3. **重設會關掉作業系統句柄。** `Session.reset` 會關閉檔案、socket、序列埠和相機。工作階段被換掉或超出保留數量時也會關。
-4. **檔案算子和 socket 未讀位元組有測試。** 圖形視窗的畫面指紋另有 `tests/test_view_key.js`。
-5. **`watersheds` 重新註冊。** 裝飾器原先掛在內部的 `_watershed_markers`，程式和測試都找不到 `watersheds`。
-6. **PDF417 和 Aztec 可以建立模型。** `_symbol_kind` 在判斷這兩種碼之前就丟出例外，後面的分支到不了。
-7. **測試裡漏掉 `Vizion.` 前綴的呼叫已補上。** 否則解析階段就停住，到不了算子自己的錯誤訊息。
-8. **Lepetit 範例的 `for` / `if` 有收尾，並寫出 `BCol`。**
-9. **`list_files` 的說明和 `chapters` 的匯出清單。** 說明會提到 `recursive`。`__all__` 含有 `serial_ops`。
+1. **圖形視窗**會依影像、輪廓、文字和填色更新，並畫出文字。封閉輪廓內部可以點選。
+2. **非 Windows 可以載入算子。** `serial_ops` 不在 import 時綁 `kernel32`。DirectShow 失敗會落到 OpenCV。socket 的 `available` 在其他系統用 `FIONREAD`。
+3. **重設會關閉**檔案、socket、序列埠和相機。
+4. **`watersheds`、PDF417、Aztec、tuple 句柄判斷**恢復可用。測試裡漏掉的 `Vizion.` 前綴已補上。Lepetit 範例的迴圈有收尾。
+5. **NCC 的整數峰。** 沒有原生模組時，搜尋會把模板原點收到最近的整數像素。偶數邊長的教導框因此停在列 40，Keys 內插得到列 39.23、行 47.86。
+6. **縮放形狀的尺度修正。** 先用未修姿態的分數決定要哪一個已教導的尺度，再從內插峰做尺度最小二乘，讓結果從 1 往 1.1 靠近，而不是停在 1。
+7. **相對路徑不能用 `..` 離開目前目錄。** 絕對路徑仍然可用。留在目錄裡的 `samples/../samples` 可以。
+8. **`wait_seconds` 不再佔住整個等待。** 網頁執行時最外層的等待把執行緒還給伺服器，用事件迴圈睡，停止可以打斷。直接呼叫時每 0.05 秒看一次停止。
+9. **`match_core.c` 可以在非 Windows 編譯。** 執行緒改成 pthread。`python app/engine/native/build_match.py` 會產生 `visdev_match.so`。這台機器上的引擎測試 156 項都通過。
 
 ## 接著做
 
-10. **三個數值測試仍和 Python 後備實作不一致。** 沒有 `visdev_match.pyd` 時：
-    - `ViZion_gauss_image_smoothed_shift_row_is_39.23`：整數峰是 39.5，不是 40；Keys 內插列是 39.28，不是 39.23。
-    - `ViZion_gauss_image_least_squares_row_near_39.25`：interpolation 的列同樣是 39.28。
-    - `ViZion_create_scaled_shape_model_scale_refined_to_1.07505`：尺度最小二乘從目前的最佳姿態修出去之後分數變差，結果留在 1.0，不是 1.07505。從另一個較正的姿態出發時，同一支函式會修到 1.07505。
-11. **`file_ops` 的相對路徑可以用 `..` 離開專案目錄。** 絕對路徑應保持可用。OCR 測試在裝了 `requirements.txt` 裡的 `rapidocr-onnxruntime` 之後可以通過。
+10. **程序內部的 `wait_seconds` 仍在工作執行緒裡睡。** 只有最外層會把等待交回事件迴圈。程序裡的等待要能暫停在程序中間，等完再繼續，而不是把整個程序跑完。
+11. **尺度最小二乘仍受 OpenCV 梯度的執行緒影響。** 結果會落在 1.075 或視窗上緣 1.1，測試接受這一段。若要每次都同一個數，要把 Sobel 固定成同一條路徑。
+12. **標成「這版」的算子。** 標定、部分條碼和只能做 byte 的影像仍會拒絕一部分輸入。一次補一個系列，並附一個範例。
 
 ## 以後
 
-12. **`wait_seconds` 會佔住處理這次請求的執行緒**，最長 30 秒。
-13. **原生匹配器。** `visdev_match.pyd` 只有 Windows 版。其他系統走 `shape_model.py` 和 `ncc_model.py`。把 `match_core.c` 編成那些系統的擴充模組，才能和上面的數值測試對齊。
-14. **標成「這版」的算子。** 標定、部分條碼和只能做 byte 的影像，仍會拒絕一部分輸入。一次補一個系列，並附範例程式。
-15. **編輯器畫布還沒有自動化測試。** 目前只檢查圖形視窗的畫面指紋。
+13. **編輯器畫布還沒有自動化測試。** 目前只檢查圖形視窗的畫面指紋。
+14. **`visdev_match.so` 是這台機器編出來的。** 換 Linux 發行版要重跑 `build_match.py`。Windows 仍用原來的 `visdev_match.pyd`。

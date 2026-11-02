@@ -175,6 +175,8 @@ class Session:
         self.try_stack: list = []
         self.proc_depth = 0
         self.cancel = False
+        self.defer_wait = False
+        self.wait_until = 0.0
         self.break_skip = None
         self.arrow_line = None
         self.line_times: dict[int, dict] = {}
@@ -348,11 +350,12 @@ class Session:
             self.step_count += 1
         self.prepare()
 
-    def run(self, max_steps: int = 100000):
-        if self.done or self.error:
+    def run(self, max_steps: int = 100000, *, resume: bool = False):
+        if not resume and (self.done or self.error):
             self.reset()
         self.paused = None
-        self.cancel = False
+        if not resume:
+            self.cancel = False
         taken = 0
         while taken < max_steps:
             self.prepare()
@@ -374,7 +377,7 @@ class Session:
                 return
             self.step_count += 1
             taken += 1
-            if self.paused == "stop":
+            if self.paused in ("stop", "wait"):
                 return
         self.error = "超過最大步數，可能有無窮迴圈"
         self.log.append(self.error)
@@ -518,7 +521,7 @@ class Session:
         guard = None
         try:
             steps = 0
-            while self.pc < end and not self.error and self.paused not in ("stop", "breakpoint", "stopped"):
+            while self.pc < end and not self.error and self.paused not in ("stop", "breakpoint", "stopped", "wait"):
                 self._execute_current()
                 steps += 1
                 if steps > 100000:

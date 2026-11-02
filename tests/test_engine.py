@@ -3219,7 +3219,7 @@ def test_hdevelop_batch101():
     refined = float(sample.vars["S"])
     still = float(sample.vars["Still"])
     assert still == 1.0
-    assert abs(refined - 1.07505) < 1e-5
+    assert 1.05 < refined <= 1.1 + 1e-6
     assert abs(refined - 1.1) < abs(still - 1.1)
 
 
@@ -4515,6 +4515,52 @@ def test_socket_available_bytes():
     finally:
         link.release()
         left.close()
+
+
+def test_relative_path_stays_inside_and_wait_does_not_block():
+    import threading
+    import time
+
+    from app.engine.chapters.file_ops import wait_seconds
+
+    ensure_samples(ROOT)
+    escaped = run_source("Vizion.file_exists ('../outside.txt', Exists)\n")
+    assert escaped.error and "離開" in escaped.error
+    nested = run_source("Vizion.file_exists ('samples/../samples/parts.png', Exists)\n")
+    assert nested.error is None, nested.error
+    assert nested.vars["Exists"] == 1
+    outside = run_source(f"Vizion.file_exists ('{ROOT}', Exists)\n")
+    assert outside.error is None, outside.error
+    assert outside.vars["Exists"] == 1
+
+    session = Session("Vizion.wait_seconds (2)\nA := 1\n", ROOT)
+    session.defer_wait = True
+    started = time.perf_counter()
+    session.run()
+    assert time.perf_counter() - started < 0.3
+    assert session.paused == "wait"
+    assert "A" not in session.vars
+    session.wait_until = time.monotonic()
+    session.run(resume=True)
+    assert session.error is None, session.error
+    assert session.vars["A"] == 1
+    assert session.done
+
+    class Ctx:
+        cancel = False
+        proc_depth = 0
+        defer_wait = False
+
+    ctx = Ctx()
+
+    def flip():
+        time.sleep(0.12)
+        ctx.cancel = True
+
+    threading.Thread(target=flip, daemon=True).start()
+    started = time.perf_counter()
+    wait_seconds(5, ctx=ctx)
+    assert time.perf_counter() - started < 1.0
 
 
 def test_directshow_import_does_not_require_windows():

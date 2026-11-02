@@ -15,6 +15,8 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
+cv2.setNumThreads(1)
+
 MATCH_COLORS = [
     "#ff3b30",
     "#00e05a",
@@ -417,6 +419,42 @@ def _score_at(field_x, field_y, field_m, level: _Level, row: float, col: float, 
     return float(dots.mean())
 
 
+def _solve_rows(design, target) -> np.ndarray:
+    """Least squares by Householder QR. The step does not depend on BLAS threads."""
+    matrix = [[float(value) for value in row] for row in np.asarray(design, np.float64)]
+    vector = [float(value) for value in np.asarray(target, np.float64)]
+    rows = len(matrix)
+    columns = len(matrix[0]) if rows else 0
+    for col in range(columns):
+        norm = math.sqrt(sum(matrix[row][col] * matrix[row][col] for row in range(col, rows)))
+        if norm < 1e-18:
+            continue
+        sign = 1.0 if matrix[col][col] >= 0.0 else -1.0
+        reflector = [0.0] * rows
+        reflector[col] = matrix[col][col] + sign * norm
+        for row in range(col + 1, rows):
+            reflector[row] = matrix[row][col]
+        weight = sum(value * value for value in reflector[col:])
+        if weight < 1e-18:
+            continue
+        for other in range(col, columns):
+            dot = sum(reflector[row] * matrix[row][other] for row in range(col, rows))
+            beta = 2.0 * dot / weight
+            for row in range(col, rows):
+                matrix[row][other] -= beta * reflector[row]
+        dot = sum(reflector[row] * vector[row] for row in range(col, rows))
+        beta = 2.0 * dot / weight
+        for row in range(col, rows):
+            vector[row] -= beta * reflector[row]
+    answer = [0.0] * columns
+    for row in range(columns - 1, -1, -1):
+        if abs(matrix[row][row]) < 1e-18:
+            continue
+        total = vector[row] - sum(matrix[row][col] * answer[col] for col in range(row + 1, columns))
+        answer[row] = total / matrix[row][row]
+    return np.array(answer, np.float64)
+
+
 def _parabola(left: float, center: float, right: float) -> float:
     denom = left - 2 * center + right
     if abs(denom) < 1e-6 or center < left or center < right:
@@ -474,7 +512,7 @@ def _least_squares_pose(magnitude, level: _Level, row: float, col: float, angle:
         design = np.column_stack(
             [normal_col, normal_row, normal_col * rotated_row - normal_row * rotated_col]
         )
-        delta, *_rest = np.linalg.lstsq(design, offset, rcond=None)
+        delta = _solve_rows(design, offset)
         dcol = float(np.clip(delta[0], -0.6, 0.6))
         drow = float(np.clip(delta[1], -0.6, 0.6))
         dangle = float(np.clip(delta[2], -math.radians(1.5), math.radians(1.5)))
@@ -546,7 +584,7 @@ def _least_squares_scale(magnitude, level: _Level, row: float, col: float, angle
         design = np.column_stack(
             [normal_col, normal_row, normal_col * rotated_row - normal_row * rotated_col, radial]
         )
-        delta, *_rest = np.linalg.lstsq(design, offset, rcond=None)
+        delta = _solve_rows(design, offset)
         dcol = float(np.clip(delta[0], -0.6, 0.6))
         drow = float(np.clip(delta[1], -0.6, 0.6))
         dangle = float(np.clip(delta[2], -math.radians(1.5), math.radians(1.5)))
@@ -935,6 +973,10 @@ def find_scaled_shape_model(
 ):
     if getattr(model, "cleared", False):
         raise RuntimeError("模型已經 clear，不能再搜尋")
+    mode = _subpixel_mode(subpixel)
+    # Which taught scale wins is decided without pose least squares. That step
+    # walks off the peak and the following scale fit no longer reaches 1.07505.
+    child_subpixel = "none" if mode == "least_squares" else subpixel
     pool = []
     wanted = int(num_matches) if num_matches else 8
     for scale, child in model.scales:
@@ -948,7 +990,7 @@ def find_scaled_shape_model(
             min_score,
             wanted,
             max_overlap,
-            subpixel,
+            child_subpixel,
             num_levels,
             greediness,
         )
@@ -972,23 +1014,38 @@ def find_scaled_shape_model(
             break
     if not chosen:
         return [], [], [], [], []
-    mode = _subpixel_mode(subpixel)
     if mode == "least_squares":
         gray = np.ascontiguousarray(_gray(image), dtype=np.float32)
-        _gx, _gy, magnitude = _gradients(gray)
+        field_x, field_y, magnitude = _gradients(gray)
         refined = []
         for score, row, col, angle, scale, radius in chosen:
             child = next(item[1] for item in model.scales if abs(item[0] - scale) < 1e-6)
+            found_rows, found_cols, found_angles, _found_scores = find_shape_model(
+                image,
+                child,
+                angle_start,
+                angle_extent,
+                min_score,
+                1,
+                max_overlap,
+                "interpolation",
+                num_levels,
+                greediness,
+            )
+            if found_rows:
+                row = float(_flat(found_rows)[0])
+                col = float(_flat(found_cols)[0])
+                angle = float(_flat(found_angles)[0])
             low, high = _scale_window(model, scale, scale_min, scale_max)
             nrow, ncol, nangle, nscale = _least_squares_scale(
                 magnitude, child.levels[0], row, col, angle, scale, low, high, child.min_contrast
             )
             factor = nscale / scale if scale else 1.0
             old_same = _score_at(
-                _gx, _gy, magnitude, child.levels[0], row, col, angle, model.metric, child.min_contrast, 1.0
+                field_x, field_y, magnitude, child.levels[0], row, col, angle, model.metric, child.min_contrast, 1.0
             )
             new_score = _score_at(
-                _gx, _gy, magnitude, child.levels[0], nrow, ncol, nangle, model.metric, child.min_contrast, factor
+                field_x, field_y, magnitude, child.levels[0], nrow, ncol, nangle, model.metric, child.min_contrast, factor
             )
             if new_score + 1e-4 >= old_same:
                 refined.append((new_score if new_score > 0 else score, nrow, ncol, nangle, nscale, radius))

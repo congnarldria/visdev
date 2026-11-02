@@ -48,10 +48,16 @@ def _path(ctx, value, label: str) -> Path:
     raw = str(value).strip().strip("'\"")
     if not raw:
         raise ValueError(f"{label} 不能是空的")
-    path = Path(raw)
-    if not path.is_absolute():
-        path = _base(ctx) / path
-    return path
+    path = Path(raw).expanduser()
+    if path.is_absolute():
+        return path
+    base = _base(ctx).resolve()
+    full = (base / path).resolve()
+    try:
+        full.relative_to(base)
+    except ValueError as exc:
+        raise ValueError(f"{label} 不能用 .. 離開目前目錄") from exc
+    return full
 
 
 def _open(handle, label: str) -> FileHandle:
@@ -462,9 +468,9 @@ def count_seconds(*, ctx):
     [P("Seconds", "要停的秒數")],
     [],
     "停住這一步",
-    "0 是立刻回來。超過 30 秒會失敗，避免整支程式卡住。",
+    "0 是立刻回來。超過 30 秒會失敗，避免整支程式卡住。等待中可以按停止。",
     "Vizion.wait_seconds (0)",
-    "新算子。這一支會停住，最長 30 秒。",
+    "新算子。這一支會停住，最長 30 秒。網頁執行時不佔住伺服器。",
 )
 def wait_seconds(seconds, *, ctx):
     delay = scalar(seconds, "Seconds")
@@ -472,8 +478,20 @@ def wait_seconds(seconds, *, ctx):
         raise ValueError("秒數不能是負的")
     if delay > 30:
         raise ValueError("等待不能超過 30 秒")
-    if delay:
-        time.sleep(delay)
+    if delay <= 0:
+        return Result([], [])
+    if getattr(ctx, "defer_wait", False) and int(getattr(ctx, "proc_depth", 0)) == 0:
+        ctx.wait_until = time.monotonic() + delay
+        ctx.paused = "wait"
+        return Result([], [])
+    deadline = time.monotonic() + delay
+    while True:
+        if getattr(ctx, "cancel", False):
+            return Result([], [])
+        left = deadline - time.monotonic()
+        if left <= 0:
+            break
+        time.sleep(min(0.05, left))
     return Result([], [])
 
 
