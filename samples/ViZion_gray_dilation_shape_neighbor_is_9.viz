@@ -1,0 +1,85 @@
+* 膨脹後旁邊也是 9
+* 3×3 會把中間的 9 擴散到旁邊。單獨一個亮點做開運算變成 0。中間的 0 做閉運算會被補上。
+* 正方形頂點的 M20 是 8、面積是 4、矩形度是 1。水平線裁進行 2 到 8 之後，兩端是 2 和 8。
+* 正方形裡的點是 1。四個角填起來的面積是 25。凸包有 4 個頂點。孤立點刪掉後面積是 4。
+* 2×2 的中央矩 Mu20 是 1。16 個像素都是 10 時，直方圖第 3 格是 16。局部門檻只留下中間那一點。
+* 平移列 1、行 2 之後，灰階 7 出現在列 1 行 2。
+Vizion.gen_image_const (Flat, 'byte', 4, 4)
+Vizion.gen_image_proto (Flat, Tens, 10)
+Vizion.gen_rectangle1 (Full, 0, 0, 3, 3)
+Vizion.gray_histo_range (Full, Tens, 0, 20, 4, Histo, BinSize)
+Bin3 := Histo[3]
+Vizion.gen_image_const (Base, 'byte', 5, 5)
+Vizion.set_grayval (Base, Peak, 2, 2, 9)
+Vizion.gen_rectangle1 (SE, 0, 0, 2, 2)
+Vizion.gray_dilation (Peak, SE, Dilated)
+Vizion.gray_dilation_shape (Peak, DilatedShape, 3, 3, 'rectangle')
+Vizion.get_grayval (Dilated, 2, 1, DilateNear)
+Vizion.get_grayval (DilatedShape, 2, 1, ShapeNear)
+Vizion.gray_opening (Peak, SE, Opened)
+Vizion.gray_opening_shape (Peak, OpenedShape, 3, 3, 'rectangle')
+Vizion.get_grayval (Opened, 2, 2, OpenCenter)
+Vizion.get_grayval (OpenedShape, 2, 2, OpenShape)
+Vizion.gen_image_proto (Base, Solid, 9)
+Vizion.set_grayval (Solid, Hole, 2, 2, 0)
+Vizion.gray_erosion (Hole, SE, Eroded)
+Vizion.gray_erosion_shape (Hole, ErodedShape, 3, 3, 'rectangle')
+Vizion.get_grayval (Eroded, 2, 1, ErodeNear)
+Vizion.get_grayval (Eroded, 0, 0, ErodeCorner)
+Vizion.get_grayval (ErodedShape, 2, 1, ErodeShape)
+Vizion.gray_closing (Hole, SE, Closed)
+Vizion.gray_closing_shape (Hole, ClosedShape, 3, 3, 'rectangle')
+Vizion.get_grayval (Closed, 2, 2, CloseCenter)
+Vizion.get_grayval (ClosedShape, 2, 2, CloseShape)
+Vizion.gen_contour_polygon_xld (Square, [0, 0, 2, 2], [0, 2, 2, 0])
+Vizion.moments_xld (Square, M20, M02, M11)
+Vizion.area_center_points_xld (Square, PolyArea, PolyRow, PolyCol)
+Vizion.rectangularity_xld (Square, RectLike)
+M20a := M20[1]
+M02a := M02[1]
+M11a := M11[1]
+Area1 := PolyArea[1]
+Row1 := PolyRow[1]
+Col1 := PolyCol[1]
+Rect1 := RectLike[1]
+Vizion.gen_contour_polygon_xld (Wide, [0, 0], [0, 10])
+Vizion.crop_contours_xld (Wide, Clipped, -1, 2, 1, 8)
+Vizion.get_contour_xld (Clipped, ClipRow, ClipCol)
+Clip0 := ClipCol[1]
+Clip1 := ClipCol[2]
+Vizion.gen_contour_polygon_xld (Box, [0, 0, 4, 4, 0], [0, 4, 4, 0, 0])
+Vizion.test_xld_point (Box, [2, 6], [2, 6], Inside)
+In1 := Inside[1]
+In2 := Inside[2]
+Vizion.gen_region_polygon_xld (Box, Filled)
+Vizion.area_center (Filled, FillArea, FillRow, FillCol)
+Fill1 := FillArea[1]
+Vizion.gen_rectangle1 (Block, 0, 0, 2, 2)
+Vizion.get_region_convex (Block, Hull)
+Vizion.get_contour_xld (Hull, HullRow, HullCol)
+Vizion.tuple_length (HullRow, HullCount)
+Vizion.gen_image_const (NoisePic, 'byte', 6, 6)
+Vizion.set_grayval (NoisePic, NoisePic, [0, 3, 3, 4, 4], [0, 3, 4, 3, 4], 255)
+Vizion.threshold (NoisePic, Noisy, 200, 255)
+Vizion.remove_noise_region (Noisy, Clean, 'n_4')
+Vizion.area_center (Clean, CleanArea, CleanRow, CleanCol)
+Clean1 := CleanArea[1]
+Vizion.gen_rectangle1 (Tiny, 0, 0, 1, 1)
+Vizion.moments_region_central (Tiny, Mu20, Mu02, Mu11)
+Mu20a := Mu20[1]
+Mu02a := Mu02[1]
+Mu11a := Mu11[1]
+Vizion.gen_image_proto (Base, Around, 100)
+Vizion.set_grayval (Around, Around, 2, 2, 40)
+Vizion.local_threshold (Around, Dark, 'mean', 'dark', 3, 20)
+Vizion.area_center (Dark, DarkArea, DarkRow, DarkCol)
+Dark1 := DarkArea[1]
+Vizion.gen_image_const (Mark, 'byte', 2, 2)
+Vizion.set_grayval (Mark, Mark, 0, 0, 7)
+Vizion.hom_mat2d_identity (Hom)
+Vizion.hom_mat2d_translate (Hom, 1, 2, Moved)
+Vizion.affine_trans_image_size (Mark, Shifted, Moved, 'nearest_neighbor', 4, 4)
+Vizion.get_grayval (Shifted, 1, 2, MovedGray)
+Vizion.dev_display (Dilated)
+Vizion.dev_set_color ('green')
+Vizion.dev_disp_text ('膨脹', 8, 8)

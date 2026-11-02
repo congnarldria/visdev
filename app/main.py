@@ -227,6 +227,17 @@ def save_program(body: SaveIn):
     return {"name": name, "path": f"workspace/{name}"}
 
 
+@app.post("/api/import/hdevelop")
+async def import_hdevelop(file: UploadFile = File(...)):
+    from app.engine.hdevelop_file import convert_hdevelop
+
+    raw = await file.read()
+    source, skipped = convert_hdevelop(raw)
+    stem = Path(file.filename or "program").stem.strip() or "program"
+    stem = re.sub(r'[\\/:*?"<>|]', "_", stem)
+    return {"name": f"{stem}.viz", "source": source, "skipped": skipped}
+
+
 @app.post("/api/upload")
 async def upload(file: UploadFile = File(...)):
     raw = Path(file.filename or "image.png").name

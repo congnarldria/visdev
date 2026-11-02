@@ -482,7 +482,7 @@ function showTab(name) {
 
 function renderOps() {
   const query = opSearch.value.trim().toLowerCase();
-  const visible = operators.filter((op) => !query || (op.name + op.purpose + op.principle + op.setup).toLowerCase().includes(query));
+  const visible = operators.filter((op) => !query || (op.name + op.purpose + op.principle + op.setup + (op.note || "")).toLowerCase().includes(query));
   let html = "";
   let group = "";
   for (const op of visible) {
@@ -490,7 +490,8 @@ function renderOps() {
       group = op.group;
       html += `<div class="op-group">${esc(group)}</div>`;
     }
-    html += `<button class="op" data-name="${esc(op.name)}" type="button"><b>${esc(op.name)}</b><span>${esc(op.short)}</span></button>`;
+    const mark = op.note ? `<i class="op-new">新</i>` : "";
+    html += `<button class="op" data-name="${esc(op.name)}" type="button"><b>${esc(op.name)}${mark}</b><span>${esc(op.short)}</span></button>`;
   }
   opList.innerHTML = html || `<div class="hint" style="padding:10px">沒有符合的算子</div>`;
 }
@@ -502,6 +503,7 @@ function showOp(name) {
   const rows = op.params.map((param) => `<tr><td>${esc(param.name)}</td><td class="role">${esc(param.role)}</td><td>${esc(param.desc)}</td></tr>`).join("");
   opHelp.innerHTML = `
     <h2>${esc(op.name)}</h2>
+    ${noteBlock(op)}
     <h3>用途</h3>
     <p class="lead">${esc(op.purpose)}</p>
     <h3>原理</h3>
@@ -513,7 +515,18 @@ function showOp(name) {
     <div class="hint">${esc(op.prototype)}</div>
     <pre>${esc(op.example)}</pre>
     <button id="btnInsert" type="button">插入範本</button>`;
-  document.getElementById("btnInsert").onclick = () => insertAtCursor(op.example);
+  document.getElementById("btnInsert").onclick = () => insertAtCursor(commentedCall(op, op.example));
+}
+
+function noteBlock(op) {
+  if (!op.note) return "";
+  return `<h3>註解</h3><p class="prose">${esc(op.note)}</p>`;
+}
+
+function commentedCall(op, call) {
+  if (!op || !op.note) return call;
+  const comment = op.note.split("\n").map((line) => `* ${line}`).join("\n");
+  return `${comment}\n${call}`;
 }
 
 function insertAtCursor(text) {
@@ -745,6 +758,7 @@ function openOperatorForm(name, preset, lineIndex) {
   if (ok) ok.textContent = editingLine == null ? "插入" : "更新";
   document.getElementById("opDialogTitle").textContent = op.name;
   document.getElementById("opDialogGuide").innerHTML = `
+    ${noteBlock(op)}
     <h3>用途</h3>
     <p class="guide-body">${esc(op.purpose)}</p>
     <h3>原理</h3>
@@ -818,7 +832,7 @@ function insertOperatorCall() {
     renderEditor();
   } else {
     rememberOperator(activeOperator, inputs);
-    insertAtCursor(call);
+    insertAtCursor(commentedCall(activeOperator, call));
     buildOperatorMenu();
   }
   closeOperatorDialog();
@@ -1737,15 +1751,52 @@ document.getElementById("fileImage").onchange = () => {
 };
 document.getElementById("btnOpen").onclick = () => document.getElementById("fileOpen").click();
 document.getElementById("fileOpen").onchange = async () => {
-  const file = document.getElementById("fileOpen").files[0];
-  if (!file) return;
-  code.value = (await file.text()).replace(/\r\n/g, "\n");
-  document.getElementById("progName").value = file.name;
+  const input = document.getElementById("fileOpen");
+  const file = input.files[0];
+  input.value = "";
+  if (file) await openLocalFile(file);
+};
+
+function isHalconProgram(name) {
+  const lower = String(name || "").toLowerCase();
+  return [".hdev", ".hdvp", ".hdpl", ".dev", ".dvp"].some((suffix) => lower.endsWith(suffix));
+}
+
+async function openLocalFile(file) {
+  let source = "";
+  let name = file.name;
+  let note = `已開啟 ${name}`;
+  if (isHalconProgram(file.name)) {
+    const body = new FormData();
+    body.append("file", file);
+    const res = await fetch("/api/import/hdevelop", { method: "POST", body });
+    const data = await res.json();
+    if (!res.ok) {
+      showDetail(data);
+      return;
+    }
+    source = data.source || "";
+    name = data.name || name;
+    if (data.skipped && data.skipped.length) {
+      const names = data.skipped;
+      note = names.length > 4
+        ? `已開啟 ${name}。${names.length} 個有密碼的程序沒有打開`
+        : `已開啟。有密碼的程序沒有打開：${names.join("、")}`;
+    } else {
+      note = `已開啟 ${name}`;
+    }
+  } else {
+    source = await file.text();
+  }
+  code.value = source.replace(/\r\n/g, "\n");
+  document.getElementById("progName").value = name;
   sessionId = null;
   breakpoints = new Set();
   renderEditor();
   await exec("reset");
-};
+  stState.textContent = note;
+  stState.className = "ok";
+}
 document.getElementById("btnSave").onclick = async () => {
   const name = document.getElementById("progName").value.trim() || "program.viz";
   const res = await fetch("/api/programs", {
@@ -1907,7 +1958,7 @@ opList.addEventListener("dblclick", (event) => {
   const node = event.target.closest(".op");
   if (!node) return;
   const op = operators.find((item) => item.name === node.dataset.name);
-  if (op) insertAtCursor(op.example);
+  if (op) insertAtCursor(commentedCall(op, op.example));
 });
 
 iconicList.addEventListener("click", async (event) => {

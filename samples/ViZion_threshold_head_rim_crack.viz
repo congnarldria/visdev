@@ -1,0 +1,36 @@
+* 螺絲頭外圈的裂痕
+* 外圈展開之後，裂痕是一段又窄又暗的缺口。圓和文字標在缺口上，種類是頭裂。
+Vizion.read_image (Image, 'samples/defects/m6_head_crack.png')
+Vizion.threshold (Image, Bright, 45, 255)
+Vizion.connection (Bright, Parts)
+Vizion.select_shape_std (Parts, Head, 'max_area', 100)
+Vizion.union1 (Head, HeadOne)
+Vizion.fill_up (HeadOne, Filled)
+Vizion.smallest_circle (Filled, CRow, CCol, Radius)
+Inner := Radius * 0.86
+Vizion.polar_trans_image_ext (Image, Polar, CRow, CCol, 0, rad(360), Inner, Radius, 360, 16, 'bilinear')
+Vizion.get_domain (Polar, Domain)
+Vizion.gray_projections (Domain, Polar, 'simple', Hor, Vert)
+Best := -1
+BestAt := 0
+for Index := 15 to 344 by 1
+Vizion.tuple_select_range (Vert, Index - 12, Index + 12, Window)
+Vizion.tuple_median (Window, Med)
+Vizion.tuple_select_range (Vert, Index - 2, Index + 2, Local)
+Vizion.tuple_min (Local, Low)
+Score := Med - Low
+if (Score > Best)
+Best := Score
+BestAt := Index
+endif
+endfor
+Angle := BestAt * rad(360) / 360
+Rim := Radius * 0.84
+MarkCol := CCol + Rim * cos(Angle)
+MarkRow := CRow + Rim * sin(Angle)
+Kind := '頭裂'
+Vizion.dev_display (Image)
+Vizion.dev_set_color ('red')
+Vizion.dev_set_line_width (2)
+Vizion.dev_disp_circle (MarkRow, MarkCol, 16)
+Vizion.dev_disp_text (Kind, MarkRow - 28, MarkCol + 10)

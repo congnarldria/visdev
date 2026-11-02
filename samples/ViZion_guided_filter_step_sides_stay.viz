@@ -1,0 +1,22 @@
+* 階梯兩邊沒有對調
+* 左半約 40、右半約 200，雜訊標準差約 28，中間是陡邊，另外有亮暗尖點。
+* 引導濾波半徑 8。靠邊界的左邊仍接近 46，右邊仍接近 193。
+* 同樣大的均值濾波把左邊拉到 62、右邊拉到 184。平坦處標準差從 28.5 降到 14.1。
+Vizion.read_image (Scene, 'samples/hard_edge.png')
+Vizion.guided_filter (Scene, Kept, 8, 800)
+Vizion.mean_image (Scene, Mixed, 17, 17)
+Vizion.gen_rectangle1 (NearLeft, 40, 70, 80, 76)
+Vizion.gen_rectangle1 (NearRight, 40, 84, 80, 90)
+Vizion.gen_rectangle1 (Flat, 40, 8, 80, 28)
+Vizion.intensity (NearLeft, Kept, GuideLeft, GuideLeftDev)
+Vizion.intensity (NearRight, Kept, GuideRight, GuideRightDev)
+Vizion.intensity (NearLeft, Mixed, MeanLeft, MeanLeftDev)
+Vizion.intensity (NearRight, Mixed, MeanRight, MeanRightDev)
+Vizion.intensity (Flat, Scene, RawMean, RawDev)
+Vizion.intensity (Flat, Kept, FlatMean, FlatDev)
+Left := GuideLeft[1]
+Right := GuideRight[1]
+BlurLeft := MeanLeft[1]
+BlurRight := MeanRight[1]
+NoiseBefore := RawDev[1]
+NoiseAfter := FlatDev[1]

@@ -1,0 +1,7 @@
+* TCP 送出再讀回 VISDEV
+* loopback 在這支程式裡配對兩端，送出的字立刻讀得回來。
+* 真的主機和埠號也用同一組 open_socket_connect、send_data、receive_data。
+Vizion.open_socket_connect ('loopback', 0, Socket)
+Vizion.send_data (Socket, 'VISDEV')
+Vizion.receive_data (Socket, 6, Text)
+Vizion.close_socket (Socket)

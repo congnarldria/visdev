@@ -288,6 +288,109 @@ def smallest_bounding_box_object_model_3d(model, *, ctx):
     return Result([], [float(item) for item in (*low, *high)])
 
 
+def _circum_triangle(a: np.ndarray, b: np.ndarray, c: np.ndarray):
+    ab = b - a
+    ac = c - a
+    normal = np.cross(ab, ac)
+    denom = 2.0 * float(np.dot(normal, normal))
+    if denom < 1e-18:
+        raise ValueError("共線")
+    center = a + (np.cross(normal, ab) * float(np.dot(ac, ac)) + np.cross(ac, normal) * float(np.dot(ab, ab))) / denom
+    return center, float(np.linalg.norm(center - a))
+
+
+def _circum_tetra(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray):
+    rows = np.stack([b - a, c - a, d - a])
+    if abs(float(np.linalg.det(rows))) < 1e-12:
+        raise ValueError("共面")
+    right = np.array([
+        float(np.dot(b, b) - np.dot(a, a)),
+        float(np.dot(c, c) - np.dot(a, a)),
+        float(np.dot(d, d) - np.dot(a, a)),
+    ]) / 2.0
+    center = np.linalg.solve(rows, right)
+    return center, float(np.linalg.norm(center - a))
+
+
+def _sphere_of(picked: list[np.ndarray]):
+    if len(picked) == 2:
+        center = (picked[0] + picked[1]) / 2.0
+        return center, float(np.linalg.norm(picked[0] - picked[1]) / 2.0)
+    if len(picked) == 3:
+        return _circum_triangle(picked[0], picked[1], picked[2])
+    return _circum_tetra(picked[0], picked[1], picked[2], picked[3])
+
+
+def _smallest_sphere(points: np.ndarray) -> tuple[np.ndarray, float]:
+    if len(points) == 1:
+        return points[0], 0.0
+    if len(points) > 40:
+        low, high = points.min(axis=0), points.max(axis=0)
+        return (low + high) / 2.0, float(np.linalg.norm(high - low) / 2.0)
+    best = None
+    for count in (2, 3, 4):
+        if len(points) < count:
+            break
+        for choice in itertools.combinations(range(len(points)), count):
+            try:
+                center, radius = _sphere_of([points[index] for index in choice])
+            except (ValueError, np.linalg.LinAlgError):
+                continue
+            if best is not None and radius >= best[1] - 1e-9:
+                continue
+            reach = np.linalg.norm(points - center, axis=1)
+            if np.all(reach <= radius + 1e-7):
+                best = (center, radius)
+    if best is None:
+        raise ValueError("算不出最小球")
+    return best
+
+
+@operator(
+    "三維",
+    [],
+    [],
+    [P("X", "球心 x"), P("Y", "球心 y"), P("Z", "球心 z"), P("Radius", "半徑")],
+    [P("ObjectModel3D", "球的六個軸向點")],
+    "用球心和半徑建立點雲",
+    "放六個軸向點，不是三角網格。包圍盒剛好是球心加減半徑。半徑 0 只有球心一個點。",
+    "Vizion.gen_sphere_object_model_3d (1, 2, 3, 4, ObjectModel3D)",
+)
+def gen_sphere_object_model_3d(x_value, y_value, z_value, radius, *, ctx):
+    center = np.array([scalar(x_value, "X"), scalar(y_value, "Y"), scalar(z_value, "Z")], np.float64)
+    length = scalar(radius, "Radius")
+    if length < 0:
+        raise ValueError("半徑不能是負的")
+    if length == 0:
+        points = center.reshape(1, 3)
+    else:
+        points = np.stack([
+            center + np.array([length, 0, 0]),
+            center - np.array([length, 0, 0]),
+            center + np.array([0, length, 0]),
+            center - np.array([0, length, 0]),
+            center + np.array([0, 0, length]),
+            center - np.array([0, 0, length]),
+        ])
+    return Result([], [ObjectModel3D(points)])
+
+
+@operator(
+    "三維",
+    [],
+    [],
+    [P("ObjectModel3D", "點雲")],
+    [P("Cx", "球心 x"), P("Cy", "球心 y"), P("Cz", "球心 z"), P("Radius", "半徑")],
+    "點雲的最小包圍球",
+    "40 點以內用真正包住所有點的最小球。更多點時用包圍盒的外接球，球心是盒子中心。空點雲不能算。",
+    "Vizion.smallest_sphere_object_model_3d (ObjectModel3D, Cx, Cy, Cz, Radius)",
+)
+def smallest_sphere_object_model_3d(model, *, ctx):
+    points = _points(model, "ObjectModel3D")
+    center, radius = _smallest_sphere(points)
+    return Result([], [float(center[0]), float(center[1]), float(center[2]), float(radius)])
+
+
 @operator(
     "三維",
     [],

@@ -1,0 +1,16 @@
+* 40 和 240 得到 32
+* bit_mask 和 bit_and 同一張常數圖相同。第 3 個位元是 255。
+* sigma_image 和 deviation_image 的灰階相同。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.set_grayval (Image, Marked, 20, 20, 40)
+Vizion.bit_mask (Marked, Masked, 240)
+Vizion.gen_image_proto (Marked, Const, 240)
+Vizion.bit_and (Marked, Const, Anded)
+Vizion.bit_slice (Marked, Sliced, 3)
+Vizion.deviation_image (Marked, Dev, 3, 3)
+Vizion.sigma_image (Marked, Sigma, 3, 3)
+Vizion.get_grayval (Masked, 20, 20, MaskGray)
+Vizion.get_grayval (Anded, 20, 20, AndGray)
+Vizion.get_grayval (Sliced, 20, 20, SliceGray)
+Vizion.get_grayval (Dev, 20, 20, DevGray)
+Vizion.get_grayval (Sigma, 20, 20, SigmaGray)

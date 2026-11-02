@@ -1,0 +1,28 @@
+* 暗角和亮區一起拉開
+* 圖幾乎是亮的。左上 60×60 是暗角，裡面有一塊稍亮的印。右下有一塊稍亮的印。
+* 局部直方圖把暗角差距和亮區差距都拉開。整張等化把暗角差距壓小，亮區差距拉得過大。
+Vizion.read_image (Scene, 'samples/hard_contrast.png')
+Vizion.emphasize_clahe (Scene, Local, 8, 8)
+Vizion.equ_histo_image (Scene, Global)
+Vizion.gen_rectangle1 (DarkMark, 24, 24, 35, 35)
+Vizion.gen_rectangle1 (DarkBack, 20, 20, 23, 23)
+Vizion.gen_rectangle1 (BrightMark, 104, 104, 115, 115)
+Vizion.gen_rectangle1 (BrightBack, 100, 100, 103, 103)
+Vizion.intensity (DarkMark, Scene, RawDarkMark, A)
+Vizion.intensity (DarkBack, Scene, RawDarkBack, B)
+Vizion.intensity (BrightMark, Scene, RawBrightMark, C)
+Vizion.intensity (BrightBack, Scene, RawBrightBack, D)
+Vizion.intensity (DarkMark, Local, ClaheDarkMark, E)
+Vizion.intensity (DarkBack, Local, ClaheDarkBack, F)
+Vizion.intensity (BrightMark, Local, ClaheBrightMark, G)
+Vizion.intensity (BrightBack, Local, ClaheBrightBack, H)
+Vizion.intensity (DarkMark, Global, HistDarkMark, I)
+Vizion.intensity (DarkBack, Global, HistDarkBack, J)
+Vizion.intensity (BrightMark, Global, HistBrightMark, K)
+Vizion.intensity (BrightBack, Global, HistBrightBack, L)
+RawDark := RawDarkMark[1] - RawDarkBack[1]
+RawBright := RawBrightMark[1] - RawBrightBack[1]
+ClaheDark := ClaheDarkMark[1] - ClaheDarkBack[1]
+ClaheBright := ClaheBrightMark[1] - ClaheBrightBack[1]
+HistDark := HistDarkMark[1] - HistDarkBack[1]
+HistBright := HistBrightMark[1] - HistBrightBack[1]

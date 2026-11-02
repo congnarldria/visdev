@@ -1,0 +1,14 @@
+* 亮處的刮痕還在
+* 難圖左暗右亮。第 70 列是暗刮痕，左上是一塊均勻暗區。
+* 第 120 行刮痕灰階 78。全域門檻 0 到 40 抓到方塊，抓不到這裡。
+* Sauvola 這裡是 1。方塊內部、左邊平坦處、右邊平坦處都是 0。
+Vizion.read_image (Scene, 'samples/hard_scene.png')
+Vizion.sauvola (Scene, Ink, 15, 0.5)
+Vizion.threshold (Scene, Global, 0, 40)
+Vizion.get_grayval (Scene, 70, 120, ScratchGray)
+Vizion.test_region_point (Ink, 70, 120, Scratch)
+Vizion.test_region_point (Ink, 28, 40, Block)
+Vizion.test_region_point (Ink, 8, 8, LeftFlat)
+Vizion.test_region_point (Ink, 8, 150, RightFlat)
+Vizion.test_region_point (Global, 70, 120, GlobalScratch)
+Vizion.test_region_point (Global, 28, 40, GlobalBlock)

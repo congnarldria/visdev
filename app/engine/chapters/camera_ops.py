@@ -91,6 +91,48 @@ def _paint(data: np.ndarray, color: str, width: int, height: int) -> np.ndarray:
     return cv2.resize(data, (int(width), int(height)), interpolation=cv2.INTER_LINEAR)
 
 
+class _HeldFrame:
+    def __init__(self, frame) -> None:
+        self.frame = frame
+        self.opened = True
+
+    def isOpened(self) -> bool:
+        return self.opened and self.frame is not None
+
+    def read(self):
+        if not self.opened or self.frame is None:
+            return False, None
+        return True, self.frame
+
+    def release(self) -> None:
+        self.opened = False
+        self.frame = None
+
+    def set(self, *_args) -> bool:
+        return False
+
+
+def _open_camera(index: int, width: int, height: int):
+    try:
+        from ..dshow import grab_bgr
+
+        return _HeldFrame(grab_bgr(index))
+    except RuntimeError:
+        pass
+    cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+    if not cap.isOpened():
+        cap.release()
+        cap = cv2.VideoCapture(index)
+    if not cap.isOpened():
+        raise RuntimeError(f"打不開相機 {index}")
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    if width > 0:
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    if height > 0:
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    return cap
+
+
 def _note_image(ctx) -> None:
     if ctx is None:
         return
@@ -150,7 +192,7 @@ def _grab(handle: AcqHandle, flush: bool, ctx) -> Result:
     "開啟檔案或本機相機",
     "沒有廠商採集卡。參數比 HALCON 少，順序是名稱、裝置、色彩、寬、高。"
     "File 的 Device 可以是一張圖或一個資料夾，資料夾裡的圖按檔名排序。"
-    "OpenCV 的 Device 是相機編號，0 是第一台。Width 或 Height 只有一個大於 0 時會保持比例。",
+    "OpenCV 的 Device 是相機編號，0 是第一台，先用 DirectShow 抓一張。Width 或 Height 只有一個大於 0 時會保持比例。",
     "Vizion.open_framegrabber ('File', 'samples/code39.png', AcqHandle)",
 )
 def open_framegrabber(name, device, color_space, width, height, *, ctx):
@@ -172,19 +214,8 @@ def open_framegrabber(name, device, color_space, width, height, *, ctx):
             index = int(device_text)
         except ValueError as exc:
             raise ValueError("OpenCV 的 Device 必須是相機編號") from exc
-        cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-        if not cap.isOpened():
-            cap.release()
-            cap = cv2.VideoCapture(index)
-        if not cap.isOpened():
-            raise RuntimeError(f"打不開相機 {index}")
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        if frame_w > 0:
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_w)
-        if frame_h > 0:
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_h)
-        handle.cap = cap
         handle.device = str(index)
+        handle.cap = _open_camera(index, frame_w, frame_h)
     return Result([], [handle])
 
 

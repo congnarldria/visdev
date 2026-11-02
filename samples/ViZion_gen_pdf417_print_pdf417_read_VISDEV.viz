@@ -1,0 +1,8 @@
+* 印出 PDF417 再讀回 VISDEV
+* gen_pdf417 排出四條四空的條碼，放大後四周留白。
+* SymbolType 用 PDF417。find_data_code_2d 讀回來仍是 VISDEV。
+Vizion.gen_pdf417 (Code, 'VISDEV')
+Vizion.create_data_code_2d_model ('PDF417', '', '', Handle)
+Vizion.find_data_code_2d (Code, Symbol, Handle, '', '', Ids, Decoded)
+Text := Decoded[1]
+Vizion.dev_display (Code)

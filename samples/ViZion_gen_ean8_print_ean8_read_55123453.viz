@@ -1,0 +1,7 @@
+* 印出 EAN-8 再讀回 55123453
+* 七位數字會補上檢查碼。數字條和 EAN-13 同一套。
+Vizion.gen_ean8 (Code, '5512345')
+Vizion.create_bar_code_model (Handle)
+Vizion.find_bar_code (Code, Symbol, Handle, 'EAN-8', Decoded)
+Text := Decoded[1]
+Vizion.dev_display (Code)

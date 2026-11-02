@@ -1,0 +1,37 @@
+* 寫出的字再讀回來
+* output 寫 VISDEV 和 OK。input 讀回同一行和同一個字。
+* 前三個位元組是 V、I、S。空目錄建好再刪掉。
+Vizion.open_file ('workspace/batch127_note.txt', 'output', Out)
+Vizion.fwrite_string (Out, 'VISDEV')
+Vizion.fnew_line (Out)
+Vizion.fwrite_string (Out, 'OK')
+Vizion.close_file (Out)
+Vizion.file_exists ('workspace/batch127_note.txt', After)
+Vizion.list_files ('workspace', 'files', Files)
+Vizion.tuple_find (Files, 'workspace/batch127_note.txt', Hit)
+Vizion.copy_file ('workspace/batch127_note.txt', 'workspace/batch127_copy.txt')
+Vizion.open_file ('workspace/batch127_copy.txt', 'input', CopyIn)
+Vizion.fread_line (CopyIn, Line, Eof1)
+Vizion.fread_string (CopyIn, Word, Eof2)
+Vizion.close_file (CopyIn)
+Vizion.open_file ('workspace/batch127_note.txt', 'input', BytesIn)
+Vizion.fread_bytes (BytesIn, 3, Bytes, EofB)
+Vizion.close_file (BytesIn)
+First := Bytes[1]
+Second := Bytes[2]
+Third := Bytes[3]
+Vizion.file_exists ('workspace/batch127_empty', Already)
+if (Already)
+Vizion.remove_dir ('workspace/batch127_empty')
+endif
+Vizion.make_dir ('workspace/batch127_empty')
+Vizion.file_exists ('workspace/batch127_empty', DirExists)
+Vizion.remove_dir ('workspace/batch127_empty')
+Vizion.file_exists ('workspace/batch127_empty', DirGone)
+Vizion.get_system_time (MSecond, Second, Minute, Hour, Day, YDay, Month, Year)
+Vizion.get_system_info ('operating_system', OsName)
+Vizion.get_system_info ('num_proc', Proc)
+Vizion.count_seconds (T0)
+Vizion.wait_seconds (0)
+Vizion.count_seconds (T1)
+Gap := T1 - T0

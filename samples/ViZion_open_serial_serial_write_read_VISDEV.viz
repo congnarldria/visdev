@@ -1,0 +1,7 @@
+* 序列埠寫出再讀回 VISDEV
+* loopback 不接真的 COM，寫進去的位元組立刻讀得回來。
+* 真的 COM 用 Windows API。打不開時會說是哪一個埠。
+Vizion.open_serial ('loopback', Handle)
+Vizion.write_serial (Handle, 'VISDEV')
+Vizion.read_serial (Handle, 6, Text)
+Vizion.close_serial (Handle)

@@ -1,0 +1,18 @@
+* 一張格子校正整批圖
+* 棋盤只有一張。校正檔寫進 workspace/grid_cam.txt。
+* distorted_originals 裡每一張都讀這個校正檔，拉直後寫到 workspace/corrected_parts。
+* 偏離中心的直線，校正前外框高度比校正後高。
+Vizion.read_image (Grid, 'samples/grid_distorted.png')
+Vizion.calibrate_grid (Grid, 6, 8, 10, 'workspace/grid_cam.txt', Error)
+Vizion.correct_image_files ('samples/distorted_originals', 'workspace/grid_cam.txt', 'workspace/corrected_parts', Count)
+Vizion.read_image (Before, 'samples/distorted_originals/line.png')
+Vizion.read_image (After, 'workspace/corrected_parts/line.png')
+Vizion.threshold (Before, Bent, 150, 255)
+Vizion.threshold (After, Straight, 150, 255)
+Vizion.smallest_rectangle1 (Bent, B1, Bc1, B2, Bc2)
+Vizion.smallest_rectangle1 (Straight, S1, Sc1, S2, Sc2)
+BentSpan := B2 - B1
+StraightSpan := S2 - S1
+Vizion.dev_display (After)
+Vizion.dev_set_color ('green')
+Vizion.dev_disp_text ('已校正', 16, 12)
