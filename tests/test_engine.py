@@ -5348,6 +5348,184 @@ def test_display_updates_before_the_program_finishes():
     assert session.paused == "stopped"
 
 
+def test_csharp_export_matches_python_threshold_and_connection():
+    import base64
+    import hashlib
+    import json
+    import subprocess
+
+    from app.engine.export_cs import ExportError, export_csharp
+    from app.engine.objects import Image
+    from app.engine.operators import _foreground_runs, area_center, connection, halcon_components, threshold
+    from app.engine.render import read_cv_image, to_uint8
+
+    ensure_samples(ROOT)
+    sample = (ROOT / "samples" / "export_parts.viz").read_bytes()
+    assert sample.count(b"\r\n") >= 5
+    assert sample.count(b"\n") == sample.count(b"\r\n")
+    source = sample.decode("utf-8")
+    session = run_source(source)
+    assert session.error is None, session.error
+    assert session.vars["Parts"].count() >= 3
+    code = export_csharp(source)
+    assert 'Operators.ReadImage("samples/parts.png")' in code
+    assert "Operators.Threshold(Image, 60, 255)" in code
+    assert "Operators.Connection(Region)" in code
+    assert "Operators.Overlays(Parts)" in code
+    assert "view(Image.Width, Image.Height, Image.Pixels, Image.Layout," in code
+    assert "ExportedProgram.Run(window.Show)" in code
+    counted = export_csharp(
+        "Vizion.read_image (Image, 'samples/parts.png')\n"
+        "Vizion.threshold (Image, Region, 60, 255)\n"
+        "Vizion.connection (Region, Parts)\n"
+        "Vizion.count_obj (Parts, Number)\n"
+        "Vizion.area_center (Parts, Area, Row, Column)\n"
+    )
+    assert "Operators.Count(Parts)" in counted
+    assert "Operators.AreaCenterOf(Parts)" in counted
+    assert "Area[exportIndex] = exportMeasured1[exportIndex].Area" in counted
+    from fastapi import HTTPException
+
+    from app.main import ExportCsIn, export_csharp_program
+
+    payload = export_csharp_program(ExportCsIn(source=source, name="export_parts.viz"))
+    assert payload["name"] == "export_parts.cs"
+    assert "export_parts.Run(window.Show)" in payload["source"]
+    try:
+        export_csharp_program(
+            ExportCsIn(
+                source="Vizion.read_image (Image, 'samples/parts.png')\nVizion.write_image (Image, 'workspace/out.png')\n",
+                name="out",
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "write_image" in str(exc.detail)
+    else:
+        raise AssertionError("寫檔不該匯出")
+    page = (ROOT / "app" / "static" / "index.html").read_text(encoding="utf-8")
+    script = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    assert 'data-cmd="exportCsharp"' in page
+    assert "/api/export/csharp" in script
+    try:
+        export_csharp("Vizion.read_image (Image, 'samples/parts.png')\nVizion.write_image (Image, 'workspace/out.png')\n")
+    except ExportError as exc:
+        assert "write_image" in str(exc)
+    else:
+        raise AssertionError("不該匯出寫檔")
+    far = "Vizion.read_image (Image, 'samples/parts.png')\nVizion.threshold (Image, Region, 1, 2)\nVizion.connection (Region, Parts, 5)\n"
+    try:
+        export_csharp(far)
+    except ExportError as exc:
+        assert "距離" in str(exc)
+    else:
+        raise AssertionError("不該匯出比較大的連通距離")
+
+    def digest(masks):
+        hasher = hashlib.sha256()
+        hasher.update(str(len(masks)).encode())
+        for mask in masks:
+            hasher.update(np.ascontiguousarray(mask).tobytes())
+        return hasher.hexdigest()
+
+    rng = np.random.default_rng(0)
+    masks = []
+    for shape in ((3, 3), (7, 12), (64, 80), (1, 20), (20, 1), (30, 30)):
+        masks.append((rng.random(shape) > 0.7).astype(np.uint8) * 255)
+    diagonal = np.zeros((3, 3), np.uint8)
+    diagonal[0, 1] = 255
+    diagonal[1, 0] = 255
+    masks.append(diagonal)
+    dots = np.zeros((7, 12), np.uint8)
+    dots[3, 1] = dots[3, 4] = dots[3, 10] = 255
+    masks.append(dots)
+    class Ctx:
+        histogram = None
+
+    picture = read_cv_image(ROOT / "samples" / "parts.png")
+    masks.append(threshold(Image(picture), 60, 255, ctx=Ctx()).iconic[0].union_mask())
+    expected = [
+        "a4cbd7c11acafefff07566b6fbb6d83aac6d0c586a93440747b7f38344856115",
+        "ba865d9ea48e10a4150efc567f294e3b24770c0c949862874f61f3325ce7ce41",
+        "e50d3bfef884d992e2e157b74d382d8ec495e7a143a9b23dbc3862dabb76c268",
+        "b9b9267090f80c2d8bcd8c0465b4b6260f7a9c6f5034b778f707409db1cf0e94",
+        "8a1bd6423831d4121cb23bd291988e9aba22133147dbf0134b389458dc9a2eab",
+        "9a33e84004d5374109ea1d5d02f63909f51210f00f57d678e0b7e0525c681611",
+        "bb0434c93d431b1b3848ebc75e2377f3ffe5eb62ca8a8616dd6fa6e75a9b9806",
+        "21c98421d5e9a66451bece8647cb2cb56283aca3ea3cfd32ab463321c65f7ad8",
+        "30de60404ae5783c63cf752f0da867e5bfc49c0b5f5871a55624d5ab80905369",
+    ]
+    for mask, digest_hex in zip(masks, expected):
+        assert digest(halcon_components(mask)) == digest_hex
+
+    folder = ROOT / "workspace" / "csharp-check"
+    folder.mkdir(parents=True, exist_ok=True)
+    color = np.zeros((2, 3, 3), np.uint8)
+    color[0, 0] = (10, 20, 30)
+    color[1, 2] = (0, 0, 255)
+    wide = np.array([[0, 257, 514, 65535]], np.uint16)
+    gray = np.zeros((8, 8), np.uint8)
+    gray[1:4, 2:6] = 200
+    gray[6, 6] = 180
+    paths = {
+        "color": folder / "color.png",
+        "wide": folder / "wide.png",
+        "gray": folder / "gray.png",
+        "parts": ROOT / "samples" / "parts.png",
+    }
+    cv2.imwrite(str(paths["color"]), color)
+    cv2.imwrite(str(paths["wide"]), wide)
+    cv2.imwrite(str(paths["gray"]), gray)
+
+    def decoded(path):
+        data = to_uint8(read_cv_image(path))
+        if data.ndim == 3 and data.shape[2] == 4:
+            data = cv2.cvtColor(data, cv2.COLOR_BGRA2BGR)
+        return data
+
+    def run_list(mask):
+        found, _rows = _foreground_runs(mask)
+        return [[row, start, end - start + 1] for row, start, end in found]
+
+    cases = []
+    for name, path, low, high in (
+        ("color", paths["color"], 22, 22),
+        ("wide", paths["wide"], 2, 255),
+        ("gray", paths["gray"], 100, 255),
+        ("parts", paths["parts"], 60, 255),
+    ):
+        image = decoded(path)
+        region = threshold(Image(image), low, high, ctx=Ctx()).iconic[0]
+        parts = connection(region, 1, ctx=Ctx()).iconic[0]
+        areas, rows, cols = area_center(parts, ctx=Ctx()).control
+        cases.append(
+            {
+                "path": str(path),
+                "width": int(image.shape[1]),
+                "height": int(image.shape[0]),
+                "channels": 1 if image.ndim == 2 else int(image.shape[2]),
+                "pixels": base64.b64encode(np.ascontiguousarray(image).tobytes()).decode("ascii"),
+                "min": low,
+                "max": high,
+                "threshold": run_list(region.union_mask()),
+                "components": [run_list(mask) for mask in parts.objects],
+                "count": parts.count(),
+                "centers": [[int(area), float(row), float(col)] for area, row, col in zip(areas, rows, cols)],
+            }
+        )
+    spec = folder / "cases.json"
+    spec.write_text(json.dumps({"cases": cases}), encoding="utf-8")
+    check = ROOT / "dotnet" / "Vizion.Operators.Check" / "Vizion.Operators.Check.csproj"
+    completed = subprocess.run(
+        ["dotnet", "run", "-f", "net8.0", "--project", str(check), "--", "--compare", str(spec)],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
 if __name__ == "__main__":
     test_language()
     test_blob()

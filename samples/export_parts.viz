@@ -1,0 +1,7 @@
+* 讀圖、二值化、連通。這三行可以匯出成 C#，再用圖形視窗顯示。
+Vizion.read_image (Image, 'samples/parts.png')
+MinGray := 60
+Vizion.threshold (Image, Region, MinGray, 255)
+Vizion.connection (Region, Parts)
+Vizion.dev_display (Image)
+Vizion.dev_display (Parts)

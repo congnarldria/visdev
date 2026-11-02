@@ -2056,6 +2056,27 @@ window.VisDevCommands = {
   },
   save() { saveCurrent(false); },
   saveAs() { saveCurrent(true); },
+  async exportCsharp() {
+    const res = await fetch("/api/export/csharp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: code.value, name: document.getElementById("progName").value }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showDetail(data);
+      return;
+    }
+    const blob = new Blob([data.source], { type: "text/plain;charset=utf-8" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = data.name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    stState.textContent = `已匯出 ${data.name}`;
+    stState.className = "ok";
+  },
   loadImage() { document.getElementById("fileImage").click(); },
   samples(anchor) { placeSampleMenu(anchor); },
   openSample(name) { openProgram("samples", name); },

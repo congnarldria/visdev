@@ -9,3 +9,5 @@ app/engine/visdev_match.so
 /build/
 /dist/
 /VisDev.spec
+dotnet/**/bin/
+dotnet/**/obj/

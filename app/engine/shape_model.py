@@ -112,8 +112,8 @@ def _gradients_stable(gray: np.ndarray):
     return gx.astype(np.float32), gy.astype(np.float32), mag.astype(np.float32)
 
 
-def _sample(image: np.ndarray, xs: np.ndarray, ys: np.ndarray):
-    height, width = image.shape
+def _locate(xs: np.ndarray, ys: np.ndarray, width: int, height: int):
+    """整數取樣座標。邊界外的權重與 np.clip 相同，插值結果不變。"""
     x0 = np.floor(xs).astype(np.int32)
     y0 = np.floor(ys).astype(np.int32)
     x1 = x0 + 1
@@ -121,17 +121,29 @@ def _sample(image: np.ndarray, xs: np.ndarray, ys: np.ndarray):
     valid = (x0 >= 0) & (y0 >= 0) & (x1 < width) & (y1 < height)
     wx = (xs - x0).astype(np.float32)
     wy = (ys - y0).astype(np.float32)
-    x0c = np.clip(x0, 0, width - 1)
-    x1c = np.clip(x1, 0, width - 1)
-    y0c = np.clip(y0, 0, height - 1)
-    y1c = np.clip(y1, 0, height - 1)
+    x_limit = width - 1
+    y_limit = height - 1
+    x0c = np.minimum(np.maximum(x0, 0), x_limit)
+    x1c = np.minimum(np.maximum(x1, 0), x_limit)
+    y0c = np.minimum(np.maximum(y0, 0), y_limit)
+    y1c = np.minimum(np.maximum(y1, 0), y_limit)
+    return x0c, x1c, y0c, y1c, wx, wy, valid
+
+
+def _interp_at(image: np.ndarray, x0c, x1c, y0c, y1c, wx, wy) -> np.ndarray:
     value = (
         image[y0c, x0c] * (1 - wx) * (1 - wy)
         + image[y0c, x1c] * wx * (1 - wy)
         + image[y1c, x0c] * (1 - wx) * wy
         + image[y1c, x1c] * wx * wy
     )
-    return value.astype(np.float32), valid
+    return value.astype(np.float32)
+
+
+def _sample(image: np.ndarray, xs: np.ndarray, ys: np.ndarray):
+    height, width = image.shape
+    x0c, x1c, y0c, y1c, wx, wy, valid = _locate(xs, ys, width, height)
+    return _interp_at(image, x0c, x1c, y0c, y1c, wx, wy), valid
 
 
 def _nms(mag: np.ndarray, gx: np.ndarray, gy: np.ndarray) -> np.ndarray:
@@ -483,23 +495,40 @@ def _local_peaks(score: np.ndarray, minimum: float, limit: int):
     return peaks
 
 
-def _score_at(field_x, field_y, field_m, level: _Level, row: float, col: float, angle: float, metric: str, min_contrast: float, scale_factor: float = 1.0):
-    cols, rows, gx, gy = _rotate(level.cols, level.rows, level.gx, level.gy, angle)
+def _score_many(field_x, field_y, field_m, level: _Level, rows, cols, angle: float, metric: str, min_contrast: float, scale_factor: float = 1.0):
+    """同一個角度一次算多個位置。每個位置的平均和逐點呼叫的順序相同。"""
+    point_cols, point_rows, gx, gy = _rotate(level.cols, level.rows, level.gx, level.gy, angle)
     if scale_factor != 1.0:
-        cols = cols * scale_factor
-        rows = rows * scale_factor
-    sample_x = col + cols
-    sample_y = row + rows
-    image_x, valid_x = _sample(field_x, sample_x, sample_y)
-    image_y, valid_y = _sample(field_y, sample_x, sample_y)
-    image_m, valid_m = _sample(field_m, sample_x, sample_y)
-    valid = valid_x & valid_y & valid_m & (image_m >= min_contrast)
-    if int(valid.sum()) < max(8, int(0.4 * len(cols))):
-        return 0.0
-    dots = (image_x[valid] * gx[valid] + image_y[valid] * gy[valid]) / np.maximum(image_m[valid], 1e-6)
-    if metric == "ignore_local_polarity":
-        dots = np.abs(dots)
-    return float(dots.mean())
+        point_cols = point_cols * scale_factor
+        point_rows = point_rows * scale_factor
+    # 位置先收成 float32 再加到模型點上，和逐點的 col + cols 同一個結果。
+    rows = np.asarray(rows, np.float32)
+    cols = np.asarray(cols, np.float32)
+    sample_x = cols[:, None] + point_cols[None, :]
+    sample_y = rows[:, None] + point_rows[None, :]
+    height, width = field_x.shape
+    x0c, x1c, y0c, y1c, wx, wy, valid = _locate(sample_x, sample_y, width, height)
+    image_x = _interp_at(field_x, x0c, x1c, y0c, y1c, wx, wy)
+    image_y = _interp_at(field_y, x0c, x1c, y0c, y1c, wx, wy)
+    image_m = _interp_at(field_m, x0c, x1c, y0c, y1c, wx, wy)
+    valid = valid & (image_m >= min_contrast)
+    need = max(8, int(0.4 * len(point_cols)))
+    ignore = metric == "ignore_local_polarity"
+    scores = []
+    for index in range(int(rows.shape[0])):
+        keep = valid[index]
+        if int(keep.sum()) < need:
+            scores.append(0.0)
+            continue
+        dots = (image_x[index][keep] * gx[keep] + image_y[index][keep] * gy[keep]) / np.maximum(image_m[index][keep], 1e-6)
+        if ignore:
+            dots = np.abs(dots)
+        scores.append(float(dots.mean()))
+    return scores
+
+
+def _score_at(field_x, field_y, field_m, level: _Level, row: float, col: float, angle: float, metric: str, min_contrast: float, scale_factor: float = 1.0):
+    return _score_many(field_x, field_y, field_m, level, [row], [col], angle, metric, min_contrast, scale_factor)[0]
 
 
 def _solve_rows(design, target) -> np.ndarray:
@@ -855,11 +884,20 @@ def find_shape_model(
         for row, col, angle, _score in found:
             best = (0.0, row * scale_row, col * scale_col, angle)
             for angle_try in (angle - angle_window, angle, angle + angle_window):
+                grid_rows = []
+                grid_cols = []
+                for dy in range(-2, 3):
+                    for dx in range(-2, 3):
+                        grid_rows.append(row * scale_row + dy)
+                        grid_cols.append(col * scale_col + dx)
+                values = _score_many(raw_x, raw_y, mag, level, grid_rows, grid_cols, angle_try, model.metric, model.min_contrast)
+                index = 0
                 for dy in range(-2, 3):
                     for dx in range(-2, 3):
                         rr = row * scale_row + dy
                         cc = col * scale_col + dx
-                        value = _score_at(raw_x, raw_y, mag, level, rr, cc, angle_try, model.metric, model.min_contrast)
+                        value = values[index]
+                        index += 1
                         if _takes_peak(value, rr, cc, best[0], best[1], best[2]):
                             best = (value, rr, cc, angle_try)
             if best[0] >= min_score * 0.8:

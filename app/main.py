@@ -73,6 +73,11 @@ class SaveIn(BaseModel):
     source: str
 
 
+class ExportCsIn(BaseModel):
+    source: str = ""
+    name: str = "ExportedProgram"
+
+
 class FeatureIn(BaseModel):
     id: str
     name: str
@@ -267,6 +272,18 @@ def read_program(kind: str, name: str):
     if not path.is_file():
         raise HTTPException(404, "找不到程式")
     return {"name": name, "kind": kind, "source": path.read_text(encoding="utf-8")}
+
+
+@app.post("/api/export/csharp")
+def export_csharp_program(body: ExportCsIn):
+    from app.engine.export_cs import ExportError, csharp_class_name, export_csharp
+
+    class_name = csharp_class_name(body.name)
+    try:
+        code = export_csharp(body.source, class_name)
+    except (ExportError, ParseError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"name": f"{class_name}.cs", "source": code}
 
 
 @app.post("/api/programs")

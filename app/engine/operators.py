@@ -19,7 +19,7 @@ from .render import normalize_color, read_cv_image, to_uint8, write_cv_image
 
 REGISTRY: dict[str, "Operator"] = {}
 _ORDER = 0
-# 程式裡的呼叫是 Vizion.算子名 (...)。C# 以後用 using Vizion.*，名稱對得上這一個前綴。
+# 程式裡的呼叫是 Vizion.算子名 (...)。C# 的 Vizion.Operators 對應讀圖、二值化、連通，前綴相同。
 CALL_PREFIX = "Vizion."
 
 
@@ -1143,26 +1143,31 @@ def threshold_sub_pix(image, threshold, *, ctx):
     return Result([XLD(image.width, image.height, lines, multi_color=True, groups=groups)], [])
 
 
+def _foreground_runs(mask: np.ndarray) -> tuple[list[tuple[int, int, int]], list[list[int]]]:
+    """同一套行程：左到右、上到下。相鄰的前景合成一段。"""
+    height, width = mask.shape
+    row_runs: list[list[int]] = [[] for _ in range(height)]
+    if height == 0 or width == 0:
+        return [], row_runs
+    foreground = np.asarray(mask > 0, dtype=np.uint8)
+    if not foreground.any():
+        return [], row_runs
+    padded = np.pad(foreground, ((0, 0), (1, 1)), mode="constant")
+    diff = np.diff(padded.astype(np.int8, copy=False), axis=1)
+    start_rows, start_cols = np.nonzero(diff == 1)
+    _end_rows, end_cols = np.nonzero(diff == -1)
+    runs: list[tuple[int, int, int]] = []
+    for row, start, end in zip(start_rows.tolist(), start_cols.tolist(), (end_cols - 1).tolist()):
+        row = int(row)
+        row_runs[row].append(len(runs))
+        runs.append((row, int(start), int(end)))
+    return runs, row_runs
+
+
 def halcon_components(mask: np.ndarray) -> list[np.ndarray]:
     """HALCON connection：前景八連通，依掃描遇到的第一個像素排序。"""
     height, width = mask.shape
-    foreground = mask > 0
-    runs: list[tuple[int, int, int]] = []
-    row_runs: list[list[int]] = []
-    for row in range(height):
-        line = foreground[row]
-        indices: list[int] = []
-        col = 0
-        while col < width:
-            if not line[col]:
-                col += 1
-                continue
-            start = col
-            while col < width and line[col]:
-                col += 1
-            indices.append(len(runs))
-            runs.append((row, start, col - 1))
-        row_runs.append(indices)
+    runs, row_runs = _foreground_runs(mask)
     if not runs:
         return []
     parent = list(range(len(runs)))
