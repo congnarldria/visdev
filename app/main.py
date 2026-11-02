@@ -115,6 +115,10 @@ class SubpixIn(BaseModel):
     color: str = "#ff3b30"
 
 
+class CalibViewIn(BaseModel):
+    index: int | None = None
+
+
 def trim_sessions():
     while len(SESSIONS) > 20:
         _sid, old = next(iter(SESSIONS.items()))
@@ -645,6 +649,16 @@ def stop(sid: str):
         return {"ok": False}
     current.cancel = True
     return {"ok": True}
+
+
+@app.post("/api/session/{sid}/calib-view")
+def set_calib_view(sid: str, body: CalibViewIn):
+    current = _session_or_404(sid)
+    with current.lock:
+        current.show_calib_view(body.index)
+        state = current.public_state()
+        state["running"] = bool(getattr(current, "running", False))
+    return state
 
 
 @app.get("/api/session/{sid}/object/{name}")

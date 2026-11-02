@@ -471,6 +471,9 @@ function applyState(data) {
     gfxBanner.hidden = false;
     const where = data.errorLine ? `第 ${data.errorLine} 行出錯。` : "這一步出錯。";
     gfxBanner.textContent = `${where}畫面留著前面已經算出的結果`;
+  } else if (data.display && data.display.calibNote) {
+    gfxBanner.hidden = false;
+    gfxBanner.textContent = data.display.calibNote;
   }
   if (localStorage.getItem("visdev.contourWidth") == null && data.display) {
     const xld = (data.display.shapes || []).find((shape) => shape.kind === "xld" && shape.width);
@@ -2520,6 +2523,11 @@ window.addEventListener("mouseup", (event) => {
   const point = imagePoint(event);
   const moved = Math.hypot(point.x - start.x, point.y - start.y) > 4;
   if (start.mode !== "zoom" && !moved) {
+    const calib = calibTarget(start.col, start.row);
+    if (calib) {
+      focusCalibPanel(calib);
+      return;
+    }
     if (!pickObject(start.col, start.row)) clearPick();
   }
   if (start.mode === "select") return;
@@ -3204,6 +3212,30 @@ function clearPick() {
   localStorage.setItem("visdev.featurePick", JSON.stringify(payload));
   featureChannel.postMessage(payload);
   draw();
+}
+
+function calibTarget(col, row) {
+  if (!disp) return null;
+  if (disp.calibBack) return { index: null };
+  const panels = disp.calibPanels || [];
+  const hit = panels.find((panel) => row >= panel.top && row < panel.bottom);
+  return hit ? { index: hit.index } : null;
+}
+
+function focusCalibPanel(target) {
+  if (!sessionId) return;
+  fetch(`/api/session/${encodeURIComponent(sessionId)}/calib-view`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ index: target.index }),
+  }).then(async (res) => {
+    const data = await res.json();
+    if (!res.ok) {
+      showDetail(data);
+      return;
+    }
+    applyState(data);
+  }).catch((err) => showDetail({ error: "無法連上 VisDev：" + err.message }));
 }
 
 function pickObject(col, row) {

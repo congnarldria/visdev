@@ -3360,6 +3360,63 @@ def test_three_checkerboard_views_share_one_calib():
     assert int(still.vars["Count"]) == 0
 
 
+def test_outlier_marks_are_the_points_that_stand_away():
+    import numpy as np
+
+    from app.engine.chapters.calib_ops import _outlier_mask
+
+    detected = np.array([[0, 0], [10, 0], [20, 0], [30, 0], [40, 0]], np.float64)
+    close = detected.copy()
+    assert _outlier_mask(detected, close) is None
+    far = detected.copy()
+    far[4, 1] = 8
+    mask = _outlier_mask(detected, far)
+    assert mask is not None and mask.tolist() == [False, False, False, False, True]
+
+
+def test_clicking_a_calib_panel_shows_that_image():
+    session = run_source(
+        "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"
+        "Vizion.read_image (Left, 'samples/calib_board_left.png')\n"
+        "Vizion.read_image (Right, 'samples/calib_board_right.png')\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.find_calib_object (Left, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.find_calib_object (Right, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.calibrate_cameras (CalibDataID, Error)\n"
+    )
+    assert session.error is None, session.error
+    stacked = session.public_state()["display"]
+    panels = stacked["calibPanels"]
+    assert [panel["index"] for panel in panels] == [0, 1, 2]
+    assert stacked["calibNote"]
+    mean_error = float(session.vars["Error"])
+    session.show_calib_view(1)
+    one = session.public_state()["display"]
+    assert one["width"] == 428 and one["height"] == 356
+    assert one["calibBack"] is True
+    labels = [shape["text"] for shape in one["shapes"] if shape["type"] == "text"]
+    assert any("第 2 組" in text for text in labels)
+    assert any("回到全部" in text for text in labels)
+    assert float(session.vars["Error"]) == mean_error
+    session.show_calib_view(None)
+    again = session.public_state()["display"]
+    assert again["height"] > 356
+    assert [panel["index"] for panel in again["calibPanels"]] == [0, 1, 2]
+
+    calib = session.vars["CalibDataID"]
+    shifted = calib.observation_projected[0].copy()
+    shifted[0] = shifted[0] + [40.0, 0.0]
+    calib.observation_projected[0] = shifted
+    session.show_calib_view(None)
+    marked = session.public_state()["display"]
+    colors = {shape["color"] for shape in marked["shapes"] if shape["type"] == "polyline"}
+    assert "#ff3b30" in colors
+    assert any("紅色" in shape["text"] for shape in marked["shapes"] if shape["type"] == "text")
+    assert float(session.vars["Error"]) == mean_error
+
+
 def test_calibration_draws_points_and_errors():
     found = run_source(
         "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"

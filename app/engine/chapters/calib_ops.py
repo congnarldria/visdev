@@ -444,29 +444,63 @@ def _segment_contours(detected, projected) -> list:
     return contours
 
 
-def _add_mark_overlays(ctx, width: int, height: int, detected, projected, texts: list[tuple[str, float]]) -> None:
-    half = max(4.0, round(min(width, height) * 0.012))
+def _outlier_mask(detected, projected):
+    """Points that sit far from the rest of this view. None when nothing stands out."""
+    if projected is None:
+        return None
+    found = np.asarray(detected, np.float64).reshape(-1, 2)
+    pred = np.asarray(projected, np.float64).reshape(-1, 2)
+    if len(found) != len(pred) or len(found) < 4:
+        return None
+    errors = np.hypot(pred[:, 0] - found[:, 0], pred[:, 1] - found[:, 1])
+    median = float(np.median(errors))
+    limit = max(median * 3.0, median + 1.0)
+    mask = errors >= limit - 1e-9
+    count = int(np.count_nonzero(mask))
+    if count <= 0 or count >= len(errors):
+        return None
+    return mask
+
+
+def _with_outlier_note(label: str, detected, projected) -> str:
+    mask = _outlier_mask(detected, projected)
+    if mask is None:
+        return label
+    return f"{label} · 紅色 {int(np.count_nonzero(mask))} 點"
+
+
+def _append_xld(ctx, width: int, height: int, contours: list, color: str) -> None:
+    if not contours:
+        return
     ctx.display.overlays.append(
         {
             "kind": "xld",
-            "xld": XLD(width, height, _cross_contours(detected, half)),
-            "color": "#3dff7a",
+            "xld": XLD(width, height, contours),
+            "color": color,
             "colors": None,
             "width": 2,
             "provisional": False,
         }
     )
-    if projected is not None:
-        ctx.display.overlays.append(
-            {
-                "kind": "xld",
-                "xld": XLD(width, height, _segment_contours(detected, projected)),
-                "color": "#ffb020",
-                "colors": None,
-                "width": 2,
-                "provisional": False,
-            }
-        )
+
+
+def _add_mark_overlays(ctx, width: int, height: int, detected, projected, texts: list[tuple[str, float]]) -> None:
+    half = max(4.0, round(min(width, height) * 0.012))
+    found = np.asarray(detected, np.float64).reshape(-1, 2)
+    mask = _outlier_mask(found, projected)
+    if mask is None:
+        _append_xld(ctx, width, height, _cross_contours(found, half), "#3dff7a")
+        if projected is not None:
+            _append_xld(ctx, width, height, _segment_contours(found, projected), "#ffb020")
+    else:
+        keep = np.flatnonzero(~mask)
+        bad = np.flatnonzero(mask)
+        pred = None if projected is None else np.asarray(projected, np.float64).reshape(-1, 2)
+        _append_xld(ctx, width, height, _cross_contours(found[keep], half), "#3dff7a")
+        _append_xld(ctx, width, height, _cross_contours(found[bad], half), "#ff3b30")
+        if pred is not None:
+            _append_xld(ctx, width, height, _segment_contours(found[keep], pred[keep]), "#ffb020")
+            _append_xld(ctx, width, height, _segment_contours(found[bad], pred[bad]), "#ff3b30")
     for text_value, row in texts:
         ctx.display.overlays.append(
             {"kind": "text", "text": text_value, "row": row, "col": 8, "color": "#ffe14a"}
@@ -503,21 +537,23 @@ def _paste(canvas: np.ndarray, image: Image, row: int) -> None:
     canvas[row : row + height, :width] = patch
 
 
-def _stack_panels(panels: list) -> tuple[Image, list]:
+def _stack_panels(panels: list) -> tuple[Image, list, list]:
     band = 28
     gap = 8
-    width = max(image.width for image, *_rest in panels)
-    height = sum(image.height + band for image, *_rest in panels) + gap * (len(panels) - 1)
-    gray = all(image.channels == 1 for image, *_rest in panels)
+    width = max(image.width for _index, image, *_rest in panels)
+    height = sum(image.height + band for _index, image, *_rest in panels) + gap * (len(panels) - 1)
+    gray = all(image.channels == 1 for _index, image, *_rest in panels)
     canvas = np.full((height, width), 16, np.uint8) if gray else np.full((height, width, 3), 16, np.uint8)
     marks = []
     row = 0
-    for image, label, detected, projected in panels:
+    for index, image, label, detected, projected in panels:
+        top = row
         text_row = row + 20
         row += band
         _paste(canvas, image, row)
-        marks.append((label, text_row, detected, projected, row))
-        row += image.height + gap
+        bottom = row + image.height
+        marks.append((index, label, text_row, detected, projected, row, top, bottom))
+        row = bottom + gap
     picture = Image(canvas)
     scale = min(1.0, 1200 / picture.width, 1600 / picture.height)
     if scale < 0.999:
@@ -527,49 +563,60 @@ def _stack_panels(panels: list) -> tuple[Image, list]:
             interpolation=cv2.INTER_AREA,
         )
         picture = Image(resized)
-        scaled = []
-        for label, text_row, detected, projected, origin in marks:
-            found = np.asarray(detected, np.float64).reshape(-1, 2).copy()
-            found[:, 0] *= scale
-            found[:, 1] = (found[:, 1] + origin) * scale
-            pred = None
-            if projected is not None:
-                pred = np.asarray(projected, np.float64).reshape(-1, 2).copy()
-                pred[:, 0] *= scale
-                pred[:, 1] = (pred[:, 1] + origin) * scale
-            scaled.append((label, text_row * scale, found, pred))
-        return picture, scaled
     placed = []
-    for label, text_row, detected, projected, origin in marks:
+    bounds = []
+    for index, label, text_row, detected, projected, origin, top, bottom in marks:
         found = np.asarray(detected, np.float64).reshape(-1, 2).copy()
-        found[:, 1] += origin
+        found[:, 0] *= scale
+        found[:, 1] = (found[:, 1] + origin) * scale
         pred = None
         if projected is not None:
             pred = np.asarray(projected, np.float64).reshape(-1, 2).copy()
-            pred[:, 1] += origin
-        placed.append((label, text_row, found, pred))
-    return picture, placed
+            pred[:, 0] *= scale
+            pred[:, 1] = (pred[:, 1] + origin) * scale
+        placed.append((label, text_row * scale, found, pred))
+        bounds.append({"index": int(index), "top": float(top * scale), "bottom": float(bottom * scale)})
+    return picture, placed, bounds
 
 
-def _present_calibration(ctx, calib: CalibData, owners: list[int]) -> None:
-    _log(ctx, _error_line(calib, owners))
-    if ctx is None or not callable(getattr(ctx, "display_obj", None)):
-        return
+def _view_parts(calib: CalibData, owners: list[int]) -> list:
     ordinals: dict[int, int] = defaultdict(int)
     panels = []
     for index, camera in enumerate(owners):
-        ordinals[camera] += 1
+        ordinals[int(camera)] += 1
         image = calib.observation_images[index] if index < len(calib.observation_images) else None
         if image is None:
             continue
         detected = np.asarray(calib.observations[index][1], np.float64).reshape(-1, 2)
         projected = calib.observation_projected[index] if index < len(calib.observation_projected) else None
         error = calib.observation_errors[index] if index < len(calib.observation_errors) else None
-        panels.append((image, _view_label(int(camera), ordinals[camera], len(detected), error), detected, projected))
+        label = _with_outlier_note(
+            _view_label(int(camera), ordinals[int(camera)], len(detected), error),
+            detected,
+            projected,
+        )
+        panels.append((index, image, label, detected, projected))
+    return panels
+
+
+def _remember_board(ctx, calib: CalibData, owners: list[int]) -> None:
+    if ctx is None:
+        return
+    ctx.calib_board = calib
+    ctx.calib_owners = [int(item) for item in owners]
+
+
+def _present_calibration(ctx, calib: CalibData, owners: list[int], *, log: bool = True) -> None:
+    if log:
+        _log(ctx, _error_line(calib, owners))
+    _remember_board(ctx, calib, owners)
+    if ctx is None or not callable(getattr(ctx, "display_obj", None)):
+        return
+    panels = _view_parts(calib, owners)
     if not panels:
         return
     if len(panels) == 1:
-        image, label, detected, projected = panels[0]
+        _index, image, label, detected, projected = panels[0]
         texts = []
         if calib.error is not None:
             texts.append((f"平均誤差 {calib.error:.3f} 像素", 18))
@@ -579,15 +626,46 @@ def _present_calibration(ctx, calib: CalibData, owners: list[int]) -> None:
         ctx.display_obj(image)
         _add_mark_overlays(ctx, image.width, image.height, detected, projected, texts)
         return
-    picture, placed = _stack_panels(panels)
+    picture, placed, bounds = _stack_panels(panels)
     ctx.display_obj(picture)
-    detected = np.vstack([item[2] for item in placed])
-    projected_parts = [item[3] for item in placed if item[3] is not None]
-    projected = np.vstack(projected_parts) if len(projected_parts) == len(placed) else None
-    texts = [(label, row) for label, row, _detected, _projected in placed]
-    if calib.error is not None and texts:
-        texts[0] = (f"平均誤差 {calib.error:.3f} 像素 · {texts[0][0]}", texts[0][1])
-    _add_mark_overlays(ctx, picture.width, picture.height, detected, projected, texts)
+    for label, row, detected, projected in placed:
+        _add_mark_overlays(ctx, picture.width, picture.height, detected, projected, [(label, row)])
+    if calib.error is not None and ctx.display.overlays:
+        for item in ctx.display.overlays:
+            if item.get("kind") == "text":
+                item["text"] = f"平均誤差 {calib.error:.3f} 像素 · {item['text']}"
+                break
+    ctx.display.calib_panels = bounds
+    ctx.display.calib_back = False
+    ctx.display.calib_note = "點某一張可看原圖、點和誤差。再點一下那張會回到全部。"
+
+
+def _show_calib_index(ctx, calib: CalibData, owners: list[int], index: int) -> None:
+    panels = _view_parts(calib, owners)
+    chosen = next((panel for panel in panels if panel[0] == int(index)), None)
+    if chosen is None or ctx is None or not callable(getattr(ctx, "display_obj", None)):
+        return
+    _index, image, label, detected, projected = chosen
+    texts = [(label, 18)]
+    if calib.error is not None:
+        texts = [(f"平均誤差 {calib.error:.3f} 像素", 18), (label, 38)]
+    texts.append(("再點一下回到全部", texts[-1][1] + 20))
+    ctx.display_obj(image)
+    _add_mark_overlays(ctx, image.width, image.height, detected, projected, texts)
+    ctx.display.calib_panels = None
+    ctx.display.calib_back = True
+    ctx.display.calib_note = f"{label}。再點一下回到全部。"
+
+
+def show_saved_calibration(ctx, index: int | None) -> None:
+    calib = getattr(ctx, "calib_board", None)
+    owners = getattr(ctx, "calib_owners", None)
+    if calib is None or not owners:
+        return
+    if index is None:
+        _present_calibration(ctx, calib, owners, log=False)
+        return
+    _show_calib_index(ctx, calib, owners, int(index))
 
 
 def _record_fit(calib: CalibData, indexed: list, width: int, height: int):
@@ -608,7 +686,7 @@ def _record_fit(calib: CalibData, indexed: list, width: int, height: int):
     [P("CalibDataID", "標定資料")],
     [P("Error", "平均重投影誤差，像素")],
     "標定相機",
-    "每一台有影像的相機至少要三組點。誤差是各相機重投影誤差的平均。算完會把每張圖的點、重投影位置和這張的誤差畫在圖形視窗，變數視窗也看得到平均誤差。姿態在該張影像所屬相機的座標：x 向右、y 向下、z 朝前。",
+    "每一台有影像的相機至少要三組點。誤差是各相機重投影誤差的平均。算完會把每張圖的點、重投影位置和這張的誤差畫在圖形視窗。點總覽裡的某一張會改看那張原圖，偏差特別大的點用紅色。變數視窗也看得到平均誤差。姿態在該張影像所屬相機的座標：x 向右、y 向下、z 朝前。",
     "Vizion.calibrate_cameras (CalibDataID, Error)",
 )
 def calibrate_cameras(model, *, ctx):

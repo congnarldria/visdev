@@ -30,11 +30,17 @@ class Display:
         self.base: Image | None = None
         self.base_provisional = False
         self.overlays: list = []
+        self.calib_panels = None
+        self.calib_note = None
+        self.calib_back = False
 
     def clear(self):
         self.base = None
         self.base_provisional = False
         self.overlays = []
+        self.calib_panels = None
+        self.calib_note = None
+        self.calib_back = False
 
     def drop_provisional(self):
         self.overlays = [item for item in self.overlays if not item.get("provisional")]
@@ -200,6 +206,8 @@ class Session:
         self.error = None
         self.error_line = None
         self.error_frames = []
+        self.calib_board = None
+        self.calib_owners = None
         self.paused = None
         self.log: list[str] = []
         self.display = Display()
@@ -465,6 +473,11 @@ class Session:
             return self.display.base.height, self.display.base.width
         return 480, 640
 
+    def show_calib_view(self, index: int | None) -> None:
+        from .chapters.calib_ops import show_saved_calibration
+
+        show_saved_calibration(self, index)
+
     def display_obj(self, obj, provisional: bool = False, name: str | None = None):
         source = name if name is not None else getattr(self, "pending_display_name", None)
         obj = coerce_iconic(obj)
@@ -474,6 +487,9 @@ class Session:
             self.display.base = obj
             self.display.base_provisional = provisional
             self.display.overlays = []
+            self.display.calib_panels = None
+            self.display.calib_note = None
+            self.display.calib_back = False
             self.ref_shape = (obj.height, obj.width)
             self._touch_display()
             return
@@ -1100,7 +1116,13 @@ class Session:
                 parts.append(("text", item.get("text"), item.get("row"), item.get("col"), item.get("color")))
             else:
                 parts.append((kind, id(item)))
-        return (base_token, tuple(parts))
+        panels = getattr(self.display, "calib_panels", None) or ()
+        extra = (
+            tuple((item.get("index"), item.get("top"), item.get("bottom")) for item in panels),
+            getattr(self.display, "calib_note", None),
+            bool(getattr(self.display, "calib_back", False)),
+        )
+        return (base_token, tuple(parts), extra)
 
     def _revision(self, cache_name: str, token: tuple) -> int:
         cached = getattr(self, cache_name, None)
@@ -1117,6 +1139,18 @@ class Session:
         if cached is not None and cached[0] == token:
             return cached[1], cached[2]
         payload = compose_display(self.display.base, overlays)
+        if payload is not None:
+            panels = getattr(self.display, "calib_panels", None)
+            note = getattr(self.display, "calib_note", None)
+            back = bool(getattr(self.display, "calib_back", False))
+            if panels or note or back:
+                payload = dict(payload)
+                if panels:
+                    payload["calibPanels"] = panels
+                if note:
+                    payload["calibNote"] = note
+                if back:
+                    payload["calibBack"] = True
         rev = int(getattr(self, "_display_rev", 0)) + 1
         self._display_rev = rev
         self._display_cache = (token, payload, rev)
