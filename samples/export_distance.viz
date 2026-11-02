@@ -1,0 +1,11 @@
+* 距離 5 會把靠得近的亮塊併起來，再用面積留下大的，然後膨脹一圈。
+Vizion.read_image (Image, 'samples/parts.png')
+Vizion.threshold (Image, Region, 60, 255)
+Vizion.connection (Region, Parts, 5)
+Vizion.select_shape (Parts, Big, 'area', 'and', 80, 99999)
+Vizion.dilation_rectangle1 (Big, Grown, 3, 3)
+Vizion.count_obj (Grown, Number)
+Vizion.smallest_rectangle1 (Grown, Row1, Column1, Row2, Column2)
+Vizion.intensity (Grown, Image, Mean, Deviation)
+Vizion.dev_display (Image)
+Vizion.dev_display (Grown)

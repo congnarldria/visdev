@@ -4,7 +4,7 @@ namespace Vizion;
 public delegate void ViewShow(int width, int height, byte[] pixels, PixelLayout layout, Overlay[] overlays);
 
 /// <summary>Vizion.read_image、Vizion.threshold、Vizion.connection。距離 1 是八連通。</summary>
-public static class Operators
+public static partial class Operators
 {
     /// <summary>和圖形視窗 16 色循環相同，0xAARRGGBB。</summary>
     public static readonly uint[] Colors =
@@ -97,8 +97,6 @@ public static class Operators
             throw new ArgumentNullException(nameof(region));
         if (distance < 0)
             throw new ArgumentOutOfRangeException(nameof(distance), "Distance 不能是負數");
-        if (distance >= 2)
-            throw new ArgumentOutOfRangeException(nameof(distance), "Distance 目前只做 1 以內的八連通");
         int count = region.Rows.Length;
         if (count == 0)
             return Array.Empty<Region>();
@@ -205,7 +203,9 @@ public static class Operators
             }
             objects[objectIndex] = new Region(region.Width, region.Height, rows, columns, lengths);
         }
-        return objects;
+        if (distance < 2 || objects.Length < 2)
+            return objects;
+        return MergeWithin(objects, distance);
     }
 
     public readonly struct AreaCenter

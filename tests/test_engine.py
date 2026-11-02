@@ -5413,13 +5413,28 @@ def test_csharp_export_matches_python_threshold_and_connection():
         assert "write_image" in str(exc)
     else:
         raise AssertionError("不該匯出寫檔")
-    far = "Vizion.read_image (Image, 'samples/parts.png')\nVizion.threshold (Image, Region, 1, 2)\nVizion.connection (Region, Parts, 5)\n"
-    try:
-        export_csharp(far)
-    except ExportError as exc:
-        assert "距離" in str(exc)
-    else:
-        raise AssertionError("不該匯出比較大的連通距離")
+    far = export_csharp(
+        "Vizion.read_image (Image, 'samples/parts.png')\n"
+        "Vizion.threshold (Image, Region, 60, 255)\n"
+        "Vizion.connection (Region, Parts, 5)\n"
+        "Vizion.select_shape (Parts, Big, 'area', 'and', 80, 99999)\n"
+        "Vizion.dilation_rectangle1 (Big, Grown, 3, 3)\n"
+        "Vizion.get_image_size (Image, Width, Height)\n"
+        "Vizion.get_grayval (Image, 10, 20, Grayval)\n"
+    )
+    assert "Operators.Connection(Region, 5)" in far
+    assert 'SelectShape(Parts, new[] { "area" }, "and"' in far
+    assert "Operators.DilateRectangle(Big, 3, 3)" in far
+    assert "Image.Width" in far and "Image.Height" in far
+    assert "Operators.GrayAt(Image, 10, 20)" in far
+    distance_bytes = (ROOT / "samples" / "export_distance.viz").read_bytes()
+    assert distance_bytes.count(b"\r\n") >= 8
+    assert distance_bytes.count(b"\n") == distance_bytes.count(b"\r\n")
+    distance_program = distance_bytes.decode("utf-8")
+    distance_session = run_source(distance_program)
+    assert distance_session.error is None, distance_session.error
+    assert distance_session.vars["Number"] >= 1
+    assert "Operators.DilateRectangle(Big, 3, 3)" in export_csharp(distance_program)
 
     def digest(masks):
         hasher = hashlib.sha256()
@@ -5513,8 +5528,248 @@ def test_csharp_export_matches_python_threshold_and_connection():
                 "centers": [[int(area), float(row), float(col)] for area, row, col in zip(areas, rows, cols)],
             }
         )
+    from app.engine.objects import Region
+    from app.engine.operators import (
+        closing_rectangle1,
+        dilation_rectangle1,
+        erosion_rectangle1,
+        intensity,
+        opening_rectangle1,
+        select_shape,
+        union2,
+        difference,
+        gen_rectangle1,
+        fill_up,
+        complement,
+    )
+
+    class RectCtx(Ctx):
+        ref_shape = (8, 10)
+
+        def canvas_size(self):
+            return self.ref_shape
+
+    def objects_of(region):
+        return [run_list(mask) for mask in region.objects]
+
+    def one_runs(result):
+        region = result.iconic[0]
+        if region.count() == 0:
+            return []
+        return run_list(region.union_mask())
+
+    ops = []
+    dots = np.zeros((7, 12), np.uint8)
+    dots[3, 1] = dots[3, 4] = dots[3, 10] = 255
+    dot_region = Region(12, 7, [dots])
+    for distance in (2.5, 3, 6):
+        parts = connection(dot_region, distance, ctx=Ctx()).iconic[0]
+        ops.append(
+            {
+                "op": "connection",
+                "name": f"dots-{distance}",
+                "width": 12,
+                "height": 7,
+                "distance": distance,
+                "runs": run_list(dots),
+                "components": objects_of(parts),
+            }
+        )
+    rng = np.random.default_rng(7)
+    blob = (rng.random((24, 28)) > 0.82).astype(np.uint8) * 255
+    blob_region = Region(28, 24, [blob])
+    parts = connection(blob_region, 4.5, ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "connection",
+            "name": "random-4.5",
+            "width": 28,
+            "height": 24,
+            "distance": 4.5,
+            "runs": run_list(blob),
+            "components": objects_of(parts),
+        }
+    )
+    block = np.zeros((12, 16), np.uint8)
+    block[4:7, 5:9] = 255
+    block_region = Region(16, 12, [block])
+    for mode, fn in (
+        ("dilate", dilation_rectangle1),
+        ("erode", erosion_rectangle1),
+        ("open", opening_rectangle1),
+        ("close", closing_rectangle1),
+    ):
+        ops.append(
+            {
+                "op": "morph",
+                "name": mode,
+                "mode": mode,
+                "width": 16,
+                "height": 12,
+                "kernelWidth": 4,
+                "kernelHeight": 3,
+                "runs": run_list(block),
+                "out": one_runs(fn(block_region, 4, 3, ctx=Ctx())),
+            }
+        )
+    other = np.zeros_like(block)
+    other[5:9, 7:12] = 255
+    other_region = Region(16, 12, [other])
+    ops.append(
+        {
+            "op": "bool",
+            "name": "difference",
+            "mode": "difference",
+            "width": 16,
+            "height": 12,
+            "left": run_list(block),
+            "right": run_list(other),
+            "out": one_runs(difference(block_region, other_region, ctx=Ctx())),
+        }
+    )
+    ops.append(
+        {
+            "op": "bool",
+            "name": "union",
+            "mode": "union",
+            "width": 16,
+            "height": 12,
+            "left": run_list(block),
+            "right": run_list(other),
+            "out": one_runs(union2(block_region, other_region, ctx=Ctx())),
+        }
+    )
+    hole = block.copy()
+    hole[5, 6:8] = 0
+    hole_region = Region(16, 12, [hole])
+    ops.append(
+        {
+            "op": "morph",
+            "name": "fill",
+            "mode": "fill",
+            "width": 16,
+            "height": 12,
+            "runs": run_list(hole),
+            "out": one_runs(fill_up(hole_region, ctx=Ctx())),
+        }
+    )
+    crack = np.array(
+        [
+            [255, 255, 255, 255, 255],
+            [255, 255, 255, 255, 255],
+            [255, 255, 0, 255, 255],
+            [255, 0, 255, 255, 255],
+            [0, 255, 255, 255, 255],
+        ],
+        np.uint8,
+    )
+    crack_region = Region(5, 5, [crack])
+    ops.append(
+        {
+            "op": "morph",
+            "name": "fill-diagonal",
+            "mode": "fill",
+            "width": 5,
+            "height": 5,
+            "runs": run_list(crack),
+            "out": one_runs(fill_up(crack_region, ctx=Ctx())),
+        }
+    )
+    ops.append(
+        {
+            "op": "morph",
+            "name": "complement",
+            "mode": "complement",
+            "width": 16,
+            "height": 12,
+            "runs": run_list(block),
+            "out": one_runs(complement(block_region, ctx=Ctx())),
+        }
+    )
+    pieces = connection(block_region, 1, ctx=Ctx()).iconic[0]
+    kept = select_shape(pieces, "area", "and", 1, 99999, ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "shape",
+            "name": "area",
+            "width": 16,
+            "height": 12,
+            "feature": "area",
+            "minimum": 1,
+            "maximum": 99999,
+            "objects": objects_of(pieces),
+            "kept": list(range(kept.count())),
+        }
+    )
+    tone_image = np.zeros((12, 16), np.uint8)
+    tone_image[4:7, 5:9] = 40
+    tone_image[4, 5] = 80
+    means, deviations = intensity(pieces, Image(tone_image), ctx=Ctx()).control
+    ops.append(
+        {
+            "op": "tone",
+            "name": "block",
+            "width": 16,
+            "height": 12,
+            "pixels": base64.b64encode(np.ascontiguousarray(tone_image).tobytes()).decode("ascii"),
+            "objects": objects_of(pieces),
+            "means": [float(item) for item in means],
+            "deviations": [float(item) for item in deviations],
+        }
+    )
+    ops.append(
+        {
+            "op": "bounds",
+            "name": "block",
+            "width": 16,
+            "height": 12,
+            "objects": objects_of(pieces),
+            "rects": [[4, 5, 6, 8]],
+        }
+    )
+    ops.append(
+        {
+            "op": "shape",
+            "name": "area-too-small",
+            "width": 16,
+            "height": 12,
+            "feature": "area",
+            "minimum": 100,
+            "maximum": 99999,
+            "objects": objects_of(pieces),
+            "kept": [],
+        }
+    )
+    ops.append(
+        {
+            "op": "rect",
+            "name": "clipped",
+            "width": 10,
+            "height": 8,
+            "row1": 1,
+            "column1": 2,
+            "row2": 4,
+            "column2": 6,
+            "out": one_runs(gen_rectangle1(1, 2, 4, 6, ctx=RectCtx())),
+        }
+    )
+    color_pixels = np.zeros((2, 3, 3), np.uint8)
+    color_pixels[0, 0] = (10, 20, 30)
+    ops.append(
+        {
+            "op": "gray",
+            "name": "bgr",
+            "width": 3,
+            "height": 2,
+            "channels": 3,
+            "pixels": base64.b64encode(np.ascontiguousarray(color_pixels).tobytes()).decode("ascii"),
+            "row": 0,
+            "column": 0,
+            "values": [30, 20, 10],
+        }
+    )
     spec = folder / "cases.json"
-    spec.write_text(json.dumps({"cases": cases}), encoding="utf-8")
+    spec.write_text(json.dumps({"cases": cases, "ops": ops}), encoding="utf-8")
     check = ROOT / "dotnet" / "Vizion.Operators.Check" / "Vizion.Operators.Check.csproj"
     completed = subprocess.run(
         ["dotnet", "run", "-f", "net8.0", "--project", str(check), "--", "--compare", str(spec)],
