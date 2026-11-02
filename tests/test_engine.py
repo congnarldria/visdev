@@ -3232,6 +3232,17 @@ def test_expand_region_splits_overlap():
     assert int(sample.vars["RightArea"]) == 8
 
 
+def test_gen_image_const_real_is_zero():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_image_const_real_zero.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Type"] == "real"
+    assert sample.vars["Gray"] == 0
+    assert sample.vars["Width"] == 4 and sample.vars["Height"] == 3
+    assert sample.vars["ByteType"] == "byte"
+    assert sample.vars["ByteGray"] == 0
+
+
 def test_hdevelop_batch102():
     import numpy as np
 

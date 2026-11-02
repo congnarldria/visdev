@@ -122,6 +122,7 @@ SAMPLE_ORDER = (
     "ViZion_points_lepetit_square_corner_inside_pixel.viz",
     "ViZion_create_scaled_shape_model_scale_refined_to_1.08895.viz",
     "ViZion_expand_region_region_splits_overlap.viz",
+    "ViZion_gen_image_const_real_zero.viz",
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz",
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz",
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz",
@@ -4950,6 +4951,19 @@ Vizion.dev_display (Split)
 """
 
 
+HDEVELOP_BATCH101C_PROGRAM = """* real 常數影像是 0
+* byte 仍是 0 到 255 的整數。real 是浮點數，這張全黑影像的灰階是 0，型別是 real。
+Vizion.gen_image_const (Image, 'real', 4, 3)
+Vizion.get_image_type (Image, Type)
+Vizion.get_grayval (Image, 1, 2, Gray)
+Vizion.get_image_size (Image, Width, Height)
+Vizion.gen_image_const (Bytes, 'byte', 4, 3)
+Vizion.get_image_type (Bytes, ByteType)
+Vizion.get_grayval (Bytes, 1, 2, ByteGray)
+Vizion.dev_display (Image)
+"""
+
+
 HDEVELOP_BATCH102_PROGRAM = """* 平滑平移的列是 39.23
 * 教導框中心是列 39.5、行 47.5。圖案往上 0.25、往右 0.35，真的中心在列 39.25、行 47.85。
 * 整數峰停在列 40。列 39 的分數更高，三點拋物線卻會停在 40。
@@ -5864,6 +5878,7 @@ GENERATED_PROGRAMS = {
     "ViZion_points_lepetit_square_corner_inside_pixel.viz": HDEVELOP_BATCH100_PROGRAM,
     "ViZion_create_scaled_shape_model_scale_refined_to_1.08895.viz": HDEVELOP_BATCH101_PROGRAM,
     "ViZion_expand_region_region_splits_overlap.viz": HDEVELOP_BATCH101B_PROGRAM,
+    "ViZion_gen_image_const_real_zero.viz": HDEVELOP_BATCH101C_PROGRAM,
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz": HDEVELOP_BATCH102_PROGRAM,
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz": HDEVELOP_BATCH103_PROGRAM,
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz": HDEVELOP_BATCH104_PROGRAM,

@@ -922,23 +922,28 @@ def scale_image_max(image, *, ctx):
     [],
     [P("Image", "新影像")],
     [
-        P("Type", "這版只做 byte", "'byte'", ["'byte'"]),
+        P("Type", "byte 或 real", "'byte'", ["'byte'", "'real'"]),
         P("Width", "寬度"),
         P("Height", "高度"),
     ],
     [],
     "建立全黑影像",
-    "Type 只能是 byte。影像裡每個像素都是 0。",
+    "byte 的像素是 0 到 255 的整數。real 的像素是浮點數，這張全黑影像的值是 0.0。",
     "Vizion.gen_image_const (Image, 'byte', 640, 480)",
 )
 def gen_image_const(kind, width, height, *, ctx):
-    if text(kind, "Type").lower() != "byte":
-        raise ValueError("Type 這版只接受 byte")
+    kind_name = text(kind, "Type").lower()
     wide = whole(width, "Width")
     high = whole(height, "Height")
     if wide < 1 or high < 1:
         raise ValueError("寬高至少要 1")
-    return Result([Image(np.zeros((high, wide), np.uint8))], [])
+    if kind_name == "byte":
+        data = np.zeros((high, wide), np.uint8)
+    elif kind_name == "real":
+        data = np.zeros((high, wide), np.float32)
+    else:
+        raise ValueError("Type 只接受 byte 或 real")
+    return Result([Image(data)], [])
 
 
 @operator(
@@ -1079,7 +1084,11 @@ def get_grayval(image, row, column, *, ctx):
     if any(item < 0 or item >= picture.height for item in rows) or any(item < 0 or item >= picture.width for item in cols):
         raise ValueError("座標超出影像")
     if picture.data.ndim == 2:
-        values = [int(picture.data[r, c]) for r, c in zip(rows, cols)]
+        raw = [picture.data[r, c] for r, c in zip(rows, cols)]
+        if np.issubdtype(picture.data.dtype, np.floating):
+            values = [_tidy(float(item)) for item in raw]
+        else:
+            values = [int(item) for item in raw]
         if len(values) == 1 and not isinstance(row, (list, tuple)):
             return Result([], [values[0]])
         return Result([], [values])
@@ -6060,12 +6069,14 @@ def smooth_image(image, filter_name, alpha, *, ctx):
     [],
     [P("Type", "影像型別")],
     "讀出影像型別",
-    "這版的影像都是 byte，所以結果是 byte。",
+    "byte 是 0 到 255 的整數。real 是浮點數。",
     "Vizion.get_image_type (Image, Type)",
-    "新算子。目前每張影像的型別都是 byte。",
+    "新算子。gen_image_const 的 byte 讀出來是 byte，real 讀出來是 real。",
 )
 def get_image_type(image, *, ctx):
-    expect_image(image, "Image")
+    picture = expect_image(image, "Image")
+    if np.issubdtype(picture.data.dtype, np.floating):
+        return Result([], ["real"])
     return Result([], ["byte"])
 
 

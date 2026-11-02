@@ -101,10 +101,11 @@ def jpeg_thumb(array: np.ndarray, max_edge: int = 112) -> str:
 
 
 def apply_domain_dim(image: Image) -> np.ndarray:
+    data = image.data if image.data.dtype == np.uint8 else to_uint8(image.data)
     if image.domain is None:
-        return image.data
-    faded = (image.data.astype(np.uint16) // 3).astype(np.uint8)
-    out = image.data.copy()
+        return data
+    faded = (data.astype(np.uint16) // 3).astype(np.uint8)
+    out = data.copy()
     outside = image.domain == 0
     out[outside] = faded[outside]
     return out
