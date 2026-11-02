@@ -452,16 +452,6 @@ def regiongrowing(image, row, column, tolerance, min_size, *, ctx):
     return Result([Region(picture.width, picture.height, objects, multi_color=len(objects) > 1)], [])
 
 
-@operator(
-    "分割",
-    [P("Image", "輸入影像")],
-    [P("Basins", "集水區"), P("Watersheds", "分水嶺")],
-    [],
-    [],
-    "灰階影像的分水嶺",
-    "把灰階當成高度。每個局部最低點是一個集水區，物件用不同顏色。分水嶺是盆地交界，另外輸出成一個區域。平坦或雜訊多的圖會切得很碎。",
-    "watersheds (Image, Basins, Watersheds)",
-)
 def _watershed_markers(gray: np.ndarray, domain: np.ndarray):
     kernel = np.ones((3, 3), np.uint8)
     minima = cv2.compare(gray, cv2.erode(gray, kernel), cv2.CMP_EQ)
@@ -473,6 +463,16 @@ def _watershed_markers(gray: np.ndarray, domain: np.ndarray):
     return np.where(domain > 0, markers, 0), count
 
 
+@operator(
+    "分割",
+    [P("Image", "輸入影像")],
+    [P("Basins", "集水區"), P("Watersheds", "分水嶺")],
+    [],
+    [],
+    "灰階影像的分水嶺",
+    "把灰階當成高度。每個局部最低點是一個集水區，物件用不同顏色。分水嶺是盆地交界，另外輸出成一個區域。平坦或雜訊多的圖會切得很碎。",
+    "watersheds (Image, Basins, Watersheds)",
+)
 def watersheds(image, *, ctx):
     picture, gray, domain = _gray_domain(image)
     markers, count = _watershed_markers(gray, domain)

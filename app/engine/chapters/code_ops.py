@@ -132,11 +132,13 @@ def _symbol_kind(symbol_type) -> str:
         return "QR Code"
     if symbol in ("datamatrix", "datamatrixecc200"):
         return "Data Matrix"
-    raise ValueError("SymbolType 只能是 QR Code 或 Data Matrix")
-
+    if symbol == "pdf417":
+        return "PDF417"
     if symbol == "aztec":
         return "Aztec"
     raise ValueError("SymbolType 只能是 QR Code、Data Matrix、PDF417 或 Aztec")
+
+
 def _runs(binary: np.ndarray):
     runs = []
     current = int(binary[0])

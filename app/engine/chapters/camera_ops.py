@@ -34,6 +34,15 @@ class AcqHandle:
     cap: object | None = None
     closed: bool = False
 
+    def release(self) -> None:
+        if self.cap is not None:
+            try:
+                self.cap.release()
+            except Exception:
+                pass
+            self.cap = None
+        self.closed = True
+
     def summary(self) -> str:
         if self.closed:
             return "採集  已關閉"
@@ -117,7 +126,7 @@ def _open_camera(index: int, width: int, height: int):
         from ..dshow import grab_bgr
 
         return _HeldFrame(grab_bgr(index))
-    except RuntimeError:
+    except (RuntimeError, OSError, ImportError, AttributeError):
         pass
     cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
     if not cap.isOpened():
@@ -259,10 +268,7 @@ def grab_image_async(handle, _delay, *, ctx):
 )
 def close_framegrabber(handle, *, ctx):
     handle = _alive(handle, "AcqHandle")
-    if handle.cap is not None:
-        handle.cap.release()
-        handle.cap = None
-    handle.closed = True
+    handle.release()
     return Result([], [])
 
 

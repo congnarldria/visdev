@@ -24,6 +24,15 @@ class FileHandle:
         self.sem_type = "file"
         self._file = handle
 
+    def release(self) -> None:
+        if self.closed:
+            return
+        try:
+            self._file.close()
+        except OSError:
+            pass
+        self.closed = True
+
     def summary(self) -> str:
         if self.closed:
             return "檔案  已關閉"
@@ -89,7 +98,7 @@ def file_exists(file_name, *, ctx):
     "列出目錄裡的檔案",
     "files 只列檔案，directories 只列目錄。兩個都給就都列。recursive 會進子目錄。路徑用斜線，前面加上你寫的目錄。最多 5000 個。",
     "Vizion.list_files ('workspace', 'files', Files)",
-    "新算子。只列這一層的檔名，最多 5000 筆，不跟隨捷徑。",
+    "新算子。files、directories、recursive 可同時給。最多 5000 筆，不跟隨捷徑。",
 )
 def list_files(directory, options, *, ctx):
     folder = _path(ctx, directory, "Directory")
@@ -204,8 +213,7 @@ def open_file(file_name, file_type, *, ctx):
 )
 def close_file(handle, *, ctx):
     opened = _open(handle, "FileHandle")
-    opened._file.close()
-    opened.closed = True
+    opened.release()
     return Result([], [])
 
 

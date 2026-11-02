@@ -162,7 +162,7 @@ def _from_lines(lines: list[str], procedures: list[ET.Element], proc_names: set[
     if procedures:
         for proc in procedures:
             name = (proc.attrib.get("name") or "").strip()
-            body = _rewrite(proc and _body_lines(proc), ops, proc_names)
+            body = _rewrite(_body_lines(proc) if proc is not None else [], ops, proc_names)
             if name.lower() == "main":
                 main.extend(body)
             else:

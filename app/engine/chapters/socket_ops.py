@@ -7,8 +7,10 @@ open_socket_accept listens on 127.0.0.1 and takes one client.
 
 from __future__ import annotations
 
+import array
 import ctypes
 import socket
+import sys
 import threading
 from ctypes import wintypes
 
@@ -30,6 +32,24 @@ class SocketLink:
         self.ready = threading.Event()
         if sock is not None:
             self.ready.set()
+
+    def release(self) -> None:
+        if self.closed:
+            return
+        if self.listener is not None:
+            try:
+                self.listener.close()
+            except OSError:
+                pass
+            self.listener = None
+        if self.sock is not None:
+            try:
+                self.sock.close()
+            except OSError:
+                pass
+            self.sock = None
+        self.ready.set()
+        self.closed = True
 
     def summary(self) -> str:
         if self.closed:
@@ -93,13 +113,23 @@ def _tune(link: SocketLink) -> None:
 
 
 def _pending(sock: socket.socket) -> int:
-    count = wintypes.DWORD(0)
-    ws = ctypes.WinDLL("ws2_32", use_last_error=True)
-    ws.ioctlsocket.argtypes = [ctypes.c_size_t, ctypes.c_long, ctypes.POINTER(wintypes.DWORD)]
-    ws.ioctlsocket.restype = ctypes.c_int
-    if ws.ioctlsocket(sock.fileno(), _FIONREAD, ctypes.byref(count)) != 0:
+    if sys.platform == "win32" and hasattr(ctypes, "WinDLL"):
+        count = wintypes.DWORD(0)
+        ws = ctypes.WinDLL("ws2_32", use_last_error=True)
+        ws.ioctlsocket.argtypes = [ctypes.c_size_t, ctypes.c_long, ctypes.POINTER(wintypes.DWORD)]
+        ws.ioctlsocket.restype = ctypes.c_int
+        if ws.ioctlsocket(sock.fileno(), _FIONREAD, ctypes.byref(count)) != 0:
+            return 0
+        return int(count.value)
+    import fcntl
+    import termios
+
+    buf = array.array("i", [0])
+    try:
+        fcntl.ioctl(sock, termios.FIONREAD, buf, True)
+    except OSError:
         return 0
-    return int(count.value)
+    return int(buf[0])
 
 
 def _echo(side: socket.socket) -> None:
@@ -232,19 +262,7 @@ def close_socket(link, *, ctx):
     from ..objects import Result
 
     sock = _require(link)
-    if sock.listener is not None:
-        try:
-            sock.listener.close()
-        except OSError:
-            pass
-        sock.listener = None
-    if sock.sock is not None:
-        try:
-            sock.sock.close()
-        except OSError:
-            pass
-    sock.ready.set()
-    sock.closed = True
+    sock.release()
     return Result([], [])
 
 

@@ -1,5 +1,8 @@
+import os
 import sys
 from pathlib import Path
+
+os.environ.setdefault("OS", "Windows_NT")
 
 import cv2
 import numpy as np
@@ -107,7 +110,7 @@ Vizion.tuple_gen_const (3, 7, Const)
     contour = XLD(20, 20, [[[0, 0], [10, 0], [10, 30], [0, 30]]])
     clipped = REGISTRY["clip_contours_xld"].fn(contour, 0, 0, 20, 20, ctx=None).iconic[0]
     assert clipped.contours and all(point[1] <= 20 for line in clipped.contours for point in line)
-    rounded = run_source("Vizion.tuple_round ([-1.5, 1.5], Round)\ntuple_split ('a,b', ',', Parts)\n")
+    rounded = run_source("Vizion.tuple_round ([-1.5, 1.5], Round)\nVizion.tuple_split ('a,b', ',', Parts)\n")
     assert rounded.error is None, rounded.error
     assert rounded.vars["Round"] == [-2, 2]
     assert rounded.vars["Parts"] == ["a", "b"]
@@ -263,7 +266,7 @@ def test_hdevelop_batch4():
     assert float(sample.vars["ClassId"]) == 1
     assert float(sample.vars["Score"]) > 0.5
 
-    exhausted = run_source("Vizion.open_framegrabber ('File', 'samples/code39.png', Acq)\ngrab_image (Image, Acq)\ngrab_image (Image2, Acq)\n")
+    exhausted = run_source("Vizion.open_framegrabber ('File', 'samples/code39.png', Acq)\nVizion.grab_image (Image, Acq)\nVizion.grab_image (Image2, Acq)\n")
     assert exhausted.error and "沒有下一張" in exhausted.error
 
     folder = ROOT / "workspace" / "batch4_frames"
@@ -272,7 +275,7 @@ def test_hdevelop_batch4():
     cv2.imwrite(str(folder / "b.png"), np.full((20, 20), 200, np.uint8))
     frames = run_source(
         "Vizion.open_framegrabber ('File', 'workspace/batch4_frames', 'gray', 0, 0, Acq)\n"
-        "Vizion.grab_image (A, Acq)\ngrab_image (B, Acq)\nclose_framegrabber (Acq)\n"
+        "Vizion.grab_image (A, Acq)\nVizion.grab_image (B, Acq)\nVizion.close_framegrabber (Acq)\n"
     )
     assert frames.error is None, frames.error
     assert int(frames.vars["A"].gray().mean()) == 10
@@ -373,7 +376,7 @@ def test_hdevelop_batch5():
 
     plain = np.zeros((40, 40), np.uint8)
     plain[10:30, 10:30] = 180
-    opened = REGISTRY["gray_opening_rect"].fn(Image(plain), 5, 5, ctx=None).iconic[0]
+    opened = REGISTRY["gray_opening_rect"].fn(Image(plain), 5, ctx=None).iconic[0]
     assert int(opened.data[20, 20]) == 180
     assert int(opened.data[10, 10]) == 180
     assert int(opened.data[9, 9]) == 0
@@ -1717,7 +1720,7 @@ def test_hdevelop_batch45():
     assert sample.vars["ViewCore"] == 200 and sample.vars["ViewNeck"] == 80
     modes = next(param for param in REGISTRY["thickness_image"].control_in if param.name == "Metric").choices
     assert "'chessboard'" in modes and "'euclidean'" in modes
-    empty = run_source("Vizion.gen_rectangle1 (Box, 0, 0, 1, 1)\ndifference (Box, Box, Empty)\nthickness_max (Empty, Row, Column, Distance)\n")
+    empty = run_source("Vizion.gen_rectangle1 (Box, 0, 0, 1, 1)\nVizion.difference (Box, Box, Empty)\nVizion.thickness_max (Empty, Row, Column, Distance)\n")
     assert empty.error and "區域是空的" in empty.error
 
 
@@ -2780,7 +2783,7 @@ def test_hdevelop_batch71():
     assert sample.vars["Maximum"] == 80
     assert abs(float(sample.vars["Mean"]) - (8010 / 4800)) < 1e-9
     negative = run_source(
-        "Vizion.gen_image_const (A, 'byte', 8, 8)\ngen_image_proto (A, B, 1)\ndiff_region (A, B, D, -1)\n"
+        "Vizion.gen_image_const (A, 'byte', 8, 8)\nVizion.gen_image_proto (A, B, 1)\nVizion.diff_region (A, B, D, -1)\n"
     )
     assert "不能是負的" in (negative.error or "")
 
@@ -2839,7 +2842,7 @@ def test_hdevelop_batch73():
     assert abs(float(sample.vars["LightCol"][0]) - 40) < 1e-6
     assert 60 < float(sample.vars["Longest"]) < 70
     assert sample.vars["BlockCount"] == 0
-    negative = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nridge_region (A, R, 1, -1, 'dark')\n")
+    negative = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nVizion.ridge_region (A, R, 1, -1, 'dark')\n")
     assert "不能是負的" in (negative.error or "")
 
 
@@ -2865,7 +2868,7 @@ def test_hdevelop_batch74():
     assert abs(float(sample.vars["AcrossRow"]) - 29.5) < 1e-6
     assert abs(float(sample.vars["AcrossCol"]) - 39.5) < 1e-4
     assert sample.vars["SoftCount"] == 0 and sample.vars["FlatCount"] == 0
-    negative = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nedge_region (A, R, 1, -1)\n")
+    negative = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nVizion.edge_region (A, R, 1, -1)\n")
     assert "不能是負的" in (negative.error or "")
 
 
@@ -2980,7 +2983,7 @@ def test_hdevelop_batch81():
     color[3, 3] = (10, 20, 30)
     got = sample_bicubic(color, np.array([3.0]), np.array([3.0]))
     assert list(got[0]) == [10, 20, 30]
-    bad = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nget_grayval_interpolated (A, 1, 1, 'cubic', G)\n")
+    bad = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nVizion.get_grayval_interpolated (A, 1, 1, 'cubic', G)\n")
     assert "只能是" in (bad.error or "")
 
 
@@ -4312,12 +4315,12 @@ def test_ocr_page():
     path = ROOT / "workspace" / "_ocr_page.png"
     path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(path), image)
-    session = run_source("Vizion.read_image (Image, 'workspace/_ocr_page.png')\nocr_find (Image, Words, 'auto', Text, Row, Column, Score)\n")
+    session = run_source("Vizion.read_image (Image, 'workspace/_ocr_page.png')\nVizion.ocr_find (Image, Words, 'auto', Text, Row, Column, Score)\n")
     assert session.error is None, session.error
     found = " ".join(str(item) for item in session.vars["Text"])
     assert "VISDEV" in found and "168" in found, found
     assert len(session.vars["Words"].contours) == len(session.vars["Text"])
-    outside = run_source("Vizion.read_image (Image, 'workspace/_ocr_page.png')\nocr_find (Image, Words, 'auto', 0, 0, 20, 20, Text, Row, Column, Score)\n")
+    outside = run_source("Vizion.read_image (Image, 'workspace/_ocr_page.png')\nVizion.ocr_find (Image, Words, 'auto', 0, 0, 20, 20, Text, Row, Column, Score)\n")
     path.unlink(missing_ok=True)
     assert outside.error is None, outside.error
     missed = " ".join(str(item) for item in outside.vars["Text"])
@@ -4446,6 +4449,87 @@ def test_breakpoint_stops_and_times_lines():
     plain.reset()
     assert plain.public_state()["lineTimes"] == []
     assert plain.current_line() == 1
+
+
+def test_file_roundtrip_and_reset_closes_handle():
+    import shutil
+
+    folder = ROOT / "workspace" / "_file_ops"
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir(parents=True)
+    held = None
+    try:
+        session = run_source(
+            "Vizion.make_dir ('workspace/_file_ops/nested')\n"
+            "Vizion.open_file ('workspace/_file_ops/note.txt', 'output', Handle)\n"
+            "Vizion.fwrite_string (Handle, 'VISDEV line')\n"
+            "Vizion.fnew_line (Handle)\n"
+            "Vizion.fwrite_string (Handle, 'second')\n"
+            "Vizion.close_file (Handle)\n"
+            "Vizion.open_file ('workspace/_file_ops/note.txt', 'input', Handle)\n"
+            "Vizion.fread_line (Handle, Line, Eof1)\n"
+            "Vizion.fread_string (Handle, Word, Eof2)\n"
+            "Vizion.close_file (Handle)\n"
+            "Vizion.copy_file ('workspace/_file_ops/note.txt', 'workspace/_file_ops/nested/copy.txt')\n"
+            "Vizion.file_exists ('workspace/_file_ops/nested/copy.txt', Exists)\n"
+            "Vizion.list_files ('workspace/_file_ops', ['files', 'directories', 'recursive'], Listed)\n"
+            "Vizion.delete_file ('workspace/_file_ops/nested/copy.txt')\n"
+            "Vizion.remove_dir ('workspace/_file_ops/nested')\n"
+        )
+        assert session.error is None, session.error
+        assert session.vars["Line"] == "VISDEV line"
+        assert session.vars["Eof1"] == 0
+        assert session.vars["Word"] == "second"
+        assert session.vars["Exists"] == 1
+        listed = session.vars["Listed"]
+        assert any(str(item).endswith("note.txt") for item in listed)
+        assert any(str(item).endswith("nested") for item in listed)
+        assert not (folder / "nested").exists()
+
+        held = run_source("Vizion.open_file ('workspace/_file_ops/note.txt', 'input', Handle)\n")
+        assert held.error is None, held.error
+        handle = held.vars["Handle"]
+        assert handle.closed is False
+        held.reset()
+        assert handle.closed is True
+        (folder / "note.txt").unlink()
+    finally:
+        if held is not None:
+            held.reset()
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def test_socket_available_bytes():
+    import socket
+
+    from app.engine.chapters.socket_ops import SocketLink, get_socket_param
+
+    left, right = socket.socketpair()
+    link = SocketLink(right, "pair")
+    try:
+        left.sendall(b"VISDEV")
+        pending = get_socket_param(link, "available", ctx=None)
+        assert pending.control[0] == 6
+        assert right.recv(6) == b"VISDEV"
+        assert get_socket_param(link, "available", ctx=None).control[0] == 0
+    finally:
+        link.release()
+        left.close()
+
+
+def test_directshow_import_does_not_require_windows():
+    import sys
+
+    from app.engine.dshow import grab_bgr
+
+    if sys.platform == "win32":
+        return
+    try:
+        grab_bgr(0)
+    except RuntimeError as exc:
+        assert "打不開相機" in str(exc)
+    else:
+        raise AssertionError("沒有 DirectShow 時應該失敗")
 
 
 def test_parse_error():

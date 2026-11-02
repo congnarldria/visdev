@@ -156,6 +156,15 @@ SAMPLE_ORDER = (
 )
 
 
+def _write_program(path: Path, source: str) -> None:
+    text = source.replace("\r\n", "\n").replace("\r", "\n")
+    if path.is_file():
+        current = path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        if current == text:
+            return
+    path.write_text(text, encoding="utf-8")
+
+
 def ensure_samples(root: Path):
     samples = root / "samples"
     samples.mkdir(parents=True, exist_ok=True)
@@ -174,13 +183,13 @@ def ensure_samples(root: Path):
     write_measure_scene(samples / "measure_batch.png")
     write_codes(samples / "codes.png")
     write_code39(samples / "code39.png")
-    (samples / "shape_match.hdv").write_text(SHAPE_MATCH_PROGRAM, encoding="utf-8")
-    (samples / "shape_teach.hdv").write_text(SHAPE_TEACH_PROGRAM, encoding="utf-8")
-    (samples / "ncc_locate.hdv").write_text(NCC_LOCATE_PROGRAM, encoding="utf-8")
+    _write_program(samples / "shape_match.hdv", SHAPE_MATCH_PROGRAM)
+    _write_program(samples / "shape_teach.hdv", SHAPE_TEACH_PROGRAM)
+    _write_program(samples / "ncc_locate.hdv", NCC_LOCATE_PROGRAM)
     write_gauge(samples / "gauge.png")
-    (samples / "gauge.hdv").write_text(GAUGE_PROGRAM, encoding="utf-8")
+    _write_program(samples / "gauge.hdv", GAUGE_PROGRAM)
     for name, source in GENERATED_PROGRAMS.items():
-        (samples / name).write_text(source, encoding="utf-8")
+        _write_program(samples / name, source)
 
 
 def write_parts(path: Path):
@@ -4896,6 +4905,9 @@ Dist := (Row[Index] - 24) * (Row[Index] - 24) + (Column[Index] - 36) * (Column[I
 if (Dist < Best)
 Best := Dist
 BRow := Row[Index]
+BCol := Column[Index]
+endif
+endfor
 Vizion.dev_display (Image)
 """
 

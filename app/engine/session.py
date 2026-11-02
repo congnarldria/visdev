@@ -101,6 +101,25 @@ def full_value(value) -> str:
     return fmt_num(value)
 
 
+_OS_HANDLES = {"FileHandle", "SerialPort", "SocketLink", "AcqHandle"}
+
+
+def _release_external(value) -> None:
+    if isinstance(value, list):
+        for item in value:
+            _release_external(item)
+        return
+    if type(value).__name__ not in _OS_HANDLES:
+        return
+    release = getattr(value, "release", None)
+    if not callable(release):
+        return
+    try:
+        release()
+    except Exception:
+        return
+
+
 def _var_role(name: str, kind: str, iconic: bool) -> str:
     low = name.lower()
     if iconic and low.startswith("ho_"):
@@ -138,7 +157,12 @@ class Session:
         self.image_stamp = 0
         self.reset()
 
+    def _release_handles(self) -> None:
+        for value in list(getattr(self, "vars", {}).values()):
+            _release_external(value)
+
     def reset(self):
+        self._release_handles()
         self.pc = 0
         self.vars: dict = {}
         self.done = False

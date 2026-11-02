@@ -7,6 +7,7 @@ grabber is already on Windows 7 and Windows 10, so no extra package is needed.
 from __future__ import annotations
 
 import ctypes
+import sys
 import time
 import uuid
 from ctypes import wintypes
@@ -67,29 +68,48 @@ _VIDEOINFO = _guid("05589f80-c356-11ce-bf01-00aa0055595a")
 _CAPTURE = _guid("fb6c4281-0353-11d1-905f-0000c0cc16ba")
 _NULL = _guid("00000000-0000-0000-0000-000000000000")
 
-_ole32 = ctypes.WinDLL("ole32", use_last_error=True)
-_user32 = ctypes.WinDLL("user32", use_last_error=True)
-try:
-    ctypes.WinDLL("qedit")
-except OSError:
-    pass
+_ole32 = None
+_user32 = None
 
-_ole32.CoInitializeEx.argtypes = [ctypes.c_void_p, wintypes.DWORD]
-_ole32.CoInitializeEx.restype = ctypes.c_long
-_ole32.CoUninitialize.argtypes = []
-_ole32.CoUninitialize.restype = None
-_ole32.CoCreateInstance.argtypes = [
-    ctypes.POINTER(_GUID), ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(_GUID), ctypes.POINTER(ctypes.c_void_p),
-]
-_ole32.CoCreateInstance.restype = ctypes.c_long
-_ole32.CoTaskMemFree.argtypes = [ctypes.c_void_p]
-_ole32.CoTaskMemFree.restype = None
-_user32.PeekMessageW.argtypes = [ctypes.POINTER(_MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT, wintypes.UINT]
-_user32.PeekMessageW.restype = wintypes.BOOL
-_user32.TranslateMessage.argtypes = [ctypes.POINTER(_MSG)]
-_user32.TranslateMessage.restype = wintypes.BOOL
-_user32.DispatchMessageW.argtypes = [ctypes.POINTER(_MSG)]
-_user32.DispatchMessageW.restype = ctypes.c_ssize_t
+
+def _bind() -> None:
+    """Load DirectShow when a camera is actually opened.
+
+    Importing this module must not require ole32. Other systems, and a Windows
+    install without those DLLs, fall back to OpenCV from the camera operator.
+    """
+    global _ole32, _user32
+    if _ole32 is not None:
+        return
+    if sys.platform != "win32" or not hasattr(ctypes, "WinDLL"):
+        raise RuntimeError("打不開相機")
+    try:
+        ole = ctypes.WinDLL("ole32", use_last_error=True)
+        user = ctypes.WinDLL("user32", use_last_error=True)
+    except OSError as exc:
+        raise RuntimeError("打不開相機") from exc
+    try:
+        ctypes.WinDLL("qedit")
+    except OSError:
+        pass
+    ole.CoInitializeEx.argtypes = [ctypes.c_void_p, wintypes.DWORD]
+    ole.CoInitializeEx.restype = ctypes.c_long
+    ole.CoUninitialize.argtypes = []
+    ole.CoUninitialize.restype = None
+    ole.CoCreateInstance.argtypes = [
+        ctypes.POINTER(_GUID), ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(_GUID), ctypes.POINTER(ctypes.c_void_p),
+    ]
+    ole.CoCreateInstance.restype = ctypes.c_long
+    ole.CoTaskMemFree.argtypes = [ctypes.c_void_p]
+    ole.CoTaskMemFree.restype = None
+    user.PeekMessageW.argtypes = [ctypes.POINTER(_MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT, wintypes.UINT]
+    user.PeekMessageW.restype = wintypes.BOOL
+    user.TranslateMessage.argtypes = [ctypes.POINTER(_MSG)]
+    user.TranslateMessage.restype = wintypes.BOOL
+    user.DispatchMessageW.argtypes = [ctypes.POINTER(_MSG)]
+    user.DispatchMessageW.restype = ctypes.c_ssize_t
+    _ole32 = ole
+    _user32 = user
 
 
 def _method(ptr, index, restype, argtypes):
@@ -427,6 +447,7 @@ def _read_rgb(reader, index: int) -> np.ndarray:
 
 
 def grab_bgr(index: int) -> np.ndarray:
+    _bind()
     try:
         return _directshow(index)
     except RuntimeError:

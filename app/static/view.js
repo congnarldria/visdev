@@ -37,6 +37,40 @@
     });
   }
 
+  function mix(hash, text) {
+    const value = String(text);
+    let next = hash;
+    for (let i = 0; i < value.length; i += 1) next = (Math.imul(next, 33) ^ value.charCodeAt(i)) >>> 0;
+    return next;
+  }
+
+  function displayKey(display) {
+    if (!display) return "";
+    let hash = 5381;
+    hash = mix(hash, display.width);
+    hash = mix(hash, "x");
+    hash = mix(hash, display.height);
+    hash = mix(hash, display.image || "");
+    for (const shape of display.shapes || []) {
+      hash = mix(hash, "|");
+      hash = mix(hash, shape.type || "");
+      hash = mix(hash, shape.color || "");
+      hash = mix(hash, shape.text || "");
+      hash = mix(hash, shape.row == null ? "" : shape.row);
+      hash = mix(hash, shape.col == null ? "" : shape.col);
+      hash = mix(hash, shape.image || "");
+      const points = shape.points || [];
+      hash = mix(hash, points.length);
+      for (let i = 0; i < points.length; i += 1) {
+        hash = mix(hash, points[i][0]);
+        hash = mix(hash, ",");
+        hash = mix(hash, points[i][1]);
+        hash = mix(hash, ";");
+      }
+    }
+    return String(hash);
+  }
+
   function mount(canvas, hooks) {
     const ctx = canvas.getContext("2d");
     const cam = { x: 0, y: 0, scale: 1, user: false, fitW: 0, fitH: 0 };
@@ -176,6 +210,14 @@
           ctx.strokeStyle = shape.color || "#00e05a";
           ctx.lineWidth = (shape.width || 2) / cam.scale;
           ctx.stroke();
+        } else if (shape.type === "text") {
+          const size = 14 / cam.scale;
+          ctx.font = `${size}px "Segoe UI", "Microsoft JhengHei", sans-serif`;
+          ctx.lineWidth = 3 / cam.scale;
+          ctx.strokeStyle = "rgba(0,0,0,0.75)";
+          ctx.strokeText(shape.text || "", shape.col || 0, shape.row || 0);
+          ctx.fillStyle = shape.color || "#fff";
+          ctx.fillText(shape.text || "", shape.col || 0, shape.row || 0);
         }
       }
       strokePicked();
@@ -193,21 +235,36 @@
       let regionHit = null;
       let xldHit = null;
       let xldDist = Infinity;
+      let xldInside = null;
+      let xldInsideArea = Infinity;
       const limit = 12 / cam.scale;
       for (let i = shapes.length - 1; i >= 0; i -= 1) {
         const shape = shapes[i];
         if (shape.type !== "polyline" || shape.object == null || !shape.source) continue;
         if (shape.kind === "xld") {
-          const dist = lineDistance(col, row, shape.points || []);
+          const points = shape.points || [];
+          const dist = lineDistance(col, row, points);
           if (dist <= limit && dist < xldDist) {
             xldDist = dist;
             xldHit = shape;
+          }
+          const ends = points.length >= 3 ? Math.hypot(points[0][0] - points[points.length - 1][0], points[0][1] - points[points.length - 1][1]) : Infinity;
+          if (ends < 1.5 && pointInPoly(col, row, points)) {
+            let area = 0;
+            for (let p = 0, q = points.length - 1; p < points.length; q = p, p += 1) {
+              area += points[q][0] * points[p][1] - points[p][0] * points[q][1];
+            }
+            area = Math.abs(area);
+            if (area < xldInsideArea) {
+              xldInsideArea = area;
+              xldInside = shape;
+            }
           }
         } else if (!regionHit && pointInPoly(col, row, shape.points || [])) {
           regionHit = shape;
         }
       }
-      const shape = xldHit || regionHit;
+      const shape = xldHit || xldInside || regionHit;
       if (!shape) return null;
       const grouped = shape.kind === "xld" && shape.group != null;
       return {
@@ -227,12 +284,6 @@
     function setSelection(next) {
       selection = next && next.name ? next : null;
       draw();
-    }
-
-    function displayKey(display) {
-      if (!display) return "";
-      const shapes = display.shapes || [];
-      return `${display.width}x${display.height}:${(display.image || "").length}:${shapes.length}:${shapes.map((shape) => shape.color || "").join(",")}`;
     }
 
     async function setDisplay(display) {
@@ -329,5 +380,5 @@
     return { setMode, setDisplay, setSelection, fit, one, zoomBy, resize };
   }
 
-  window.VisdevView = { mount };
+  window.VisdevView = { mount, displayKey };
 })();

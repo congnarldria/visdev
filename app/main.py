@@ -105,12 +105,16 @@ class SubpixIn(BaseModel):
 
 def trim_sessions():
     while len(SESSIONS) > 20:
-        SESSIONS.pop(next(iter(SESSIONS)))
+        _sid, old = next(iter(SESSIONS.items()))
+        SESSIONS.pop(_sid, None)
+        old._release_handles()
 
 
 def session_for(body: ExecIn) -> Session:
     current = SESSIONS.get(body.id) if body.id else None
     if current is None or current.source != body.source:
+        if current is not None and current.source != body.source:
+            current._release_handles()
         current = Session(body.source, ROOT)
         SESSIONS[current.id] = current
         trim_sessions()

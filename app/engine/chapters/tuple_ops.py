@@ -10,7 +10,7 @@ import math
 import random
 import re
 
-from ..objects import Result
+from ..objects import Image, Region, Result, XLD
 from ..operators import P, operator
 
 IMPLEMENTED: set[str] = set()

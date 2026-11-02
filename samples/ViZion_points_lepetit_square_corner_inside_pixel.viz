@@ -14,4 +14,7 @@ Dist := (Row[Index] - 24) * (Row[Index] - 24) + (Column[Index] - 36) * (Column[I
 if (Dist < Best)
 Best := Dist
 BRow := Row[Index]
+BCol := Column[Index]
+endif
+endfor
 Vizion.dev_display (Image)

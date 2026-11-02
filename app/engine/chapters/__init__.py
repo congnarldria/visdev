@@ -32,6 +32,7 @@ __all__ = [
     "pose_ops",
     "code_ops",
     "camera_ops",
+    "serial_ops",
     "calib_ops",
     "cloud_ops",
     "class_ops",

@@ -8,6 +8,7 @@ sample can round-trip without a cable.
 from __future__ import annotations
 
 import ctypes
+import sys
 from ctypes import wintypes
 
 from ..operators import P, operator, text, whole
@@ -61,31 +62,42 @@ class _Timeouts(ctypes.Structure):
     ]
 
 
-if ctypes.sizeof(_DCB) != 28:
-    raise RuntimeError("DCB 大小不對")
+_kernel = None
 
-_kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-_kernel.CreateFileW.argtypes = [
-    wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
-    wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
-]
-_kernel.CreateFileW.restype = ctypes.c_void_p
-_kernel.ReadFile.argtypes = [
-    ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p,
-]
-_kernel.ReadFile.restype = wintypes.BOOL
-_kernel.WriteFile.argtypes = [
-    ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p,
-]
-_kernel.WriteFile.restype = wintypes.BOOL
-_kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-_kernel.CloseHandle.restype = wintypes.BOOL
-_kernel.GetCommState.argtypes = [ctypes.c_void_p, ctypes.POINTER(_DCB)]
-_kernel.GetCommState.restype = wintypes.BOOL
-_kernel.SetCommState.argtypes = [ctypes.c_void_p, ctypes.POINTER(_DCB)]
-_kernel.SetCommState.restype = wintypes.BOOL
-_kernel.SetCommTimeouts.argtypes = [ctypes.c_void_p, ctypes.POINTER(_Timeouts)]
-_kernel.SetCommTimeouts.restype = wintypes.BOOL
+
+def _windows():
+    """Bind kernel32 once. Missing on other systems, so loopback still imports."""
+    global _kernel
+    if _kernel is not None:
+        return _kernel
+    if sys.platform != "win32" or not hasattr(ctypes, "WinDLL"):
+        return None
+    if ctypes.sizeof(_DCB) != 28:
+        raise RuntimeError("DCB 大小不對")
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+        wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+    ]
+    kernel.CreateFileW.restype = ctypes.c_void_p
+    kernel.ReadFile.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p,
+    ]
+    kernel.ReadFile.restype = wintypes.BOOL
+    kernel.WriteFile.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p,
+    ]
+    kernel.WriteFile.restype = wintypes.BOOL
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel.CloseHandle.restype = wintypes.BOOL
+    kernel.GetCommState.argtypes = [ctypes.c_void_p, ctypes.POINTER(_DCB)]
+    kernel.GetCommState.restype = wintypes.BOOL
+    kernel.SetCommState.argtypes = [ctypes.c_void_p, ctypes.POINTER(_DCB)]
+    kernel.SetCommState.restype = wintypes.BOOL
+    kernel.SetCommTimeouts.argtypes = [ctypes.c_void_p, ctypes.POINTER(_Timeouts)]
+    kernel.SetCommTimeouts.restype = wintypes.BOOL
+    _kernel = kernel
+    return kernel
 
 
 class SerialPort:
@@ -102,6 +114,15 @@ class SerialPort:
         self.stop_bits = 1
         self.total_timeout = 200
         self.inter_char = 50
+
+    def release(self) -> None:
+        if self.closed:
+            return
+        if self.native is not None and _kernel is not None:
+            _kernel.CloseHandle(self.native)
+            self.native = None
+        self.buffer.clear()
+        self.closed = True
 
     def summary(self) -> str:
         if self.closed:
@@ -152,11 +173,14 @@ def _device_path(name: str) -> str:
 def _apply(port: SerialPort) -> None:
     if port.native is None:
         return
+    kernel = _windows()
+    if kernel is None:
+        raise RuntimeError("這個序列埠套不到這些參數")
     timeouts = _Timeouts(port.inter_char, 0, port.total_timeout, 0, port.total_timeout)
-    _kernel.SetCommTimeouts(port.native, ctypes.byref(timeouts))
+    kernel.SetCommTimeouts(port.native, ctypes.byref(timeouts))
     state = _DCB()
     state.DCBlength = ctypes.sizeof(_DCB)
-    if not _kernel.GetCommState(port.native, ctypes.byref(state)):
+    if not kernel.GetCommState(port.native, ctypes.byref(state)):
         raise RuntimeError("這個序列埠套不到這些參數")
     state.BaudRate = port.baud
     state.ByteSize = port.data_bits
@@ -168,12 +192,15 @@ def _apply(port: SerialPort) -> None:
     state.fInX = state.fOutX
     state.fOutxCtsFlow = 1 if port.flow == "rts/cts" else 0
     state.fRtsControl = 2 if port.flow == "rts/cts" else 1
-    if not _kernel.SetCommState(port.native, ctypes.byref(state)):
+    if not kernel.SetCommState(port.native, ctypes.byref(state)):
         raise RuntimeError("這個序列埠套不到這些參數")
 
 
 def _open_windows(name: str) -> SerialPort:
-    native = _kernel.CreateFileW(
+    kernel = _windows()
+    if kernel is None:
+        raise ValueError(f"打不開 {name}")
+    native = kernel.CreateFileW(
         _device_path(name),
         _GENERIC_READ | _GENERIC_WRITE,
         0,
@@ -228,9 +255,12 @@ def write_serial(handle, data, *, ctx):
     if port.loopback:
         port.buffer.extend(payload)
         return Result([], [])
+    kernel = _windows()
+    if kernel is None:
+        raise RuntimeError(f"寫不到 {port.name}")
     written = wintypes.DWORD(0)
     buffer = ctypes.create_string_buffer(payload)
-    ok = _kernel.WriteFile(port.native, buffer, len(payload), ctypes.byref(written), None)
+    ok = kernel.WriteFile(port.native, buffer, len(payload), ctypes.byref(written), None)
     if not ok or written.value != len(payload):
         raise RuntimeError(f"寫不到 {port.name}")
     return Result([], [])
@@ -264,9 +294,12 @@ def read_serial(handle, count, *, ctx):
         payload = bytes(port.buffer[:number])
         del port.buffer[:number]
         return Result([], [payload.decode("latin-1")])
+    kernel = _windows()
+    if kernel is None:
+        raise RuntimeError(f"{port.name} 沒有讀到資料")
     buffer = ctypes.create_string_buffer(number)
     got = wintypes.DWORD(0)
-    ok = _kernel.ReadFile(port.native, buffer, number, ctypes.byref(got), None)
+    ok = kernel.ReadFile(port.native, buffer, number, ctypes.byref(got), None)
     if not ok or got.value == 0:
         raise RuntimeError(f"{port.name} 沒有讀到資料")
     return Result([], [buffer.raw[: got.value].decode("latin-1")])
@@ -287,11 +320,7 @@ def close_serial(handle, *, ctx):
 
     port = handle if isinstance(handle, SerialPort) else None
     _require(port)
-    if port.native is not None:
-        _kernel.CloseHandle(port.native)
-        port.native = None
-    port.buffer.clear()
-    port.closed = True
+    port.release()
     return Result([], [])
 
 
