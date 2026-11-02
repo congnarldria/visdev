@@ -4890,6 +4890,19 @@ def test_score_shift_matches_and_cancel_stops():
     assert session.step_count < 2000000
 
 
+def test_pick_area_and_center_use_existing_measures():
+    import numpy as np
+
+    from app.engine.operators import region_measures
+
+    mask = np.zeros((10, 20), np.uint8)
+    mask[2:6, 4:10] = 255
+    values = region_measures(mask)
+    assert values["area"] == 24
+    assert abs(values["row"] - 3.5) < 1e-6
+    assert abs(values["column"] - 6.5) < 1e-6
+
+
 def test_unchanged_display_is_not_reencoded():
     from app.engine import render
     from app.engine.session import omit_known_state

@@ -74,6 +74,21 @@
     };
   }
 
+  function shouldRefit(userAdjusted, prevW, prevH, nextW, nextH) {
+    if (!nextW || !nextH) return false;
+    if (userAdjusted) return prevW > 0 && prevH > 0 && (prevW !== nextW || prevH !== nextH);
+    return true;
+  }
+
+  function frameAt(viewW, viewH, scale, col, row) {
+    const next = Math.min(48, Math.max(0.05, Number(scale) || 1));
+    return {
+      scale: next,
+      x: viewW / 2 - col * next,
+      y: viewH / 2 - row * next,
+    };
+  }
+
   function fitView(viewW, viewH, imageW, imageH, pad) {
     const scale = Math.max(0.02, Math.min((viewW - pad * 2) / imageW, (viewH - pad * 2) / imageH));
     return {
@@ -180,6 +195,8 @@
     pointInPoly,
     lineDistance,
     pickShape,
+    shouldRefit,
+    frameAt,
     fitView,
     oneToOne,
     zoomAt,

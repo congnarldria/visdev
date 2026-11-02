@@ -516,6 +516,9 @@ function takeDisplay(data) {
 
 function applyLiveState(data) {
   absorbKept(data);
+  const nextStamp = data.imageStamp;
+  const imageChanged = imageStamp != null && nextStamp != null && nextStamp !== imageStamp;
+  if (nextStamp != null) imageStamp = nextStamp;
   sessionId = data.id;
   server = data;
   renderEditor();
@@ -528,6 +531,7 @@ function applyLiveState(data) {
     stState.className = "";
   }
   takeDisplay(data);
+  if (imageChanged) clearPick();
 }
 
 async function exec(action, line) {
@@ -1265,10 +1269,10 @@ async function loadDisplay(display) {
   publishDisplay(display);
   gfxEmpty.hidden = true;
   gfxTitle.textContent = `${display.width} × ${display.height}`;
-  const sizeChanged = cam.fitW !== display.width || cam.fitH !== display.height;
+  const refit = VisdevGeom.shouldRefit(cam.user, cam.fitW, cam.fitH, display.width, display.height);
   cam.fitW = display.width;
   cam.fitH = display.height;
-  if (!cam.user || sizeChanged) {
+  if (refit) {
     cam.user = false;
     fit(false);
   } else {
@@ -2074,6 +2078,7 @@ iconicList.addEventListener("click", async (event) => {
     showDetail(data);
     return;
   }
+  clearPick();
   gfxBanner.hidden = false;
   gfxBanner.textContent = `預覽 ${selectedVar} · 再執行會回到程式畫面`;
   await loadDisplay(data.display);
@@ -2912,6 +2917,13 @@ function selectedFeatures() {
 
 let displayChannel = null;
 
+function currentFrame() {
+  if (!cam.user || !disp || !disp.width) return null;
+  const rect = canvas.getBoundingClientRect();
+  const center = VisdevGeom.imagePoint(rect.width / 2, rect.height / 2, cam);
+  return { scale: cam.scale, col: center.col, row: center.row };
+}
+
 function publishDisplay(display) {
   const copy = display ? {
     width: display.width,
@@ -2923,7 +2935,7 @@ function publishDisplay(display) {
       return next;
     }),
   } : null;
-  const payload = { type: "display", id: sessionId, display: copy, displayRev: liveDisplayRev, at: Date.now() };
+  const payload = { type: "display", id: sessionId, display: copy, displayRev: liveDisplayRev, frame: currentFrame(), at: Date.now() };
   try {
     if (!displayChannel) displayChannel = new BroadcastChannel("visdev-display");
     displayChannel.postMessage(payload);
@@ -2960,17 +2972,59 @@ async function openFeatureWindow() {
   window.open(url, "visdev-features", "popup=yes,width=880,height=720,left=420,top=60");
 }
 
+function showPickedVariable(name) {
+  if (!name || name === "__preview__" || selectedVar === name) return;
+  selectedVar = name;
+  renderVars();
+  const node = [...document.querySelectorAll("#iconicList .var")].find((item) => item.dataset.name === name);
+  if (node) node.scrollIntoView({ block: "nearest" });
+}
+
+function pickBanner(pick) {
+  const label = pick.kind === "xld" ? "輪廓" : "區域";
+  const shown = pick.name === "__preview__" ? "次像素" : (pick.name || "");
+  const body = `已點選${label} ${shown} #${pick.index + 1}。白色虛線是這一個，特徵只顯示它。`;
+  return pick.summary ? `${body} ${pick.summary}` : body;
+}
+
+let pickTicket = 0;
+
+async function describePick() {
+  const pick = pickedObject;
+  if (!pick || !sessionId || pick.name === "__preview__") return;
+  const ticket = ++pickTicket;
+  let res;
+  try {
+    res = await fetch("/api/features", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: sessionId,
+        name: pick.name,
+        index: pick.index,
+        kind: pick.kind || "region",
+        region: ["area", "row", "column"],
+        xld: ["area", "row", "column"],
+        gray: [],
+        subpixel: false,
+      }),
+    });
+  } catch (_err) {
+    return;
+  }
+  const data = await res.json().catch(() => null);
+  if (ticket !== pickTicket || pickedObject !== pick || !res.ok || !data) return;
+  const values = (pick.kind === "xld" ? data.xld : data.region) || {};
+  const text = VisdevPick.summary(values);
+  if (!text) return;
+  pick.summary = text;
+  gfxBanner.textContent = pickBanner(pick);
+  publishFeaturePick();
+}
+
 function publishFeaturePick() {
   if (!pickedObject) return;
-  const payload = {
-    type: "pick",
-    from: "main",
-    id: sessionId,
-    name: pickedObject.name,
-    index: pickedObject.index,
-    kind: pickedObject.kind,
-    at: Date.now(),
-  };
+  const payload = VisdevPick.pack("main", pickedObject, sessionId);
   localStorage.setItem("visdev.featurePick", JSON.stringify(payload));
   featureChannel.postMessage(payload);
 }
@@ -2979,7 +3033,7 @@ function clearPick() {
   pickedObject = null;
   featureLines = [];
   gfxBanner.hidden = true;
-  const payload = { type: "pick", from: "main", clear: true, at: Date.now() };
+  const payload = VisdevPick.pack("main", null, sessionId);
   localStorage.setItem("visdev.featurePick", JSON.stringify(payload));
   featureChannel.postMessage(payload);
   draw();
@@ -2989,13 +3043,13 @@ function pickObject(col, row) {
   const hit = VisdevGeom.pickShape(disp?.shapes || [], col, row, cam.scale);
   if (!hit) return false;
   pickedObject = hit;
-  const label = pickedObject.kind === "xld" ? "輪廓" : "區域";
-  const shown = pickedObject.name === "__preview__" ? "次像素" : (pickedObject.name || "");
+  showPickedVariable(pickedObject.name);
   gfxBanner.hidden = false;
-  gfxBanner.textContent = `已點選${label} ${shown} #${pickedObject.index + 1}。白色虛線是這一個，特徵只顯示它。`;
+  gfxBanner.textContent = pickBanner(pickedObject);
   draw();
   publishFeaturePick();
   loadFeatures();
+  describePick();
   return true;
 }
 
@@ -3026,27 +3080,32 @@ async function loadFeatures() {
 }
 
 const featureChannel = new BroadcastChannel("visdev-features");
+const pickWatch = VisdevPick.createWatch("main");
 function applyExternalPick(data) {
-  if (!data || data.type !== "pick" || data.from === "main") return;
-  if (data.clear || data.name === "__preview__") {
+  const next = pickWatch.accept(data);
+  if (!next || VisdevPick.sameSelection(pickedObject, next.selection)) return;
+  if (!next.selection) {
     pickedObject = null;
     featureLines = [];
     gfxBanner.hidden = true;
     draw();
     return;
   }
-  if (!data.name) return;
-  pickedObject = {
-    name: data.name,
-    index: data.index,
-    kind: data.kind || "region",
-    group: data.kind === "xld" ? data.index : null,
-  };
-  const label = pickedObject.kind === "xld" ? "輪廓" : "區域";
+  pickedObject = next.selection;
+  showPickedVariable(pickedObject.name);
   gfxBanner.hidden = false;
-  gfxBanner.textContent = `已點選${label} ${data.name} #${pickedObject.index + 1}。白色虛線是這一個，特徵只顯示它。`;
+  gfxBanner.textContent = pickBanner(pickedObject);
   draw();
   loadFeatures();
+  if (!pickedObject.summary) describePick();
+}
+
+function readStoredPick() {
+  try {
+    return JSON.parse(localStorage.getItem("visdev.featurePick") || "null");
+  } catch (_err) {
+    return null;
+  }
 }
 
 featureChannel.onmessage = (event) => {
@@ -3057,7 +3116,11 @@ featureChannel.onmessage = (event) => {
 };
 window.addEventListener("storage", (event) => {
   if (event.key === "visdev.features" && pickedObject) loadFeatures();
+  if (event.key === "visdev.featurePick" && event.newValue) {
+    try { applyExternalPick(JSON.parse(event.newValue)); } catch (_err) { /* 忽略壞掉的點選 */ }
+  }
 });
+setInterval(() => applyExternalPick(readStoredPick()), 300);
 
 function fillOcrMethods(engines) {
   const select = document.getElementById("ocrMethod");

@@ -34,8 +34,9 @@
     <button id="in" type="button">+</button>
   </header>
   <div id="stage"><canvas id="view"></canvas></div>
-  <script src="/static/geom.js?v=3"></script>
-  <script src="/static/view.js?v=4"></script>
+  <script src="/static/geom.js?v=5"></script>
+  <script src="/static/pick_sync.js?v=2"></script>
+  <script src="/static/view.js?v=6"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const sessionId = params.get("id") || "";
@@ -50,13 +51,10 @@
         });
       },
       onPick(hit) {
-        const payload = hit
-          ? { type: "pick", from: "gfx", id: sessionId, name: hit.name, index: hit.index, kind: hit.kind, at: Date.now() }
-          : { type: "pick", from: "gfx", clear: true, at: Date.now() };
-        view.setSelection(hit);
+        const payload = VisdevPick.pack("gfx", hit, sessionId);
+        applySelection(VisdevPick.graphicsSelection(payload));
         try { localStorage.setItem("visdev.featurePick", JSON.stringify(payload)); } catch (_err) { /* 圖太大時仍走頻道 */ }
         channel.postMessage(payload);
-        title.textContent = hit ? `已點選 ${hit.name} #${hit.index + 1}` : "跟主視窗同一張圖。點選、手抓、拉框放大。";
       },
     });
     const channel = new BroadcastChannel("visdev-features");
@@ -66,19 +64,40 @@
     document.getElementById("one").onclick = () => view.one();
     document.getElementById("out").onclick = () => view.zoomBy(1 / 1.25);
     document.getElementById("in").onclick = () => view.zoomBy(1.25);
-    channel.onmessage = (event) => {
-      const data = event.data;
-      if (!data || data.type !== "pick" || data.from === "gfx") return;
-      if (data.clear) {
-        view.setSelection(null);
-        return;
-      }
-      view.setSelection({ name: data.name, index: data.index, kind: data.kind });
-    };
+    const pickWatch = VisdevPick.createWatch("gfx");
+    let currentPick = null;
+    let pictureLabel = "跟主視窗同一張圖。點選、手抓、拉框放大。";
+    function pickTitle(selection) {
+      if (!selection) return pictureLabel;
+      const base = `已點選 ${selection.name} #${selection.index + 1}`;
+      return selection.summary ? `${base} · ${selection.summary}` : base;
+    }
+    function applySelection(selection) {
+      const same = VisdevPick.sameSelection(currentPick, selection);
+      currentPick = selection;
+      if (!same) view.setSelection(selection);
+      title.textContent = pickTitle(selection);
+    }
+    function acceptPick(message, force) {
+      const next = pickWatch.accept(message, force);
+      if (!next) return;
+      applySelection(next.selection);
+    }
+    channel.onmessage = (event) => acceptPick(event.data);
+    window.addEventListener("storage", (event) => {
+      if (event.key !== "visdev.featurePick" || !event.newValue) return;
+      try { acceptPick(JSON.parse(event.newValue)); } catch (_err) { /* 忽略壞掉的點選 */ }
+    });
+    setInterval(() => {
+      try { acceptPick(JSON.parse(localStorage.getItem("visdev.featurePick") || "null")); } catch (_err) { /* 尚未點選 */ }
+    }, 300);
+    try { acceptPick(JSON.parse(localStorage.getItem("visdev.featurePick") || "null"), true); } catch (_err) { /* 尚未點選 */ }
     let displayRev = null;
-    function showDisplay(display) {
+    function showDisplay(display, frame) {
+      if (frame) view.setFrame(frame);
+      pictureLabel = display ? `${display.width} × ${display.height}` : "圖形視窗是空的";
       view.setDisplay(display);
-      title.textContent = display ? `${display.width} × ${display.height}` : "圖形視窗是空的";
+      title.textContent = pickTitle(currentPick);
     }
     displayChannel.onmessage = (event) => {
       const data = event.data;
@@ -86,10 +105,10 @@
       if (sessionId && data.id && data.id !== sessionId) return;
       if (data.displayRev != null) displayRev = data.displayRev;
       if (!data.display) {
-        showDisplay(null);
+        showDisplay(null, data.frame);
         return;
       }
-      showDisplay(data.display);
+      showDisplay(data.display, data.frame);
     };
     async function pull() {
       if (!sessionId) return;

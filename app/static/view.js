@@ -206,6 +206,19 @@
       if (hooks && hooks.onMode) hooks.onMode(mode);
     }
 
+    function setFrame(frame) {
+      if (!frame || cam.user) return false;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width < 2 || rect.height < 2) return false;
+      const placed = VisdevGeom.frameAt(rect.width, rect.height, frame.scale, frame.col, frame.row);
+      cam.scale = placed.scale;
+      cam.x = placed.x;
+      cam.y = placed.y;
+      cam.user = true;
+      draw();
+      return true;
+    }
+
     function setSelection(next) {
       selection = next && next.name ? next : null;
       draw();
@@ -231,10 +244,10 @@
         }
       });
       await Promise.all(jobs);
-      const changed = cam.fitW !== disp.width || cam.fitH !== disp.height;
+      const refit = VisdevGeom.shouldRefit(cam.user, cam.fitW, cam.fitH, disp.width, disp.height);
       cam.fitW = disp.width;
       cam.fitH = disp.height;
-      if (!cam.user || changed) fit(false);
+      if (refit) fit(false);
       else draw();
     }
 
@@ -302,7 +315,7 @@
     new ResizeObserver(() => resize()).observe(canvas.parentElement || canvas);
     setMode("select");
     resize();
-    return { setMode, setDisplay, setSelection, fit, one, zoomBy, resize };
+    return { setMode, setDisplay, setSelection, setFrame, fit, one, zoomBy, resize };
   }
 
   window.VisdevView = { mount, displayKey };

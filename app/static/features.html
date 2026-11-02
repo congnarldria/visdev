@@ -116,8 +116,9 @@
       <div id="customList" class="empty">執行程式後，數值會靠右顯示。</div>
     </aside>
   </div>
-  <script src="/static/geom.js?v=3"></script>
-  <script src="/static/view.js?v=4"></script>
+  <script src="/static/geom.js?v=5"></script>
+  <script src="/static/pick_sync.js?v=2"></script>
+  <script src="/static/view.js?v=6"></script>
   <script>
     const GRAY_LABELS = {
       gray_min: "最小輝度",
@@ -342,9 +343,7 @@
         modeButtons.forEach((button) => button.classList.toggle("on", button.dataset.mode === mode));
       },
       onPick(hit) {
-        const payload = hit
-          ? { type: "pick", from: "features", id: sessionId, name: hit.name, index: hit.index, kind: hit.kind, at: Date.now() }
-          : { type: "pick", from: "features", clear: true, at: Date.now() };
+        const payload = VisdevPick.pack("features", hit, sessionId);
         try { localStorage.setItem("visdev.featurePick", JSON.stringify(payload)); } catch (_err) { /* 仍走頻道 */ }
         channel.postMessage(payload);
         takePick(payload);
@@ -355,18 +354,27 @@
     document.getElementById("one").onclick = () => picture.one();
     document.getElementById("out").onclick = () => picture.zoomBy(1 / 1.25);
     document.getElementById("in").onclick = () => picture.zoomBy(1.25);
+    let displayRev = null;
+    function showPicture(display, frame) {
+      if (frame) picture.setFrame(frame);
+      picture.setDisplay(display || null);
+    }
     displayChannel.onmessage = (event) => {
       const data = event.data;
-      if (!data || data.type !== "display" || !data.display) return;
+      if (!data || data.type !== "display") return;
       if (sessionId && data.id && data.id !== sessionId) return;
-      picture.setDisplay(data.display);
+      if (data.displayRev != null) displayRev = data.displayRev;
+      showPicture(data.display, data.frame);
     };
     async function pullDisplay() {
       if (!sessionId) return;
-      const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/display`);
+      const query = displayRev == null ? "" : `?displayRev=${encodeURIComponent(displayRev)}`;
+      const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/display${query}`);
       if (!res.ok) return;
       const data = await res.json();
-      if (data.display) picture.setDisplay(data.display);
+      if (data.displayRev != null) displayRev = data.displayRev;
+      if (data.displayKept) return;
+      showPicture(data.display, null);
     }
     pullDisplay();
     setInterval(pullDisplay, 800);
