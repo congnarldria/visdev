@@ -4421,6 +4421,103 @@ Vizion.count_obj (OpenCVParts, OpenCVCount)
     assert set(colors) <= {item.lower() for item in MATCH_COLORS}
 
 
+def test_arrow_into_procedure_stops_at_the_header():
+    source = "\n".join([
+        "procedure add (: : Value : Result)",
+        "    Result := Value + 1",
+        "endprocedure",
+        "Value := 4",
+        "add (Value, Out)",
+    ])
+    session = Session(source, ROOT)
+    session.set_line(2)
+    assert session.current_line() == 1
+    assert session.log[-1] == "程序還沒呼叫，箭頭停在程序標題"
+    session.step()
+    assert session.current_line() == 4
+    assert "Result" not in session.vars
+    session.step()
+    assert session.vars["Value"] == 4
+    session.step()
+    assert session.current_line() == 2
+    assert session.public_state()["procedure"] == "add"
+    session.set_line(2)
+    assert session.current_line() == 2
+    assert session.vars["Value"] == 4
+    session.set_line(5)
+    assert session.current_line() == 5
+    assert session.public_state()["procedure"] is None
+    assert session.vars["Value"] == 4
+    assert "Out" not in session.vars
+    session.step()
+    assert session.current_line() == 2
+    session.step()
+    assert session.vars["Out"] == 5
+
+    stopped = Session(source, ROOT)
+    stopped.breakpoints = {2}
+    stopped.run()
+    assert stopped.paused == "breakpoint"
+    assert stopped.current_line() == 2
+    stopped.set_line(4)
+    assert stopped.current_line() == 4
+    assert stopped.paused is None
+    stopped.run()
+    assert stopped.paused == "breakpoint"
+    assert stopped.current_line() == 2
+    assert "Result" not in stopped.vars
+    assert stopped.vars["Value"] == 4
+
+
+def test_procedure_error_marks_the_inner_line():
+    source = "\n".join([
+        "procedure add (: : Value : Result)",
+        "    Result := Value + Missing",
+        "endprocedure",
+        "add (4, Out)",
+    ])
+    session = run_source(source)
+    assert session.error_line == 2
+    assert "Missing" in session.error
+    assert "Out" not in session.vars
+    stepped = Session(source, ROOT)
+    stepped.step()
+    stepped.step()
+    assert stepped.current_line() == 2
+    stepped.step()
+    assert stepped.error_line == 2
+    assert "Missing" in stepped.error
+
+
+def test_procedure_step_keeps_caller_variables_visible():
+    source = "\n".join([
+        "Ready := 1",
+        "procedure add (: : Value : Result)",
+        "    Result := Value + 1",
+        "endprocedure",
+        "add (4, Out)",
+    ])
+    session = Session(source, ROOT)
+    session.step()
+    session.step()
+    session.step()
+    assert session.current_line() == 3
+    assert session.public_state()["procedure"] == "add"
+    names = [item["name"] for item in session.public_state()["control"]]
+    assert names.index("Value") < names.index("Ready")
+    assert "Out" not in names
+    scopes = {item["name"]: item["scope"] for item in session.public_state()["control"]}
+    assert scopes["Value"] == "程序"
+    assert scopes["Ready"] == "呼叫端"
+    session.step()
+    assert session.vars["Out"] == 5
+    assert session.public_state()["procedure"] is None
+    after = [item["name"] for item in session.public_state()["control"]]
+    assert "Ready" in after and "Out" in after
+    assert "Value" not in after
+    assert all(item.get("scope") in (None,) for item in session.public_state()["control"])
+
+
 def test_move_program_arrow():
     session = Session("a := 1\nb := a + 1\nc := b + 1\n", ROOT)
     session.step()

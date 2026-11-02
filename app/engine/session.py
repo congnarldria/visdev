@@ -184,6 +184,7 @@ class Session:
         self._wait_frame = None
         self.break_skip = None
         self.arrow_line = None
+        self.arrow_note = None
         self.line_times: dict[int, dict] = {}
         self.step_count = 0
         self.ref_shape = None
@@ -223,8 +224,32 @@ class Session:
                 return proc.name
         return None
 
+    def _scoped_vars(self) -> tuple[dict, set]:
+        layers = []
+        if self.proc_stack:
+            layers = [frame["caller_vars"] for frame in reversed(self.proc_stack)]
+        elif self.paused in ("breakpoint", "wait") and getattr(self, "_wait_frame", None) is not None:
+            frame = self._wait_frame
+            while frame is not None:
+                layers.append(frame.get("caller_vars") or {})
+                frame = frame.get("caller")
+        if not layers:
+            return self.vars, set()
+        local_names = set(self.vars)
+        merged = dict(self.vars)
+        for layer in layers:
+            for name, value in layer.items():
+                if name not in merged:
+                    merged[name] = value
+        return merged, local_names
+
     def set_line(self, line: int):
-        """Move the program arrow. Variables stay; the next step starts at this line."""
+        """Move the program arrow. Variables stay; the next step starts at this line.
+
+        A drop inside a procedure body stays there only when that call is already
+        active. Otherwise the arrow stops on the procedure header, so the body
+        does not run with the caller's variables.
+        """
         target = None
         for index, stmt in enumerate(self.stmts):
             if isinstance(stmt, (Blank, Comment)):
@@ -236,13 +261,136 @@ class Session:
         self.error_line = None
         self.paused = None
         self.break_skip = None
+        self.arrow_note = None
         if target is None:
+            self._release_proc_jump(None)
             self.pc = len(self.stmts)
             self.done = True
             self.arrow_line = None
             return
-        self.pc = target
+        adjusted = self._procedure_arrow_index(target)
+        self._release_proc_jump(adjusted)
+        if adjusted != target:
+            self.arrow_note = "程序還沒呼叫，箭頭停在程序標題"
+            self.log.append(self.arrow_note)
+        self.pc = adjusted
         self.done = False
+
+    def _enclosing_proc(self, index: int):
+        found = None
+        span = None
+        for proc_index, end in self.proc_end.items():
+            if proc_index < index < end:
+                width = end - proc_index
+                if span is None or width < span:
+                    found = proc_index
+                    span = width
+        if found is None:
+            return None
+        return found, self.proc_end[found]
+
+    def _frame_proc_index(self, frame) -> int | None:
+        proc = frame.get("proc")
+        end = frame.get("end")
+        for proc_index, proc_end in self.proc_end.items():
+            if proc_end == end and self.stmts[proc_index] is proc:
+                return proc_index
+        return None
+
+    def _proc_is_active(self, proc_index: int) -> bool:
+        for frame in self.proc_stack:
+            if self._frame_proc_index(frame) == proc_index:
+                return True
+        frame = getattr(self, "_wait_frame", None)
+        while frame is not None:
+            if self._frame_proc_index(frame) == proc_index:
+                return True
+            frame = frame.get("caller")
+        return False
+
+    def _procedure_arrow_index(self, index: int) -> int:
+        found = self._enclosing_proc(index)
+        if found is None:
+            return index
+        proc_index, _end = found
+        if self._proc_is_active(proc_index):
+            return index
+        return proc_index
+
+    def _release_proc_jump(self, index: int | None) -> None:
+        while self.proc_stack:
+            proc_index = self._frame_proc_index(self.proc_stack[-1])
+            end = self.proc_stack[-1]["end"]
+            if index is not None and proc_index is not None and proc_index < index < end:
+                break
+            frame = self.proc_stack.pop()
+            self.vars = frame["caller_vars"]
+            self.proc_depth = max(0, self.proc_depth - 1)
+        if self.proc_stack:
+            self._wait_frame = None
+            return
+        if self._wait_frame is None:
+            return
+        if index is not None and self._wait_contains(index):
+            self._adopt_wait_chain(index)
+            return
+        self._drop_wait_frames()
+
+    def _wait_contains(self, index: int) -> bool:
+        frame = self._wait_frame
+        while frame is not None:
+            proc_index = self._frame_proc_index(frame)
+            end = frame.get("end")
+            if proc_index is not None and end is not None and proc_index < index < end:
+                return True
+            frame = frame.get("caller")
+        return False
+
+    def _drop_wait_frames(self) -> None:
+        frame = self._wait_frame
+        outer = None
+        while frame is not None:
+            outer = frame.get("caller_vars")
+            frame = frame.get("caller")
+        if outer is not None:
+            self.vars = outer
+        self._wait_frame = None
+        self.proc_depth = len(self.proc_stack)
+
+    def _adopt_wait_chain(self, index: int) -> None:
+        chain = []
+        frame = self._wait_frame
+        while frame is not None:
+            chain.append(frame)
+            frame = frame.get("caller")
+        chosen = None
+        for frame in chain:
+            proc_index = self._frame_proc_index(frame)
+            end = frame.get("end")
+            if proc_index is not None and end is not None and proc_index < index < end:
+                chosen = frame
+                break
+        if chosen is None:
+            self._drop_wait_frames()
+            return
+        selected = []
+        frame = chosen
+        while frame is not None:
+            selected.append(frame)
+            frame = frame.get("caller")
+        self.proc_stack = [self._stack_frame(item) for item in reversed(selected)]
+        self.vars = chosen["local"]
+        self.proc_depth = len(self.proc_stack)
+        self._wait_frame = None
+
+    def _stack_frame(self, frame) -> dict:
+        return {
+            "caller_vars": frame["caller_vars"],
+            "end": frame["end"],
+            "saved_pc": frame["saved_pc"],
+            "stmt": frame["stmt"],
+            "proc": frame["proc"],
+        }
 
     def resolve_read_path(self, filename: str) -> Path:
         path = Path(filename).expanduser()
@@ -368,6 +516,7 @@ class Session:
     def step(self):
         if self.error:
             return
+        self.arrow_note = None
         self.paused = None
         self.break_skip = None
         self.prepare()
@@ -403,6 +552,7 @@ class Session:
                 self.reset()
                 parked = None
                 resume_parked = False
+            self.arrow_note = None
             self.paused = None
             if not resume:
                 self.cancel = False
@@ -459,12 +609,17 @@ class Session:
                 self.pc = catch_index + 1
                 self.log.append(f"catch {var} 第 {stmt.line} 行：{exc}")
             elif self.proc_depth:
-                self.error = f"程序第 {stmt.line} 行：{exc}"
-                self.error_line = stmt.line
+                if getattr(exc, "line", None):
+                    self.error = str(exc)
+                    self.error_line = exc.line
+                else:
+                    self.error = f"程序第 {stmt.line} 行：{exc}"
+                    self.error_line = stmt.line
             else:
+                line = getattr(exc, "line", None) or stmt.line
                 self.error = str(exc)
-                self.error_line = stmt.line
-                self.log.append(f"錯誤 第 {stmt.line} 行：{exc}")
+                self.error_line = line
+                self.log.append(f"錯誤 第 {line} 行：{exc}")
         finally:
             self._note_time(stmt, time.perf_counter() - started)
 
@@ -654,9 +809,12 @@ class Session:
             raise RuntimeError(guard)
         if self.error:
             message = self.error
+            line = self.error_line
             self.error = None
             self.error_line = None
-            raise RuntimeError(message)
+            err = RuntimeError(message)
+            err.line = line
+            raise err
         self._export_proc(stmt, proc, local)
 
     def _export_proc(self, stmt: Call, proc, local) -> None:
@@ -887,30 +1045,36 @@ class Session:
     def public_state(self) -> dict:
         iconic = []
         control = []
-        for name, value in self.vars.items():
+        variables, local_names = self._scoped_vars()
+        for name, value in variables.items():
+            scope = None
+            if local_names:
+                scope = "程序" if name in local_names else "呼叫端"
             if isinstance(value, list) and value and all(isinstance(item, Image) for item in value):
                 kind, info, thumb = describe_iconic(value[-1], self._thumb_cache)
                 iconic.append({
                     "name": name, "kind": kind, "role": _var_role(name, kind, True),
+                    "scope": scope,
                     "info": f"{len(value)} 張  {info}", "thumb": thumb,
                 })
             elif isinstance(value, (Image, Region, XLD)):
                 kind, info, thumb = describe_iconic(value, self._thumb_cache)
                 iconic.append({
                     "name": name, "kind": kind, "role": _var_role(name, kind, True),
+                    "scope": scope,
                     "info": info, "thumb": thumb,
                 })
             elif isinstance(value, ShapeModel):
-                control.append({"name": name, "type": "shape_model", "text": value.summary(), "full": value.summary()})
+                control.append({"name": name, "type": "shape_model", "scope": scope, "text": value.summary(), "full": value.summary()})
             elif isinstance(value, NccModel):
-                control.append({"name": name, "type": "ncc_model", "text": value.summary(), "full": value.summary()})
+                control.append({"name": name, "type": "ncc_model", "scope": scope, "text": value.summary(), "full": value.summary()})
             elif callable(getattr(value, "summary", None)):
                 text = value.summary()
-                control.append({"name": name, "type": "model", "text": text, "full": text})
+                control.append({"name": name, "type": "model", "scope": scope, "text": text, "full": text})
             else:
                 kind = "tuple" if isinstance(value, list) else "string" if isinstance(value, str) else "real" if isinstance(value, float) else "integer"
                 role = _var_role(name, kind, False)
-                control.append({"name": name, "type": role, "text": fmt_value(value), "full": full_value(value)})
+                control.append({"name": name, "type": role, "scope": scope, "text": fmt_value(value), "full": full_value(value)})
         histogram = None
         if self.histogram is not None:
             histogram = dict(self.histogram)
@@ -919,8 +1083,8 @@ class Session:
         var_rev = self._revision(
             "_var_cache",
             (
-                tuple((item["name"], item["kind"], item["role"], item["info"], item["thumb"]) for item in iconic),
-                tuple((item["name"], item["type"], item["text"], item["full"]) for item in control),
+                tuple((item["name"], item.get("scope"), item["kind"], item["role"], item["info"], item["thumb"]) for item in iconic),
+                tuple((item["name"], item.get("scope"), item["type"], item["text"], item["full"]) for item in control),
             ),
         )
         log_rev = self._revision("_log_cache", tuple(self.log[-300:]))
@@ -928,6 +1092,7 @@ class Session:
             "id": self.id,
             "line": self.current_line(),
             "procedure": self._paused_procedure(),
+            "arrowNote": getattr(self, "arrow_note", None),
             "done": self.done,
             "error": self.error,
             "errorLine": self.error_line,

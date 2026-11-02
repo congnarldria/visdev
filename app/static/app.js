@@ -135,7 +135,7 @@ function programArrow() {
 }
 
 function noteRunningProgram() {
-  if (runningSource == null) return;
+  if (runningSource == null || server.arrowNote) return;
   const note = VisdevRun.statusText(runningSource, code.value, server.line, !!server.running, server.paused);
   if (!note) {
     if (!server.running) {
@@ -233,11 +233,11 @@ function renderVars() {
     <button class="var ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="iconic">
       <img alt="" src="${item.thumb || ""}">
       <span class="vn">${esc(item.name)}</span>
-      <span class="vm">${esc(item.role && item.role !== item.kind ? item.role + " · " + item.kind : item.kind)} · ${esc(item.info)}</span>
+      <span class="vm">${esc(item.scope ? item.scope + " · " : "")}${esc(item.role && item.role !== item.kind ? item.role + " · " + item.kind : item.kind)} · ${esc(item.info)}</span>
     </button>`).join("") || `<div class="hint">還沒有圖像變數</div>`;
   controlList.innerHTML = server.control.map((item) => `
     <button class="var ctrl ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="control" title="${esc(item.full || item.text)}">
-      <span class="vn">${esc(item.name)}<small>${esc(item.type)}</small></span>
+      <span class="vn">${esc(item.name)}<small>${esc(item.scope ? item.scope + " " : "")}${esc(item.type)}</small></span>
       <span class="vm">${esc(item.text)}</span>
     </button>`).join("") || `<div class="hint">還沒有控制變數</div>`;
 }
@@ -434,7 +434,8 @@ function setStatus() {
     stState.textContent = "就緒";
   }
   const proc = server.procedure ? `程序 ${server.procedure} · ` : "";
-  if (server.line && server.paused === "breakpoint") stLine.textContent = `${proc}中斷於第 ${server.line} 行`;
+  if (server.arrowNote) stLine.textContent = server.arrowNote;
+  else if (server.line && server.paused === "breakpoint") stLine.textContent = `${proc}中斷於第 ${server.line} 行`;
   else if (server.line && server.done) stLine.textContent = `${proc}結束於第 ${server.line} 行`;
   else if (server.line) stLine.textContent = `${proc}下一行 ${server.line}`;
   else stLine.textContent = server.done ? "程式結束" : "";
@@ -579,7 +580,10 @@ function applyLiveState(data) {
 }
 
 async function exec(action, line) {
-  if (inflight) return;
+  if (inflight) {
+    if (action === "goto") stLine.textContent = "程式還在跑，停下來才能移動箭頭";
+    return;
+  }
   inflight = true;
   document.getElementById("btnRun").disabled = action === "run";
   const submitted = code.value;
