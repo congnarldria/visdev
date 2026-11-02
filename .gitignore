@@ -6,3 +6,6 @@ workspace/*
 !workspace/.gitkeep
 # Linux build of the matcher. Windows keeps app/engine/visdev_match.pyd.
 app/engine/visdev_match.so
+/build/
+/dist/
+/VisDev.spec

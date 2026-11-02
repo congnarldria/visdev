@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from ..objects import Image, Result
 from ..operators import P, operator, text, whole
@@ -100,22 +101,40 @@ def _paint(data: np.ndarray, color: str, width: int, height: int) -> np.ndarray:
     return cv2.resize(data, (int(width), int(height)), interpolation=cv2.INTER_LINEAR)
 
 
-class _HeldFrame:
-    def __init__(self, frame) -> None:
-        self.frame = frame
-        self.opened = True
+class _LiveCamera:
+    """DirectShow camera. Each read asks for the current frame.
+
+    The frame taken while opening is returned once, then later reads call
+    ``grab`` again. A failed later read does not reuse the previous picture.
+    """
+
+    def __init__(self, grab, index: int, first) -> None:
+        self._grab = grab
+        self._index = index
+        self._pending = None if first is None else np.array(first, copy=True)
+        self.opened = self._pending is not None
 
     def isOpened(self) -> bool:
-        return self.opened and self.frame is not None
+        return self.opened
 
     def read(self):
-        if not self.opened or self.frame is None:
+        if not self.opened:
             return False, None
-        return True, self.frame
+        if self._pending is not None:
+            frame = self._pending
+            self._pending = None
+            return True, frame
+        try:
+            frame = self._grab(self._index)
+        except (RuntimeError, OSError, ImportError, AttributeError):
+            return False, None
+        if frame is None:
+            return False, None
+        return True, np.array(frame, copy=True)
 
     def release(self) -> None:
         self.opened = False
-        self.frame = None
+        self._pending = None
 
     def set(self, *_args) -> bool:
         return False
@@ -125,7 +144,7 @@ def _open_camera(index: int, width: int, height: int):
     try:
         from ..dshow import grab_bgr
 
-        return _HeldFrame(grab_bgr(index))
+        return _LiveCamera(grab_bgr, index, grab_bgr(index))
     except (RuntimeError, OSError, ImportError, AttributeError):
         pass
     cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
@@ -201,7 +220,7 @@ def _grab(handle: AcqHandle, flush: bool, ctx) -> Result:
     "開啟檔案或本機相機",
     "沒有廠商採集卡。參數比 HALCON 少，順序是名稱、裝置、色彩、寬、高。"
     "File 的 Device 可以是一張圖或一個資料夾，資料夾裡的圖按檔名排序。"
-    "OpenCV 的 Device 是相機編號，0 是第一台，先用 DirectShow 抓一張。Width 或 Height 只有一個大於 0 時會保持比例。",
+    "OpenCV 的 Device 是相機編號，0 是第一台。每次抓圖都讀目前畫面；Windows 上先問 DirectShow，打不開再試 OpenCV。Width 或 Height 只有一個大於 0 時會保持比例。",
     "Vizion.open_framegrabber ('File', 'samples/code39.png', AcqHandle)",
 )
 def open_framegrabber(name, device, color_space, width, height, *, ctx):

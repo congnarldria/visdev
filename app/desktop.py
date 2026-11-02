@@ -216,6 +216,22 @@ class DesktopApi:
         return str(file)
 
 
+def report_startup_failure(text: str) -> None:
+    log = ROOT / "visdev.log"
+    try:
+        log.write_text(text, encoding="utf-8")
+    except OSError:
+        pass
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, text[-1500:], "VisDev 沒有啟動", 0x00000010)
+    except Exception:
+        return
+
+
 def main() -> None:
     port = free_port()
     errors: list[str] = []
@@ -242,6 +258,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
-        log = ROOT / "visdev.log"
-        log.write_text(traceback.format_exc(), encoding="utf-8")
+        report_startup_failure(traceback.format_exc())
         raise

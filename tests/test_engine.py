@@ -3550,6 +3550,61 @@ def test_hdevelop_batch109():
     assert sample.vars["Parts"].count() == 4
 
 
+def test_live_camera_reads_a_new_frame_each_grab():
+    from app.engine.chapters import camera_ops
+
+    values = [10, 80, 160, 200]
+
+    def grab(_index):
+        return np.full((3, 4, 3), values.pop(0), np.uint8)
+
+    handle = camera_ops.AcqHandle("opencv", "0", "gray", 0, 0, cap=camera_ops._LiveCamera(grab, 0, grab(0)))
+    first = camera_ops._load_camera(handle, False)
+    second = camera_ops._load_camera(handle, False)
+    latest = camera_ops._load_camera(handle, True)
+    assert int(first.mean()) == 10
+    assert int(second.mean()) == 80
+    assert int(latest.mean()) == 200
+    handle.release()
+    try:
+        camera_ops._load_camera(handle, False)
+    except RuntimeError as exc:
+        assert "相機沒有打開" in str(exc)
+    else:
+        raise AssertionError("a closed camera should fail")
+
+
+def test_unopened_camera_error_stays_the_same():
+    from app.engine.chapters import camera_ops
+    import app.engine.dshow as dshow
+
+    original_grab = dshow.grab_bgr
+    original_capture = camera_ops.cv2.VideoCapture
+
+    def boom(_index):
+        raise RuntimeError("sample grabber failed")
+
+    class Dead:
+        def isOpened(self):
+            return False
+
+        def release(self):
+            return None
+
+    dshow.grab_bgr = boom
+    camera_ops.cv2.VideoCapture = lambda *_args, **_kwargs: Dead()
+    try:
+        try:
+            camera_ops._open_camera(0, 0, 0)
+        except RuntimeError as exc:
+            assert str(exc) == "打不開相機 0"
+        else:
+            raise AssertionError("camera should not open")
+    finally:
+        dshow.grab_bgr = original_grab
+        camera_ops.cv2.VideoCapture = original_capture
+
+
 def test_open_framegrabber_directshow():
     session = run_source(
         "Vizion.open_framegrabber ('OpenCV', '0', 'gray', 320, 240, Handle)\n"
