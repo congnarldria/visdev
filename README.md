@@ -38,7 +38,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8765
 - **載入影像**把圖放進 `workspace/`，路徑可寫進 `read_image`。
 - **匯出 C#** 涵蓋讀圖、定義域、二值化、連通、篩選、矩形和圓形形態學、個數和重心。
 
-執行是 F5，單步是 F6，步進程序是 F7。點算子名稱可改參數。有座標的算子可在圖上框選。
+執行是 F5，單步是 F6，步進程序是 F7。點算子名稱可改參數。有座標的算子可在圖上框選。說明選單裡的「使用說明」有同樣的步驟，不用另開這個檔。
 
 要在 Windows 上打包，執行 `build_windows.bat`。需要 Python 3.9 或更新版本、`app/engine/visdev_match.pyd`，以及 PyInstaller。腳本會分別說明缺哪一個。執行檔在使用者的電腦上產出，是 `dist\VisDev\VisDev.exe`。
 

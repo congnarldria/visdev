@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VisDev 視覺開發環境</title>
   <link rel="icon" href="/static/magpie.ico">
-  <link rel="stylesheet" href="/static/app.css?v=32">
+  <link rel="stylesheet" href="/static/app.css?v=33">
 </head>
 <body>
   <nav class="menubar" aria-label="主選單">
@@ -96,6 +96,7 @@
     <div class="menu-item">
       <button type="button">說明</button>
       <div class="menu-drop" hidden>
+        <button type="button" data-cmd="help">使用說明</button>
         <button type="button" data-cmd="about">關於 VisDev</button>
       </div>
     </div>
@@ -262,6 +263,21 @@ endfor</pre>
     </section>
   </main>
 
+  <div id="helpDialog" class="modal" hidden>
+    <div class="dialog guide" role="dialog" aria-labelledby="helpTitle">
+      <h2 id="helpTitle">使用說明</h2>
+      <p>這是 VisDev 1.1 beta，不是正式版。</p>
+      <h3>執行</h3>
+      <p>F5 執行，F6 單步，F7 步進程序。程式跑到一半失敗時，已經算出的圖和變數留著，狀態列會寫出第幾行。</p>
+      <h3>範本</h3>
+      <p>檔案、範本裡有三支，打開就能跑。零件檢測讀 <code>samples/parts.png</code>，這張圖是 8 個零件，可改門檻和面積。邊緣量測讀 <code>samples/gauge.png</code>。形狀定位用樣板在場景裡找，這張場景是 4 個。</p>
+      <h3>標定</h3>
+      <p>棋盤寫 <code>'5,7,10'</code>，也可以用 <code>.cpd</code> 或 <code>.descr</code>。多台相機時，每一台的第 k 組要是同時看到的同一塊板。<code>camera/pose</code> 是相對第 0 台的姿態，第 0 台是 0。標完的圖可以點某一張看原圖，再點一下回到全部。</p>
+      <h3>存檔與 Windows</h3>
+      <p>存檔在 <code>workspace/</code>。Windows 上用 <code>run.bat</code> 開啟，用 <code>build_windows.bat</code> 打包。打包需要 Python 3.9 或更新版本、<code>visdev_match.pyd</code> 和 PyInstaller。形狀匹配在 Windows 用這個 <code>.pyd</code>。</p>
+      <div class="actions"><button id="helpOk" type="button">確定</button></div>
+    </div>
+  </div>
   <div id="aboutDialog" class="modal" hidden>
     <div class="dialog about" role="dialog" aria-labelledby="aboutTitle">
       <h2 id="aboutTitle">VisDev 1.1 beta</h2>
@@ -311,6 +327,6 @@ endfor</pre>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
   <script src="/static/run_source.js?v=1"></script>
-  <script src="/static/app.js?v=75"></script>
+  <script src="/static/app.js?v=76"></script>
 </body>
 </html>

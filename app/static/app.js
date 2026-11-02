@@ -111,6 +111,7 @@ function highlightLine(line) {
 function renderHighlight() {
   const src = code.value.endsWith("\n") ? code.value + " " : code.value;
   hl.innerHTML = src.split("\n").map(highlightLine).join("\n");
+  hl.dataset.paint = String(Number(hl.dataset.paint || 0) + 1);
 }
 
 async function pushBreakpoints() {
@@ -221,12 +222,47 @@ function revealLine(line) {
   placeBars();
 }
 
+let gutterArrow = null;
+
+function paintLineTime(line) {
+  const node = lineTimes.children[line - 1];
+  if (!node) return;
+  const item = (server.lineTimes || []).find((entry) => entry.line === line);
+  node.textContent = item ? formatLineTime(item) : "";
+}
+
+function renderRunningFrame() {
+  const count = Math.max(1, code.value.split("\n").length);
+  if (gutter.childElementCount !== count || lineTimes.childElementCount !== count) {
+    renderEditor();
+    return;
+  }
+  const arrow = programArrow();
+  if (gutterArrow != null && gutterArrow !== arrow) {
+    const prev = gutter.querySelector(`.gl[data-line="${gutterArrow}"]`);
+    if (prev) prev.classList.remove("cur");
+    const prevTime = lineTimes.children[gutterArrow - 1];
+    if (prevTime) prevTime.classList.remove("on");
+    paintLineTime(gutterArrow);
+  }
+  gutterArrow = arrow;
+  if (arrow) {
+    const node = gutter.querySelector(`.gl[data-line="${arrow}"]`);
+    if (node) node.classList.add("cur");
+    const time = lineTimes.children[arrow - 1];
+    if (time) time.classList.add("on");
+    paintLineTime(arrow);
+  }
+  placeBars();
+}
+
 function renderEditor() {
   renderProblems();
   renderHighlight();
   renderGutter();
   renderTimes();
   placeBars();
+  gutterArrow = programArrow();
 }
 
 function renderVars() {
@@ -591,7 +627,7 @@ function applyLiveState(data) {
   if (nextStamp != null) imageStamp = nextStamp;
   sessionId = data.id;
   server = data;
-  renderEditor();
+  renderRunningFrame();
   const arrow = programArrow();
   if (arrow) revealLine(arrow);
   renderLog();
@@ -2190,6 +2226,7 @@ window.VisDevCommands = {
   },
   layout() { if (window.VisDevDock) VisDevDock.reset(); },
   floatGfx() { openGfxWindow(); },
+  help() { document.getElementById("helpDialog").hidden = false; },
   about() { document.getElementById("aboutDialog").hidden = false; },
   openOperator(name) { openOperatorForm(name); },
 };
@@ -2197,6 +2234,7 @@ window.VisDevCommands = {
 window.addEventListener("visdev-layout", syncViewMenu);
 syncViewMenu();
 document.getElementById("aboutOk").onclick = () => { document.getElementById("aboutDialog").hidden = true; };
+document.getElementById("helpOk").onclick = () => { document.getElementById("helpDialog").hidden = true; };
 document.getElementById("opDialogCancel").onclick = () => closeOperatorDialog();
 document.getElementById("opDialogOk").onclick = () => insertOperatorCall();
 document.getElementById("opDialog").addEventListener("keydown", (event) => {
