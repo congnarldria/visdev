@@ -74,7 +74,68 @@
     };
   }
 
-  const api = { pointInPoly, lineDistance, pickShape };
+  function fitView(viewW, viewH, imageW, imageH, pad) {
+    const scale = Math.max(0.02, Math.min((viewW - pad * 2) / imageW, (viewH - pad * 2) / imageH));
+    return {
+      scale,
+      x: (viewW - imageW * scale) / 2,
+      y: (viewH - imageH * scale) / 2,
+    };
+  }
+
+  function oneToOne(viewW, viewH, imageW, imageH) {
+    return {
+      scale: 1,
+      x: (viewW - imageW) / 2,
+      y: (viewH - imageH) / 2,
+    };
+  }
+
+  function zoomAt(cam, sx, sy, factor) {
+    const next = Math.min(48, Math.max(0.05, cam.scale * factor));
+    const k = next / cam.scale;
+    return {
+      scale: next,
+      x: sx - (sx - cam.x) * k,
+      y: sy - (sy - cam.y) * k,
+    };
+  }
+
+  function zoomRect(viewW, viewH, col0, row0, col1, row1, pad) {
+    const left = Math.min(col0, col1);
+    const top = Math.min(row0, row1);
+    const width = Math.max(1, Math.abs(col1 - col0));
+    const height = Math.max(1, Math.abs(row1 - row0));
+    const scale = Math.min(48, Math.max(0.05, Math.min((viewW - pad * 2) / width, (viewH - pad * 2) / height)));
+    return {
+      scale,
+      x: (viewW - width * scale) / 2 - left * scale,
+      y: (viewH - height * scale) / 2 - top * scale,
+    };
+  }
+
+  function panBy(x, y, dx, dy) {
+    return { x: x + dx, y: y + dy };
+  }
+
+  function imagePoint(sx, sy, cam) {
+    return {
+      col: (sx - cam.x) / cam.scale,
+      row: (sy - cam.y) / cam.scale,
+    };
+  }
+
+  const api = {
+    pointInPoly,
+    lineDistance,
+    pickShape,
+    fitView,
+    oneToOne,
+    zoomAt,
+    zoomRect,
+    panBy,
+    imagePoint,
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof window !== "undefined") window.VisdevGeom = api;
 })();

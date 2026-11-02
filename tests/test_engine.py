@@ -3243,6 +3243,65 @@ def test_gen_image_const_real_is_zero():
     assert sample.vars["ByteGray"] == 0
 
 
+def test_convert_image_type_real_and_byte():
+    import numpy as np
+
+    from app.engine.objects import Image
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_convert_image_type_real_byte_roundtrip.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["RealType"] == "real"
+    assert sample.vars["ByteType"] == "byte"
+    assert int(sample.vars["Original"]) == 200
+    assert int(sample.vars["RealGray"]) == 200
+    assert int(sample.vars["ByteGray"]) == 200
+    assert int(sample.vars["Outside"]) == 0
+
+    convert = REGISTRY["convert_image_type"].fn
+    source = Image(np.array([[0, 200]], np.uint8))
+    copied = convert(source, "byte", ctx=None).iconic[0]
+    assert copied.data.dtype == np.uint8
+    assert int(copied.data[0, 1]) == 200
+    assert copied.data is not source.data
+    source.data[0, 1] = 7
+    assert int(copied.data[0, 1]) == 200
+
+    real = convert(Image(np.array([[10, 200]], np.uint8)), "real", ctx=None).iconic[0]
+    assert real.data.dtype == np.float32
+    assert float(real.data[0, 0]) == 10 and float(real.data[0, 1]) == 200
+
+    rounded = convert(
+        Image(np.array([[-1.2, 1.4, 10.0, 254.6, 300.0]], np.float32)),
+        "byte",
+        ctx=None,
+    ).iconic[0]
+    assert rounded.data.dtype == np.uint8
+    assert list(int(item) for item in rounded.data[0]) == [0, 1, 10, 255, 255]
+
+    domain = np.zeros((1, 2), np.uint8)
+    domain[0, 1] = 255
+    kept = convert(Image(np.array([[3, 4]], np.uint8), domain), "real", ctx=None).iconic[0]
+    assert kept.domain is not None and int(kept.domain[0, 1]) == 255
+    color = np.zeros((1, 1, 3), np.uint8)
+    color[0, 0] = (30, 20, 10)
+    channels = convert(Image(color), "real", ctx=None).iconic[0]
+    assert channels.data.shape == (1, 1, 3)
+    assert [float(item) for item in channels.data[0, 0]] == [30.0, 20.0, 10.0]
+
+
+def test_gen_image_surface_real_keeps_values_past_255():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_image_surface_real_keeps_310.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert int(sample.vars["ByteGray"]) == 255
+    assert sample.vars["RealType"] == "real"
+    assert int(sample.vars["RealGray"]) == 310
+    assert int(sample.vars["ByteBowlGray"]) == 255
+    assert int(sample.vars["RealBowlGray"]) == 404
+
+
 def test_hdevelop_batch102():
     import numpy as np
 

@@ -123,6 +123,8 @@ SAMPLE_ORDER = (
     "ViZion_create_scaled_shape_model_scale_refined_to_1.08895.viz",
     "ViZion_expand_region_region_splits_overlap.viz",
     "ViZion_gen_image_const_real_zero.viz",
+    "ViZion_convert_image_type_real_byte_roundtrip.viz",
+    "ViZion_gen_image_surface_real_keeps_310.viz",
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz",
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz",
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz",
@@ -4964,6 +4966,38 @@ Vizion.dev_display (Image)
 """
 
 
+HDEVELOP_BATCH101D_PROGRAM = """* byte 轉 real 再轉回，灰階仍是 200
+* 200 轉成 real 還是 200。再轉回 byte 仍是 200。原來的 byte 影像沒有被改掉。
+Vizion.gen_image_const (Base, 'byte', 6, 4)
+Vizion.gen_rectangle1 (Box, 1, 1, 2, 4)
+Vizion.paint_region (Box, Base, Marked, 200, 'fill')
+Vizion.convert_image_type (Marked, AsReal, 'real')
+Vizion.get_image_type (AsReal, RealType)
+Vizion.get_grayval (AsReal, 1, 1, RealGray)
+Vizion.convert_image_type (AsReal, Back, 'byte')
+Vizion.get_image_type (Back, ByteType)
+Vizion.get_grayval (Back, 1, 1, ByteGray)
+Vizion.get_grayval (Marked, 1, 1, Original)
+Vizion.get_grayval (Marked, 0, 0, Outside)
+Vizion.dev_display (Back)
+"""
+
+
+HDEVELOP_BATCH101E_PROGRAM = """* real 曲面保留 310
+* byte 的一次平面在列 1 被夾成 255。real 同一點是 310。二次曲面列 2，byte 是 255，real 是 404。
+Vizion.gen_image_surface_first_order (BytePlane, 'byte', 300, 0, 10, 0, 0, 2, 2)
+Vizion.get_grayval (BytePlane, 1, 0, ByteGray)
+Vizion.gen_image_surface_first_order (RealPlane, 'real', 300, 0, 10, 0, 0, 2, 2)
+Vizion.get_image_type (RealPlane, RealType)
+Vizion.get_grayval (RealPlane, 1, 0, RealGray)
+Vizion.gen_image_surface_second_order (ByteBowl, 'byte', 100, 0, 0, 0, 0, 4, 0, 0, 3, 3)
+Vizion.get_grayval (ByteBowl, 2, 0, ByteBowlGray)
+Vizion.gen_image_surface_second_order (RealBowl, 'real', 100, 0, 0, 0, 0, 4, 0, 0, 3, 3)
+Vizion.get_grayval (RealBowl, 2, 0, RealBowlGray)
+Vizion.dev_display (BytePlane)
+"""
+
+
 HDEVELOP_BATCH102_PROGRAM = """* 平滑平移的列是 39.23
 * 教導框中心是列 39.5、行 47.5。圖案往上 0.25、往右 0.35，真的中心在列 39.25、行 47.85。
 * 整數峰停在列 40。列 39 的分數更高，三點拋物線卻會停在 40。
@@ -5879,6 +5913,8 @@ GENERATED_PROGRAMS = {
     "ViZion_create_scaled_shape_model_scale_refined_to_1.08895.viz": HDEVELOP_BATCH101_PROGRAM,
     "ViZion_expand_region_region_splits_overlap.viz": HDEVELOP_BATCH101B_PROGRAM,
     "ViZion_gen_image_const_real_zero.viz": HDEVELOP_BATCH101C_PROGRAM,
+    "ViZion_convert_image_type_real_byte_roundtrip.viz": HDEVELOP_BATCH101D_PROGRAM,
+    "ViZion_gen_image_surface_real_keeps_310.viz": HDEVELOP_BATCH101E_PROGRAM,
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz": HDEVELOP_BATCH102_PROGRAM,
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz": HDEVELOP_BATCH103_PROGRAM,
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz": HDEVELOP_BATCH104_PROGRAM,

@@ -54,4 +54,32 @@ const inner = {
 const hole = geom.pickShape([outer, inner], 7, 7, 1);
 assert(hole && hole.name === "Hole" && hole.index === 1, "the smaller closed contour wins when the click is inside both");
 
+const fitted = geom.fitView(220, 140, 100, 50, 18);
+assert(Math.abs(fitted.scale - 1.84) < 1e-12, "fit uses the tighter axis");
+assert(Math.abs(fitted.x - 18) < 1e-12 && Math.abs(fitted.y - 24) < 1e-12, "fit centers the image");
+const tiny = geom.fitView(20, 20, 1000, 1000, 18);
+assert(tiny.scale === 0.02, "fit does not shrink below 0.02");
+
+const one = geom.oneToOne(200, 100, 80, 40);
+assert(one.scale === 1 && one.x === 60 && one.y === 30, "1:1 puts the image center on the view center");
+
+const start = { scale: 2, x: 10, y: 20 };
+const anchor = geom.imagePoint(100, 80, start);
+const zoomed = geom.zoomAt(start, 100, 80, 1.25);
+const stayed = geom.imagePoint(100, 80, zoomed);
+assert(Math.abs(anchor.col - stayed.col) < 1e-9 && Math.abs(anchor.row - stayed.row) < 1e-9, "zoom keeps the point under the cursor");
+assert(geom.zoomAt({ scale: 40, x: 0, y: 0 }, 0, 0, 2).scale === 48, "zoom stops at 48");
+assert(geom.zoomAt({ scale: 0.06, x: 0, y: 0 }, 0, 0, 0.5).scale === 0.05, "zoom stops at 0.05");
+
+const framed = geom.zoomRect(200, 200, 30, 80, 10, 40, 8);
+const center = geom.imagePoint(100, 100, framed);
+assert(Math.abs(center.col - 20) < 1e-9 && Math.abs(center.row - 60) < 1e-9, "a zoom rectangle is centered in the view");
+
+const panned = geom.panBy(10, 20, 8, -4);
+assert(panned.x === 18 && panned.y === 16, "pan adds the pointer movement");
+const before = geom.imagePoint(50, 50, { scale: 2, x: 10, y: 20 });
+const after = geom.imagePoint(50, 50, { scale: 2, x: panned.x, y: panned.y });
+assert(Math.abs(before.col - 8 / 2 - after.col) < 1e-9, "panning right moves the image left under the same pixel");
+assert(Math.abs(before.row - (-4) / 2 - after.row) < 1e-9, "panning up moves the image down under the same pixel");
+
 console.log("canvas pick ok");

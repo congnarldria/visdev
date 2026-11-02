@@ -2308,16 +2308,28 @@ def cfa_to_rgb(image, cfa_type, *, ctx):
     "檔案",
     [P("Image", "輸入影像")],
     [P("ImageConverted", "轉換後影像")],
-    [P("Type", "這版只做 byte", "'byte'", ["'byte'"])],
+    [P("Type", "byte 或 real", "'byte'", ["'byte'", "'real'"])],
     [],
     "轉換影像型別",
-    "這版的影像本來就是 0 到 255 的 byte，所以只複製一份。其他型別會失敗。",
+    "byte 轉 real 時數值不變，200 還是 200.0。real 轉 byte 時四捨五入並夾到 0 到 255。byte 轉 byte 只複製，像素不變。",
     "Vizion.convert_image_type (Image, ImageConverted, 'byte')",
 )
 def convert_image_type(image, kind, *, ctx):
-    if text(kind, "Type").lower() != "byte":
-        raise ValueError("Type 這版只接受 byte")
-    return Result([expect_image(image, "Image").copy()], [])
+    picture = expect_image(image, "Image")
+    kind_name = text(kind, "Type").lower()
+    domain = None if picture.domain is None else picture.domain.copy()
+    if kind_name == "byte":
+        if picture.data.dtype == np.uint8:
+            data = picture.data.copy()
+        else:
+            data = np.clip(np.rint(np.asarray(picture.data, dtype=np.float64)), 0, 255).astype(np.uint8)
+    elif kind_name == "real":
+        data = np.asarray(picture.data, dtype=np.float32)
+        if data is picture.data:
+            data = data.copy()
+    else:
+        raise ValueError("Type 只接受 byte 或 real")
+    return Result([Image(data, domain)], [])
 
 
 @operator(
@@ -5682,6 +5694,15 @@ def _unit_byte(values: np.ndarray) -> np.ndarray:
     return np.clip(np.round(values), 0, 255).astype(np.uint8)
 
 
+def _surface_image(kind, values: np.ndarray) -> Image:
+    name = text(kind, "Type").lower()
+    if name == "byte":
+        return Image(_unit_byte(values))
+    if name == "real":
+        return Image(np.asarray(values, dtype=np.float32))
+    raise ValueError("Type 只接受 byte 或 real")
+
+
 def _angle_byte(gray: np.ndarray) -> np.ndarray:
     return gray.astype(np.float64)
 
@@ -5822,7 +5843,7 @@ def add_image_border(image, border, grayval, *, ctx):
     [],
     [P("ImageSurface", "一次曲面")],
     [
-        P("Type", "這版只做 byte", "'byte'", ["'byte'"]),
+        P("Type", "byte 會夾到 0 到 255，real 保留原值", "'byte'", ["'byte'", "'real'"]),
         P("Alpha", "列的斜率"),
         P("Beta", "行的斜率"),
         P("Gamma", "常數項"),
@@ -5833,13 +5854,11 @@ def add_image_border(image, border, grayval, *, ctx):
     ],
     [],
     "做出一張傾斜的灰階平面",
-    "灰階是 Alpha×(列-Row) + Beta×(行-Column) + Gamma，再夾到 0 到 255。",
+    "灰階是 Alpha×(列-Row) + Beta×(行-Column) + Gamma。byte 再四捨五入並夾到 0 到 255。real 保留超過這個範圍的值。",
     "Vizion.gen_image_surface_first_order (ImageSurface, 'byte', 2, 3, 10, 0, 0, 4, 2)",
     "新算子。原點在左上、斜率 2 和 3、常數 10 時，列 1 行 1 是 15。",
 )
 def gen_image_surface_first_order(kind, alpha, beta, gamma, row, column, width, height, *, ctx):
-    if text(kind, "Type").lower() != "byte":
-        raise ValueError("Type 這版只接受 byte")
     wide = whole(width, "Width")
     high = whole(height, "Height")
     if wide < 1 or high < 1:
@@ -5847,7 +5866,7 @@ def gen_image_surface_first_order(kind, alpha, beta, gamma, row, column, width, 
     rows = np.arange(high, dtype=np.float64)[:, None] - scalar(row, "Row")
     cols = np.arange(wide, dtype=np.float64)[None, :] - scalar(column, "Column")
     plane = scalar(alpha, "Alpha") * rows + scalar(beta, "Beta") * cols + scalar(gamma, "Gamma")
-    return Result([Image(_unit_byte(plane))], [])
+    return Result([_surface_image(kind, plane)], [])
 
 
 @operator(
@@ -5855,7 +5874,7 @@ def gen_image_surface_first_order(kind, alpha, beta, gamma, row, column, width, 
     [],
     [P("ImageSurface", "二次曲面")],
     [
-        P("Type", "這版只做 byte", "'byte'", ["'byte'"]),
+        P("Type", "byte 會夾到 0 到 255，real 保留原值", "'byte'", ["'byte'", "'real'"]),
         P("Alpha", "列的平方項"),
         P("Beta", "行的平方項"),
         P("Gamma", "列乘行"),
@@ -5869,13 +5888,11 @@ def gen_image_surface_first_order(kind, alpha, beta, gamma, row, column, width, 
     ],
     [],
     "做出一張彎曲的灰階曲面",
-    "列、行先減掉原點。灰階是列平方、行平方、列乘行、列、行和常數這六項相加，再夾到 0 到 255。",
+    "列、行先減掉原點。灰階是列平方、行平方、列乘行、列、行和常數這六項相加。byte 再四捨五入並夾到 0 到 255。real 保留超過這個範圍的值。",
     "Vizion.gen_image_surface_second_order (ImageSurface, 'byte', 1, 0, 0, 0, 0, 4, 0, 0, 4, 3)",
     "新算子。只有列的平方項是 1、常數是 4 時，列 2 行 0 是 8。",
 )
 def gen_image_surface_second_order(kind, alpha, beta, gamma, delta, epsilon, zeta, row, column, width, height, *, ctx):
-    if text(kind, "Type").lower() != "byte":
-        raise ValueError("Type 這版只接受 byte")
     wide = whole(width, "Width")
     high = whole(height, "Height")
     if wide < 1 or high < 1:
@@ -5890,7 +5907,7 @@ def gen_image_surface_second_order(kind, alpha, beta, gamma, delta, epsilon, zet
         + scalar(epsilon, "Epsilon") * cols
         + scalar(zeta, "Zeta")
     )
-    return Result([Image(_unit_byte(curved))], [])
+    return Result([_surface_image(kind, curved)], [])
 
 
 @operator(

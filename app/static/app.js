@@ -1300,10 +1300,10 @@ async function loadDisplay(display) {
 function fit(markUser = false) {
   const rect = canvas.getBoundingClientRect();
   if (!disp || !disp.width || rect.width < 2) return;
-  const pad = 18;
-  cam.scale = Math.max(0.02, Math.min((rect.width - pad * 2) / disp.width, (rect.height - pad * 2) / disp.height));
-  cam.x = (rect.width - disp.width * cam.scale) / 2;
-  cam.y = (rect.height - disp.height * cam.scale) / 2;
+  const placed = VisdevGeom.fitView(rect.width, rect.height, disp.width, disp.height, 18);
+  cam.scale = placed.scale;
+  cam.x = placed.x;
+  cam.y = placed.y;
   cam.user = markUser;
   draw();
 }
@@ -1311,13 +1311,10 @@ function fit(markUser = false) {
 function zoomBy(factor) {
   if (!disp) return;
   const rect = canvas.getBoundingClientRect();
-  const mx = rect.width / 2;
-  const my = rect.height / 2;
-  const next = Math.min(48, Math.max(0.05, cam.scale * factor));
-  const k = next / cam.scale;
-  cam.x = mx - (mx - cam.x) * k;
-  cam.y = my - (my - cam.y) * k;
-  cam.scale = next;
+  const placed = VisdevGeom.zoomAt(cam, rect.width / 2, rect.height / 2, factor);
+  cam.scale = placed.scale;
+  cam.x = placed.x;
+  cam.y = placed.y;
   cam.user = true;
   draw();
 }
@@ -1466,12 +1463,8 @@ function imagePoint(event) {
   const rect = canvas.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  return {
-    x,
-    y,
-    col: (x - cam.x) / cam.scale,
-    row: (y - cam.y) / cam.scale,
-  };
+  const image = VisdevGeom.imagePoint(x, y, cam);
+  return { x, y, col: image.col, row: image.row };
 }
 
 const probeBox = document.getElementById("probe");
@@ -1737,9 +1730,10 @@ document.getElementById("btnFit").onclick = () => { cam.user = false; fit(false)
 document.getElementById("btnOne").onclick = () => {
   if (!disp) return;
   const rect = canvas.getBoundingClientRect();
-  cam.scale = 1;
-  cam.x = (rect.width - disp.width) / 2;
-  cam.y = (rect.height - disp.height) / 2;
+  const placed = VisdevGeom.oneToOne(rect.width, rect.height, disp.width, disp.height);
+  cam.scale = placed.scale;
+  cam.x = placed.x;
+  cam.y = placed.y;
   cam.user = true;
   draw();
 };
@@ -2005,11 +1999,10 @@ canvas.addEventListener("wheel", (event) => {
   if (!disp) return;
   event.preventDefault();
   const point = imagePoint(event);
-  const next = Math.min(48, Math.max(0.05, cam.scale * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
-  const k = next / cam.scale;
-  cam.x = point.x - (point.x - cam.x) * k;
-  cam.y = point.y - (point.y - cam.y) * k;
-  cam.scale = next;
+  const placed = VisdevGeom.zoomAt(cam, point.x, point.y, event.deltaY < 0 ? 1.12 : 1 / 1.12);
+  cam.x = placed.x;
+  cam.y = placed.y;
+  cam.scale = placed.scale;
   cam.user = true;
   draw();
 }, { passive: false });
@@ -2033,24 +2026,19 @@ function applyMouseMode(mode) {
 }
 
 function zoomAtScreen(sx, sy, factor) {
-  const next = Math.min(48, Math.max(0.05, cam.scale * factor));
-  const k = next / cam.scale;
-  cam.x = sx - (sx - cam.x) * k;
-  cam.y = sy - (sy - cam.y) * k;
-  cam.scale = next;
+  const placed = VisdevGeom.zoomAt(cam, sx, sy, factor);
+  cam.scale = placed.scale;
+  cam.x = placed.x;
+  cam.y = placed.y;
   cam.user = true;
 }
 
 function zoomToRect(col0, row0, col1, row1) {
-  const left = Math.min(col0, col1);
-  const top = Math.min(row0, row1);
-  const width = Math.max(1, Math.abs(col1 - col0));
-  const height = Math.max(1, Math.abs(row1 - row0));
   const rect = canvas.getBoundingClientRect();
-  const pad = 8;
-  cam.scale = Math.min(48, Math.max(0.05, Math.min((rect.width - pad * 2) / width, (rect.height - pad * 2) / height)));
-  cam.x = (rect.width - width * cam.scale) / 2 - left * cam.scale;
-  cam.y = (rect.height - height * cam.scale) / 2 - top * cam.scale;
+  const placed = VisdevGeom.zoomRect(rect.width, rect.height, col0, row0, col1, row1, 8);
+  cam.scale = placed.scale;
+  cam.x = placed.x;
+  cam.y = placed.y;
   cam.user = true;
 }
 
@@ -2320,8 +2308,9 @@ canvas.addEventListener("mousemove", (event) => {
   }
   if (dragging && dragging.mode === "pan") {
     const point = imagePoint(event);
-    cam.x = dragging.camX + point.x - dragging.x;
-    cam.y = dragging.camY + point.y - dragging.y;
+    const shifted = VisdevGeom.panBy(dragging.camX, dragging.camY, point.x - dragging.x, point.y - dragging.y);
+    cam.x = shifted.x;
+    cam.y = shifted.y;
     cam.user = true;
   } else if (dragging && dragging.mode === "zoom") {
     const point = imagePoint(event);
