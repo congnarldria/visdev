@@ -3302,6 +3302,28 @@ def test_gen_image_surface_real_keeps_values_past_255():
     assert int(sample.vars["RealBowlGray"]) == 404
 
 
+def test_three_checkerboard_views_share_one_calib():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_find_calib_object_three_views_one_board.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert int(sample.vars["AfterOne"]) == 1
+    assert int(sample.vars["Count"]) == 3
+    assert float(sample.vars["Error"]) < 5
+    assert len(sample.vars["Pose0"]) == 7
+    assert len(sample.vars["Pose2"]) == 7
+    assert float(sample.vars["CamParam"][0]) > 200
+    again = run_source(
+        "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.get_calib_data (CalibDataID, 'model', 0, 'num_poses', Count)\n"
+    )
+    assert again.error is None, again.error
+    assert int(again.vars["Count"]) == 0
+
+
 def test_hdevelop_batch102():
     import numpy as np
 

@@ -125,6 +125,57 @@
     };
   }
 
+  function draftBox(a, b) {
+    const col1 = Math.min(a.col, b.col);
+    const col2 = Math.max(a.col, b.col);
+    const row1 = Math.min(a.row, b.row);
+    const row2 = Math.max(a.row, b.row);
+    return { col1, col2, row1, row2, width: col2 - col1, height: row2 - row1 };
+  }
+
+  function geometryTools(names) {
+    const has = (name) => (names || []).indexOf(name) !== -1;
+    const tools = [];
+    if (has("Row1") && has("Column1") && has("Row2") && has("Column2")) tools.push("rect");
+    if (has("Row") && has("Column") && has("Length1") && has("Length2") && tools.indexOf("rect") === -1) tools.push("rect");
+    if (has("Row") && has("Column") && has("Radius")) tools.push("circle");
+    if (has("Row") && has("Column") && has("Radius1") && has("Radius2")) tools.push("ellipse");
+    return tools;
+  }
+
+  function shapeNumbers(tool, a, b, mode) {
+    const box = draftBox(a, b);
+    if (tool === "rect" && mode === "corners") {
+      return { Row1: box.row1, Column1: box.col1, Row2: box.row2, Column2: box.col2 };
+    }
+    if (tool === "rect") {
+      return {
+        Row: (box.row1 + box.row2) / 2,
+        Column: (box.col1 + box.col2) / 2,
+        Phi: 0,
+        Length1: box.width / 2,
+        Length2: box.height / 2,
+      };
+    }
+    if (tool === "circle") {
+      return {
+        Row: a.row,
+        Column: a.col,
+        Radius: Math.hypot(b.col - a.col, b.row - a.row),
+      };
+    }
+    const along = box.width / 2;
+    const across = box.height / 2;
+    const inner = mode === "inner";
+    return {
+      Row: (box.row1 + box.row2) / 2,
+      Column: (box.col1 + box.col2) / 2,
+      Phi: 0,
+      Radius1: inner ? Math.min(along, across) : along,
+      Radius2: inner ? Math.max(along, across) : across,
+    };
+  }
+
   const api = {
     pointInPoly,
     lineDistance,
@@ -135,6 +186,9 @@
     zoomRect,
     panBy,
     imagePoint,
+    draftBox,
+    geometryTools,
+    shapeNumbers,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof window !== "undefined") window.VisdevGeom = api;

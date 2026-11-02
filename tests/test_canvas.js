@@ -82,4 +82,21 @@ const after = geom.imagePoint(50, 50, { scale: 2, x: panned.x, y: panned.y });
 assert(Math.abs(before.col - 8 / 2 - after.col) < 1e-9, "panning right moves the image left under the same pixel");
 assert(Math.abs(before.row - (-4) / 2 - after.row) < 1e-9, "panning up moves the image down under the same pixel");
 
+const box = geom.draftBox({ col: 10, row: 30 }, { col: 2, row: 8 });
+assert(box.col1 === 2 && box.col2 === 10 && box.row1 === 8 && box.row2 === 30, "a dragged rectangle sorts its corners");
+assert(box.width === 8 && box.height === 22, "rectangle size follows the sorted corners");
+
+const cornerTools = geom.geometryTools(["Row1", "Column1", "Row2", "Column2", "Row", "Column", "Length1", "Length2"]);
+assert(cornerTools[0] === "rect" && cornerTools.length === 1, "corner fields choose the corner rectangle");
+const centerTools = geom.geometryTools(["Row", "Column", "Length1", "Length2", "Radius"]);
+assert(centerTools.indexOf("rect") !== -1 && centerTools.indexOf("circle") !== -1, "a center rectangle can also draw a circle");
+
+const circle = geom.shapeNumbers("circle", { col: 4, row: 5 }, { col: 7, row: 9 }, "axis");
+assert(circle.Row === 5 && circle.Column === 4 && Math.abs(circle.Radius - 5) < 1e-12, "circle radius is the drag length");
+const centered = geom.shapeNumbers("rect", { col: 0, row: 0 }, { col: 10, row: 4 }, "axis");
+assert(centered.Row === 2 && centered.Column === 5 && centered.Phi === 0, "a center rectangle sits on the box middle");
+assert(centered.Length1 === 5 && centered.Length2 === 2, "half widths are half the box");
+const ring = geom.shapeNumbers("ellipse", { col: 0, row: 0 }, { col: 10, row: 4 }, "inner");
+assert(ring.Radius1 === 2 && ring.Radius2 === 5, "an inner radius uses the shorter axis first");
+
 console.log("canvas pick ok");

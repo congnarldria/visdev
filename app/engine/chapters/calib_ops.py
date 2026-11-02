@@ -20,7 +20,7 @@ from ..operators import P, as_list, expect_image, operator, scalar, text, whole
 
 _SETUPS = ["'calibration_object'"]
 _ITEMS = ["'camera'", "'calib_obj_pose'", "'model'"]
-_DATA = ["'params'", "'pose'", "'error'"]
+_DATA = ["'params'", "'pose'", "'error'", "'num_poses'"]
 
 
 @dataclass
@@ -165,7 +165,7 @@ def _store_observation(calib: CalibData, rows: np.ndarray, cols: np.ndarray, wid
     ],
     [],
     "在影像裡找棋盤格",
-    "用 OpenCV 找內角點。找不到會失敗。同一塊板可以從不同角度多找幾次，calibrate_cameras 至少要三組。",
+    "用 OpenCV 找內角點。找不到會失敗，已經放進去的影像還留著。同一塊板、同一台相機可以從不同角度再找，每一張都加進同一份標定。calibrate_cameras 至少要三張。",
     "Vizion.find_calib_object (Image, CalibDataID, 0, 0, '', '')",
 )
 def find_calib_object(image, model, camera_idx, object_idx, _name, _value, *, ctx):
@@ -267,7 +267,7 @@ def calibrate_cameras(model, *, ctx):
     ],
     [P("DataValue", "結果")],
     "讀出標定結果",
-    "camera/params 是九個數：fx、fy、cx、cy、k1、k2、p1、p2、k3。calib_obj_pose/pose 是七個數的姿態。model/error 是重投影誤差。",
+    "camera/params 是九個數：fx、fy、cx、cy、k1、k2、p1、p2、k3。calib_obj_pose/pose 是七個數的姿態，編號是放進去的順序。model/error 是重投影誤差。model/num_poses 是已經放進這份標定的影像張數，還沒標定也能讀。",
     "Vizion.get_calib_data (CalibDataID, 'camera', 0, 'params', CamParam)",
 )
 def get_calib_data(model, item_type, item_idx, data_name, *, ctx):
@@ -287,6 +287,10 @@ def get_calib_data(model, item_type, item_idx, data_name, *, ctx):
         if calib.error is None:
             raise RuntimeError("還沒有 calibrate_cameras")
         return Result([], [calib.error])
+    if kind == "model" and name == "num_poses":
+        if index != 0:
+            raise ValueError("這版的編號只能是 0")
+        return Result([], [len(calib.observations)])
     raise ValueError("這組 ItemType 和 DataName 沒有對應的結果")
 
 

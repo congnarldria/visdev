@@ -2085,12 +2085,7 @@ function refreshShapeTools() {
 }
 
 function geometryTools(map) {
-  const tools = [];
-  if (map.Row1 && map.Column1 && map.Row2 && map.Column2) tools.push("rect");
-  if (map.Row && map.Column && map.Length1 && map.Length2 && !tools.includes("rect")) tools.push("rect");
-  if (map.Row && map.Column && map.Radius) tools.push("circle");
-  if (map.Row && map.Column && map.Radius1 && map.Radius2) tools.push("ellipse");
-  return tools;
+  return VisdevGeom.geometryTools(Object.keys(map));
 }
 
 function hideDrawMenu() {
@@ -2106,11 +2101,7 @@ function cancelShapeDraw() {
 }
 
 function draftBox(draw) {
-  const col1 = Math.min(draw.a.col, draw.b.col);
-  const col2 = Math.max(draw.a.col, draw.b.col);
-  const row1 = Math.min(draw.a.row, draw.b.row);
-  const row2 = Math.max(draw.a.row, draw.b.row);
-  return { col1, col2, row1, row2, width: col2 - col1, height: row2 - row1 };
+  return VisdevGeom.draftBox(draw.a, draw.b);
 }
 
 function strokeDraft(pen) {
@@ -2171,37 +2162,11 @@ function clearUnusedGeom(map, keep) {
 function applyShapeDraw() {
   if (!shapeDraw || !shapeDraw.a || !shapeDraw.b) return;
   const map = geometryInputs();
-  const box = draftBox(shapeDraw);
-  let keep;
-  if (shapeDraw.tool === "rect" && map.Row1) {
-    writeGeom(map, "Row1", box.row1);
-    writeGeom(map, "Column1", box.col1);
-    writeGeom(map, "Row2", box.row2);
-    writeGeom(map, "Column2", box.col2);
-    keep = new Set(["Row1", "Column1", "Row2", "Column2"]);
-  } else if (shapeDraw.tool === "rect") {
-    writeGeom(map, "Row", (box.row1 + box.row2) / 2);
-    writeGeom(map, "Column", (box.col1 + box.col2) / 2);
-    writeGeom(map, "Phi", 0);
-    writeGeom(map, "Length1", box.width / 2);
-    writeGeom(map, "Length2", box.height / 2);
-    keep = new Set(["Row", "Column", "Phi", "Length1", "Length2"]);
-  } else if (shapeDraw.tool === "circle") {
-    writeGeom(map, "Row", shapeDraw.a.row);
-    writeGeom(map, "Column", shapeDraw.a.col);
-    writeGeom(map, "Radius", Math.hypot(shapeDraw.b.col - shapeDraw.a.col, shapeDraw.b.row - shapeDraw.a.row));
-    keep = new Set(["Row", "Column", "Radius"]);
-  } else {
-    const along = box.width / 2;
-    const across = box.height / 2;
-    const inner = map.Radius1 && (activeOperator.params.find((param) => param.name === "Radius1")?.desc || "").includes("內");
-    writeGeom(map, "Row", (box.row1 + box.row2) / 2);
-    writeGeom(map, "Column", (box.col1 + box.col2) / 2);
-    writeGeom(map, "Phi", 0);
-    writeGeom(map, "Radius1", inner ? Math.min(along, across) : along);
-    writeGeom(map, "Radius2", inner ? Math.max(along, across) : across);
-    keep = new Set(["Row", "Column", "Phi", "Radius1", "Radius2"]);
-  }
+  const inner = map.Radius1 && (activeOperator.params.find((param) => param.name === "Radius1")?.desc || "").includes("內");
+  const mode = shapeDraw.tool === "rect" && map.Row1 ? "corners" : (inner ? "inner" : "axis");
+  const numbers = VisdevGeom.shapeNumbers(shapeDraw.tool, shapeDraw.a, shapeDraw.b, mode);
+  Object.keys(numbers).forEach((name) => writeGeom(map, name, numbers[name]));
+  const keep = new Set(Object.keys(numbers));
   clearUnusedGeom(map, keep);
   refreshOpPreview();
   cancelShapeDraw();

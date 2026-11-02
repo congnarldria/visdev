@@ -125,6 +125,7 @@ SAMPLE_ORDER = (
     "ViZion_gen_image_const_real_zero.viz",
     "ViZion_convert_image_type_real_byte_roundtrip.viz",
     "ViZion_gen_image_surface_real_keeps_310.viz",
+    "ViZion_find_calib_object_three_views_one_board.viz",
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz",
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz",
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz",
@@ -187,6 +188,7 @@ def ensure_samples(root: Path):
     write_measure_scene(samples / "measure_batch.png")
     write_codes(samples / "codes.png")
     write_code39(samples / "code39.png")
+    write_calib_boards(samples)
     _write_program(samples / "shape_match.hdv", SHAPE_MATCH_PROGRAM)
     _write_program(samples / "shape_teach.hdv", SHAPE_TEACH_PROGRAM)
     _write_program(samples / "ncc_locate.hdv", NCC_LOCATE_PROGRAM)
@@ -651,6 +653,30 @@ def write_measure_scene(path: Path):
     cv2.circle(image, (180, 70), 28, 220, -1, lineType=cv2.LINE_AA)
     cv2.ellipse(image, (220, 160), (36, 22), 25, 0, 360, 200, -1, lineType=cv2.LINE_AA)
     write_cv_image(path, image)
+
+
+def write_calib_boards(folder: Path):
+    """Three views of one 6 by 8 square checkerboard. Inner corners are 5 by 7."""
+    squares_r, squares_c, pix, border = 6, 8, 36, 70
+    height = squares_r * pix + border * 2
+    width = squares_c * pix + border * 2
+    image = np.full((height, width), 255, np.uint8)
+    for row in range(squares_r):
+        for col in range(squares_c):
+            if (row + col) % 2 == 0:
+                y0 = border + row * pix
+                x0 = border + col * pix
+                image[y0 : y0 + pix, x0 : x0 + pix] = 0
+
+    def warp(shift):
+        src = np.float32([[40, 40], [width - 40, 50], [width - 60, height - 40], [50, height - 50]])
+        dst = src + np.float32(shift)
+        matrix = cv2.getPerspectiveTransform(src, dst)
+        return cv2.warpPerspective(image, matrix, (width, height), borderValue=255)
+
+    write_cv_image(folder / "calib_board_front.png", image)
+    write_cv_image(folder / "calib_board_left.png", warp([[0, 10], [-30, 20], [20, -25], [-10, 15]]))
+    write_cv_image(folder / "calib_board_right.png", warp([[15, -20], [10, 25], [-20, 10], [25, -5]]))
 
 
 def write_code39(path: Path):
@@ -4998,6 +5024,26 @@ Vizion.dev_display (BytePlane)
 """
 
 
+HDEVELOP_BATCH101F_PROGRAM = """* 三張同一塊棋盤放進同一個標定
+* 內角點是 5 列 7 行，格子邊長 36。仍是一台相機、一塊板。第一張放進去之後是 1，三張都放進去是 3。
+Vizion.read_image (Front, 'samples/calib_board_front.png')
+Vizion.read_image (Left, 'samples/calib_board_left.png')
+Vizion.read_image (Right, 'samples/calib_board_right.png')
+Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)
+Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')
+Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')
+Vizion.get_calib_data (CalibDataID, 'model', 0, 'num_poses', AfterOne)
+Vizion.find_calib_object (Left, CalibDataID, 0, 0, '', '')
+Vizion.find_calib_object (Right, CalibDataID, 0, 0, '', '')
+Vizion.get_calib_data (CalibDataID, 'model', 0, 'num_poses', Count)
+Vizion.calibrate_cameras (CalibDataID, Error)
+Vizion.get_calib_data (CalibDataID, 'calib_obj_pose', 0, 'pose', Pose0)
+Vizion.get_calib_data (CalibDataID, 'calib_obj_pose', 2, 'pose', Pose2)
+Vizion.get_calib_data (CalibDataID, 'camera', 0, 'params', CamParam)
+Vizion.dev_display (Front)
+"""
+
+
 HDEVELOP_BATCH102_PROGRAM = """* 平滑平移的列是 39.23
 * 教導框中心是列 39.5、行 47.5。圖案往上 0.25、往右 0.35，真的中心在列 39.25、行 47.85。
 * 整數峰停在列 40。列 39 的分數更高，三點拋物線卻會停在 40。
@@ -5915,6 +5961,7 @@ GENERATED_PROGRAMS = {
     "ViZion_gen_image_const_real_zero.viz": HDEVELOP_BATCH101C_PROGRAM,
     "ViZion_convert_image_type_real_byte_roundtrip.viz": HDEVELOP_BATCH101D_PROGRAM,
     "ViZion_gen_image_surface_real_keeps_310.viz": HDEVELOP_BATCH101E_PROGRAM,
+    "ViZion_find_calib_object_three_views_one_board.viz": HDEVELOP_BATCH101F_PROGRAM,
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz": HDEVELOP_BATCH102_PROGRAM,
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz": HDEVELOP_BATCH103_PROGRAM,
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz": HDEVELOP_BATCH104_PROGRAM,
