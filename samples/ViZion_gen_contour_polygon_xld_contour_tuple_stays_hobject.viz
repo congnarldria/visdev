@@ -1,0 +1,17 @@
+* 輪廓 tuple 傳進程序仍是 HObject
+* 幾條輪廓收成同一個物件，再傳進程序。count_obj 數的是條數。
+* ho_XLDs[1] 是第一條。圖形視窗裡兩條顏色不同。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_contour_polygon_xld (ho_A, [10, 10, 40], [10, 40, 40])
+Vizion.gen_contour_polygon_xld (ho_B, [20, 50], [15, 55])
+ho_XLDs := [ho_A, ho_B]
+pass (ho_XLDs, ho_Kept, hv_Count)
+Vizion.length_xld (ho_XLDs, Length)
+First := Length[1]
+ho_One := ho_XLDs[1]
+Vizion.count_obj (ho_One, OneN)
+Vizion.dev_display (ho_XLDs)
+procedure pass (Contours : Kept : : Number)
+    Vizion.count_obj (Contours, Number)
+    Vizion.select_obj (Contours, Kept, 1)
+endprocedure

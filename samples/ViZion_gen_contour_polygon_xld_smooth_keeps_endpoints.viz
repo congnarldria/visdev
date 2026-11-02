@@ -1,0 +1,8 @@
+* 平滑不會把端點往裡縮
+* smooth_contours_xld 沿輪廓用高斯權重平滑。開放輪廓在端點做奇數延拓，直線不會被端點的缺點往裡拉。閉合輪廓維持閉合。
+* 直線在列 10，行從 0 到 40，窗寬 5。左右平均會把第一個點從行 0 拉到 10，最後一個點從 40 拉到 30。
+* 奇數延拓之後，五個點仍是列 10，行 0、10、20、30、40。
+Vizion.gen_contour_polygon_xld (Line, [10, 10, 10, 10, 10], [0, 10, 20, 30, 40])
+Vizion.smooth_contours_xld (Line, Smooth, 5)
+Vizion.get_contour_xld (Smooth, Row, Col)
+Vizion.dev_display (Smooth)

@@ -1,0 +1,13 @@
+* 邊緣不在像素中心
+* 直線階躍畫在行 40.37。圖上有雜訊、左右斜坡，還有亮暗尖點。
+* Zernike 沿著整條邊的平均行，和量測矩形的次像素位置相差不到 0.05。
+Vizion.read_image (Scene, 'samples/hard_zernike.png')
+Vizion.edges_zernike (Scene, Edges, 7, 80, Rows, Cols)
+Vizion.tuple_mean (Cols, ZCol)
+Vizion.gen_measure_rectangle2 (60, 40, 0, 30, 8, 160, 120, 'bilinear', Handle)
+Vizion.measure_pos (Scene, Handle, 1.2, 12, 'positive', 'first', MRow, MCol, Amp, Dist)
+Edge := MCol[1]
+Gap := ZCol - Edge
+Vizion.dev_display (Scene)
+Vizion.dev_set_color ('green')
+Vizion.dev_display (Edges)

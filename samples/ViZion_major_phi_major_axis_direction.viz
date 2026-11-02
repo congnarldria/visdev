@@ -1,0 +1,75 @@
+* 長軸朝哪
+* 用法：0 沿著行往右，正角度在畫面上順時針，直的是 90 度。範圍在 -90 度到 90 度。
+* orientation_region 和 elliptic_axis 現在也用二次矩。橫條是 0，直條是 90 度。
+* 長度是兩端像素中心的距離再加 1。20 像素長、5 像素厚的長條，長度是 20、厚度是 5，倍數是 4。
+* 接近正方形時角度會落在 0。major_ratio 接近 1 就沒有長軸，select_long 的 2 會把它去掉。
+* select_axis 的 Tolerance 是度。15 表示離水平或垂直 15 度以內，diagonal 是兩邊都超過。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Wide, 10, 10, 14, 29)
+Vizion.gen_rectangle1 (Tall, 10, 50, 29, 54)
+Vizion.gen_rectangle1 (Box, 40, 10, 49, 19)
+Vizion.gen_rectangle2 (Tilt, 30, 60, rad(30), 12, 3)
+Vizion.concat_obj (Wide, Tall, Two)
+Vizion.concat_obj (Two, Box, Three)
+Vizion.concat_obj (Three, Tilt, Parts)
+Vizion.major_phi (Parts, Phi)
+P1 := Phi[1]
+P2 := Phi[2]
+P3 := Phi[3]
+P4 := Phi[4]
+Vizion.major_length (Parts, Length)
+L1 := Length[1]
+L2 := Length[2]
+L3 := Length[3]
+L4 := Length[4]
+Vizion.minor_length (Parts, Thick)
+M1 := Thick[1]
+M4 := Thick[4]
+Vizion.major_ratio (Parts, Ratio)
+R1 := Ratio[1]
+R3 := Ratio[3]
+R4 := Ratio[4]
+Vizion.axis_ends (Parts, EndRow1, EndCol1, EndRow2, EndCol2)
+ER1 := EndRow1[1]
+EC1 := EndCol1[1]
+ER2 := EndRow2[1]
+EC2 := EndCol2[1]
+VR1 := EndRow1[2]
+VC1 := EndCol1[2]
+VR2 := EndRow2[2]
+VC2 := EndCol2[2]
+TR1 := EndRow1[4]
+TC1 := EndCol1[4]
+TR2 := EndRow2[4]
+TC2 := EndCol2[4]
+Vizion.select_axis (Parts, Level, 'horizontal', 15)
+Vizion.count_obj (Level, LevelN)
+Vizion.select_axis (Parts, Upright, 'vertical', 15)
+Vizion.count_obj (Upright, UprightN)
+Vizion.area_center (Upright, UprightArea, UprightRow, UprightCol)
+UA := UprightArea[1]
+UR := UprightRow[1]
+UC := UprightCol[1]
+Vizion.select_axis (Parts, Slant, 'diagonal', 15)
+Vizion.count_obj (Slant, SlantN)
+Vizion.area_center (Slant, SlantArea, SlantRow, SlantCol)
+SA := SlantArea[1]
+SR := SlantRow[1]
+SC := SlantCol[1]
+Vizion.select_axis (Parts, Loose, 'horizontal', 30)
+Vizion.count_obj (Loose, LooseN)
+Vizion.select_long (Parts, Long, 2)
+Vizion.count_obj (Long, LongN)
+Vizion.area_center (Long, LongArea, LongRow, LongCol)
+LA := LongArea[3]
+LR := LongRow[3]
+Vizion.axis_region (Parts, Axis)
+Vizion.select_obj (Axis, Spine, 1)
+Vizion.area_center (Spine, SpineArea, SpineRow, SpineCol)
+SpineA := SpineArea[1]
+SpineR := SpineRow[1]
+SpineC := SpineCol[1]
+Vizion.paint_region (Spine, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 12, 19, AxisGray)
+Vizion.get_grayval (Shown, 11, 19, OffGray)
+Vizion.dev_display (Shown)

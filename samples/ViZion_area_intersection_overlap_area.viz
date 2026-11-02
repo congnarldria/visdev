@@ -1,0 +1,45 @@
+* 兩個區域重疊多少
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Wide, 10, 10, 19, 19)
+Vizion.gen_rectangle1 (Shift, 10, 15, 19, 24)
+Vizion.gen_rectangle1 (Small, 40, 40, 44, 44)
+Vizion.gen_rectangle1 (Big, 38, 38, 48, 48)
+Vizion.concat_obj (Wide, Small, Parts)
+Vizion.concat_obj (Shift, Big, Other)
+Vizion.area_intersection (Parts, Other, Inter)
+Inter1 := Inter[1]
+Inter2 := Inter[2]
+Vizion.area_union (Parts, Other, UnionArea)
+Union1 := UnionArea[1]
+Union2 := UnionArea[2]
+Vizion.area_difference (Parts, Other, Only)
+Only1 := Only[1]
+Only2 := Only[2]
+Vizion.region_iou (Parts, Other, IoU)
+Iou1 := IoU[1]
+Iou2 := IoU[2]
+Vizion.region_cover (Parts, Other, Cover)
+Cover1 := Cover[1]
+Cover2 := Cover[2]
+Vizion.region_inside (Parts, Other, Inside)
+Inside1 := Inside[1]
+Inside2 := Inside[2]
+Vizion.select_cover (Parts, Other, Kept, 0.9, 1)
+Vizion.count_obj (Kept, KeepCount)
+Vizion.area_center (Kept, KeepArea, KeepRow, KeepCol)
+KeepN := KeepArea[1]
+KeepR := KeepRow[1]
+KeepC := KeepCol[1]
+Vizion.select_cover (Parts, Other, KeptSwap, 1, 0.9)
+Vizion.count_obj (KeptSwap, SwapCount)
+Vizion.select_cover (Parts, Other, Half, 0.4, 0.6)
+Vizion.count_obj (Half, HalfCount)
+Vizion.sym_difference (Parts, Other, Differ)
+Vizion.area_center (Differ, SymArea, SymRow, SymCol)
+Sym1 := SymArea[1]
+Sym2 := SymArea[2]
+Vizion.intersection (Wide, Shift, Overlap)
+Vizion.paint_region (Overlap, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 12, 17, HitGray)
+Vizion.get_grayval (Shown, 12, 12, MissGray)
+Vizion.dev_display (Shown)

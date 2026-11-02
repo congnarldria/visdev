@@ -1,0 +1,59 @@
+* 左右對不對稱
+* 用法：以物件外框的中心翻面。1 是完全對稱，0 是翻過去完全對不上。
+* column 左右對調，row 上下對調，both 轉 180 度。方向是下拉選單，可省略時預設左右。
+* 中心用外框，不是像素平均。缺一塊但外框的角還在，中心不會跑掉。整張圖翻面請用 mirror_region。
+* 至少 0.95 算夠對稱，可以改。對不上的像素數用 symmetry_miss，0 也留著。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Block, 10, 10, 29, 29)
+Vizion.gen_rectangle1 (Bite, 18, 26, 21, 29)
+Vizion.difference (Block, Bite, Notch)
+Vizion.gen_rectangle1 (Square, 10, 50, 19, 59)
+Vizion.concat_obj (Notch, Square, Parts)
+* 右邊缺一塊。左右只剩 368/384。上下仍是 1。方塊是 1
+Vizion.symmetry_score (Parts, 'column', ColScore)
+HC1 := ColScore[1]
+HC2 := ColScore[2]
+Vizion.symmetry_score (Parts, 'row', RowScore)
+HR1 := RowScore[1]
+HR2 := RowScore[2]
+Vizion.symmetry_score (Parts, 'both', BothScore)
+HB1 := BothScore[1]
+Vizion.symmetry_miss (Parts, 'column', ColMiss)
+MC1 := ColMiss[1]
+MC2 := ColMiss[2]
+Vizion.symmetry_miss (Parts, 'row', RowMiss)
+MR1 := RowMiss[1]
+Vizion.symmetry_center (Parts, CenterRow, CenterCol)
+CR1 := CenterRow[1]
+CC1 := CenterCol[1]
+CR2 := CenterRow[2]
+CC2 := CenterCol[2]
+* 對不上的是左邊那 16 個像素，對面正好是缺口
+Vizion.asymmetry_region (Parts, Asym, 'column')
+Vizion.count_obj (Asym, AsymN)
+Vizion.area_center (Asym, AsymArea, AsymRow, AsymCol)
+AA := AsymArea[1]
+AR := AsymRow[1]
+AC := AsymCol[1]
+Vizion.symmetry_core (Parts, Core, 'column')
+Vizion.select_obj (Core, CoreOne, 1)
+Vizion.area_center (CoreOne, CoreArea, CoreRow, CoreCol)
+CA := CoreArea[1]
+* 0.99 只留下方塊。0.96 留下缺塊的那個
+Vizion.select_symmetric (Parts, Kept, 'column', 0.99)
+Vizion.count_obj (Kept, KeepN)
+Vizion.area_center (Kept, KeepArea, KeepRow, KeepCol)
+KeepA := KeepArea[1]
+KeepR := KeepRow[1]
+KeepC := KeepCol[1]
+Vizion.select_asymmetric (Parts, Odd, 'column', 0.96)
+Vizion.count_obj (Odd, OddN)
+Vizion.area_center (Odd, OddArea, OddRow, OddCol)
+OddA := OddArea[1]
+OddR := OddRow[1]
+OddC := OddCol[1]
+Vizion.reflect_region (Notch, Flipped, 'column')
+Vizion.paint_region (Flipped, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 18, 29, FlipGray)
+Vizion.get_grayval (Shown, 18, 10, GoneGray)
+Vizion.dev_display (Shown)

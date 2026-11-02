@@ -1,8 +1,7 @@
 """HALCON-style tuple operators.
 
 Indices follow HALCON and start at 0. The expression form T[1] stays 1-based.
-Handle, semaphore, environment, and vector operators are not registered:
-there is no HALCON handle type in this runtime.
+tuple_to_vector_1d is not registered: this runtime has no vector type.
 """
 
 from __future__ import annotations
@@ -19,15 +18,6 @@ IMPLEMENTED: set[str] = set()
 EXISTING = {"tuple_length", "tuple_min", "tuple_max", "tuple_sum", "tuple_mean"}
 
 SKIPPED = {
-    "tuple_environment",
-    "tuple_is_handle",
-    "tuple_is_handle_elem",
-    "tuple_is_serializable",
-    "tuple_is_serializable_elem",
-    "tuple_is_valid_handle",
-    "tuple_sem_type",
-    "tuple_sem_type_elem",
-    "tuple_str_bit_select",
     "tuple_to_vector_1d",
 }
 
@@ -206,6 +196,12 @@ def _index(length: int, raw, name="Index") -> int:
     return pos
 
 
+def _is_handle(value) -> bool:
+    if isinstance(value, (Image, Region, XLD, str, int, float, bool, list, tuple)):
+        return False
+    return callable(getattr(value, "summary", None))
+
+
 def _kind(value) -> str:
     if isinstance(value, bool):
         return "integer"
@@ -215,7 +211,69 @@ def _kind(value) -> str:
         return "real"
     if isinstance(value, str):
         return "string"
+    if _is_handle(value):
+        return "handle"
     raise ValueError(f"不能放進 tuple：{value!r}")
+
+
+def _sem_one(value) -> str:
+    if not _is_handle(value):
+        return _kind(value)
+    name = getattr(value, "sem_type", None)
+    if isinstance(name, str) and name:
+        return name
+    return type(value).__name__.lower()
+
+
+def _open_handle(value) -> bool:
+    return _is_handle(value) and not bool(getattr(value, "closed", False))
+
+
+def _all_flag(value, test, *, empty=0) -> Result:
+    src = _items(value)
+    if not src:
+        return Result([], [empty])
+    return Result([], [1 if all(test(item) for item in src) else 0])
+
+
+def tuple_environment(name, *, ctx):
+    import os
+
+    keys = [str(item) for item in _items(name)]
+    found = []
+    for key in keys:
+        if key not in os.environ:
+            raise ValueError(f"沒有環境變數 {key}")
+        found.append(os.environ[key])
+    return _finish(found, _listed(name))
+
+
+def tuple_str_bit_select(value, index, *, ctx):
+    texts = [str(item) for item in _items(value)]
+    positions = [_as_int(item) for item in _items(index)]
+    picked = []
+    for text in texts:
+        for pos in positions:
+            if pos < 0:
+                pos += len(text)
+            if pos < 0 or pos >= len(text):
+                raise ValueError("索引超出字串")
+            picked.append(text[pos])
+    return _finish(picked, len(picked) != 1)
+
+
+def tuple_sem_type(value, *, ctx):
+    src = _items(value)
+    if not src:
+        return Result([], ["empty"])
+    kinds = {_sem_one(item) for item in src}
+    if len(kinds) > 1:
+        return Result([], ["mixed"])
+    return Result([], [kinds.pop()])
+
+
+def tuple_sem_type_elem(value, *, ctx):
+    return Result([], [[_sem_one(item) for item in _items(value)]])
 
 
 def _round_away(value):
@@ -855,8 +913,17 @@ def _register_text():
         ("tuple_is_number", _ONE, [P("IsNumber", "全部是數值才是 1")], "是不是全部都是數值", "整數和浮點數都算。有字串就是 0。", "Vizion.tuple_is_number ([1, 1.5], IsNumber)", lambda value, *, ctx: tuple_is(value, "number", ctx=ctx)),
         ("tuple_is_mixed", _ONE, [P("IsMixed", "有兩種以上型別才是 1")], "裡面是不是混了不同型別", "整數和浮點數算不同型別。", "Vizion.tuple_is_mixed ([1, 'a'], IsMixed)", lambda value, *, ctx: tuple_is(value, "mixed", ctx=ctx)),
         ("tuple_is_nan_elem", _ONE, [P("IsNaN", "每個元素 0 或 1")], "每個元素是不是 NaN", "只有浮點 NaN 是 1。", "Vizion.tuple_is_nan_elem ([1, 2], IsNaN)", lambda value, *, ctx: tuple_is_elem(value, "nan", ctx=ctx)),
-        ("tuple_type", _ONE, [P("Type", "integer、real、string、mixed 或 empty")], "tuple 的型別", "全部同一種才回傳那種名字。空 tuple 是 empty。", "Vizion.tuple_type ([1, 2], Type)", tuple_type),
-        ("tuple_type_elem", _ONE, [P("Type", "每個元素的型別")], "每個元素的型別", "名字是 integer、real 或 string。", "Vizion.tuple_type_elem ([1, 'a'], Type)", tuple_type_elem),
+        ("tuple_type", _ONE, [P("Type", "integer、real、string、handle、mixed 或 empty")], "tuple 的型別", "全部同一種才回傳那種名字。空 tuple 是 empty。句柄是 handle。", "Vizion.tuple_type ([1, 2], Type)", tuple_type),
+        ("tuple_type_elem", _ONE, [P("Type", "每個元素的型別")], "每個元素的型別", "名字是 integer、real、string 或 handle。", "Vizion.tuple_type_elem ([1, 'a'], Type)", tuple_type_elem),
+        ("tuple_is_handle", _ONE, [P("IsHandle", "全部是句柄才是 1")], "是不是全部都是句柄", "矩陣、量測、相機這類控制碼是句柄。數字和字串不是。空 tuple 是 0。", "Vizion.tuple_is_handle (MatrixID, IsHandle)", lambda value, *, ctx: tuple_is(value, "handle", ctx=ctx)),
+        ("tuple_is_handle_elem", _ONE, [P("IsHandle", "每個元素 0 或 1")], "每個元素是不是句柄", "數字和字串的位置是 0。", "Vizion.tuple_is_handle_elem ([MatrixID, 1], IsHandle)", lambda value, *, ctx: tuple_is_elem(value, "handle", ctx=ctx)),
+        ("tuple_is_valid_handle", _ONE, [P("IsValid", "全部都還開著才是 1")], "句柄是不是都還沒關閉", "clear_matrix 之後變成 0。數字和字串也是 0。", "Vizion.tuple_is_valid_handle (MatrixID, IsValid)", lambda value, *, ctx: _all_flag(value, _open_handle)),
+        ("tuple_is_serializable", _ONE, [P("IsSerializable", "全部都能存成文字才是 1")], "能不能整份存成數值或字串", "句柄不能。空 tuple 可以。", "Vizion.tuple_is_serializable ([1, 'a'], IsSerializable)", lambda value, *, ctx: _all_flag(value, lambda item: _kind(item) in ("integer", "real", "string"), empty=1)),
+        ("tuple_is_serializable_elem", _ONE, [P("IsSerializable", "每個元素 0 或 1")], "每個元素能不能存成數值或字串", "句柄的位置是 0。", "Vizion.tuple_is_serializable_elem ([1, MatrixID], IsSerializable)", lambda value, *, ctx: _finish([1 if _kind(item) in ("integer", "real", "string") else 0 for item in _items(value)], True)),
+        ("tuple_sem_type", _ONE, [P("SemType", "integer、real、string、matrix、mixed 或 empty")], "語意型別", "同一種才回傳那個名字。矩陣是 matrix。混在一起是 mixed。", "Vizion.tuple_sem_type (MatrixID, SemType)", tuple_sem_type),
+        ("tuple_sem_type_elem", _ONE, [P("SemType", "每個元素的語意型別")], "每個元素的語意型別", "矩陣是 matrix，整數是 integer。", "Vizion.tuple_sem_type_elem ([MatrixID, 1], SemType)", tuple_sem_type_elem),
+        ("tuple_environment", [P("Name", "環境變數名稱")], [P("Value", "內容")], "讀取環境變數", "沒有這個名稱會報錯。一次可以讀好幾個。", "Vizion.tuple_environment ('OS', Value)", tuple_environment),
+        ("tuple_str_bit_select", [P("String", "字串"), P("Index", "字元位置，從 0")], [P("Selected", "挑出來的字元")], "按位置挑字元", "索引從 0 開始，負數從尾巴數。超出字串會報錯。", "Vizion.tuple_str_bit_select ('HALCON', [0, 3], Selected)", tuple_str_bit_select),
     ]
     for name, cin, cout, short, detail, example, fn in specs:
         _bind(name, cin, cout, short, detail, example, fn)

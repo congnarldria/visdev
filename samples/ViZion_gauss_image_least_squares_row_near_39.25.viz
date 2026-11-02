@@ -1,0 +1,23 @@
+* 最小二乘的列更靠近 39.25
+* interpolation 在整數峰周圍的分數上做 Keys 三次內插。平坦的峰留在整數，不再用三點拋物線。
+* least_squares 仍從整數峰用 Lucas-Kanade，沿灰階梯度修列和行。角度維持搜尋結果。
+* 教導框中心是列 39.5、行 47.5。往上 0.25、往右 0.35 之後，真的中心在列 39.25、行 47.85。
+* interpolation 的列是 39.23。least_squares 的列更靠近 39.25。
+Vizion.gen_image_const (Base, 'byte', 96, 80)
+Vizion.gen_image_proto (Base, Sheet, 30)
+Vizion.gen_rectangle1 (A, 18, 20, 33, 43)
+Vizion.paint_region (A, Sheet, P1, 200, 'fill')
+Vizion.gen_rectangle1 (B, 36, 40, 57, 69)
+Vizion.paint_region (B, P1, P2, 90, 'fill')
+Vizion.gen_rectangle1 (C, 22, 60, 29, 79)
+Vizion.paint_region (C, P2, P3, 240, 'fill')
+Vizion.gen_rectangle1 (D, 48, 12, 69, 27)
+Vizion.paint_region (D, P3, Sharp, 150, 'fill')
+Vizion.gauss_image (Sharp, Image, 5)
+Vizion.teach_ncc_model (Image, 10, 10, 69, 85, 1, 0, 0, 0, 'use_polarity', ModelID)
+Vizion.hom_mat2d_identity (Id)
+Vizion.hom_mat2d_translate (Id, -0.25, 0.35, Shift)
+Vizion.affine_trans_image (Image, Moved, Shift, 'bicubic', 'false')
+Vizion.find_ncc_model (Moved, ModelID, 0, 0, 0.5, 1, 0.5, 'interpolation', 1, IRow, ICol, IAng, IScore)
+Vizion.find_ncc_model (Moved, ModelID, 0, 0, 0.5, 1, 0.5, 'least_squares', 1, LRow, LCol, LAng, LScore)
+Vizion.dev_display (Moved)

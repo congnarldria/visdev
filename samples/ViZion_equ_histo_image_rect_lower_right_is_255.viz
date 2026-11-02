@@ -1,0 +1,118 @@
+* 等化後右下是 255
+* 矩形裡的 0、10、20、200 等化成 0、85、170、255。外面的 0 不變。
+* 6×5 四邊各裁 1，剩下寬 4、高 3，灰階仍是 9。定義域矩形裁下來是寬 5、高 4，原來 (2,3) 的 4 在列 1 行 2。
+* 4×4 的 5 外擴一圈填 9，左上角是 9，列 1 行 1 仍是 5。中心被 40 圍住時變成 40。三列橫條的骨架只留中間的 9。
+* 紅 10 用索引 1 挑出來。投影平移後，7 出現在列 1 行 2。左邊 10、右邊 80 分成兩塊，各 4 個像素。
+* 直方圖第三格是 4，面積是 4。兩個 2×2 各自面積是 4。4×4 拿掉 3 個像素後面積是 13。2×2 的鏈碼是 2、0、6、4。
+* 水平線邊長 10、角度 0、平均行 5。圓心距離 4，圓周是 0。矩形中心距離 2。正方形的 M20 是 8。只留下中間那條亮線。
+Vizion.gen_image_const (Field, 'byte', 8, 8)
+Vizion.gen_rectangle1 (Block, 0, 0, 3, 3)
+Vizion.hamming_change_region (Block, Changed, 3)
+Vizion.area_center (Changed, HamArea, HamRow, HamCol)
+Ham1 := HamArea[1]
+Vizion.gen_rectangle1 (Tiny, 0, 0, 1, 1)
+Vizion.get_region_chain (Tiny, ChainRow, ChainCol, Chain)
+StartRow := ChainRow[1]
+StartCol := ChainCol[1]
+Code0 := Chain[1]
+Code1 := Chain[2]
+Code2 := Chain[3]
+Code3 := Chain[4]
+Vizion.gen_region_histo (Bars, [0, 0, 4], 0, 0, 1)
+Vizion.area_center (Bars, BarArea, BarRow, BarCol)
+Bar1 := BarArea[1]
+Vizion.gen_random_regions (Randoms, 'rectangle', 2, 2, 2, 2, 0, 2)
+Vizion.count_obj (Randoms, RandCount)
+Vizion.area_center (Randoms, RandArea, RandRow, RandCol)
+Rand1 := RandArea[1]
+Rand2 := RandArea[2]
+Vizion.set_grayval (Field, Marked, 2, 3, 4)
+Vizion.rectangle1_domain (Marked, Reduced, 1, 1, 4, 5)
+Vizion.crop_domain (Reduced, Part)
+Vizion.get_image_size (Part, PartW, PartH)
+Vizion.get_grayval (Part, 1, 2, PartGray)
+Vizion.gen_image_const (Wide, 'byte', 6, 5)
+Vizion.gen_image_proto (Wide, Nines, 9)
+Vizion.crop_domain_rel (Nines, Cropped, 1, 1, 1, 1)
+Vizion.get_image_size (Cropped, CropW, CropH)
+Vizion.get_grayval (Cropped, 0, 0, CropGray)
+Vizion.gen_image_const (Small, 'byte', 4, 4)
+Vizion.gen_image_proto (Small, Fives, 5)
+Vizion.expand_domain_gray (Fives, Expanded, 1, 9)
+Vizion.get_image_size (Expanded, ExpW, ExpH)
+Vizion.get_grayval (Expanded, 0, 0, Edge9)
+Vizion.get_grayval (Expanded, 1, 1, Inner5)
+Vizion.gen_image_const (Ramp0, 'byte', 4, 4)
+Vizion.set_grayval (Ramp0, Ramp, [1, 1, 2, 2], [1, 2, 1, 2], [0, 10, 20, 200])
+Vizion.equ_histo_image_rect (Ramp, Equ, 1, 1, 2, 2)
+Vizion.get_grayval (Equ, 0, 0, Eq00)
+Vizion.get_grayval (Equ, 1, 2, Eq12)
+Vizion.get_grayval (Equ, 2, 1, Eq21)
+Vizion.get_grayval (Equ, 2, 2, Eq22)
+Vizion.gen_image_const (Bowl0, 'byte', 5, 5)
+Vizion.set_grayval (Bowl0, BowlRing, [1, 1, 1, 2, 2, 3, 3, 3], [1, 2, 3, 1, 3, 1, 2, 3], 40)
+Vizion.set_grayval (BowlRing, Bowl, 2, 2, 10)
+Vizion.gray_inside (Bowl, Inside)
+Vizion.get_grayval (Inside, 2, 2, InsideCenter)
+Vizion.get_grayval (Inside, 0, 0, InsideEdge)
+Vizion.gen_image_const (Band0, 'byte', 5, 5)
+Vizion.set_grayval (Band0, Band, [1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3], [0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4], 9)
+Vizion.gray_skeleton (Band, Skel)
+Vizion.get_grayval (Skel, 2, 2, SkelMid)
+Vizion.get_grayval (Skel, 1, 2, SkelSide)
+Vizion.gen_image_const (Grow0, 'byte', 4, 2)
+Vizion.set_grayval (Grow0, Grow, [0, 0, 1, 1, 0, 0, 1, 1], [0, 1, 0, 1, 2, 3, 2, 3], [10, 10, 10, 10, 80, 80, 80, 80])
+Vizion.regiongrowing_n (Grow, Grown, 'euclid', 0, 5, 1)
+Vizion.count_obj (Grown, GrowCount)
+Vizion.area_center (Grown, GrowArea, GrowRow, GrowCol)
+Grow1 := GrowArea[1]
+Grow2 := GrowArea[2]
+Vizion.gen_image_const (Plane, 'byte', 2, 2)
+Vizion.gen_image_proto (Plane, Red10, 10)
+Vizion.gen_image_proto (Plane, Green20, 20)
+Vizion.gen_image_proto (Plane, Blue30, 30)
+Vizion.channels_to_image (Red10, Green20, Blue30, Color)
+Vizion.gen_image_proto (Plane, Index, 1)
+Vizion.select_grayvalues_from_channels (Color, Index, Picked)
+Vizion.get_grayval (Picked, 0, 0, PickedRed)
+Vizion.gen_image_const (Stamp0, 'byte', 2, 2)
+Vizion.set_grayval (Stamp0, Stamp, 0, 0, 7)
+Vizion.hom_mat2d_identity (Id)
+Vizion.hom_mat2d_translate (Id, 1, 2, Shift)
+Vizion.projective_trans_image_size (Stamp, Moved, Shift, 'nearest_neighbor', 4, 4)
+Vizion.get_grayval (Moved, 1, 2, MovedGray)
+Vizion.gen_contour_polygon_xld (Line, [0, 0], [0, 10])
+Vizion.get_polygon_xld (Line, PolyRow, PolyCol, SideLength, SidePhi)
+Len1 := SideLength[1]
+PhiLine := SidePhi[1]
+ColEnd := PolyCol[2]
+Vizion.get_regress_params_xld (Line, RegLen, RegPhi, RegRow, RegCol, RegDev)
+LenReg := RegLen[1]
+PhiReg := RegPhi[1]
+RowReg := RegRow[1]
+ColReg := RegCol[1]
+DevReg := RegDev[1]
+Vizion.gen_contour_polygon_xld (Dots, [0, 0], [0, 4])
+Vizion.dist_ellipse_contour_points_xld (Dots, 0, 0, 0, 4, 4, EllDist)
+Ell0 := EllDist[1]
+Ell1 := EllDist[2]
+Vizion.dist_rectangle2_contour_points_xld (Dots, 0, 0, 0, 4, 2, RectDist)
+Rect0 := RectDist[1]
+Rect1 := RectDist[2]
+Vizion.gen_contour_polygon_xld (Square, [0, 0, 2, 2], [0, 2, 2, 0])
+Vizion.moments_points_xld (Square, M20, M02, M11)
+M20a := M20[1]
+M02a := M02[1]
+M11a := M11[1]
+Vizion.moments_any_points_xld (Square, 2, 0, AnyMoment)
+Any20 := AnyMoment[1]
+Vizion.gen_image_const (Ridge0, 'byte', 7, 5)
+Vizion.set_grayval (Ridge0, Ridge1, [0, 0, 0, 0, 0], [1, 2, 3, 4, 5], 1)
+Vizion.set_grayval (Ridge1, Ridge5, [1, 1, 1, 1, 1], [1, 2, 3, 4, 5], 5)
+Vizion.set_grayval (Ridge5, Ridge, [2, 2, 2, 2, 2], [1, 2, 3, 4, 5], 9)
+Vizion.gen_contour_polygon_xld (Bright, [2, 2], [1, 5])
+Vizion.gen_contour_polygon_xld (Dim, [0, 0], [1, 5])
+Vizion.concat_obj (Bright, Dim, Both)
+Vizion.local_max_contours_xld (Both, Ridge, Kept)
+Vizion.count_obj (Kept, KeptCount)
+Vizion.dev_display (Equ)

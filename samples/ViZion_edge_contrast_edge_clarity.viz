@@ -1,0 +1,64 @@
+* 邊緣清不清楚
+* 用法：看物件最外一圈，和貼在外面的那一圈，灰階差多少。正的表示物件比較亮，負的表示外面比較亮。
+* 0 是邊界兩邊一樣，看不出邊緣。差的絕對值愈大，邊緣愈清楚。門檻可省略，預設 10。
+* inner 是物件自己的最外一像素，outer 是外面那一圈。物件只有一像素厚時，內圈就是整個物件。
+Vizion.gen_image_const (Blank, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Sharp, 10, 10, 29, 29)
+Vizion.paint_region (Sharp, Blank, Step1, 200, 'fill')
+Vizion.gen_rectangle1 (FlatBig, 8, 38, 31, 61)
+Vizion.paint_region (FlatBig, Step1, Step2, 100, 'fill')
+Vizion.gen_rectangle1 (Flat, 10, 40, 29, 59)
+Vizion.gen_rectangle1 (DarkBig, 38, 8, 61, 31)
+Vizion.paint_region (DarkBig, Step2, Step3, 180, 'fill')
+Vizion.gen_rectangle1 (Dark, 40, 10, 59, 29)
+Vizion.paint_region (Dark, Step3, Picture, 20, 'fill')
+Vizion.concat_obj (Sharp, Flat, Pair)
+Vizion.concat_obj (Pair, Dark, Parts)
+* 清楚的邊緣差 200。融在背景裡的是 0。外面比較亮的是 -160
+Vizion.edge_contrast (Parts, Picture, Contrast)
+C1 := Contrast[1]
+C2 := Contrast[2]
+C3 := Contrast[3]
+Vizion.edge_abs (Parts, Picture, AbsContrast)
+A1 := AbsContrast[1]
+A2 := AbsContrast[2]
+A3 := AbsContrast[3]
+Vizion.inner_gray (Parts, Picture, InnerMean)
+I1 := InnerMean[1]
+I2 := InnerMean[2]
+I3 := InnerMean[3]
+Vizion.outer_gray (Parts, Picture, OuterMean)
+O1 := OuterMean[1]
+O2 := OuterMean[2]
+O3 := OuterMean[3]
+* 差至少 100 才留下。融在背景裡的用較小的上限抓
+Vizion.select_edge (Parts, Picture, Kept, 100)
+Vizion.count_obj (Kept, KeepN)
+Vizion.area_center (Kept, KeepArea, KeepRow, KeepCol)
+Keep1 := KeepRow[1]
+Keep2 := KeepRow[2]
+Vizion.select_soft (Parts, Picture, Soft, 10)
+Vizion.count_obj (Soft, SoftN)
+Vizion.area_center (Soft, SoftArea, SoftRow, SoftCol)
+SoftA := SoftArea[1]
+SoftC := SoftCol[1]
+Vizion.strongest_edge (Parts, Picture, Best)
+Vizion.area_center (Best, BestArea, BestRow, BestCol)
+BestA := BestArea[1]
+BestR := BestRow[1]
+* 清楚那塊的內圈 76 像素，外圈 84 像素，中心仍在方塊中間
+Vizion.edge_ring (Parts, Picture, InnerRing, 'inner')
+Vizion.select_obj (InnerRing, InnerOne, 1)
+Vizion.area_center (InnerOne, InnerArea, InnerRow, InnerCol)
+InnerA := InnerArea[1]
+InnerR := InnerRow[1]
+InnerC := InnerCol[1]
+Vizion.edge_ring (Parts, Picture, OuterRing, 'outer')
+Vizion.select_obj (OuterRing, OuterOne, 1)
+Vizion.area_center (OuterOne, OuterArea, OuterRow, OuterCol)
+OuterA := OuterArea[1]
+Vizion.get_grayval (Picture, 19, 19, SharpGray)
+Vizion.get_grayval (Picture, 9, 19, OutsideGray)
+Vizion.get_grayval (Picture, 49, 19, DarkGray)
+Vizion.get_grayval (Picture, 39, 19, HaloGray)
+Vizion.dev_display (Picture)

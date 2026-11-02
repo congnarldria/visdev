@@ -1,0 +1,58 @@
+* 補上缺掉的缺口
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Block, 10, 10, 39, 39)
+Vizion.gen_rectangle1 (Bite, 20, 30, 29, 39)
+Vizion.difference (Block, Bite, Notched)
+Vizion.gen_rectangle1 (Plain, 45, 45, 54, 54)
+Vizion.gen_rectangle1 (CornerBlock, 10, 50, 29, 69)
+Vizion.gen_rectangle1 (CornerBite, 10, 65, 14, 69)
+Vizion.difference (CornerBlock, CornerBite, Corner)
+Vizion.concat_obj (Notched, Plain, Pair)
+Vizion.concat_obj (Pair, Corner, Parts)
+Vizion.region_defects (Parts, Bites, 1, 'city-block')
+Vizion.count_obj (Bites, BiteN)
+Vizion.area_center (Bites, BiteArea, BiteRow, BiteCol)
+BA1 := BiteArea[1]
+BA2 := BiteArea[2]
+BR1 := BiteRow[1]
+BC1 := BiteCol[1]
+BR2 := BiteRow[2]
+BC2 := BiteCol[2]
+Vizion.defect_count (Parts, 1, 'city-block', Counts)
+C1 := Counts[1]
+C2 := Counts[2]
+C3 := Counts[3]
+Vizion.defect_area (Parts, 1, 'city-block', Areas)
+DA1 := Areas[1]
+DA2 := Areas[2]
+Vizion.defect_depth (Parts, 1, 'city-block', Depths)
+DP1 := Depths[1]
+DP2 := Depths[2]
+Vizion.defect_point (Parts, 1, 'city-block', PointRow, PointCol, PointDepth)
+PR1 := PointRow[1]
+PC1 := PointCol[1]
+PD1 := PointDepth[1]
+PR2 := PointRow[2]
+PC2 := PointCol[2]
+PD2 := PointDepth[2]
+Vizion.select_defect (Parts, Chipped, 2, 'city-block')
+Vizion.count_obj (Chipped, ChipN)
+Vizion.area_center (Chipped, ChipArea, ChipRow, ChipCol)
+Chip1 := ChipArea[1]
+Chip2 := ChipArea[2]
+Vizion.region_defects (Parts, DeepOnly, 6, 'city-block')
+Vizion.count_obj (DeepOnly, DeepN)
+Vizion.area_center (DeepOnly, DeepArea, DeepRow, DeepCol)
+DeepA := DeepArea[1]
+Vizion.deepest_defect (Parts, Deepest, 'city-block')
+Vizion.area_center (Deepest, MostArea, MostRow, MostCol)
+MostN := MostArea[1]
+Vizion.fill_defects (Parts, Fixed, 1, 'city-block')
+Vizion.area_center (Fixed, FixArea, FixRow, FixCol)
+F1 := FixArea[1]
+F2 := FixArea[2]
+F3 := FixArea[3]
+Vizion.paint_region (Deepest, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 24, 34, GapGray)
+Vizion.get_grayval (Shown, 14, 14, BodyGray)
+Vizion.dev_display (Shown)

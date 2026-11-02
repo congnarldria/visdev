@@ -1,0 +1,23 @@
+* 正方形周長是 120
+* 點序和 get_contour_xld 相同。圓度和 xld_features 相同。
+* 起點像素是 180，和 get_grayval 同一個點。
+Vizion.gen_contour_polygon_xld (Contour, [10, 10, 40, 40, 10], [10, 40, 40, 10, 10])
+Vizion.length_xld (Contour, Length)
+Vizion.circularity_xld (Contour, Circ)
+Vizion.compactness_xld (Contour, Comp)
+Vizion.convexity_xld (Contour, Conv)
+Vizion.eccentricity_xld (Contour, Ecc)
+Vizion.xld_features (Contour, 'circularity', FeatCirc)
+Vizion.xld_features (Contour, 'compactness', FeatComp)
+Vizion.xld_features (Contour, 'convexity', FeatConv)
+Vizion.xld_features (Contour, 'anisometry', FeatEcc)
+Vizion.xld_features (Contour, 'contlength', FeatLen)
+Vizion.get_contour_xld (Contour, Row, Col)
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.set_grayval (Image, Marked, 10, 10, 180)
+Vizion.get_grayval_contour_xld (Marked, Contour, Gray)
+Vizion.get_grayval (Marked, 10, 10, Pixel)
+Len := Length[1]
+FirstRow := Row[1]
+FirstCol := Col[1]
+StartGray := Gray[1]

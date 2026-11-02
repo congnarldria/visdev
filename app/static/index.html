@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VisDev 視覺開發環境</title>
   <link rel="icon" href="/static/magpie.ico">
-  <link rel="stylesheet" href="/static/app.css?v=30">
+  <link rel="stylesheet" href="/static/app.css?v=31">
 </head>
 <body>
   <nav class="menubar" aria-label="主選單">
@@ -77,6 +77,7 @@
       <button type="button">視窗</button>
       <div class="menu-drop" hidden>
         <button type="button" data-cmd="layout">回復版面</button>
+        <button type="button" data-cmd="floatGfx">拉出圖形視窗</button>
       </div>
     </div>
     <div class="menu-item">
@@ -114,12 +115,12 @@
     <button id="btnStep" type="button">單步 <kbd>F6</kbd></button>
     <button id="btnRun" class="primary" type="button">執行 <kbd>F5</kbd></button>
     <button id="btnStop" type="button">停止</button>
-    <input id="fileOpen" type="file" accept=".viz,.hdv,.txt" hidden>
+    <input id="fileOpen" type="file" accept=".viz,.hdv,.hdev,.hdvp,.hdpl,.dev,.dvp,.txt" hidden>
   </header>
 
   <main id="dock" class="workspace">
     <section class="pane program" data-dock="program">
-      <div class="pane-bar"><span>程式</span><span class="hint">點行號設斷點，F5 會停　連點算子行開啟參數　右側是該行時間　拖綠色箭頭改下一行</span></div>
+      <div class="pane-bar"><span>程式</span><span class="hint">點行號設斷點，F5 會停　點算子名稱開啟參數　右側是該行時間　拖綠色箭頭改下一行</span></div>
       <div class="editor-wrap">
         <div id="gutter" class="gutter"></div>
         <div class="editor-stage">
@@ -135,7 +136,18 @@
       <div class="pane-bar">
         <span>圖形視窗</span>
         <span id="gfxTitle" class="hint"></span>
+        <div id="gfxMouse" class="mouse-mode" role="group" aria-label="滑鼠">
+          <button type="button" data-mode="select" title="箭頭點選區域或輪廓" aria-label="點選"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M2.2 1.2 4 13.2l2.6-2.7 2.5 4.1 1.7-1.1-2.5-4.1h4.2L2.2 1.2z"/></svg></button>
+          <button type="button" data-mode="pan" title="手抓移動畫面" aria-label="手抓移動"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6 7.1V3.2a.8.8 0 0 1 1.6 0v3.3h.3V2.1a.8.8 0 0 1 1.6 0v4.4h.3V3.4a.8.8 0 0 1 1.6 0v3.3h.3V5a.8.8 0 0 1 1.6 0v5.1c0 2-1.5 3.4-3.6 3.4H7.8c-1.4 0-2.4-.6-3-1.6L2.8 9.4a.85.85 0 0 1 1.4-.9l1.2 1.5V7.1H6z"/></svg></button>
+          <button type="button" data-mode="zoom" title="拉一個範圍放大。點一下也會放大" aria-label="放大"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path stroke="currentColor" stroke-width="1.5" d="M9.8 9.8 13.5 13.5M6.8 4.8v4M4.8 6.8h4"/></svg></button>
+        </div>
+        <span id="shapeTools" hidden>
+          <button type="button" data-draw="rect" title="在圖上拖矩形，填進開啟中的算子參數">框選</button>
+          <button type="button" data-draw="circle" title="在圖上拖圓">圓</button>
+          <button type="button" data-draw="ellipse" title="在圖上拖橢圓">橢圓</button>
+        </span>
         <div class="spacer"></div>
+        <button id="btnFloatGfx" type="button" title="把圖形單獨拉成新視窗，不擋住主視窗">拉出</button>
         <button id="btnFit" type="button" title="符合視窗">符合</button>
         <button id="btnOne" type="button" title="原始像素">1:1</button>
         <button id="btnZoomOut" type="button" title="縮小">−</button>
@@ -156,7 +168,7 @@
       <div id="gfxStage" class="gfx-stage">
         <canvas id="canvas"></canvas>
         <div id="probe" hidden></div>
-        <div id="gfxEmpty" class="gfx-empty">執行程式後，影像、區域和輪廓會畫在這裡。<br>也可以把圖檔拖進來。</div>
+        <div id="gfxEmpty" class="gfx-empty">執行程式後，影像、區域和輪廓會畫在這裡。<br>點程式裡的算子名稱可改參數。有座標的算子可按「框選」在圖上拖範圍。<br>也可以把圖檔拖進來。</div>
         <div id="gfxBanner" class="gfx-banner" hidden></div>
         <div id="drawMenu" class="draw-menu" hidden></div>
         <div id="shapeConfirm" hidden>
@@ -252,7 +264,7 @@ endfor</pre>
   <div id="opDialog" hidden>
     <h2 id="opDialogTitle">算子</h2>
     <div id="opDialogGuide"></div>
-    <p id="opDrawHint" class="hint" hidden>在圖上按右鍵，選矩形、圓或橢圓再拖曳。確認後填進參數。留成空字串的圖形不會使用，ocr_find 就讀整張圖。</p>
+    <p id="opDrawHint" class="hint" hidden>圖形列上的「框選」「圓」「橢圓」，或在圖上按右鍵，拖曳後按確認填入。留成空字串的圖形不會使用，ocr_find 就讀整張圖。</p>
     <form id="opForm"></form>
     <h3>範例用法</h3>
     <pre id="opPreview"></pre>
@@ -283,6 +295,6 @@ endfor</pre>
     <span class="hint">取代 HALCON 的第一版。常用流程先用這套語法寫，缺的算子再補。</span>
   </footer>
   <script src="/static/dock.js?v=9"></script>
-  <script src="/static/app.js?v=52"></script>
+  <script src="/static/app.js?v=55"></script>
 </body>
 </html>

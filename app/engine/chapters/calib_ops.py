@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -417,3 +418,150 @@ def clear_calib_data(model, *, ctx):
     calib.camera = None
     calib.closed = True
     return Result([], [])
+
+
+_GRID_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+
+
+def _project_path(ctx, value, label: str) -> Path:
+    raw = str(value).strip().strip("'\"")
+    if not raw:
+        raise ValueError(f"{label} 不能是空的")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = Path(ctx.root) / path
+    return path
+
+
+def _write_cam_par(path: Path, nums: list[float]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(" ".join(f"{item:.10g}" for item in nums), encoding="utf-8")
+
+
+def _read_cam_par(path: Path) -> list[float]:
+    if not path.is_file():
+        raise ValueError(f"讀不到校正檔 {path}")
+    nums = [float(item) for item in path.read_text(encoding="utf-8").split()]
+    if len(nums) != 9:
+        raise ValueError("校正檔要有 9 個數")
+    return nums
+
+
+def _grid_corners(gray: np.ndarray, rows: int, cols: int) -> np.ndarray:
+    pattern = (cols, rows)
+    found, corners = False, None
+    if hasattr(cv2, "findChessboardCornersSB"):
+        found, corners = cv2.findChessboardCornersSB(gray, pattern)
+    if not found:
+        flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE
+        found, corners = cv2.findChessboardCorners(gray, pattern, flags)
+    if not found or corners is None:
+        raise RuntimeError("找不到棋盤格")
+    corners = np.asarray(corners, np.float32).reshape(-1, 1, 2)
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
+    corners = cv2.cornerSubPix(gray, corners, (5, 5), (-1, -1), criteria)
+    return corners
+
+
+@operator(
+    "標定",
+    [P("Image", "一張棋盤照片")],
+    [],
+    [
+        P("CornerRows", "內角點列數"),
+        P("CornerCols", "內角點行數"),
+        P("Square", "一格的邊長"),
+        P("CamParFile", "要寫出的校正檔"),
+    ],
+    [P("Error", "重投影誤差")],
+    "一張棋盤校正畸變",
+    "只拍一張。主點固定在影像中心，只估焦距和 k1。校正檔是一行九個數：fx、fy、cx、cy、k1、k2、p1、p2、k3。",
+    "Vizion.calibrate_grid (Image, 6, 8, 10, 'workspace/grid_cam.txt', Error)",
+    "新算子。一張棋盤照片就寫出校正檔。不是多張標定板。",
+)
+def calibrate_grid(image, rows, cols, square, cam_file, *, ctx):
+    picture = expect_image(image, "Image")
+    corner_rows = whole(rows, "CornerRows")
+    corner_cols = whole(cols, "CornerCols")
+    size = scalar(square, "Square")
+    if corner_rows < 2 or corner_cols < 2 or size <= 0:
+        raise ValueError("棋盤至少要 2×2 個內角點，格子邊長要大於 0")
+    gray = picture.gray()
+    corners = _grid_corners(gray, corner_rows, corner_cols)
+    height, width = gray.shape[:2]
+    focal = float(width)
+    camera = np.array(
+        [[focal, 0, (width - 1) / 2.0], [0, focal, (height - 1) / 2.0], [0, 0, 1]],
+        np.float64,
+    )
+    distortion = np.zeros((5, 1), np.float64)
+    objects = np.zeros((corner_rows * corner_cols, 3), np.float32)
+    for row in range(corner_rows):
+        for col in range(corner_cols):
+            objects[row * corner_cols + col, 0] = col * size
+            objects[row * corner_cols + col, 1] = row * size
+    flags = (
+        cv2.CALIB_FIX_PRINCIPAL_POINT
+        | cv2.CALIB_FIX_ASPECT_RATIO
+        | cv2.CALIB_ZERO_TANGENT_DIST
+        | cv2.CALIB_FIX_K2
+        | cv2.CALIB_FIX_K3
+    )
+    error, camera, distortion, _rvecs, _tvecs = cv2.calibrateCamera(
+        [objects],
+        [corners],
+        (width, height),
+        camera,
+        distortion,
+        flags=flags,
+    )
+    flat = distortion.reshape(-1)
+    nums = [
+        float(camera[0, 0]),
+        float(camera[1, 1]),
+        float(camera[0, 2]),
+        float(camera[1, 2]),
+        float(flat[0]),
+        float(flat[1]),
+        float(flat[2]),
+        float(flat[3]),
+        float(flat[4]),
+    ]
+    _write_cam_par(_project_path(ctx, cam_file, "CamParFile"), nums)
+    return Result([], [float(error)])
+
+
+@operator(
+    "標定",
+    [],
+    [],
+    [
+        P("SourceDir", "原始圖資料夾"),
+        P("CamParFile", "校正檔"),
+        P("DestDir", "校正後要放的資料夾"),
+    ],
+    [P("Count", "校正了幾張")],
+    "用校正檔拉直整個資料夾",
+    "只讀資料夾最上一層的 png、jpg、bmp、tif。每張都用同一份校正檔，畸變清成 0 後另存，檔名不變。",
+    "Vizion.correct_image_files ('samples/distorted_originals', 'workspace/grid_cam.txt', 'workspace/corrected_parts', Count)",
+    "新算子。讀完校正檔，把資料夾裡每張原圖拉直後另存。",
+)
+def correct_image_files(source_dir, cam_file, dest_dir, *, ctx):
+    source = _project_path(ctx, source_dir, "SourceDir")
+    if not source.is_dir():
+        raise ValueError(f"找不到目錄 {source}")
+    matrix, distortion = _matrices(_read_cam_par(_project_path(ctx, cam_file, "CamParFile")))
+    dest = _project_path(ctx, dest_dir, "DestDir")
+    dest.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for path in sorted(source.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in _GRID_SUFFIXES:
+            continue
+        image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+        if image is None:
+            continue
+        corrected = cv2.undistort(image, matrix, distortion)
+        if not cv2.imwrite(str(dest / path.name), corrected):
+            raise ValueError(f"寫不出 {dest / path.name}")
+        count += 1
+    return Result([], [count])

@@ -115,6 +115,7 @@ class Session:
         self.id = uuid.uuid4().hex[:12]
         self.source = source
         self.root = root
+        self.file_dir = None
         program = parse_program(source)
         self.stmts = program.stmts
         self.if_false = program.if_false

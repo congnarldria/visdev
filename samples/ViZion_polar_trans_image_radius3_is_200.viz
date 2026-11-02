@@ -1,0 +1,93 @@
+* 極座標列 3 是 200
+* 圓心 (5,5) 往右 3 像素的 200，出現在極座標列 3、行 0。三張灰階合成後，紅是 10、綠是 20、藍是 30。
+* 同一列 5 個一樣亮的點，長軸是 2.82843、短軸是 0、角度是 0。左邊 10、右邊 80，平均生長只留下 4 個像素。
+* 長度 10 和長度 2 的兩條線，範圍 5 到 100 只留下 1 條。水平線切到行 2 到 8 之後，兩端是 2 和 8。
+* 兩條平行線相隔 3。四個角的長軸是 6、短軸是 2、扁度是 3。16 個像素都是 10 時，第 11 格是 16。
+* 3×3 平均把中間的 9 變成 1。2×2 的 7 貼到列 1、行 2。水平線面積是 4，10×10 的 25% 面積是 25。
+* 寬 5 高 3 的厚度是 3。2×2 的二階不變矩 I1 是 2。平移後 (0,0) 變成列 1、行 2。橢圓角度 0 的點在行 24。
+Vizion.gen_image_const (Field, 'byte', 11, 11)
+Vizion.set_grayval (Field, Marked, 5, 8, 200)
+Vizion.polar_trans_image (Marked, Polar, 5, 5, 4, 4)
+Vizion.get_grayval (Polar, 3, 0, PolarGray)
+Vizion.gen_rectangle1 (ThickRegion, 0, 0, 2, 4)
+Vizion.get_region_thickness (ThickRegion, Thickness)
+Thick1 := Thickness[1]
+Vizion.gen_rectangle1 (Block, 0, 0, 1, 1)
+Vizion.moments_region_2nd_invar (Block, I1, I2)
+I1a := I1[1]
+I2a := I2[1]
+Vizion.gen_image_proto (Field, Tens, 10)
+Vizion.gen_rectangle1 (HistoRegion, 0, 0, 3, 3)
+Vizion.gray_histo_abs (HistoRegion, Tens, 1, AbsoluteHisto)
+Abs11 := AbsoluteHisto[11]
+Vizion.set_grayval (Field, Impulse, 5, 5, 9)
+Vizion.gen_rectangle1 (MeanMask, 0, 0, 2, 2)
+Vizion.mean_image_shape (Impulse, MeanMask, MeanImage)
+Vizion.get_grayval (MeanImage, 5, 5, MeanCenter)
+Vizion.gen_rectangle1 (BarRegion, 2, 0, 2, 4)
+Vizion.set_grayval (Field, BarImage, [2, 2, 2, 2, 2], [0, 1, 2, 3, 4], 100)
+Vizion.elliptic_axis_gray (BarRegion, BarImage, Ra, Rb, Phi)
+Ra1 := Ra[1]
+Rb1 := Rb[1]
+Phi1 := Phi[1]
+Vizion.gen_rectangle1 (ClipRegion, 0, 2, 0, 8)
+Vizion.gen_region_hline (LineRegion, rad(90), 2, 4, 5)
+Vizion.area_center (LineRegion, LineArea, LineRow, LineCol)
+Line1 := LineArea[1]
+Vizion.gen_random_region (RandomRegion, 10, 10, 25)
+Vizion.area_center (RandomRegion, RandArea, RandRow, RandCol)
+Rand1 := RandArea[1]
+Vizion.gen_image_const (GrowBlank, 'byte', 4, 2)
+Vizion.set_grayval (GrowBlank, Grow, [0, 0, 1, 1, 0, 0, 1, 1], [0, 1, 0, 1, 2, 3, 2, 3], [10, 10, 10, 10, 80, 80, 80, 80])
+Vizion.regiongrowing_mean (Grow, Grown, 0, 0, 5, 1)
+Vizion.area_center (Grown, GrowArea, GrowRow, GrowCol)
+Grow1 := GrowArea[1]
+Vizion.gen_contour_polygon_xld (Line, [0, 0], [0, 10])
+Vizion.get_lines_xld (Line, BeginRow, BeginCol, EndRow, EndCol, Length, LinePhi)
+Len1 := Length[1]
+PhiLine := LinePhi[1]
+Vizion.hom_mat2d_identity (Id)
+Vizion.hom_mat2d_translate (Id, 1, 2, Shift)
+Vizion.affine_trans_polygon_xld (Line, MovedLine, Shift)
+Vizion.get_contour_xld (MovedLine, MovedRow, MovedCol)
+RowA := MovedRow[1]
+ColA := MovedCol[1]
+Vizion.get_points_ellipse ([0, rad(90)], 10, 20, 0, 4, 2, RowE, ColE)
+RowE0 := RowE[1]
+ColE0 := ColE[1]
+RowE90 := RowE[2]
+ColE90 := ColE[2]
+Vizion.gen_contour_polygon_xld (Short, [0, 0], [0, 2])
+Vizion.concat_obj (Line, Short, Both)
+Vizion.select_shape_xld (Both, Kept, 'contlength', 'and', 5, 100)
+Vizion.count_obj (Kept, KeptCount)
+Vizion.intersection_region_contour_xld (ClipRegion, Line, Crossed)
+Vizion.get_contour_xld (Crossed, CrossRow, CrossCol)
+Clip0 := CrossCol[1]
+Clip1 := CrossCol[2]
+Vizion.gen_contour_polygon_xld (High, [3, 3], [0, 10])
+Vizion.distance_contours_xld (Line, High, 'point_to_segment', Distances)
+Dist1 := Distances[1]
+Vizion.gen_contour_polygon_xld (Box, [0, 0, 2, 2], [0, 6, 6, 0])
+Vizion.orientation_points_xld (Box, Ori)
+Vizion.elliptic_axis_points_xld (Box, Era, Erb, Ephi)
+Vizion.eccentricity_points_xld (Box, Ecc)
+Ori1 := Ori[1]
+Era1 := Era[1]
+Erb1 := Erb[1]
+Ephi1 := Ephi[1]
+Ecc1 := Ecc[1]
+Vizion.gen_image_const (Plane, 'byte', 2, 2)
+Vizion.gen_image_proto (Plane, Red10, 10)
+Vizion.gen_image_proto (Plane, Green20, 20)
+Vizion.gen_image_proto (Plane, Blue30, 30)
+Vizion.channels_to_image (Red10, Green20, Blue30, Color)
+Vizion.get_grayval (Color, 0, 0, Channels)
+Red1 := Channels[1]
+Green1 := Channels[2]
+Blue1 := Channels[3]
+Vizion.gen_image_proto (Plane, Stamp, 7)
+Vizion.tile_images_offset (Stamp, Tiled, 1, 2, 0, 0, 1, 1, 4, 4)
+Vizion.get_grayval (Tiled, 1, 2, TileGray)
+Vizion.get_grayval (Tiled, 0, 0, TileZero)
+Vizion.dev_display (Tiled)

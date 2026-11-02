@@ -1,0 +1,27 @@
+* 句柄關掉之後還在
+* HALCON 的字元位置從 0 起算。HALCON 的 0 是 H，3 是 C。
+* 矩陣 [[1, 2], [3, 4]] 乘 [[5, 6], [7, 8]] 是 19、22、43、50。
+* 矩陣是句柄。clear 之後還是句柄，但不再有效，也不能序列化。
+Vizion.tuple_str_bit_select ('HALCON', [0, 3], Picked)
+Head := Picked[1]
+Third := Picked[2]
+Vizion.tuple_environment ('OS', OsName)
+Vizion.create_matrix (2, 2, [1, 2, 3, 4], A)
+Vizion.create_matrix (2, 2, [5, 6, 7, 8], B)
+Vizion.mult_matrix (A, B, 'AB', Product)
+Vizion.get_full_matrix (Product, Cells)
+C1 := Cells[1]
+C2 := Cells[2]
+C3 := Cells[3]
+C4 := Cells[4]
+Vizion.tuple_is_handle (A, IsHandle)
+Vizion.tuple_is_valid_handle (A, Valid)
+Vizion.tuple_is_serializable (A, Serial)
+Vizion.tuple_sem_type (A, Sem)
+Vizion.tuple_is_handle (1, NumberHandle)
+Vizion.tuple_is_int_elem ([1, 1.0], IntElem)
+IntOne := IntElem[1]
+RealOne := IntElem[2]
+Vizion.clear_matrix (A)
+Vizion.tuple_is_handle (A, StillHandle)
+Vizion.tuple_is_valid_handle (A, ValidAfter)

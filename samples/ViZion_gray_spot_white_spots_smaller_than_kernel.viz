@@ -1,0 +1,45 @@
+* 比結構元素小的亮點和暗點
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_image_proto (Image, Field, 100)
+Vizion.gen_rectangle1 (BrightBox, 19, 24, 21, 26)
+Vizion.gen_rectangle1 (DarkBox, 39, 49, 41, 51)
+Vizion.concat_obj (BrightBox, DarkBox, Parts)
+Vizion.set_grayval (Field, Marked, [20, 40], [25, 50], [130, 70])
+Vizion.gray_spot_white (Marked, White, 3)
+Vizion.get_grayval (White, 20, 25, WhitePeak)
+Vizion.get_grayval (White, 20, 24, WhiteSide)
+Vizion.get_grayval (White, 40, 50, WhitePit)
+Vizion.gray_spot_black (Marked, Black, 3)
+Vizion.get_grayval (Black, 40, 50, BlackPit)
+Vizion.get_grayval (Black, 40, 49, BlackSide)
+Vizion.get_grayval (Black, 20, 25, BlackPeak)
+Vizion.spot_volume (BrightBox, Marked, 'white', 3, VolWhite)
+Vizion.spot_volume (BrightBox, Marked, 'black', 3, VolBlackOnBright)
+Vizion.spot_mean (BrightBox, Marked, 'white', 3, MeanWhite)
+Vizion.spot_volume (DarkBox, Marked, 'black', 3, VolBlack)
+Vizion.spot_volume (DarkBox, Marked, 'white', 3, VolWhiteOnDark)
+Vizion.spot_volume_objects (Parts, Marked, 'white', 3, ObjWhite)
+White1 := ObjWhite[1]
+White2 := ObjWhite[2]
+Vizion.spot_volume_objects (Parts, Marked, 'black', 3, ObjBlack)
+Black1 := ObjBlack[1]
+Black2 := ObjBlack[2]
+Vizion.extreme_spot (BrightBox, Marked, 'white', 3, HighRow, HighCol, HighH)
+Vizion.extreme_spot (DarkBox, Marked, 'black', 3, PitRow, PitCol, PitH)
+Vizion.select_spot (Parts, Marked, Kept, 1, 100, 'white', 3)
+Vizion.count_obj (Kept, KeepCount)
+Vizion.select_spot (Parts, Marked, KeptSwap, 100, 1, 'white', 3)
+Vizion.count_obj (KeptSwap, SwapCount)
+Vizion.select_spot (Parts, Marked, DarkKept, 1, 100, 'black', 3)
+Vizion.count_obj (DarkKept, DarkCount)
+Vizion.band_spot (Parts, Marked, BrightPix, 20, 40, 'white', 3)
+Vizion.area_center (BrightPix, BrightArea, BrightRow, BrightCol)
+BrightN := BrightArea[1]
+BrightR := BrightRow[1]
+BrightC := BrightCol[1]
+Vizion.band_spot (Parts, Marked, DarkPix, 20, 40, 'black', 3)
+Vizion.area_center (DarkPix, DarkArea, DarkRow, DarkCol)
+DarkN := DarkArea[1]
+DarkR := DarkRow[1]
+DarkC := DarkCol[1]
+Vizion.dev_display (White)

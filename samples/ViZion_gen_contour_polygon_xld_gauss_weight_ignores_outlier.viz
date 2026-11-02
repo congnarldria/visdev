@@ -1,0 +1,21 @@
+* 高斯權重不跟飛點
+* regress_contours_xld 的 gauss 依每個點離直線的距離做高斯加權。Iterations 填 0 會做 4 次。
+* no 每個點一樣重。四個點在列 10、行 0 到 30，飛點在列 22、行 15。
+* no 整條被抬到列 12.4。gauss 仍是列 10，行從 0 到 30。
+* 點本來就在直線上時，gauss 和 no 一樣，還是列 10。
+Vizion.gen_contour_polygon_xld (Spike, [10, 10, 10, 10, 22], [0, 10, 20, 30, 15])
+Vizion.regress_contours_xld (Spike, Fit, 'gauss', 0)
+Vizion.get_contour_xld (Fit, Rows, Cols)
+Vizion.tuple_min (Rows, RowMin)
+Vizion.tuple_max (Rows, RowMax)
+Vizion.tuple_min (Cols, ColMin)
+Vizion.tuple_max (Cols, ColMax)
+Vizion.regress_contours_xld (Spike, Plain, 'no', 0)
+Vizion.get_contour_xld (Plain, PRows, PCols)
+Vizion.tuple_mean (PRows, PlainMean)
+Vizion.gen_contour_polygon_xld (Clean, [10, 10, 10], [0, 15, 30])
+Vizion.regress_contours_xld (Clean, Same, 'gauss', 0)
+Vizion.get_contour_xld (Same, CRows, CCols)
+Vizion.tuple_min (CRows, CleanMin)
+Vizion.tuple_max (CRows, CleanMax)
+Vizion.dev_display (Fit)

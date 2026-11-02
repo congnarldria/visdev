@@ -1,0 +1,58 @@
+* 物件在參考的哪一側
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Ref, 30, 30, 39, 39)
+Vizion.gen_rectangle1 (Right, 30, 50, 39, 59)
+Vizion.gen_rectangle1 (Left, 30, 22, 39, 26)
+Vizion.gen_rectangle1 (Below, 48, 30, 52, 39)
+Vizion.gen_rectangle1 (Above, 14, 30, 18, 39)
+Vizion.concat_obj (Right, Left, Pair)
+Vizion.concat_obj (Pair, Below, Three)
+Vizion.concat_obj (Three, Above, Parts)
+Vizion.region_angle (Parts, Ref, Angle)
+Ang1 := Angle[1]
+Ang2 := Angle[2]
+Ang3 := Angle[3]
+Ang4 := Angle[4]
+Vizion.select_side (Parts, Ref, RightKept, 'right')
+Vizion.count_obj (RightKept, RightCount)
+Vizion.select_side (Parts, Ref, LeftKept, 'left')
+Vizion.count_obj (LeftKept, LeftCount)
+Vizion.select_side (Parts, Ref, BelowKept, 'below')
+Vizion.count_obj (BelowKept, BelowCount)
+Vizion.select_side (Parts, Ref, AboveKept, 'above')
+Vizion.count_obj (AboveKept, AboveCount)
+Vizion.sort_distance (Parts, Ref, Near, 'near', 'city-block')
+Vizion.area_center (Near, NearArea, NearRow, NearCol)
+NearR := NearRow[1]
+NearC := NearCol[1]
+Vizion.sort_distance (Parts, Ref, FarSorted, 'far', 'city-block')
+Vizion.area_center (FarSorted, FarArea, FarRow, FarCol)
+FarR := FarRow[1]
+FarC := FarCol[1]
+Vizion.nearest_one (Parts, Ref, Closest, 'city-block')
+Vizion.area_center (Closest, CloseArea, CloseRow, CloseCol)
+CloseN := CloseArea[1]
+CloseR := CloseRow[1]
+CloseC := CloseCol[1]
+Vizion.farthest_one (Parts, Ref, Farthest, 'city-block')
+Vizion.area_center (Farthest, FarMostArea, FarMostRow, FarMostCol)
+FarN := FarMostArea[1]
+FarMostR := FarMostRow[1]
+FarMostC := FarMostCol[1]
+Vizion.gap_area (Parts, Ref, 'city-block', GapArea)
+Gap1 := GapArea[1]
+Gap2 := GapArea[2]
+Gap3 := GapArea[3]
+Gap4 := GapArea[4]
+Vizion.gap_width (Parts, Ref, 'city-block', GapWidth)
+Wide1 := GapWidth[1]
+Wide2 := GapWidth[2]
+Wide3 := GapWidth[3]
+Wide4 := GapWidth[4]
+Vizion.gap_region (Right, Ref, Gap, 'city-block')
+Vizion.area_center (Gap, GapOnly, GapRow, GapCol)
+GapN := GapOnly[1]
+Vizion.paint_region (Gap, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 34, 44, GapGray)
+Vizion.get_grayval (Shown, 34, 39, RefGray)
+Vizion.dev_display (Shown)

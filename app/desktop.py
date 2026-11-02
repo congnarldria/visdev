@@ -121,6 +121,9 @@ class DesktopApi:
     def open_feature_window(self, url: str) -> bool:
         return self._open_tool("區域特徵", url, 880, 720, (640, 480))
 
+    def open_gfx_window(self, url: str) -> bool:
+        return self._open_tool("圖形視窗", url, 960, 720, (640, 480))
+
     def open_threshold_window(self, url: str) -> bool:
         return self._open_tool("二值化", url, 920, 720, (640, 520))
 

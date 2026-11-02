@@ -1,0 +1,10 @@
+* 尖角不會掀起平面
+* fit_plane_region_inlier 先從三點子集裡挑中位誤差小的平面，再留下差距不超過 MaxDist 的像素重擬合。每個點一開始就在門檻裡時，直接用全部像素。
+* 3×3 的高度都是 0，左上角被設成 40。一次擬合會被掀成列、行斜率都是 -6.66667，常數 51.11111。門檻 2 時，這張斜面讓九個點全都超過門檻。
+* 改從平的三點出發之後，平面回到 0、0、0。
+Vizion.gen_image_const (Sheet, 'byte', 12, 10)
+Vizion.gen_rectangle1 (Box, 2, 3, 4, 5)
+Vizion.set_grayval (Sheet, Peak, 2, 3, 40)
+Vizion.fit_plane_region (Box, Peak, RawA, RawB, RawG)
+Vizion.fit_plane_region_inlier (Box, Peak, 2, Alpha, Beta, Gamma)
+Vizion.dev_display (Peak)

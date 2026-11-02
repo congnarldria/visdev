@@ -1,0 +1,8 @@
+* 印出 Data Matrix 再讀回 VISDEV
+* gen_datamatrix 自己排 ECC200 方碼，放大後四周留白。
+* SymbolType 用 Data Matrix。find_data_code_2d 讀回來仍是 VISDEV。
+Vizion.gen_datamatrix (Code, 'VISDEV')
+Vizion.create_data_code_2d_model ('Data Matrix', '', '', Handle)
+Vizion.find_data_code_2d (Code, Symbol, Handle, '', '', Ids, Decoded)
+Text := Decoded[1]
+Vizion.dev_display (Code)

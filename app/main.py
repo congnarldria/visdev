@@ -122,7 +122,7 @@ def session_for(body: ExecIn) -> Session:
 @app.middleware("http")
 async def no_cache(request, call_next):
     response = await call_next(request)
-    if request.url.path in ("/", "/bin", "/features", "/threshold") or request.url.path.startswith("/static"):
+    if request.url.path in ("/", "/bin", "/features", "/threshold", "/gfx") or request.url.path.startswith("/static"):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -145,6 +145,20 @@ def feature_tool():
 @app.get("/threshold")
 def threshold_tool():
     return FileResponse(STATIC / "threshold.html")
+
+
+@app.get("/gfx")
+def gfx_tool():
+    return FileResponse(STATIC / "gfx.html")
+
+
+@app.get("/api/session/{sid}/display")
+def session_display(sid: str):
+    current = SESSIONS.get(sid)
+    if current is None:
+        raise HTTPException(404, "沒有這個執行階段，請先按重設")
+    state = current.public_state()
+    return {"id": sid, "display": state.get("display")}
 
 
 @app.get("/api/operators")
@@ -225,6 +239,17 @@ def save_program(body: SaveIn):
     path = ROOT / "workspace" / name
     path.write_text(body.source.replace("\r\n", "\n").replace("\r", "\n"), encoding="utf-8")
     return {"name": name, "path": f"workspace/{name}"}
+
+
+@app.post("/api/import/hdevelop")
+async def import_hdevelop(file: UploadFile = File(...)):
+    from app.engine.hdevelop_file import convert_hdevelop
+
+    raw = await file.read()
+    source, skipped = convert_hdevelop(raw)
+    stem = Path(file.filename or "program").stem.strip() or "program"
+    stem = re.sub(r'[\\/:*?"<>|]', "_", stem)
+    return {"name": f"{stem}.viz", "source": source, "skipped": skipped}
 
 
 @app.post("/api/upload")

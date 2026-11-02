@@ -1,0 +1,71 @@
+* 亮度偏到哪一邊
+* 用法：看亮的部分相對形狀中心偏了哪邊。正的列是偏下，正的行是偏右。0 是正在中間。
+* 方向 0 度向右，90 度向下，270 度向上。Balance 為 1 是在正中間，0 是全擠在邊緣。
+* 右半邊較亮的方塊大約是 0.68，不是 0。center 表示幾乎沒偏。
+* 較亮的一半用形狀中心切開。亮度在中間時，亮的一半和暗的一半都是整個物件。
+Vizion.gen_image_const (Blank, 'byte', 80, 60)
+Vizion.gen_rectangle1 (RightLeft, 10, 10, 29, 19)
+Vizion.gen_rectangle1 (RightRight, 10, 20, 29, 29)
+Vizion.paint_region (RightLeft, Blank, Step1, 50, 'fill')
+Vizion.paint_region (RightRight, Step1, Step2, 200, 'fill')
+Vizion.union2 (RightLeft, RightRight, RightBlock)
+Vizion.gen_rectangle1 (Flat, 10, 40, 19, 59)
+Vizion.paint_region (Flat, Step2, Step3, 100, 'fill')
+Vizion.gen_rectangle1 (TopTop, 40, 40, 49, 59)
+Vizion.gen_rectangle1 (TopBottom, 50, 40, 59, 59)
+Vizion.paint_region (TopTop, Step3, Step4, 200, 'fill')
+Vizion.paint_region (TopBottom, Step4, Picture, 50, 'fill')
+Vizion.union2 (TopTop, TopBottom, TopBlock)
+Vizion.concat_obj (RightBlock, Flat, Pair)
+Vizion.concat_obj (Pair, TopBlock, Parts)
+* 右邊較亮的方塊行偏 3。均勻的是 0。上面較亮的方塊列偏 -3
+Vizion.gray_offset (Parts, Picture, DRow, DColumn)
+DR1 := DRow[1]
+DC1 := DColumn[1]
+DR2 := DRow[2]
+DC2 := DColumn[2]
+DR3 := DRow[3]
+DC3 := DColumn[3]
+Vizion.gray_shift (Parts, Picture, Shift)
+S1 := Shift[1]
+S2 := Shift[2]
+S3 := Shift[3]
+Vizion.gray_direction (Parts, Picture, Phi)
+P1 := Phi[1]
+P2 := Phi[2]
+P3 := Phi[3]
+Vizion.bright_side (Parts, Picture, Side)
+Side1 := Side[1]
+Side2 := Side[2]
+Side3 := Side[3]
+Vizion.gray_balance (Parts, Picture, Balance)
+B1 := Balance[1]
+B2 := Balance[2]
+B3 := Balance[3]
+* 較亮的一半在右，中心行 24.5。較暗的一半在左，中心行 14.5
+Vizion.bright_half (Parts, Picture, Bright)
+Vizion.select_obj (Bright, BrightOne, 1)
+Vizion.area_center (BrightOne, BrightArea, BrightRow, BrightCol)
+BA := BrightArea[1]
+BR := BrightRow[1]
+BC := BrightCol[1]
+Vizion.dark_half (Parts, Picture, Dark)
+Vizion.select_obj (Dark, DarkOne, 1)
+Vizion.area_center (DarkOne, DarkArea, DarkRow, DarkCol)
+DA := DarkArea[1]
+DR := DarkRow[1]
+DC := DarkCol[1]
+* 偏移至少 1 才留下偏右的。center 則是偏移小於 0.5
+Vizion.select_bright (Parts, Picture, Kept, 'right', 1)
+Vizion.count_obj (Kept, KeepN)
+Vizion.area_center (Kept, KeepArea, KeepRow, KeepCol)
+KeepA := KeepArea[1]
+KeepC := KeepCol[1]
+Vizion.select_bright (Parts, Picture, Middle, 'center', 0.5)
+Vizion.count_obj (Middle, MidN)
+Vizion.area_center (Middle, MidArea, MidRow, MidCol)
+MidA := MidArea[1]
+MidC := MidCol[1]
+Vizion.get_grayval (Picture, 19, 14, LeftGray)
+Vizion.get_grayval (Picture, 19, 24, RightGray)
+Vizion.dev_display (Picture)

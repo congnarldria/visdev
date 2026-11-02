@@ -1,0 +1,10 @@
+* 本機聽埠再讀回 VISDEV
+* 先聽一個空埠，再從本機連上去送字，聽的那端讀回同一段。
+Vizion.open_socket_accept (0, Listen, Port)
+Vizion.open_socket_connect ('127.0.0.1', Port, Client)
+Vizion.send_data (Client, 'VISDEV')
+Vizion.receive_data (Listen, 6, Text)
+Vizion.set_socket_param (Client, 'timeout', 1)
+Vizion.get_socket_param (Client, 'timeout', Wait)
+Vizion.close_socket (Client)
+Vizion.close_socket (Listen)

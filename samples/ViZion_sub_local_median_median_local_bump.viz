@@ -1,0 +1,33 @@
+* 中值和局部凸起
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Flat, 10, 10, 14, 14)
+Vizion.gen_rectangle1 (Spot, 29, 39, 31, 41)
+Vizion.concat_obj (Flat, Spot, Parts)
+Vizion.set_grayval (Image, Peak, 30, 40, 30)
+Vizion.sub_local_median (Peak, Level, 3)
+Vizion.get_grayval (Level, 30, 40, CenterGray)
+Vizion.get_grayval (Level, 30, 39, SideGray)
+Vizion.get_grayval (Level, 12, 12, FlatGray)
+Vizion.roughness_median_ra (Spot, Peak, 3, SpotRa)
+Vizion.roughness_median_ra (Flat, Peak, 3, FlatRa)
+Vizion.roughness_median_rq (Spot, Peak, 3, SpotRq)
+Vizion.roughness_median_rz (Spot, Peak, 3, Rp, Rv, Rz)
+Vizion.roughness_median_ra_objects (Parts, Peak, 3, ObjRa)
+Ra1 := ObjRa[1]
+Ra2 := ObjRa[2]
+Vizion.select_median_roughness (Parts, Peak, Rough, 1, 10, 3)
+Vizion.count_obj (Rough, RoughCount)
+Vizion.area_center (Rough, RoughArea, RoughRow, RoughCol)
+RoughN := RoughArea[1]
+Vizion.select_median_roughness (Parts, Peak, RoughSwap, 10, 1, 3)
+Vizion.count_obj (RoughSwap, SwapCount)
+Vizion.select_median_roughness (Parts, Peak, Smooth, 0, 0.001, 3)
+Vizion.count_obj (Smooth, SmoothCount)
+Vizion.extreme_median_roughness (Spot, Peak, 3, 'high', HighRow, HighCol, HighRes)
+Vizion.extreme_median_roughness (Spot, Peak, 3, 'low', LowRow, LowCol, LowRes)
+Vizion.band_median_roughness (Spot, Peak, PeakPix, 20, 40, 3)
+Vizion.area_center (PeakPix, PeakArea, PeakRow, PeakCol)
+PeakN := PeakArea[1]
+PeakR := PeakRow[1]
+PeakC := PeakCol[1]
+Vizion.dev_display (Level)

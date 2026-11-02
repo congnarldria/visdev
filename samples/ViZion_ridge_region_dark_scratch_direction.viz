@@ -1,0 +1,29 @@
+* 暗的刮痕在哪、朝哪
+* 細線用高斯導數的 Hessian 找脊線，再沿法線收到次像素中心。這就是改良後的 lines_gauss。
+* dark 找比周圍暗的線，light 找亮線。平坦、大方塊的邊、抓錯明暗，都不會留下。
+* ridge_response 只有中心有灰階，那個數字就是 lines_gauss 的強度門檻。
+* ridge_region 是一像素寬。Phi 為 0 朝右，垂直是 1.5708。Length 是點距，不是面積。
+Vizion.gen_image_const (Base, 'byte', 80, 60)
+Vizion.gen_image_proto (Base, Sheet, 180)
+Vizion.gen_region_line (Mark, 10, 40, 49, 40)
+Vizion.paint_region (Mark, Sheet, Scene, 40, 'fill')
+Vizion.ridge_region (Scene, Scratch, 1, 8, 'dark')
+Vizion.area_center (Scratch, Area, Row, Column)
+Vizion.ridge_response (Scene, Response, 1, 'dark')
+Vizion.get_grayval (Response, 30, 40, Peak)
+Vizion.get_grayval (Response, 30, 39, Side)
+Vizion.ridge_stats (Scene, 1, 8, 'dark', Count, Length, Phi, CenterRow, CenterCol)
+Vizion.ridge_stats (Scene, 1, 8, 'light', WrongCount, WrongLength, WrongPhi, WrongRow, WrongCol)
+Vizion.ridge_stats (Sheet, 1, 8, 'dark', FlatCount, FlatLength, FlatPhi, FlatRow, FlatCol)
+Vizion.gen_image_proto (Base, Dark, 0)
+Vizion.gen_rectangle1 (Bar, 29, 8, 31, 72)
+Vizion.paint_region (Bar, Dark, Bright, 255, 'fill')
+Vizion.ridge_region (Bright, LightLine, 1.2, 5, 'light')
+Vizion.area_center (LightLine, LightArea, LightRow, LightCol)
+Vizion.lines_gauss (Bright, Lines, 1.2, 5, 20, 'light')
+Vizion.length_xld (Lines, LineLen)
+Vizion.tuple_max (LineLen, Longest)
+Vizion.gen_rectangle1 (Block, 10, 10, 49, 49)
+Vizion.paint_region (Block, Dark, Wide, 255, 'fill')
+Vizion.ridge_stats (Wide, 1.2, 5, 'light', BlockCount, BlockLength, BlockPhi, BlockRow, BlockCol)
+Vizion.dev_display (Scratch)

@@ -888,6 +888,7 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
 .op.on, .op:hover { background: #262c36; }
 .op.on { border-left-color: var(--green); }
 .op b { display: block; font: 12px var(--mono); font-weight: 600; color: #d7ffe8; }
+.op-new { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid #3d8f62; color: #9dffc4; font: 10px var(--mono); font-style: normal; vertical-align: 1px; }
 .op span { color: var(--muted); }
 .op-help { flex: 1; overflow: auto; padding: 12px 14px 16px; }
 .op-help h2 { margin: 0 0 4px; font-size: 16px; }

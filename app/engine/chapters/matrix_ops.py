@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -784,3 +785,479 @@ def pow_element_matrix(base, exponent, *, ctx):
     if not np.all(np.isfinite(result)):
         raise ValueError("pow_element_matrix 的結果不是有限數")
     return Result([], [_wrap(result)])
+
+
+def _replace(matrix: Matrix, data) -> Result:
+    matrix.data = np.array(data, dtype=np.float64, copy=True)
+    return Result([], [])
+
+
+def _multiply(left, right, mult_type: str) -> np.ndarray:
+    kind = _token(mult_type, "MultType").upper()
+    a = left
+    b = right
+    if kind == "ATB":
+        a = a.T
+    elif kind == "ABT":
+        b = b.T
+    elif kind == "ATBT":
+        a, b = a.T, b.T
+    elif kind != "AB":
+        raise ValueError("MultType 只能是 AB、ATB、ABT 或 ATBT")
+    if a.shape[1] != b.shape[0]:
+        raise ValueError(f"矩陣乘法的內側尺寸不同：{a.shape} 和 {b.shape}")
+    return a @ b
+
+
+def _lu(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    size = data.shape[0]
+    lower = np.eye(size, dtype=np.float64)
+    upper = np.array(data, dtype=np.float64, copy=True)
+    for col in range(size):
+        pivot = col + int(np.argmax(np.abs(upper[col:, col])))
+        if abs(upper[pivot, col]) < 1e-12:
+            raise ValueError("這個矩陣不能做 LU 分解")
+        if pivot != col:
+            upper[[col, pivot]] = upper[[pivot, col]]
+            if col:
+                lower[[col, pivot], :col] = lower[[pivot, col], :col]
+        for row in range(col + 1, size):
+            lower[row, col] = upper[row, col] / upper[col, col]
+            upper[row, col:] -= lower[row, col] * upper[col, col:]
+            upper[row, col] = 0.0
+    return lower, upper
+
+
+def _udu(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    size = data.shape[0]
+    symmetric = np.triu(data) + np.triu(data, 1).T
+    lower = np.eye(size, dtype=np.float64)
+    diagonal = np.zeros(size, dtype=np.float64)
+    for col in range(size):
+        diagonal[col] = symmetric[col, col] - np.sum(lower[col, :col] ** 2 * diagonal[:col])
+        if abs(diagonal[col]) < 1e-12:
+            raise ValueError("這個對稱矩陣不能做 UDU 分解")
+        for row in range(col + 1, size):
+            lower[row, col] = (
+                symmetric[row, col] - np.sum(lower[row, :col] * lower[col, :col] * diagonal[:col])
+            ) / diagonal[col]
+    return lower.T, np.diag(diagonal)
+
+
+def _matrix_power(data: np.ndarray, power) -> np.ndarray:
+    exponent = scalar(power, "Power")
+    if abs(exponent - round(exponent)) > 1e-8:
+        raise ValueError("次方必須是整數")
+    if data.shape[0] != data.shape[1]:
+        raise ValueError("只有方陣可以做矩陣次方")
+    try:
+        return np.linalg.matrix_power(data, int(round(exponent)))
+    except np.linalg.LinAlgError as exc:
+        raise ValueError("這個矩陣不能做這個次方") from exc
+
+
+def _inverse(data: np.ndarray, matrix_type, epsilon) -> np.ndarray:
+    if data.shape[0] != data.shape[1]:
+        raise ValueError("只有方陣可以求逆")
+    kind = _token(matrix_type, "MatrixType")
+    if kind not in ("general", "symmetric", "positive_definite"):
+        raise ValueError("MatrixType 只能是 general、symmetric 或 positive_definite")
+    tol = scalar(epsilon, "Epsilon")
+    try:
+        if tol > 0:
+            return np.linalg.pinv(data, rcond=tol)
+        return np.linalg.inv(data)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError("這個矩陣不能求逆") from exc
+
+
+def _element_power(data: np.ndarray, power) -> np.ndarray:
+    result = np.power(data, scalar(power, "Power"))
+    if not np.all(np.isfinite(result)):
+        raise ValueError("次方的結果不是有限數")
+    return result
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixID", "矩陣"), P("SumType", "columns、rows 或 full", "'columns'", ["'columns'", "'rows'", "'full'"])],
+    [P("MatrixSumID", "和")],
+    "矩陣元素的和",
+    "columns 得到一列，每一行一個和。rows 得到一行，每一列一個和。full 得到 1×1。",
+    "Vizion.sum_matrix (MatrixID, 'full', MatrixSumID)",
+)
+def sum_matrix(matrix, sum_type, *, ctx):
+    data = _expect(matrix).data
+    kind = _token(sum_type, "SumType")
+    if kind == "columns":
+        result = np.sum(data, axis=0, keepdims=True)
+    elif kind == "rows":
+        result = np.sum(data, axis=1, keepdims=True)
+    elif kind == "full":
+        result = np.array([[np.sum(data)]], np.float64)
+    else:
+        raise ValueError("SumType 只能是 columns、rows 或 full")
+    return Result([], [_wrap(result)])
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixID", "矩陣")],
+    [P("MatrixCopyID", "複本")],
+    "複製矩陣",
+    "複本是另一個句柄。改其中一個，另一個不變。",
+    "Vizion.copy_matrix (MatrixID, MatrixCopyID)",
+)
+def copy_matrix(matrix, *, ctx):
+    return Result([], [_wrap(_expect(matrix).data.copy())])
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixID", "方陣"), P("ComputeEigenvectors", "none、left 或 right", "'none'", ["'none'", "'left'", "'right'"])],
+    [
+        P("EigenvaluesRealID", "特徵值的實部"),
+        P("EigenvaluesImagID", "特徵值的虛部"),
+        P("EigenvectorsRealID", "特徵向量的實部"),
+        P("EigenvectorsImagID", "特徵向量的虛部"),
+    ],
+    "一般矩陣的特徵值",
+    "不要求對稱。特徵值排成一行。none 不計算特徵向量，那兩個矩陣是空的。left 和 right 的每一行是一個單位長度的特徵向量。順序不固定。",
+    "Vizion.eigenvalues_general_matrix (MatrixID, 'none', Real, Imag, VecReal, VecImag)",
+)
+def eigenvalues_general_matrix(matrix, compute, *, ctx):
+    data = _expect(matrix).data
+    if data.shape[0] != data.shape[1]:
+        raise ValueError("只有方陣可以算特徵值")
+    mode = _token(compute, "ComputeEigenvectors")
+    if mode not in ("none", "left", "right"):
+        raise ValueError("ComputeEigenvectors 只能是 none、left 或 right")
+    values, vectors = np.linalg.eig(data.T if mode == "left" else data)
+    real = np.real(values).reshape(-1, 1)
+    imag = np.imag(values).reshape(-1, 1)
+    if mode == "none":
+        empty = np.zeros((0, 0), np.float64)
+        return Result([], [_wrap(real), _wrap(imag), _wrap(empty), _wrap(empty)])
+    return Result([], [_wrap(real), _wrap(imag), _wrap(np.real(vectors)), _wrap(np.imag(vectors))])
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixID", "方陣"), P("MatrixType", "general、symmetric、positive_definite 或 tridiagonal", "'general'", ["'general'", "'symmetric'", "'positive_definite'", "'tridiagonal'"])],
+    [P("Matrix1ID", "第一個因子"), P("Matrix2ID", "第二個因子")],
+    "矩陣分解",
+    "general 和 tridiagonal 做 LU：第一個是單位對角的下三角，第二個是上三角，必要時會交換列。tridiagonal 只用主對角和相鄰的兩條。symmetric 用上三角做沒有列交換的 UDU，第二個是對角矩陣。positive_definite 做喬列斯基，第二個是第一個的轉置。",
+    "Vizion.decompose_matrix (MatrixID, 'positive_definite', Lower, Upper)",
+)
+def decompose_matrix(matrix, matrix_type, *, ctx):
+    data = _expect(matrix).data
+    if data.shape[0] != data.shape[1]:
+        raise ValueError("只有方陣可以分解")
+    kind = _token(matrix_type, "MatrixType")
+    if kind == "positive_definite":
+        try:
+            lower = np.linalg.cholesky(np.triu(data) + np.triu(data, 1).T)
+        except np.linalg.LinAlgError as exc:
+            raise ValueError("這個矩陣不是正定的") from exc
+        return Result([], [_wrap(lower), _wrap(lower.T)])
+    if kind == "symmetric":
+        upper, diagonal = _udu(data)
+        return Result([], [_wrap(upper), _wrap(diagonal)])
+    if kind == "tridiagonal":
+        band = np.diag(np.diag(data))
+        if data.shape[0] > 1:
+            band += np.diag(np.diag(data, 1), 1)
+            band += np.diag(np.diag(data, -1), -1)
+        lower, upper = _lu(band)
+        return Result([], [_wrap(lower), _wrap(upper)])
+    if kind == "general":
+        lower, upper = _lu(data)
+        return Result([], [_wrap(lower), _wrap(upper)])
+    raise ValueError("MatrixType 只能是 general、symmetric、positive_definite 或 tridiagonal")
+
+
+def _matrix_path(file_name, name: str) -> Path:
+    text = str(file_name).strip().strip("'\"")
+    if not text:
+        raise ValueError(f"{name} 不能是空的")
+    return Path(text)
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [
+        P("MatrixID", "矩陣"),
+        P("FileFormat", "ascii 或 binary", "'ascii'", ["'ascii'", "'binary'"]),
+        P("FileName", "檔名"),
+    ],
+    [],
+    "把矩陣寫進檔案",
+    "ascii 每一列一行，數字用空白分開，read_matrix 讀得回來。binary 是這支程式自己的格式：兩個 32 位元整數的列數和行數，後面是 64 位元浮點數。這不是 HALCON 的二進位檔。",
+    "Vizion.write_matrix (MatrixID, 'ascii', 'workspace/matrix.mtx')",
+)
+def write_matrix(matrix, file_format, file_name, *, ctx):
+    data = _expect(matrix).data
+    kind = _token(file_format, "FileFormat")
+    path = _matrix_path(file_name, "FileName")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if kind == "ascii":
+        lines = []
+        for row in data:
+            lines.append(" ".join(str(_tidy(float(item))) for item in row))
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    elif kind == "binary":
+        header = np.array(data.shape, np.int32).tobytes()
+        path.write_bytes(header + np.ascontiguousarray(data, np.float64).tobytes())
+    else:
+        raise ValueError("FileFormat 只能是 ascii 或 binary")
+    return Result([], [])
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("FileName", "檔名")],
+    [P("MatrixID", "讀到的矩陣")],
+    "從檔案讀矩陣",
+    "ascii 是 write_matrix 寫出的文字。讀不到檔案會報錯。",
+    "Vizion.read_matrix ('workspace/matrix.mtx', MatrixID)",
+)
+def read_matrix(file_name, *, ctx):
+    path = _matrix_path(file_name, "FileName")
+    if not path.is_file():
+        raise ValueError(f"讀不到矩陣檔 {path}")
+    raw = path.read_bytes()
+    text = None
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = None
+    rows = []
+    if text is not None:
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            try:
+                rows.append([float(item) for item in line.split()])
+            except ValueError:
+                rows = []
+                break
+    if rows:
+        width = len(rows[0])
+        if width < 1 or any(len(row) != width for row in rows):
+            raise ValueError("矩陣檔每一列的個數要相同")
+        return Result([], [_wrap(np.array(rows, np.float64))])
+    if len(raw) < 8:
+        raise ValueError("矩陣檔太短")
+    height, width = np.frombuffer(raw[:8], np.int32)
+    count = int(height) * int(width)
+    payload = raw[8:]
+    if height < 1 or width < 1 or len(payload) != count * 8:
+        raise ValueError("矩陣檔的二進位內容對不上")
+    data = np.frombuffer(payload, np.float64).reshape(int(height), int(width)).copy()
+    return Result([], [_wrap(data)])
+
+
+def _mod_unary(name, short, detail, example, fn):
+    def impl(matrix, *, ctx, _fn=fn):
+        handle = _expect(matrix)
+        try:
+            result = _fn(handle.data)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        if not np.all(np.isfinite(result)):
+            raise ValueError(f"{name} 的結果不是有限數")
+        return _replace(handle, result)
+
+    impl.__name__ = name
+    return operator("矩陣", [], [], [P("MatrixID", "要改的矩陣")], [], short, detail, example)(impl)
+
+
+_mod_unary("abs_matrix_mod", "絕對值寫回原矩陣", "每個元素取絕對值，寫進原來的句柄。", "Vizion.abs_matrix_mod (MatrixID)", np.abs)
+_mod_unary("sqrt_matrix_mod", "平方根寫回原矩陣", "有負數會失敗。結果寫進原來的句柄。", "Vizion.sqrt_matrix_mod (MatrixID)", _sqrt)
+_mod_unary("transpose_matrix_mod", "轉置寫回原矩陣", "列和行對調，寫進原來的句柄。", "Vizion.transpose_matrix_mod (MatrixID)", lambda data: data.T.copy())
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixAID", "要改的矩陣"), P("MatrixBID", "加上的矩陣")],
+    [],
+    "相加並寫回第一個矩陣",
+    "兩個矩陣必須一樣大。結果放進第一個句柄。",
+    "Vizion.add_matrix_mod (A, B)",
+)
+def add_matrix_mod(left, right, *, ctx):
+    a = _expect(left)
+    b = _expect(right)
+    _same_shape(a, b, "add_matrix_mod")
+    return _replace(a, a.data + b.data)
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixAID", "要改的矩陣"), P("MatrixBID", "減去的矩陣")],
+    [],
+    "相減並寫回第一個矩陣",
+    "結果是 A - B，放進第一個句柄。",
+    "Vizion.sub_matrix_mod (A, B)",
+)
+def sub_matrix_mod(left, right, *, ctx):
+    a = _expect(left)
+    b = _expect(right)
+    _same_shape(a, b, "sub_matrix_mod")
+    return _replace(a, a.data - b.data)
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixAID", "要改的矩陣"), P("MatrixBID", "元素乘數")],
+    [],
+    "元素相乘並寫回第一個矩陣",
+    "對應位置相乘，放進第一個句柄。",
+    "Vizion.mult_element_matrix_mod (A, B)",
+)
+def mult_element_matrix_mod(left, right, *, ctx):
+    a = _expect(left)
+    b = _expect(right)
+    _same_shape(a, b, "mult_element_matrix_mod")
+    return _replace(a, a.data * b.data)
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixAID", "要改的被除數"), P("MatrixBID", "除數")],
+    [],
+    "元素相除並寫回第一個矩陣",
+    "除數裡有 0 會失敗。",
+    "Vizion.div_element_matrix_mod (A, B)",
+)
+def div_element_matrix_mod(left, right, *, ctx):
+    a = _expect(left)
+    b = _expect(right)
+    _same_shape(a, b, "div_element_matrix_mod")
+    if np.any(b.data == 0):
+        raise ZeroDivisionError("除數矩陣裡有 0")
+    return _replace(a, a.data / b.data)
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixID", "要改的矩陣"), P("Factor", "倍率")],
+    [],
+    "乘上常數並寫回原矩陣",
+    "每個元素都乘 Factor。",
+    "Vizion.scale_matrix_mod (MatrixID, 2)",
+)
+def scale_matrix_mod(matrix, factor, *, ctx):
+    handle = _expect(matrix)
+    return _replace(handle, handle.data * scalar(factor, "Factor"))
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [
+        P("MatrixAID", "要改的左邊矩陣"),
+        P("MatrixBID", "右邊的矩陣"),
+        P("MultType", "AB、ATB、ABT 或 ATBT", "'AB'", _MULT),
+    ],
+    [],
+    "矩陣乘法並寫回左邊",
+    "乘積放進左邊的句柄。尺寸規則和 mult_matrix 相同。",
+    "Vizion.mult_matrix_mod (A, B, 'AB')",
+)
+def mult_matrix_mod(left, right, mult_type, *, ctx):
+    a = _expect(left)
+    b = _expect(right)
+    return _replace(a, _multiply(a.data, b.data, mult_type))
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [
+        P("MatrixID", "要改的方陣"),
+        P("MatrixType", "general、symmetric 或 positive_definite", "'general'", _MATRIX_TYPE),
+        P("Epsilon", "大於 0 時改用偽逆", "0"),
+    ],
+    [],
+    "求逆並寫回原矩陣",
+    "規則和 invert_matrix 相同，結果放進原來的句柄。",
+    "Vizion.invert_matrix_mod (MatrixID, 'general', 0)",
+)
+def invert_matrix_mod(matrix, matrix_type, epsilon, *, ctx):
+    handle = _expect(matrix)
+    return _replace(handle, _inverse(handle.data, matrix_type, epsilon))
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixID", "要改的方陣"), P("Power", "整數次方")],
+    [],
+    "矩陣次方並寫回原矩陣",
+    "規則和 pow_matrix 相同，結果放進原來的句柄。",
+    "Vizion.pow_matrix_mod (MatrixID, 2)",
+)
+def pow_matrix_mod(matrix, power, *, ctx):
+    handle = _expect(matrix)
+    return _replace(handle, _matrix_power(handle.data, power))
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixID", "要改的矩陣"), P("Power", "次方")],
+    [],
+    "元素次方並寫回原矩陣",
+    "每個元素乘上同一個次方。",
+    "Vizion.pow_scalar_element_matrix_mod (MatrixID, 2)",
+)
+def pow_scalar_element_matrix_mod(matrix, power, *, ctx):
+    handle = _expect(matrix)
+    return _replace(handle, _element_power(handle.data, power))
+
+
+@operator(
+    "矩陣",
+    [],
+    [],
+    [P("MatrixBaseID", "要改的底數"), P("MatrixExpID", "次方")],
+    [],
+    "元素各自次方並寫回底數",
+    "兩個矩陣必須一樣大。",
+    "Vizion.pow_element_matrix_mod (Base, Exponent)",
+)
+def pow_element_matrix_mod(base, exponent, *, ctx):
+    left = _expect(base)
+    right = _expect(exponent)
+    _same_shape(left, right, "pow_element_matrix_mod")
+    result = np.power(left.data, right.data)
+    if not np.all(np.isfinite(result)):
+        raise ValueError("pow_element_matrix_mod 的結果不是有限數")
+    return _replace(left, result)

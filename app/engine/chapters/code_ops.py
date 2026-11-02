@@ -1,8 +1,9 @@
 """Barcodes, QR codes, and text results.
 
-1D codes are EAN-13, UPC-A, Code 39, and Code 128. The scanline reader is used
-when OpenCV's barcode detector returns nothing. QR codes come from OpenCV.
-Data Matrix ECC200 is written here. find_text stores the word boxes from the
+1D codes are EAN-13, EAN-8, UPC-A, UPC-E, Code 39, Code 93, Code 128, Codabar,
+interleaved and industrial 2/5, and MSI. The scanline reader is used when
+OpenCV's barcode detector returns nothing. QR codes come from OpenCV.
+Data Matrix ECC200, PDF417, and Aztec are written here. find_text stores the word boxes from the
 local OCR engine; it does not read an MLP or OCR classifier file.
 """
 
@@ -13,28 +14,38 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
+from ..barcode1d import (
+    G as _G,
+    L as _L,
+    PARITY as _PARITY,
+    R as _R,
+    decode_codabar_row,
+    decode_code2of5_row,
+    decode_code93_row,
+    decode_ean8_row,
+    decode_industrial2of5_row,
+    decode_msi_row,
+    decode_upce_row,
+    render_codabar,
+    render_code2of5,
+    render_code93,
+    render_ean8,
+    render_industrial2of5,
+    render_msi,
+    render_upce,
+)
 from ..objects import Image, Region, Result, XLD
 from ..ocr import method_choices, normalize_method, read_text
 from ..operators import P, expect_image, expect_region, operator, text
 
-_CODE_TYPES = ["'auto'", "'EAN-13'", "'UPC-A'", "'Code 39'", "'Code 128'"]
-_SYMBOLS = ["'QR Code'", "'Data Matrix'"]
+_CODE_TYPES = [
+    "'auto'", "'EAN-13'", "'EAN-8'", "'UPC-A'", "'UPC-E'", "'Code 39'", "'Code 93'", "'Code 128'",
+    "'Codabar'", "'2/5 Interleaved'", "'2/5 Industrial'", "'MSI'",
+]
+_SYMBOLS = ["'QR Code'", "'Data Matrix'", "'PDF417'", "'Aztec'"]
 _TEXT_MODE = ["'auto'", "'manual'"]
 _TEXT_RESULT = ["'class'", "'confidence'", "'row'", "'column'"]
 
-_L = {
-    "0": "0001101", "1": "0011001", "2": "0010011", "3": "0111101", "4": "0100011",
-    "5": "0110001", "6": "0101111", "7": "0111011", "8": "0110111", "9": "0001011",
-}
-_G = {
-    "0": "0100111", "1": "0110011", "2": "0011011", "3": "0100001", "4": "0011101",
-    "5": "0111001", "6": "0000101", "7": "0010001", "8": "0001001", "9": "0010111",
-}
-_R = {digit: "".join("1" if bit == "0" else "0" for bit in bits) for digit, bits in _L.items()}
-_PARITY = {
-    "0": "LLLLLL", "1": "LLGLGG", "2": "LLGGLG", "3": "LLGGGL", "4": "LGLLGG",
-    "5": "LGGLLG", "6": "LGGGLL", "7": "LGLGLG", "8": "LGLGGL", "9": "LGGLGL",
-}
 _L_REV = {bits: digit for digit, bits in _L.items()}
 _G_REV = {bits: digit for digit, bits in _G.items()}
 _R_REV = {bits: digit for digit, bits in _R.items()}
@@ -77,7 +88,7 @@ class BarCodeModel:
     closed: bool = False
 
     def summary(self) -> str:
-        return "條碼模型  已關閉" if self.closed else "條碼模型  EAN-13 / UPC-A / Code 39 / Code 128"
+        return "條碼模型  已關閉" if self.closed else "條碼模型  EAN / UPC / Code 39 / 93 / 128 / Codabar / 2/5 / MSI"
 
 
 @dataclass
@@ -123,7 +134,9 @@ def _symbol_kind(symbol_type) -> str:
         return "Data Matrix"
     raise ValueError("SymbolType 只能是 QR Code 或 Data Matrix")
 
-
+    if symbol == "aztec":
+        return "Aztec"
+    raise ValueError("SymbolType 只能是 QR Code、Data Matrix、PDF417 或 Aztec")
 def _runs(binary: np.ndarray):
     runs = []
     current = int(binary[0])
@@ -496,8 +509,8 @@ def _select_code(code: str, kind: str, requested: str):
     ],
     [P("BarCodeHandle", "條碼模型")],
     "建立一維條碼模型",
-    "能讀 EAN-13、UPC-A、Code 39 和 Code 128。Data Matrix 和 PDF417 這版不解。",
-    "Vizion.create_bar_code_model (BarCodeHandle)",
+    "能讀 EAN-13、EAN-8、UPC-A、UPC-E、Code 39、Code 93、Code 128、Codabar、2/5 和 MSI。二維碼用 create_data_code_2d_model。",
+    "Vizion.create_bar_code_model ('', '', BarCodeHandle)",
 )
 def create_bar_code_model(_name, _value, *, ctx):
     return Result([], [BarCodeModel()])
@@ -509,12 +522,12 @@ def create_bar_code_model(_name, _value, *, ctx):
     [P("SymbolRegions", "條碼範圍")],
     [
         P("BarCodeHandle", "條碼模型"),
-        P("CodeType", "auto、EAN-13、UPC-A、Code 39 或 Code 128", "'auto'", _CODE_TYPES),
+        P("CodeType", "auto，或下面列出的一維碼", "'auto'", _CODE_TYPES),
     ],
-    [P("DecodedDataStrings", "讀到的字串")],
+    [P("DecodedDataStrings", "讀到的字")],
     "尋找一維條碼",
-    "EAN-13 和 UPC-A 先問 OpenCV，沒有結果再用掃描線。Code 39 與 Code 128 用掃描線，Code 128 這版依字元集 B 產生、也能讀字元集 C 的數字對。"
-    "UPC-A 是開頭為 0 的 EAN-13，去掉第一個 0。auto 先找 EAN，沒有再找 Code 128 和 Code 39。找不到時區域是空的，字串是空 tuple。",
+    "EAN 和 UPC 先問 OpenCV，沒有結果再用掃描線。Code 39、Code 93、Code 128、Codabar、2/5 和 MSI 用掃描線，編碼和解碼共用同一套表。"
+    "UPC-A 是開頭為 0 的 EAN-13，去掉第一個 0。auto 先找 EAN-13，沒有再依序找其他碼。找不到時區域是空的，字串是空 tuple。",
     "Vizion.find_bar_code (Image, SymbolRegions, BarCodeHandle, 'auto', DecodedDataStrings)",
 )
 def find_bar_code(image, handle, code_type, *, ctx):
@@ -527,17 +540,28 @@ def find_bar_code(image, handle, code_type, *, ctx):
     aliases = {
         "AUTO": "auto", "EAN-13": "EAN-13", "EAN13": "EAN-13", "UPC-A": "UPC-A", "UPCA": "UPC-A",
         "CODE 39": "Code 39", "CODE39": "Code 39", "CODE 128": "Code 128", "CODE128": "Code 128",
+        "AUTO": "auto", "EAN-13": "EAN-13", "EAN13": "EAN-13", "EAN-8": "EAN-8", "EAN8": "EAN-8",
+        "UPC-A": "UPC-A", "UPCA": "UPC-A", "UPC-E": "UPC-E", "UPCE": "UPC-E",
+        "CODE 39": "Code 39", "CODE39": "Code 39", "CODE 93": "Code 93", "CODE93": "Code 93",
+        "CODE 128": "Code 128", "CODE128": "Code 128", "CODABAR": "Codabar",
+        "2/5 INTERLEAVED": "2/5 Interleaved", "INTERLEAVED 2 OF 5": "2/5 Interleaved",
+        "2/5 INDUSTRIAL": "2/5 Industrial", "INDUSTRIAL 2 OF 5": "2/5 Industrial",
+        "MSI": "MSI",
     }
     if requested not in aliases:
-        raise ValueError("CodeType 這版只接受 auto、EAN-13、UPC-A、Code 39 或 Code 128")
+        raise ValueError("CodeType 只能是 auto、EAN-13、EAN-8、UPC-A、UPC-E、Code 39、Code 93、Code 128、Codabar、2/5 Interleaved、2/5 Industrial 或 MSI")
     requested = aliases[requested]
     gray = picture.gray()
     codes = []
     boxes = []
     seen = set()
-    opencv_hits = [] if requested in ("Code 39", "Code 128") else _opencv_barcodes(gray)
+    scan_only = {
+        "Code 39", "Code 93", "Code 128", "Codabar", "EAN-8", "UPC-E", "MSI",
+        "2/5 Interleaved", "2/5 Industrial",
+    }
+    opencv_hits = [] if requested in scan_only else _opencv_barcodes(gray)
     for code, kind, box in opencv_hits:
-        chosen = _select_code(code, kind.upper(), requested)
+        chosen = _select_code(code, kind, requested)
         if not chosen or chosen in seen or box is None:
             continue
         seen.add(chosen)
@@ -560,6 +584,24 @@ def find_bar_code(image, handle, code_type, *, ctx):
             boxes.append((top, bottom, left, right))
     if requested == "Code 39" or (requested == "auto" and not codes):
         for code, top, bottom, left, right in _scan_decoder(gray, _decode_code39_row):
+            if code in seen:
+                continue
+            seen.add(code)
+            codes.append(code)
+            boxes.append((top, bottom, left, right))
+    extra = (
+        ("EAN-8", decode_ean8_row),
+        ("UPC-E", decode_upce_row),
+        ("Code 93", decode_code93_row),
+        ("Codabar", decode_codabar_row),
+        ("2/5 Interleaved", decode_code2of5_row),
+        ("2/5 Industrial", decode_industrial2of5_row),
+        ("MSI", decode_msi_row),
+    )
+    for kind, decoder in extra:
+        if requested != kind and not (requested == "auto" and not codes):
+            continue
+        for code, top, bottom, left, right in _scan_decoder(gray, decoder):
             if code in seen:
                 continue
             seen.add(code)
@@ -593,7 +635,7 @@ def clear_bar_code_model(handle, *, ctx):
     [],
     "做出一張 QR 圖",
     "OpenCV 產生 QR，放大 8 倍並在四周留白，find_data_code_2d 才讀得回來。"
-    "只做 QR。Data Matrix 用 gen_datamatrix。PDF417、Aztec 沒有。文字不能是空的。",
+    "只做 QR。Data Matrix 用 gen_datamatrix。PDF417 用 gen_pdf417。Aztec 用 gen_aztec。文字不能是空的。",
     "Vizion.gen_qrcode (Image, 'VISDEV')",
 )
 def gen_qrcode(message, *, ctx):
@@ -635,16 +677,160 @@ def gen_datamatrix(message, *, ctx):
 @operator(
     "條碼",
     [],
+    [P("Image", "白底黑條的 PDF417")],
+    [P("Text", "要寫進 PDF417 的文字")],
+    [],
+    "做出一張 PDF417",
+    "四條四空的條碼，列高 3 個模組，Reed-Solomon 在模 929 上。放大 8 倍並在四周留白。"
+    "大寫和空白走文字模式，其他 ASCII 走位元組模式。文字不能是空的。",
+    "Vizion.gen_pdf417 (Image, 'VISDEV')",
+)
+def gen_pdf417(message, *, ctx):
+    from ..pdf417 import encode_modules
+
+    payload = text(message, "Text")
+    raw = encode_modules(payload)
+    module = cv2.resize(raw, None, fx=8, fy=8, interpolation=cv2.INTER_NEAREST)
+    canvas = cv2.copyMakeBorder(module, 32, 32, 32, 32, cv2.BORDER_CONSTANT, value=255)
+    return Result([Image(canvas)], [])
+
+
+@operator(
+    "條碼",
+    [],
+    [P("Image", "白底、中心牛眼的 Aztec")],
+    [P("Text", "要寫進 Aztec 的文字")],
+    [],
+    "做出一張 Aztec",
+    "中心是 9×9 牛眼，外圈依列排資料、長度和檢查碼。放大 8 倍並在四周留白。"
+    "只寫 ASCII。文字不能是空的。",
+    "Vizion.gen_aztec (Image, 'VISDEV')",
+)
+def gen_aztec(message, *, ctx):
+    from ..aztec import encode_modules
+
+    payload = text(message, "Text")
+    raw = encode_modules(payload)
+    module = cv2.resize(raw, None, fx=8, fy=8, interpolation=cv2.INTER_NEAREST)
+    canvas = cv2.copyMakeBorder(module, 32, 32, 32, 32, cv2.BORDER_CONSTANT, value=255)
+    return Result([Image(canvas)], [])
+
+
+def _gen_bar(image: np.ndarray) -> Result:
+    return Result([Image(image)], [])
+
+
+@operator(
+    "條碼",
+    [],
+    [P("Image", "白底黑條的 EAN-8")],
+    [P("Text", "7 或 8 位數字")],
+    [],
+    "做出一張 EAN-8",
+    "左四碼和右四碼用和 EAN-13 同一套數字條。七位會補上檢查碼。",
+    "Vizion.gen_ean8 (Image, '5512345')",
+)
+def gen_ean8(message, *, ctx):
+    return _gen_bar(render_ean8(text(message, "Text")))
+
+
+@operator(
+    "條碼",
+    [],
+    [P("Image", "白底黑條的 UPC-E")],
+    [P("Text", "6 位數字")],
+    [],
+    "做出一張 UPC-E",
+    "六位數字壓成 UPC-A 算出檢查碼，再決定奇偶條。數字條和 EAN 同一套。",
+    "Vizion.gen_upce (Image, '123456')",
+)
+def gen_upce(message, *, ctx):
+    return _gen_bar(render_upce(text(message, "Text")))
+
+
+@operator(
+    "條碼",
+    [],
+    [P("Image", "白底黑條的 Codabar")],
+    [P("Text", "以 A B C D 開頭和結尾")],
+    [],
+    "做出一張 Codabar",
+    "每個字是七段寬窄條，編碼和解碼用同一張表。開頭和結尾要是 A、B、C 或 D。",
+    "Vizion.gen_codabar (Image, 'A1234B')",
+)
+def gen_codabar(message, *, ctx):
+    return _gen_bar(render_codabar(text(message, "Text")))
+
+
+@operator(
+    "條碼",
+    [],
+    [P("Image", "白底黑條的交錯二五碼")],
+    [P("Text", "偶數位數字")],
+    [],
+    "做出一張交錯二五碼",
+    "兩位一組，前一位畫在黑條、後一位畫在白條。寬窄表和工業二五碼共用。",
+    "Vizion.gen_code2of5 (Image, '123456')",
+)
+def gen_code2of5(message, *, ctx):
+    return _gen_bar(render_code2of5(text(message, "Text")))
+
+
+@operator(
+    "條碼",
+    [],
+    [P("Image", "白底黑條的工業二五碼")],
+    [P("Text", "數字")],
+    [],
+    "做出一張工業二五碼",
+    "每一位是五條黑條，中間的白條都是窄的。寬窄表和交錯二五碼共用。",
+    "Vizion.gen_industrial2of5 (Image, '12345')",
+)
+def gen_industrial2of5(message, *, ctx):
+    return _gen_bar(render_industrial2of5(text(message, "Text")))
+
+
+@operator(
+    "條碼",
+    [],
+    [P("Image", "白底黑條的 Code 93")],
+    [P("Text", "數字、大寫英文和符號")],
+    [],
+    "做出一張 Code 93",
+    "每個字是六段條寬，後面加兩個檢查碼。編碼和解碼用同一張表。",
+    "Vizion.gen_code93 (Image, 'VISDEV')",
+)
+def gen_code93(message, *, ctx):
+    return _gen_bar(render_code93(text(message, "Text")))
+
+
+@operator(
+    "條碼",
+    [],
+    [P("Image", "白底黑條的 MSI")],
+    [P("Text", "數字")],
+    [],
+    "做出一張 MSI",
+    "每個數字是 12 個模組。開頭 110，結尾 1001。編碼和解碼用同一張表。",
+    "Vizion.gen_msi (Image, '123456')",
+)
+def gen_msi(message, *, ctx):
+    return _gen_bar(render_msi(text(message, "Text")))
+
+
+@operator(
+    "條碼",
+    [],
     [],
     [
-        P("SymbolType", "QR Code 或 Data Matrix", "'QR Code'", _SYMBOLS),
+        P("SymbolType", "QR Code、Data Matrix、PDF417 或 Aztec", "'QR Code'", _SYMBOLS),
         P("GenParamName", "這版不使用，留空字串", "''"),
         P("GenParamValue", "這版不使用，留空字串", "''"),
     ],
     [P("DataCodeHandle", "二維碼模型")],
     "建立二維碼模型",
-    "QR 用 OpenCV。Data Matrix 是自己寫的 ECC200。PDF417 和 Aztec 這版沒有。",
-    "Vizion.create_data_code_2d_model ('QR Code', DataCodeHandle)",
+    "QR 用 OpenCV。Data Matrix 是自己寫的 ECC200。PDF417 是自己排的條碼。Aztec 是中心牛眼的方碼。",
+    "Vizion.create_data_code_2d_model ('QR Code', '', '', DataCodeHandle)",
 )
 def create_data_code_2d_model(symbol_type, _name, _value, *, ctx):
     return Result([], [DataCodeModel(_symbol_kind(symbol_type))])
@@ -685,9 +871,10 @@ def _decode_qr(gray: np.ndarray):
         P("GenParamValue", "這版不使用，留空字串", "''"),
     ],
     [P("ResultHandles", "從 0 開始的結果編號"), P("DecodedDataStrings", "讀到的字串")],
-    "尋找 QR 或 Data Matrix",
-    "QR 太小會先放大再解。Data Matrix 依實心 L 和時鐘邊取樣。外框座標在原圖上。找不到時輪廓和字串都是空的。",
-    "Vizion.find_data_code_2d (Image, SymbolXLDs, DataCodeHandle, ResultHandles, DecodedDataStrings)",
+    "尋找 QR、Data Matrix、PDF417 或 Aztec",
+    "QR 太小會先放大再解。Data Matrix 依實心 L 和時鐘邊取樣。PDF417 依起始條估計模組寬。Aztec 依中心牛眼取樣。"
+    "外框座標在原圖上。找不到時輪廓和字串都是空的。",
+    "Vizion.find_data_code_2d (Image, SymbolXLDs, DataCodeHandle, '', '', ResultHandles, DecodedDataStrings)",
 )
 def find_data_code_2d(image, handle, _name, _value, *, ctx):
     picture = expect_image(image, "Image")
@@ -697,6 +884,14 @@ def find_data_code_2d(image, handle, _name, _value, *, ctx):
         raise RuntimeError("二維碼模型已經 clear_data_code_2d_model")
     if handle.symbol == "Data Matrix":
         from ..datamatrix import decode_image
+
+        hits = decode_image(picture.gray())
+    elif handle.symbol == "PDF417":
+        from ..pdf417 import decode_image
+
+        hits = decode_image(picture.gray())
+    elif handle.symbol == "Aztec":
+        from ..aztec import decode_image
 
         hits = decode_image(picture.gray())
     else:

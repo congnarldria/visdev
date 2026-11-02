@@ -1,0 +1,12 @@
+* 橢圓弧上有一個飛點
+* fit_ellipse_contour_xld 在點很多、而且有一個點離開弧線時，會先找中位誤差小的橢圓，再丟掉那個飛點重擬合。剛好五個點時不會丟。
+* 橢圓中心在列 80、行 90，長軸 40、短軸 18，長軸角度 0.4。弧只蓋住中間約 69 度，正中間那個點往右移 8 像素。
+* 重擬合後中心仍是 80、90，兩軸仍是 40 和 18。
+Vizion.gen_ellipse_contour_xld (Arc, 80, 90, 0.4, 40, 18, -0.6, 0.6, 'positive', 1.5)
+Vizion.get_contour_xld (Arc, Row, Col)
+Vizion.tuple_length (Row, Count)
+Mid := round(Count / 2) - 1
+Vizion.tuple_replace (Col, Col[Mid + 1] + 8, Mid, Col2)
+Vizion.gen_contour_polygon_xld (Bumped, Row, Col2)
+Vizion.fit_ellipse_contour_xld (Bumped, Ellipse, BRow, BCol, BPhi, BR1, BR2)
+Vizion.dev_display (Bumped)

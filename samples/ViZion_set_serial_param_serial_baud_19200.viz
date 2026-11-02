@@ -1,0 +1,6 @@
+* 序列埠速率改成 19200
+* loopback 把設定記下來。get_serial_param 讀回的速率是 19200。
+Vizion.open_serial ('loopback', Handle)
+Vizion.set_serial_param (Handle, 19200, 8, 'none', 'none', 1, 500, 20)
+Vizion.get_serial_param (Handle, Baud, Bits, Flow, Parity, Stop, Total, Gap)
+Vizion.close_serial (Handle)

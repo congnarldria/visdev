@@ -20,110 +20,134 @@ SAMPLE_ORDER = (
     "xld_circle.hdv",
     "image_filter.hdv",
     "tuple_stats.hdv",
-    "ViZion_hdevelop_batch1.viz",
-    "ViZion_hdevelop_batch2.viz",
-    "ViZion_hdevelop_batch3.viz",
-    "ViZion_hdevelop_batch4.viz",
-    "ViZion_hdevelop_batch5.viz",
-    "ViZion_hdevelop_batch6.viz",
-    "ViZion_hdevelop_batch7.viz",
-    "ViZion_hdevelop_batch8.viz",
-    "ViZion_hdevelop_batch9.viz",
-    "ViZion_hdevelop_batch10.viz",
-    "ViZion_hdevelop_batch11.viz",
-    "ViZion_hdevelop_batch12.viz",
-    "ViZion_hdevelop_batch13.viz",
-    "ViZion_hdevelop_batch14.viz",
-    "ViZion_hdevelop_batch15.viz",
-    "ViZion_hdevelop_batch16.viz",
-    "ViZion_hdevelop_batch17.viz",
-    "ViZion_hdevelop_batch18.viz",
-    "ViZion_hdevelop_batch19.viz",
-    "ViZion_hdevelop_batch20.viz",
-    "ViZion_hdevelop_batch21.viz",
-    "ViZion_hdevelop_batch22.viz",
-    "ViZion_hdevelop_batch23.viz",
-    "ViZion_hdevelop_batch24.viz",
-    "ViZion_hdevelop_batch25.viz",
-    "ViZion_hdevelop_batch26.viz",
-    "ViZion_hdevelop_batch27.viz",
-    "ViZion_hdevelop_batch28.viz",
-    "ViZion_hdevelop_batch29.viz",
-    "ViZion_hdevelop_batch30.viz",
-    "ViZion_hdevelop_batch31.viz",
-    "ViZion_hdevelop_batch32.viz",
-    "ViZion_hdevelop_batch33.viz",
-    "ViZion_hdevelop_batch34.viz",
-    "ViZion_hdevelop_batch35.viz",
-    "ViZion_hdevelop_batch36.viz",
-    "ViZion_hdevelop_batch37.viz",
-    "ViZion_hdevelop_batch38.viz",
-    "ViZion_hdevelop_batch39.viz",
-    "ViZion_hdevelop_batch40.viz",
-    "ViZion_hdevelop_batch41.viz",
-    "ViZion_hdevelop_batch42.viz",
-    "ViZion_hdevelop_batch43.viz",
-    "ViZion_hdevelop_batch44.viz",
-    "ViZion_hdevelop_batch45.viz",
-    "ViZion_hdevelop_batch46.viz",
-    "ViZion_hdevelop_batch47.viz",
-    "ViZion_hdevelop_batch48.viz",
-    "ViZion_hdevelop_batch49.viz",
-    "ViZion_hdevelop_batch50.viz",
-    "ViZion_hdevelop_batch51.viz",
-    "ViZion_hdevelop_batch52.viz",
-    "ViZion_hdevelop_batch53.viz",
-    "ViZion_hdevelop_batch54.viz",
-    "ViZion_hdevelop_batch55.viz",
-    "ViZion_hdevelop_batch56.viz",
-    "ViZion_hdevelop_batch57.viz",
-    "ViZion_hdevelop_batch58.viz",
-    "ViZion_hdevelop_batch59.viz",
-    "ViZion_hdevelop_batch60.viz",
-    "ViZion_hdevelop_batch61.viz",
-    "ViZion_hdevelop_batch62.viz",
-    "ViZion_hdevelop_batch63.viz",
-    "ViZion_hdevelop_batch64.viz",
-    "ViZion_hdevelop_batch65.viz",
-    "ViZion_hdevelop_batch66.viz",
-    "ViZion_hdevelop_batch67.viz",
-    "ViZion_hdevelop_batch68.viz",
-    "ViZion_hdevelop_batch69.viz",
-    "ViZion_hdevelop_batch70.viz",
-    "ViZion_hdevelop_batch71.viz",
-    "ViZion_hdevelop_batch72.viz",
-    "ViZion_hdevelop_batch73.viz",
-    "ViZion_hdevelop_batch74.viz",
-    "ViZion_hdevelop_batch75.viz",
-    "ViZion_hdevelop_batch76.viz",
-    "ViZion_hdevelop_batch77.viz",
-    "ViZion_hdevelop_batch78.viz",
-    "ViZion_hdevelop_batch79.viz",
-    "ViZion_hdevelop_batch80.viz",
-    "ViZion_hdevelop_batch81.viz",
-    "ViZion_hdevelop_batch82.viz",
-    "ViZion_hdevelop_batch83.viz",
-    "ViZion_hdevelop_batch84.viz",
-    "ViZion_hdevelop_batch85.viz",
-    "ViZion_hdevelop_batch86.viz",
-    "ViZion_hdevelop_batch87.viz",
-    "ViZion_hdevelop_batch88.viz",
-    "ViZion_hdevelop_batch89.viz",
-    "ViZion_hdevelop_batch90.viz",
-    "ViZion_hdevelop_batch91.viz",
-    "ViZion_hdevelop_batch92.viz",
-    "ViZion_hdevelop_batch93.viz",
-    "ViZion_hdevelop_batch94.viz",
-    "ViZion_hdevelop_batch95.viz",
-    "ViZion_hdevelop_batch96.viz",
-    "ViZion_hdevelop_batch97.viz",
-    "ViZion_hdevelop_batch98.viz",
-    "ViZion_hdevelop_batch99.viz",
-    "ViZion_hdevelop_batch100.viz",
-    "ViZion_hdevelop_batch101.viz",
-    "ViZion_hdevelop_batch102.viz",
-    "ViZion_hdevelop_batch103.viz",
-    "ViZion_hdevelop_batch104.viz",
+    "ViZion_rgb1_to_gray_tuple_add_shift_local_threshold.viz",
+    "ViZion_rgb1_to_gray_measure_metrology_scaled_shape.viz",
+    "ViZion_create_matrix_rigid_barcode_text.viz",
+    "ViZion_open_framegrabber_file_camera_Code39_quaternion_cloud.viz",
+    "ViZion_gray_erosion_rect_ellipse_contrast.viz",
+    "ViZion_get_image_size_gray_tophat.viz",
+    "ViZion_get_grayval_ramp_diameter_shape.viz",
+    "ViZion_scale_image_range_project_arrow.viz",
+    "ViZion_distance_rr_align_corner_region_distance.viz",
+    "ViZion_gen_region_points_power_ridge_intersection.viz",
+    "ViZion_get_region_runs_filter_skeleton_circle.viz",
+    "ViZion_inner_rectangle1_holes_rounded.viz",
+    "ViZion_check_difference_chars_corners.viz",
+    "ViZion_gen_empty_region_edge_plateau_flow.viz",
+    "ViZion_distance_transform_highpass_corner.viz",
+    "ViZion_eliminate_runs_plane_entropy.viz",
+    "ViZion_sqrt_image_log_saddle_trim.viz",
+    "ViZion_gray_features_distance_auto_threshold.viz",
+    "ViZion_gamma_image_zero_cross_sector.viz",
+    "ViZion_exp_image_polar_tophat.viz",
+    "ViZion_reduce_domain_paint_corner_intersection.viz",
+    "ViZion_abs_image_direction_crossing.viz",
+    "ViZion_prewitt_amp_polar_split.viz",
+    "ViZion_frei_amp_robinson_azimuth_circle.viz",
+    "ViZion_bit_not_lut_bits_pyramid.viz",
+    "ViZion_gen_measure_rectangle2_profile_funct1d.viz",
+    "ViZion_create_funct_1d_pairs_integral_derivative_inverse.viz",
+    "ViZion_fft_image_shift_phase_correlation.viz",
+    "ViZion_fft_image_spectrum_mask_convolve_energy.viz",
+    "ViZion_fft_image_correlation_shift_pad.viz",
+    "ViZion_gen_object_model_3d_from_points_plane_box.viz",
+    "ViZion_gen_object_model_3d_from_points_scale_project_axis.viz",
+    "ViZion_gen_object_model_3d_from_points_intersect_grid_axis.viz",
+    "ViZion_gen_object_model_3d_from_region_cloud_aligned_to_image.viz",
+    "ViZion_fit_image_plane_height_normal_shade.viz",
+    "ViZion_sub_plane_image_reference_tilt_volume.viz",
+    "ViZion_fit_plane_region_plane_inside_region.viz",
+    "ViZion_fit_plane_objects_plane_per_object.viz",
+    "ViZion_fit_quad_region_parabola_quadric.viz",
+    "ViZion_add_plane_image_height_map_difference.viz",
+    "ViZion_sub_local_mean_local_mean_roughness.viz",
+    "ViZion_sub_local_median_median_local_bump.viz",
+    "ViZion_gray_spot_white_spots_smaller_than_kernel.viz",
+    "ViZion_gray_opening_rect_opening_reconstruct.viz",
+    "ViZion_thickness_max_how_thick.viz",
+    "ViZion_area_intersection_overlap_area.viz",
+    "ViZion_distance_objects_how_far_apart.viz",
+    "ViZion_region_angle_which_side.viz",
+    "ViZion_partition_nearest_gap_to_nearest.viz",
+    "ViZion_sort_feature_pick_by_feature.viz",
+    "ViZion_region_defects_fill_notches.viz",
+    "ViZion_select_inner_who_contains_whom.viz",
+    "ViZion_select_border_touches_border.viz",
+    "ViZion_neighbor_distance_objects_touch.viz",
+    "ViZion_shape_score_most_like_template.viz",
+    "ViZion_align_delta_move_onto_template.viz",
+    "ViZion_grid_size_rows_and_columns.viz",
+    "ViZion_gray_offset_brightness_side.viz",
+    "ViZion_edge_contrast_edge_clarity.viz",
+    "ViZion_edge_min_weakest_edge.viz",
+    "ViZion_band_count_bright_enough.viz",
+    "ViZion_gray_mode_main_gray.viz",
+    "ViZion_row_runs_horizontal_and_vertical.viz",
+    "ViZion_symmetry_score_left_right_symmetry.viz",
+    "ViZion_top_point_four_endpoints.viz",
+    "ViZion_hole_count_hole_count_and_size.viz",
+    "ViZion_window_inside_stays_inside_window.viz",
+    "ViZion_major_phi_major_axis_direction.viz",
+    "ViZion_edge_enhance_sharpen_edges_keep_flat.viz",
+    "ViZion_area_center_catch_error_after_procedure.viz",
+    "ViZion_diff_region_difference_from_golden.viz",
+    "ViZion_gen_qrcode_print_qr_read_back.viz",
+    "ViZion_ridge_region_dark_scratch_direction.viz",
+    "ViZion_edge_region_edge_between_pixels.viz",
+    "ViZion_phase_correlation_shift_under_one_pixel.viz",
+    "ViZion_gen_contour_polygon_xld_line_outlier_stays_straight.viz",
+    "ViZion_gen_contour_polygon_xld_arc_outlier.viz",
+    "ViZion_gen_contour_region_xld_boundary_at_half_pixel.viz",
+    "ViZion_gen_contour_polygon_xld_gauss_weight_ignores_outlier.viz",
+    "ViZion_derivate_gauss_slope1_derivative_is_129.viz",
+    "ViZion_get_grayval_interpolated_half_pixel_is_not_the_average.viz",
+    "ViZion_teach_shape_model_least_squares_aligns_shape.viz",
+    "ViZion_gauss_image_least_squares_row_near_39.25.viz",
+    "ViZion_create_metrology_model_caliper_averages_spike.viz",
+    "ViZion_points_foerstner_corner_inside_pixel.viz",
+    "ViZion_vector_to_hom_mat2d_affine_ignores_outlier.viz",
+    "ViZion_hom_vector_to_proj_hom_mat2d_projective_ignores_outlier.viz",
+    "ViZion_gen_ellipse_contour_xld_ellipse_arc_outlier.viz",
+    "ViZion_tuple_concat_rectangle_edge_outlier.viz",
+    "ViZion_fit_plane_region_spike_does_not_tilt_plane.viz",
+    "ViZion_gen_object_model_3d_from_points_cloud_plane_ignores_outlier.viz",
+    "ViZion_gen_object_model_3d_from_points_axis_ignores_side_point.viz",
+    "ViZion_gen_contour_polygon_xld_line_normal_ignores_corner.viz",
+    "ViZion_points_harris_harris_corner_inside_pixel.viz",
+    "ViZion_gen_contour_polygon_xld_smooth_keeps_endpoints.viz",
+    "ViZion_zoom_image_size_zoomed_half_pixel_is_112.viz",
+    "ViZion_elliptic_axis_wide_bar_0_tall_bar_90.viz",
+    "ViZion_hom_mat2d_identity_pulled_back_half_pixel_is_112.viz",
+    "ViZion_local_max_sub_pix_gauss_peak_at_30.33298.viz",
+    "ViZion_points_lepetit_square_corner_inside_pixel.viz",
+    "ViZion_create_scaled_shape_model_scale_refined_to_1.07505.viz",
+    "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz",
+    "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz",
+    "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz",
+    "ViZion_gen_pdf417_print_pdf417_read_VISDEV.viz",
+    "ViZion_gen_aztec_print_aztec_read_VISDEV.viz",
+    "ViZion_open_serial_serial_write_read_VISDEV.viz",
+    "ViZion_open_socket_connect_tcp_send_read_VISDEV.viz",
+    "ViZion_split_skeleton_cross_into_four.viz",
+    "ViZion_set_serial_param_serial_baud_19200.viz",
+    "ViZion_open_socket_accept_listen_read_VISDEV.viz",
+    "ViZion_gen_ean8_print_ean8_read_55123453.viz",
+    "ViZion_rectangularity_bar_rectangularity_and_direction.viz",
+    "ViZion_circularity_xld_square_length_is_120.viz",
+    "ViZion_remove_obj_two_blocks_drop_second.viz",
+    "ViZion_bit_mask_40_and_240_is_32.viz",
+    "ViZion_gen_sphere_object_model_3d_center_123_radius_4.viz",
+    "ViZion_frangi_dark_line_brighter_than_block.viz",
+    "ViZion_sauvola_bright_side_scratch_stays.viz",
+    "ViZion_guided_filter_step_sides_stay.viz",
+    "ViZion_emphasize_clahe_dark_corner_and_bright_field.viz",
+    "ViZion_edges_zernike_edge_matches_measure.viz",
+    "ViZion_tuple_is_handle_matrix_stays_after_clear.viz",
+    "ViZion_sum_matrix_copy_cholesky_and_file.viz",
+    "ViZion_sin_image_gray0_sine_is_128.viz",
+    "ViZion_gray_dilation_shape_neighbor_is_9.viz",
+    "ViZion_polar_trans_image_radius3_is_200.viz",
+    "ViZion_equ_histo_image_rect_lower_right_is_255.viz",
     "ocr_read.hdv",
     "shape_match.hdv",
     "shape_teach.hdv",
@@ -137,6 +161,10 @@ def ensure_samples(root: Path):
     samples.mkdir(parents=True, exist_ok=True)
     (root / "workspace").mkdir(parents=True, exist_ok=True)
     write_parts(samples / "parts.png")
+    write_hard_scene(samples / "hard_scene.png")
+    write_hard_edge(samples / "hard_edge.png")
+    write_hard_contrast(samples / "hard_contrast.png")
+    write_hard_zernike(samples / "hard_zernike.png")
     write_stripes(samples / "stripes.png")
     write_shape_template(samples / "shape_template.png")
     write_shapes_scene(samples / "shapes_scene.png")
@@ -170,7 +198,77 @@ def write_parts(path: Path):
         x = int(speck.integers(20, 600))
         y = int(speck.integers(20, 440))
         image[y : y + 2, x : x + 2] = 170
-    write_cv_image(path, image)
+    columns = np.linspace(0.72, 1.22, image.shape[1], dtype=np.float32)
+    image = np.clip(image.astype(np.float32) * columns[None, :, None], 0, 255)
+    image += np.random.default_rng(9).normal(0, 4.0, image.shape)
+    scratch = image[300, 40:600, 0] * 0.25
+    image[300, 40:600, :] = scratch[:, None]
+    write_cv_image(path, np.clip(np.round(image), 0, 255).astype(np.uint8))
+
+
+def write_hard_scene(path: Path):
+    """Illumination ramp, noise, a one-pixel dark scratch, and a dark block.
+
+    A single global threshold cannot keep the whole scratch and reject the block.
+    The scratch row and the block center are the ground truth.
+    """
+    height, width = 120, 160
+    columns = np.arange(width, dtype=np.float32)
+    rows = np.arange(height, dtype=np.float32)
+    image = 35.0 + (columns / (width - 1)) * 150.0
+    image = np.broadcast_to(image, (height, width)).astype(np.float32).copy()
+    image += (rows[:, None] / (height - 1)) * 20.0
+    image += np.random.default_rng(7).normal(0, 7.0, image.shape)
+    image[70, 24:136] = np.clip(image[70, 24:136] - 80.0, 0, 255)
+    image[18:40, 28:52] = 22.0
+    image[96, 110] = 255.0
+    write_cv_image(path, np.clip(np.round(image), 0, 255).astype(np.uint8))
+
+
+def write_hard_edge(path: Path):
+    """A step from 40 to 200 at column 80, plus noise strong enough to cross the step."""
+    height, width = 120, 160
+    image = np.full((height, width), 40.0, np.float32)
+    image[:, 80:] = 200.0
+    image += np.random.default_rng(21).normal(0, 28.0, image.shape)
+    spikes = np.random.default_rng(22)
+    for _ in range(40):
+        row = int(spikes.integers(0, height))
+        col = int(spikes.integers(0, width))
+        image[row, col] = 0.0 if spikes.random() < 0.5 else 255.0
+    write_cv_image(path, np.clip(np.round(image), 0, 255).astype(np.uint8))
+
+
+def write_hard_contrast(path: Path):
+    """A small dark corner with faint detail, and a bright field that fills the rest.
+
+    Global histogram equalization spends the range on the bright field.
+    """
+    image = np.full((160, 160), 198.0, np.float32)
+    image[0:60, 0:60] = 16.0
+    image[24:36, 24:36] = 40.0
+    image[104:116, 104:116] = 222.0
+    image += np.random.default_rng(31).normal(0, 1.5, image.shape)
+    write_cv_image(path, np.clip(np.round(image), 0, 255).astype(np.uint8))
+
+
+def write_hard_zernike(path: Path):
+    """Vertical step at column 40.37, with noise and a slow brightness ramp.
+
+    Pixel column c covers [c-0.5, c+0.5]. The edge is not on a pixel center.
+    """
+    height, width = 120, 160
+    edge = 40.37
+    image = np.empty((height, width), np.float32)
+    for col in range(width):
+        bright = float(np.clip((col + 0.5) - edge, 0.0, 1.0))
+        image[:, col] = 30.0 * (1.0 - bright) + 210.0 * bright
+    image += np.linspace(0.0, 12.0, width, dtype=np.float32)[None, :]
+    image += np.random.default_rng(41).normal(0, 10.0, image.shape)
+    spikes = np.random.default_rng(42)
+    for _ in range(24):
+        image[int(spikes.integers(0, height)), int(spikes.integers(0, width))] = 0.0 if spikes.random() < 0.5 else 255.0
+    write_cv_image(path, np.clip(np.round(image), 0, 255).astype(np.uint8))
 
 
 def write_ocr_label(path: Path):
@@ -4210,7 +4308,7 @@ HDEVELOP_BATCH72_PROGRAM = """* 印一張 QR 再讀回來
 * gen_qrcode 做出白底黑點，四周留白，find_data_code_2d 才讀得到。
 * 先 create_data_code_2d_model。QR 的 SymbolType 是 QR Code。
 * Decoded 是字串 tuple，第一個用 [1]。找不到時字串是空的。
-* PDF417 和 Aztec 這版不讀。Data Matrix 用 gen_datamatrix。
+* PDF417 用 gen_pdf417。Aztec 用 gen_aztec。Data Matrix 用 gen_datamatrix。
 Vizion.gen_qrcode (Code, 'VISDEV')
 Vizion.create_data_code_2d_model ('QR Code', '', '', Handle)
 Vizion.find_data_code_2d (Code, Symbol, Handle, '', '', Ids, Decoded)
@@ -4861,6 +4959,750 @@ Vizion.dev_display (Code)
 """
 
 
+HDEVELOP_BATCH105_PROGRAM = """* 印出 PDF417 再讀回 VISDEV
+* gen_pdf417 排出四條四空的條碼，放大後四周留白。
+* SymbolType 用 PDF417。find_data_code_2d 讀回來仍是 VISDEV。
+Vizion.gen_pdf417 (Code, 'VISDEV')
+Vizion.create_data_code_2d_model ('PDF417', '', '', Handle)
+Vizion.find_data_code_2d (Code, Symbol, Handle, '', '', Ids, Decoded)
+Text := Decoded[1]
+Vizion.dev_display (Code)
+"""
+
+
+HDEVELOP_BATCH106_PROGRAM = """* 印出 Aztec 再讀回 VISDEV
+* gen_aztec 畫出中心牛眼，外圈放文字和檢查碼，放大後四周留白。
+* SymbolType 用 Aztec。find_data_code_2d 讀回來仍是 VISDEV。
+Vizion.gen_aztec (Code, 'VISDEV')
+Vizion.create_data_code_2d_model ('Aztec', '', '', Handle)
+Vizion.find_data_code_2d (Code, Symbol, Handle, '', '', Ids, Decoded)
+Text := Decoded[1]
+Vizion.dev_display (Code)
+"""
+
+
+HDEVELOP_BATCH107_PROGRAM = """* 序列埠寫出再讀回 VISDEV
+* loopback 不接真的 COM，寫進去的位元組立刻讀得回來。
+* 真的 COM 用 Windows API。打不開時會說是哪一個埠。
+Vizion.open_serial ('loopback', Handle)
+Vizion.write_serial (Handle, 'VISDEV')
+Vizion.read_serial (Handle, 6, Text)
+Vizion.close_serial (Handle)
+"""
+
+
+HDEVELOP_BATCH108_PROGRAM = """* TCP 送出再讀回 VISDEV
+* loopback 在這支程式裡配對兩端，送出的字立刻讀得回來。
+* 真的主機和埠號也用同一組 open_socket_connect、send_data、receive_data。
+Vizion.open_socket_connect ('loopback', 0, Socket)
+Vizion.send_data (Socket, 'VISDEV')
+Vizion.receive_data (Socket, 6, Text)
+Vizion.close_socket (Socket)
+"""
+
+
+HDEVELOP_BATCH109_PROGRAM = """* 十字骨架分成四段
+* 橫線和直線交在一點。交叉點拿掉之後，四段各自成一個物件。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (RowBar, 30, 10, 30, 50)
+Vizion.gen_rectangle1 (ColBar, 10, 30, 50, 30)
+Vizion.union2 (RowBar, ColBar, Cross)
+Vizion.split_skeleton (Cross, Parts)
+Vizion.count_obj (Parts, Count)
+"""
+
+
+HDEVELOP_BATCH110_PROGRAM = """* 序列埠速率改成 19200
+* loopback 把設定記下來。get_serial_param 讀回的速率是 19200。
+Vizion.open_serial ('loopback', Handle)
+Vizion.set_serial_param (Handle, 19200, 8, 'none', 'none', 1, 500, 20)
+Vizion.get_serial_param (Handle, Baud, Bits, Flow, Parity, Stop, Total, Gap)
+Vizion.close_serial (Handle)
+"""
+
+
+HDEVELOP_BATCH111_PROGRAM = """* 本機聽埠再讀回 VISDEV
+* 先聽一個空埠，再從本機連上去送字，聽的那端讀回同一段。
+Vizion.open_socket_accept (0, Listen, Port)
+Vizion.open_socket_connect ('127.0.0.1', Port, Client)
+Vizion.send_data (Client, 'VISDEV')
+Vizion.receive_data (Listen, 6, Text)
+Vizion.set_socket_param (Client, 'timeout', 1)
+Vizion.get_socket_param (Client, 'timeout', Wait)
+Vizion.close_socket (Client)
+Vizion.close_socket (Listen)
+"""
+
+
+HDEVELOP_BATCH112_PROGRAM = """* 印出 EAN-8 再讀回 55123453
+* 七位數字會補上檢查碼。數字條和 EAN-13 同一套。
+Vizion.gen_ean8 (Code, '5512345')
+Vizion.create_bar_code_model (Handle)
+Vizion.find_bar_code (Code, Symbol, Handle, 'EAN-8', Decoded)
+Text := Decoded[1]
+Vizion.dev_display (Code)
+"""
+
+
+HDEVELOP_BATCH113_PROGRAM = """* 橫條的矩形度和方向
+* 寬條的方向是 0。rectangularity 和 region_features 的矩形度相同。
+* line_orientation 把朝左的水平線也收成 0。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Wide, 10, 10, 14, 29)
+Vizion.orientation_region (Wide, Phi)
+Vizion.rectangularity (Wide, Rect)
+Vizion.circularity (Wide, Circ)
+Vizion.eccentricity (Wide, Ecc)
+Vizion.region_features (Wide, 'rectangularity', FeatRect)
+Vizion.region_features (Wide, 'circularity', FeatCirc)
+Vizion.region_features (Wide, 'anisometry', FeatEcc)
+Vizion.line_orientation (10, 10, 10, 29, LinePhi)
+Vizion.angle_lx (10, 10, 10, 29, Axis)
+Angle := Phi[1]
+Rect1 := Rect[1]
+"""
+
+
+HDEVELOP_BATCH114_PROGRAM = """* 正方形周長是 120
+* 點序和 get_contour_xld 相同。圓度和 xld_features 相同。
+* 起點像素是 180，和 get_grayval 同一個點。
+Vizion.gen_contour_polygon_xld (Contour, [10, 10, 40, 40, 10], [10, 40, 40, 10, 10])
+Vizion.length_xld (Contour, Length)
+Vizion.circularity_xld (Contour, Circ)
+Vizion.compactness_xld (Contour, Comp)
+Vizion.convexity_xld (Contour, Conv)
+Vizion.eccentricity_xld (Contour, Ecc)
+Vizion.xld_features (Contour, 'circularity', FeatCirc)
+Vizion.xld_features (Contour, 'compactness', FeatComp)
+Vizion.xld_features (Contour, 'convexity', FeatConv)
+Vizion.xld_features (Contour, 'anisometry', FeatEcc)
+Vizion.xld_features (Contour, 'contlength', FeatLen)
+Vizion.get_contour_xld (Contour, Row, Col)
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.set_grayval (Image, Marked, 10, 10, 180)
+Vizion.get_grayval_contour_xld (Marked, Contour, Gray)
+Vizion.get_grayval (Marked, 10, 10, Pixel)
+Len := Length[1]
+FirstRow := Row[1]
+FirstCol := Col[1]
+StartGray := Gray[1]
+"""
+
+
+HDEVELOP_BATCH115_PROGRAM = """* 兩個方塊連通是 2 個
+* 拿掉第 2 個剩下 1 個。插到最前面變成 3 個。
+* Rank 為 1 的面積和 dilation_rectangle1 相同。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Top, 10, 10, 20, 25)
+Vizion.gen_rectangle1 (Low, 35, 40, 48, 60)
+Vizion.concat_obj (Top, Low, Both)
+Vizion.connection (Both, Parts)
+Vizion.count_obj (Parts, Count)
+Vizion.remove_obj (Parts, Kept, 2)
+Vizion.count_obj (Kept, Left)
+Vizion.insert_obj (Parts, Top, Inserted, 1)
+Vizion.count_obj (Inserted, Added)
+Vizion.replace_obj (Parts, Top, Replaced, 2)
+Vizion.count_obj (Replaced, Same)
+Vizion.dilation_rectangle1 (Top, Dilated, 3, 3)
+Vizion.rank_region (Top, Ranked, 3, 3, 1)
+Vizion.area_center (Dilated, AreaD, RowD, ColD)
+Vizion.area_center (Ranked, AreaR, RowR, ColR)
+DilateArea := AreaD[1]
+RankArea := AreaR[1]
+"""
+
+
+HDEVELOP_BATCH116_PROGRAM = """* 40 和 240 得到 32
+* bit_mask 和 bit_and 同一張常數圖相同。第 3 個位元是 255。
+* sigma_image 和 deviation_image 的灰階相同。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.set_grayval (Image, Marked, 20, 20, 40)
+Vizion.bit_mask (Marked, Masked, 240)
+Vizion.gen_image_proto (Marked, Const, 240)
+Vizion.bit_and (Marked, Const, Anded)
+Vizion.bit_slice (Marked, Sliced, 3)
+Vizion.deviation_image (Marked, Dev, 3, 3)
+Vizion.sigma_image (Marked, Sigma, 3, 3)
+Vizion.get_grayval (Masked, 20, 20, MaskGray)
+Vizion.get_grayval (Anded, 20, 20, AndGray)
+Vizion.get_grayval (Sliced, 20, 20, SliceGray)
+Vizion.get_grayval (Dev, 20, 20, DevGray)
+Vizion.get_grayval (Sigma, 20, 20, SigmaGray)
+"""
+
+
+HDEVELOP_BATCH117_PROGRAM = """* 球心是 (1, 2, 3)，半徑是 4
+* 六個軸向點。包圍盒是球心加減半徑。直徑是 8。
+Vizion.gen_sphere_object_model_3d (1, 2, 3, 4, Sphere)
+Vizion.smallest_sphere_object_model_3d (Sphere, Cx, Cy, Cz, Radius)
+Vizion.smallest_bounding_box_object_model_3d (Sphere, MinX, MinY, MinZ, MaxX, MaxY, MaxZ)
+Vizion.get_object_model_3d_params (Sphere, 'center', Center)
+Vizion.get_object_model_3d_params (Sphere, 'diameter', Diameter)
+"""
+
+
+HDEVELOP_BATCH118_PROGRAM = """* 暗線比方塊亮
+* 圖有光照斜坡、雜訊、一像素暗刮痕和一塊暗區。刮痕在第 70 列。
+* 全域門檻抓不住整條刮痕。Frangi 在刮痕上仍很亮，方塊內部是 0。
+Vizion.read_image (Scene, 'samples/hard_scene.png')
+Vizion.frangi (Scene, Response, 1.2, 1.2, 'dark')
+Vizion.threshold (Scene, Dark, 0, 40)
+Vizion.area_center (Dark, DarkArea, DarkRow, DarkCol)
+Vizion.get_grayval (Response, 70, 80, LineGray)
+Vizion.get_grayval (Response, 28, 40, BlockGray)
+Vizion.get_grayval (Response, 8, 8, FlatGray)
+Caught := DarkArea[1]
+"""
+
+
+HDEVELOP_BATCH119_PROGRAM = """* 亮處的刮痕還在
+* 難圖左暗右亮。第 70 列是暗刮痕，左上是一塊均勻暗區。
+* 第 120 行刮痕灰階 78。全域門檻 0 到 40 抓到方塊，抓不到這裡。
+* Sauvola 這裡是 1。方塊內部、左邊平坦處、右邊平坦處都是 0。
+Vizion.read_image (Scene, 'samples/hard_scene.png')
+Vizion.sauvola (Scene, Ink, 15, 0.5)
+Vizion.threshold (Scene, Global, 0, 40)
+Vizion.get_grayval (Scene, 70, 120, ScratchGray)
+Vizion.test_region_point (Ink, 70, 120, Scratch)
+Vizion.test_region_point (Ink, 28, 40, Block)
+Vizion.test_region_point (Ink, 8, 8, LeftFlat)
+Vizion.test_region_point (Ink, 8, 150, RightFlat)
+Vizion.test_region_point (Global, 70, 120, GlobalScratch)
+Vizion.test_region_point (Global, 28, 40, GlobalBlock)
+"""
+
+
+HDEVELOP_BATCH120_PROGRAM = """* 階梯兩邊沒有對調
+* 左半約 40、右半約 200，雜訊標準差約 28，中間是陡邊，另外有亮暗尖點。
+* 引導濾波半徑 8。靠邊界的左邊仍接近 46，右邊仍接近 193。
+* 同樣大的均值濾波把左邊拉到 62、右邊拉到 184。平坦處標準差從 28.5 降到 14.1。
+Vizion.read_image (Scene, 'samples/hard_edge.png')
+Vizion.guided_filter (Scene, Kept, 8, 800)
+Vizion.mean_image (Scene, Mixed, 17, 17)
+Vizion.gen_rectangle1 (NearLeft, 40, 70, 80, 76)
+Vizion.gen_rectangle1 (NearRight, 40, 84, 80, 90)
+Vizion.gen_rectangle1 (Flat, 40, 8, 80, 28)
+Vizion.intensity (NearLeft, Kept, GuideLeft, GuideLeftDev)
+Vizion.intensity (NearRight, Kept, GuideRight, GuideRightDev)
+Vizion.intensity (NearLeft, Mixed, MeanLeft, MeanLeftDev)
+Vizion.intensity (NearRight, Mixed, MeanRight, MeanRightDev)
+Vizion.intensity (Flat, Scene, RawMean, RawDev)
+Vizion.intensity (Flat, Kept, FlatMean, FlatDev)
+Left := GuideLeft[1]
+Right := GuideRight[1]
+BlurLeft := MeanLeft[1]
+BlurRight := MeanRight[1]
+NoiseBefore := RawDev[1]
+NoiseAfter := FlatDev[1]
+"""
+
+
+HDEVELOP_BATCH121_PROGRAM = """* 暗角和亮區一起拉開
+* 圖幾乎是亮的。左上 60×60 是暗角，裡面有一塊稍亮的印。右下有一塊稍亮的印。
+* 局部直方圖把暗角差距和亮區差距都拉開。整張等化把暗角差距壓小，亮區差距拉得過大。
+Vizion.read_image (Scene, 'samples/hard_contrast.png')
+Vizion.emphasize_clahe (Scene, Local, 8, 8)
+Vizion.equ_histo_image (Scene, Global)
+Vizion.gen_rectangle1 (DarkMark, 24, 24, 35, 35)
+Vizion.gen_rectangle1 (DarkBack, 20, 20, 23, 23)
+Vizion.gen_rectangle1 (BrightMark, 104, 104, 115, 115)
+Vizion.gen_rectangle1 (BrightBack, 100, 100, 103, 103)
+Vizion.intensity (DarkMark, Scene, RawDarkMark, A)
+Vizion.intensity (DarkBack, Scene, RawDarkBack, B)
+Vizion.intensity (BrightMark, Scene, RawBrightMark, C)
+Vizion.intensity (BrightBack, Scene, RawBrightBack, D)
+Vizion.intensity (DarkMark, Local, ClaheDarkMark, E)
+Vizion.intensity (DarkBack, Local, ClaheDarkBack, F)
+Vizion.intensity (BrightMark, Local, ClaheBrightMark, G)
+Vizion.intensity (BrightBack, Local, ClaheBrightBack, H)
+Vizion.intensity (DarkMark, Global, HistDarkMark, I)
+Vizion.intensity (DarkBack, Global, HistDarkBack, J)
+Vizion.intensity (BrightMark, Global, HistBrightMark, K)
+Vizion.intensity (BrightBack, Global, HistBrightBack, L)
+RawDark := RawDarkMark[1] - RawDarkBack[1]
+RawBright := RawBrightMark[1] - RawBrightBack[1]
+ClaheDark := ClaheDarkMark[1] - ClaheDarkBack[1]
+ClaheBright := ClaheBrightMark[1] - ClaheBrightBack[1]
+HistDark := HistDarkMark[1] - HistDarkBack[1]
+HistBright := HistBrightMark[1] - HistBrightBack[1]
+"""
+
+
+HDEVELOP_BATCH122_PROGRAM = """* 邊緣不在像素中心
+* 直線階躍畫在行 40.37。圖上有雜訊、左右斜坡，還有亮暗尖點。
+* Zernike 沿著整條邊的平均行，和量測矩形的次像素位置相差不到 0.05。
+Vizion.read_image (Scene, 'samples/hard_zernike.png')
+Vizion.edges_zernike (Scene, Edges, 7, 80, Rows, Cols)
+Vizion.tuple_mean (Cols, ZCol)
+Vizion.gen_measure_rectangle2 (60, 40, 0, 30, 8, 160, 120, 'bilinear', Handle)
+Vizion.measure_pos (Scene, Handle, 1.2, 12, 'positive', 'first', MRow, MCol, Amp, Dist)
+Edge := MCol[1]
+Gap := ZCol - Edge
+Vizion.dev_display (Scene)
+Vizion.dev_set_color ('green')
+Vizion.dev_display (Edges)
+"""
+
+
+HDEVELOP_BATCH123_PROGRAM = """* 句柄關掉之後還在
+* HALCON 的字元位置從 0 起算。HALCON 的 0 是 H，3 是 C。
+* 矩陣 [[1, 2], [3, 4]] 乘 [[5, 6], [7, 8]] 是 19、22、43、50。
+* 矩陣是句柄。clear 之後還是句柄，但不再有效，也不能序列化。
+Vizion.tuple_str_bit_select ('HALCON', [0, 3], Picked)
+Head := Picked[1]
+Third := Picked[2]
+Vizion.tuple_environment ('OS', OsName)
+Vizion.create_matrix (2, 2, [1, 2, 3, 4], A)
+Vizion.create_matrix (2, 2, [5, 6, 7, 8], B)
+Vizion.mult_matrix (A, B, 'AB', Product)
+Vizion.get_full_matrix (Product, Cells)
+C1 := Cells[1]
+C2 := Cells[2]
+C3 := Cells[3]
+C4 := Cells[4]
+Vizion.tuple_is_handle (A, IsHandle)
+Vizion.tuple_is_valid_handle (A, Valid)
+Vizion.tuple_is_serializable (A, Serial)
+Vizion.tuple_sem_type (A, Sem)
+Vizion.tuple_is_handle (1, NumberHandle)
+Vizion.tuple_is_int_elem ([1, 1.0], IntElem)
+IntOne := IntElem[1]
+RealOne := IntElem[2]
+Vizion.clear_matrix (A)
+Vizion.tuple_is_handle (A, StillHandle)
+Vizion.tuple_is_valid_handle (A, ValidAfter)
+"""
+
+
+HDEVELOP_BATCH131_PROGRAM = """* 等化後右下是 255
+* 矩形裡的 0、10、20、200 等化成 0、85、170、255。外面的 0 不變。
+* 6×5 四邊各裁 1，剩下寬 4、高 3，灰階仍是 9。定義域矩形裁下來是寬 5、高 4，原來 (2,3) 的 4 在列 1 行 2。
+* 4×4 的 5 外擴一圈填 9，左上角是 9，列 1 行 1 仍是 5。中心被 40 圍住時變成 40。三列橫條的骨架只留中間的 9。
+* 紅 10 用索引 1 挑出來。投影平移後，7 出現在列 1 行 2。左邊 10、右邊 80 分成兩塊，各 4 個像素。
+* 直方圖第三格是 4，面積是 4。兩個 2×2 各自面積是 4。4×4 拿掉 3 個像素後面積是 13。2×2 的鏈碼是 2、0、6、4。
+* 水平線邊長 10、角度 0、平均行 5。圓心距離 4，圓周是 0。矩形中心距離 2。正方形的 M20 是 8。只留下中間那條亮線。
+Vizion.gen_image_const (Field, 'byte', 8, 8)
+Vizion.gen_rectangle1 (Block, 0, 0, 3, 3)
+Vizion.hamming_change_region (Block, Changed, 3)
+Vizion.area_center (Changed, HamArea, HamRow, HamCol)
+Ham1 := HamArea[1]
+Vizion.gen_rectangle1 (Tiny, 0, 0, 1, 1)
+Vizion.get_region_chain (Tiny, ChainRow, ChainCol, Chain)
+StartRow := ChainRow[1]
+StartCol := ChainCol[1]
+Code0 := Chain[1]
+Code1 := Chain[2]
+Code2 := Chain[3]
+Code3 := Chain[4]
+Vizion.gen_region_histo (Bars, [0, 0, 4], 0, 0, 1)
+Vizion.area_center (Bars, BarArea, BarRow, BarCol)
+Bar1 := BarArea[1]
+Vizion.gen_random_regions (Randoms, 'rectangle', 2, 2, 2, 2, 0, 2)
+Vizion.count_obj (Randoms, RandCount)
+Vizion.area_center (Randoms, RandArea, RandRow, RandCol)
+Rand1 := RandArea[1]
+Rand2 := RandArea[2]
+Vizion.set_grayval (Field, Marked, 2, 3, 4)
+Vizion.rectangle1_domain (Marked, Reduced, 1, 1, 4, 5)
+Vizion.crop_domain (Reduced, Part)
+Vizion.get_image_size (Part, PartW, PartH)
+Vizion.get_grayval (Part, 1, 2, PartGray)
+Vizion.gen_image_const (Wide, 'byte', 6, 5)
+Vizion.gen_image_proto (Wide, Nines, 9)
+Vizion.crop_domain_rel (Nines, Cropped, 1, 1, 1, 1)
+Vizion.get_image_size (Cropped, CropW, CropH)
+Vizion.get_grayval (Cropped, 0, 0, CropGray)
+Vizion.gen_image_const (Small, 'byte', 4, 4)
+Vizion.gen_image_proto (Small, Fives, 5)
+Vizion.expand_domain_gray (Fives, Expanded, 1, 9)
+Vizion.get_image_size (Expanded, ExpW, ExpH)
+Vizion.get_grayval (Expanded, 0, 0, Edge9)
+Vizion.get_grayval (Expanded, 1, 1, Inner5)
+Vizion.gen_image_const (Ramp0, 'byte', 4, 4)
+Vizion.set_grayval (Ramp0, Ramp, [1, 1, 2, 2], [1, 2, 1, 2], [0, 10, 20, 200])
+Vizion.equ_histo_image_rect (Ramp, Equ, 1, 1, 2, 2)
+Vizion.get_grayval (Equ, 0, 0, Eq00)
+Vizion.get_grayval (Equ, 1, 2, Eq12)
+Vizion.get_grayval (Equ, 2, 1, Eq21)
+Vizion.get_grayval (Equ, 2, 2, Eq22)
+Vizion.gen_image_const (Bowl0, 'byte', 5, 5)
+Vizion.set_grayval (Bowl0, BowlRing, [1, 1, 1, 2, 2, 3, 3, 3], [1, 2, 3, 1, 3, 1, 2, 3], 40)
+Vizion.set_grayval (BowlRing, Bowl, 2, 2, 10)
+Vizion.gray_inside (Bowl, Inside)
+Vizion.get_grayval (Inside, 2, 2, InsideCenter)
+Vizion.get_grayval (Inside, 0, 0, InsideEdge)
+Vizion.gen_image_const (Band0, 'byte', 5, 5)
+Vizion.set_grayval (Band0, Band, [1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3], [0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4], 9)
+Vizion.gray_skeleton (Band, Skel)
+Vizion.get_grayval (Skel, 2, 2, SkelMid)
+Vizion.get_grayval (Skel, 1, 2, SkelSide)
+Vizion.gen_image_const (Grow0, 'byte', 4, 2)
+Vizion.set_grayval (Grow0, Grow, [0, 0, 1, 1, 0, 0, 1, 1], [0, 1, 0, 1, 2, 3, 2, 3], [10, 10, 10, 10, 80, 80, 80, 80])
+Vizion.regiongrowing_n (Grow, Grown, 'euclid', 0, 5, 1)
+Vizion.count_obj (Grown, GrowCount)
+Vizion.area_center (Grown, GrowArea, GrowRow, GrowCol)
+Grow1 := GrowArea[1]
+Grow2 := GrowArea[2]
+Vizion.gen_image_const (Plane, 'byte', 2, 2)
+Vizion.gen_image_proto (Plane, Red10, 10)
+Vizion.gen_image_proto (Plane, Green20, 20)
+Vizion.gen_image_proto (Plane, Blue30, 30)
+Vizion.channels_to_image (Red10, Green20, Blue30, Color)
+Vizion.gen_image_proto (Plane, Index, 1)
+Vizion.select_grayvalues_from_channels (Color, Index, Picked)
+Vizion.get_grayval (Picked, 0, 0, PickedRed)
+Vizion.gen_image_const (Stamp0, 'byte', 2, 2)
+Vizion.set_grayval (Stamp0, Stamp, 0, 0, 7)
+Vizion.hom_mat2d_identity (Id)
+Vizion.hom_mat2d_translate (Id, 1, 2, Shift)
+Vizion.projective_trans_image_size (Stamp, Moved, Shift, 'nearest_neighbor', 4, 4)
+Vizion.get_grayval (Moved, 1, 2, MovedGray)
+Vizion.gen_contour_polygon_xld (Line, [0, 0], [0, 10])
+Vizion.get_polygon_xld (Line, PolyRow, PolyCol, SideLength, SidePhi)
+Len1 := SideLength[1]
+PhiLine := SidePhi[1]
+ColEnd := PolyCol[2]
+Vizion.get_regress_params_xld (Line, RegLen, RegPhi, RegRow, RegCol, RegDev)
+LenReg := RegLen[1]
+PhiReg := RegPhi[1]
+RowReg := RegRow[1]
+ColReg := RegCol[1]
+DevReg := RegDev[1]
+Vizion.gen_contour_polygon_xld (Dots, [0, 0], [0, 4])
+Vizion.dist_ellipse_contour_points_xld (Dots, 0, 0, 0, 4, 4, EllDist)
+Ell0 := EllDist[1]
+Ell1 := EllDist[2]
+Vizion.dist_rectangle2_contour_points_xld (Dots, 0, 0, 0, 4, 2, RectDist)
+Rect0 := RectDist[1]
+Rect1 := RectDist[2]
+Vizion.gen_contour_polygon_xld (Square, [0, 0, 2, 2], [0, 2, 2, 0])
+Vizion.moments_points_xld (Square, M20, M02, M11)
+M20a := M20[1]
+M02a := M02[1]
+M11a := M11[1]
+Vizion.moments_any_points_xld (Square, 2, 0, AnyMoment)
+Any20 := AnyMoment[1]
+Vizion.gen_image_const (Ridge0, 'byte', 7, 5)
+Vizion.set_grayval (Ridge0, Ridge1, [0, 0, 0, 0, 0], [1, 2, 3, 4, 5], 1)
+Vizion.set_grayval (Ridge1, Ridge5, [1, 1, 1, 1, 1], [1, 2, 3, 4, 5], 5)
+Vizion.set_grayval (Ridge5, Ridge, [2, 2, 2, 2, 2], [1, 2, 3, 4, 5], 9)
+Vizion.gen_contour_polygon_xld (Bright, [2, 2], [1, 5])
+Vizion.gen_contour_polygon_xld (Dim, [0, 0], [1, 5])
+Vizion.concat_obj (Bright, Dim, Both)
+Vizion.local_max_contours_xld (Both, Ridge, Kept)
+Vizion.count_obj (Kept, KeptCount)
+Vizion.dev_display (Equ)
+"""
+
+
+HDEVELOP_BATCH130_PROGRAM = """* 極座標列 3 是 200
+* 圓心 (5,5) 往右 3 像素的 200，出現在極座標列 3、行 0。三張灰階合成後，紅是 10、綠是 20、藍是 30。
+* 同一列 5 個一樣亮的點，長軸是 2.82843、短軸是 0、角度是 0。左邊 10、右邊 80，平均生長只留下 4 個像素。
+* 長度 10 和長度 2 的兩條線，範圍 5 到 100 只留下 1 條。水平線切到行 2 到 8 之後，兩端是 2 和 8。
+* 兩條平行線相隔 3。四個角的長軸是 6、短軸是 2、扁度是 3。16 個像素都是 10 時，第 11 格是 16。
+* 3×3 平均把中間的 9 變成 1。2×2 的 7 貼到列 1、行 2。水平線面積是 4，10×10 的 25% 面積是 25。
+* 寬 5 高 3 的厚度是 3。2×2 的二階不變矩 I1 是 2。平移後 (0,0) 變成列 1、行 2。橢圓角度 0 的點在行 24。
+Vizion.gen_image_const (Field, 'byte', 11, 11)
+Vizion.set_grayval (Field, Marked, 5, 8, 200)
+Vizion.polar_trans_image (Marked, Polar, 5, 5, 4, 4)
+Vizion.get_grayval (Polar, 3, 0, PolarGray)
+Vizion.gen_rectangle1 (ThickRegion, 0, 0, 2, 4)
+Vizion.get_region_thickness (ThickRegion, Thickness)
+Thick1 := Thickness[1]
+Vizion.gen_rectangle1 (Block, 0, 0, 1, 1)
+Vizion.moments_region_2nd_invar (Block, I1, I2)
+I1a := I1[1]
+I2a := I2[1]
+Vizion.gen_image_proto (Field, Tens, 10)
+Vizion.gen_rectangle1 (HistoRegion, 0, 0, 3, 3)
+Vizion.gray_histo_abs (HistoRegion, Tens, 1, AbsoluteHisto)
+Abs11 := AbsoluteHisto[11]
+Vizion.set_grayval (Field, Impulse, 5, 5, 9)
+Vizion.gen_rectangle1 (MeanMask, 0, 0, 2, 2)
+Vizion.mean_image_shape (Impulse, MeanMask, MeanImage)
+Vizion.get_grayval (MeanImage, 5, 5, MeanCenter)
+Vizion.gen_rectangle1 (BarRegion, 2, 0, 2, 4)
+Vizion.set_grayval (Field, BarImage, [2, 2, 2, 2, 2], [0, 1, 2, 3, 4], 100)
+Vizion.elliptic_axis_gray (BarRegion, BarImage, Ra, Rb, Phi)
+Ra1 := Ra[1]
+Rb1 := Rb[1]
+Phi1 := Phi[1]
+Vizion.gen_rectangle1 (ClipRegion, 0, 2, 0, 8)
+Vizion.gen_region_hline (LineRegion, rad(90), 2, 4, 5)
+Vizion.area_center (LineRegion, LineArea, LineRow, LineCol)
+Line1 := LineArea[1]
+Vizion.gen_random_region (RandomRegion, 10, 10, 25)
+Vizion.area_center (RandomRegion, RandArea, RandRow, RandCol)
+Rand1 := RandArea[1]
+Vizion.gen_image_const (GrowBlank, 'byte', 4, 2)
+Vizion.set_grayval (GrowBlank, Grow, [0, 0, 1, 1, 0, 0, 1, 1], [0, 1, 0, 1, 2, 3, 2, 3], [10, 10, 10, 10, 80, 80, 80, 80])
+Vizion.regiongrowing_mean (Grow, Grown, 0, 0, 5, 1)
+Vizion.area_center (Grown, GrowArea, GrowRow, GrowCol)
+Grow1 := GrowArea[1]
+Vizion.gen_contour_polygon_xld (Line, [0, 0], [0, 10])
+Vizion.get_lines_xld (Line, BeginRow, BeginCol, EndRow, EndCol, Length, LinePhi)
+Len1 := Length[1]
+PhiLine := LinePhi[1]
+Vizion.hom_mat2d_identity (Id)
+Vizion.hom_mat2d_translate (Id, 1, 2, Shift)
+Vizion.affine_trans_polygon_xld (Line, MovedLine, Shift)
+Vizion.get_contour_xld (MovedLine, MovedRow, MovedCol)
+RowA := MovedRow[1]
+ColA := MovedCol[1]
+Vizion.get_points_ellipse ([0, rad(90)], 10, 20, 0, 4, 2, RowE, ColE)
+RowE0 := RowE[1]
+ColE0 := ColE[1]
+RowE90 := RowE[2]
+ColE90 := ColE[2]
+Vizion.gen_contour_polygon_xld (Short, [0, 0], [0, 2])
+Vizion.concat_obj (Line, Short, Both)
+Vizion.select_shape_xld (Both, Kept, 'contlength', 'and', 5, 100)
+Vizion.count_obj (Kept, KeptCount)
+Vizion.intersection_region_contour_xld (ClipRegion, Line, Crossed)
+Vizion.get_contour_xld (Crossed, CrossRow, CrossCol)
+Clip0 := CrossCol[1]
+Clip1 := CrossCol[2]
+Vizion.gen_contour_polygon_xld (High, [3, 3], [0, 10])
+Vizion.distance_contours_xld (Line, High, 'point_to_segment', Distances)
+Dist1 := Distances[1]
+Vizion.gen_contour_polygon_xld (Box, [0, 0, 2, 2], [0, 6, 6, 0])
+Vizion.orientation_points_xld (Box, Ori)
+Vizion.elliptic_axis_points_xld (Box, Era, Erb, Ephi)
+Vizion.eccentricity_points_xld (Box, Ecc)
+Ori1 := Ori[1]
+Era1 := Era[1]
+Erb1 := Erb[1]
+Ephi1 := Ephi[1]
+Ecc1 := Ecc[1]
+Vizion.gen_image_const (Plane, 'byte', 2, 2)
+Vizion.gen_image_proto (Plane, Red10, 10)
+Vizion.gen_image_proto (Plane, Green20, 20)
+Vizion.gen_image_proto (Plane, Blue30, 30)
+Vizion.channels_to_image (Red10, Green20, Blue30, Color)
+Vizion.get_grayval (Color, 0, 0, Channels)
+Red1 := Channels[1]
+Green1 := Channels[2]
+Blue1 := Channels[3]
+Vizion.gen_image_proto (Plane, Stamp, 7)
+Vizion.tile_images_offset (Stamp, Tiled, 1, 2, 0, 0, 1, 1, 4, 4)
+Vizion.get_grayval (Tiled, 1, 2, TileGray)
+Vizion.get_grayval (Tiled, 0, 0, TileZero)
+Vizion.dev_display (Tiled)
+"""
+
+
+HDEVELOP_BATCH129_PROGRAM = """* 膨脹後旁邊也是 9
+* 3×3 會把中間的 9 擴散到旁邊。單獨一個亮點做開運算變成 0。中間的 0 做閉運算會被補上。
+* 正方形頂點的 M20 是 8、面積是 4、矩形度是 1。水平線裁進行 2 到 8 之後，兩端是 2 和 8。
+* 正方形裡的點是 1。四個角填起來的面積是 25。凸包有 4 個頂點。孤立點刪掉後面積是 4。
+* 2×2 的中央矩 Mu20 是 1。16 個像素都是 10 時，直方圖第 3 格是 16。局部門檻只留下中間那一點。
+* 平移列 1、行 2 之後，灰階 7 出現在列 1 行 2。
+Vizion.gen_image_const (Flat, 'byte', 4, 4)
+Vizion.gen_image_proto (Flat, Tens, 10)
+Vizion.gen_rectangle1 (Full, 0, 0, 3, 3)
+Vizion.gray_histo_range (Full, Tens, 0, 20, 4, Histo, BinSize)
+Bin3 := Histo[3]
+Vizion.gen_image_const (Base, 'byte', 5, 5)
+Vizion.set_grayval (Base, Peak, 2, 2, 9)
+Vizion.gen_rectangle1 (SE, 0, 0, 2, 2)
+Vizion.gray_dilation (Peak, SE, Dilated)
+Vizion.gray_dilation_shape (Peak, DilatedShape, 3, 3, 'rectangle')
+Vizion.get_grayval (Dilated, 2, 1, DilateNear)
+Vizion.get_grayval (DilatedShape, 2, 1, ShapeNear)
+Vizion.gray_opening (Peak, SE, Opened)
+Vizion.gray_opening_shape (Peak, OpenedShape, 3, 3, 'rectangle')
+Vizion.get_grayval (Opened, 2, 2, OpenCenter)
+Vizion.get_grayval (OpenedShape, 2, 2, OpenShape)
+Vizion.gen_image_proto (Base, Solid, 9)
+Vizion.set_grayval (Solid, Hole, 2, 2, 0)
+Vizion.gray_erosion (Hole, SE, Eroded)
+Vizion.gray_erosion_shape (Hole, ErodedShape, 3, 3, 'rectangle')
+Vizion.get_grayval (Eroded, 2, 1, ErodeNear)
+Vizion.get_grayval (Eroded, 0, 0, ErodeCorner)
+Vizion.get_grayval (ErodedShape, 2, 1, ErodeShape)
+Vizion.gray_closing (Hole, SE, Closed)
+Vizion.gray_closing_shape (Hole, ClosedShape, 3, 3, 'rectangle')
+Vizion.get_grayval (Closed, 2, 2, CloseCenter)
+Vizion.get_grayval (ClosedShape, 2, 2, CloseShape)
+Vizion.gen_contour_polygon_xld (Square, [0, 0, 2, 2], [0, 2, 2, 0])
+Vizion.moments_xld (Square, M20, M02, M11)
+Vizion.area_center_points_xld (Square, PolyArea, PolyRow, PolyCol)
+Vizion.rectangularity_xld (Square, RectLike)
+M20a := M20[1]
+M02a := M02[1]
+M11a := M11[1]
+Area1 := PolyArea[1]
+Row1 := PolyRow[1]
+Col1 := PolyCol[1]
+Rect1 := RectLike[1]
+Vizion.gen_contour_polygon_xld (Wide, [0, 0], [0, 10])
+Vizion.crop_contours_xld (Wide, Clipped, -1, 2, 1, 8)
+Vizion.get_contour_xld (Clipped, ClipRow, ClipCol)
+Clip0 := ClipCol[1]
+Clip1 := ClipCol[2]
+Vizion.gen_contour_polygon_xld (Box, [0, 0, 4, 4, 0], [0, 4, 4, 0, 0])
+Vizion.test_xld_point (Box, [2, 6], [2, 6], Inside)
+In1 := Inside[1]
+In2 := Inside[2]
+Vizion.gen_region_polygon_xld (Box, Filled)
+Vizion.area_center (Filled, FillArea, FillRow, FillCol)
+Fill1 := FillArea[1]
+Vizion.gen_rectangle1 (Block, 0, 0, 2, 2)
+Vizion.get_region_convex (Block, Hull)
+Vizion.get_contour_xld (Hull, HullRow, HullCol)
+Vizion.tuple_length (HullRow, HullCount)
+Vizion.gen_image_const (NoisePic, 'byte', 6, 6)
+Vizion.set_grayval (NoisePic, NoisePic, [0, 3, 3, 4, 4], [0, 3, 4, 3, 4], 255)
+Vizion.threshold (NoisePic, Noisy, 200, 255)
+Vizion.remove_noise_region (Noisy, Clean, 'n_4')
+Vizion.area_center (Clean, CleanArea, CleanRow, CleanCol)
+Clean1 := CleanArea[1]
+Vizion.gen_rectangle1 (Tiny, 0, 0, 1, 1)
+Vizion.moments_region_central (Tiny, Mu20, Mu02, Mu11)
+Mu20a := Mu20[1]
+Mu02a := Mu02[1]
+Mu11a := Mu11[1]
+Vizion.gen_image_proto (Base, Around, 100)
+Vizion.set_grayval (Around, Around, 2, 2, 40)
+Vizion.local_threshold (Around, Dark, 'mean', 'dark', 3, 20)
+Vizion.area_center (Dark, DarkArea, DarkRow, DarkCol)
+Dark1 := DarkArea[1]
+Vizion.gen_image_const (Mark, 'byte', 2, 2)
+Vizion.set_grayval (Mark, Mark, 0, 0, 7)
+Vizion.hom_mat2d_identity (Hom)
+Vizion.hom_mat2d_translate (Hom, 1, 2, Moved)
+Vizion.affine_trans_image_size (Mark, Shifted, Moved, 'nearest_neighbor', 4, 4)
+Vizion.get_grayval (Shifted, 1, 2, MovedGray)
+Vizion.dev_display (Dilated)
+Vizion.dev_set_color ('green')
+Vizion.dev_disp_text ('膨脹', 8, 8)
+"""
+
+
+HDEVELOP_BATCH128_PROGRAM = """* 灰階 0 的正弦是 128
+* 灰階當弧度。0 的正弦是 128、餘弦是 255、正切是 128。灰階 1 的正弦是 235、餘弦是 196、正切是 140。
+* 128 的反正弦、反餘弦、反正切都是 128。反正切 160 是 191。反餘弦 255 是 0。
+* 平面列 1 行 1 是 15。曲面列 2 行 0 是 8。紅 100 的亮度是 30。
+* 3×3 裡 6 個 0 和 3 個 255，熵是 29。最小 0 最大 90 的中間值是 45。
+* 2×1 加邊 2 變成 6×5，角落是 9。一列亮段留下 3 個像素。一半亮的圖留下 8 個。3×3 均值是 1。
+* 多邊形面積是 20。點 (0,0) 到 (4,3) 的距離是 5，高寬比是 4/3。
+Vizion.gen_image_const (Blank, 'byte', 2, 1)
+Vizion.set_grayval (Blank, Angle, [0, 0], [0, 1], [0, 1])
+Vizion.sin_image (Angle, Sine)
+Vizion.cos_image (Angle, Cosine)
+Vizion.tan_image (Angle, Tangent)
+Vizion.get_grayval (Sine, 0, 0, Sin0)
+Vizion.get_grayval (Sine, 0, 1, Sin1)
+Vizion.get_grayval (Cosine, 0, 0, Cos0)
+Vizion.get_grayval (Cosine, 0, 1, Cos1)
+Vizion.get_grayval (Tangent, 0, 0, Tan0)
+Vizion.get_grayval (Tangent, 0, 1, Tan1)
+Vizion.gen_image_proto (Blank, Level, 128)
+Vizion.set_grayval (Level, AtanSrc, 0, 1, 160)
+Vizion.asin_image (Level, ArcSin)
+Vizion.acos_image (Level, ArcCos)
+Vizion.atan_image (AtanSrc, ArcTan)
+Vizion.get_grayval (ArcSin, 0, 0, Asin0)
+Vizion.get_grayval (ArcCos, 0, 0, Acos0)
+Vizion.set_grayval (Level, High, 0, 0, 255)
+Vizion.acos_image (High, ArcCosHigh)
+Vizion.get_grayval (ArcCosHigh, 0, 0, Acos255)
+Vizion.get_grayval (ArcTan, 0, 0, Atan0)
+Vizion.get_grayval (ArcTan, 0, 1, Atan160)
+Vizion.gen_image_surface_first_order (Plane, 'byte', 2, 3, 10, 0, 0, 4, 2)
+Vizion.get_grayval (Plane, 1, 1, Plane11)
+Vizion.gen_image_surface_second_order (Bowl, 'byte', 1, 0, 0, 0, 0, 4, 0, 0, 4, 3)
+Vizion.get_grayval (Bowl, 2, 0, Bowl20)
+Vizion.gen_image_proto (Blank, Red, 100)
+Vizion.gen_image_proto (Blank, Zero, 0)
+Vizion.rgb3_to_gray (Red, Zero, Zero, Gray)
+Vizion.get_grayval (Gray, 0, 0, RedGray)
+Vizion.gen_image_const (Field, 'byte', 6, 6)
+Vizion.set_grayval (Field, Field, [3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5], 255)
+Vizion.entropy_image (Field, Entropy, 3, 3)
+Vizion.get_grayval (Entropy, 2, 2, Ent)
+Vizion.gen_image_const (Box, 'byte', 5, 5)
+Vizion.set_grayval (Box, Box, [1, 3], [1, 3], [10, 90])
+Vizion.midrange_image (Box, Midrange, 3, 3)
+Vizion.get_grayval (Midrange, 2, 2, Mid22)
+Vizion.add_image_border (Blank, Framed, 2, 9)
+Vizion.get_image_size (Framed, FrameW, FrameH)
+Vizion.get_grayval (Framed, 0, 0, Edge)
+Vizion.gen_image_const (Strip, 'byte', 8, 1)
+Vizion.set_grayval (Strip, Strip, [0, 0, 0, 0, 0], [1, 2, 4, 5, 6], 255)
+Vizion.fast_threshold (Strip, Kept, 200, 255, 3)
+Vizion.area_center (Kept, FastArea, FastRow, FastCol)
+Vizion.gen_image_const (Halves, 'byte', 4, 4)
+Vizion.set_grayval (Halves, Halves, [0, 0, 1, 1, 2, 2, 3, 3], [2, 3, 2, 3, 2, 3, 2, 3], 255)
+Vizion.bin_threshold (Halves, Bright)
+Vizion.area_center (Bright, BinArea, BinRow, BinCol)
+Vizion.gen_image_const (Dot, 'byte', 3, 3)
+Vizion.set_grayval (Dot, Dot, 1, 1, 9)
+Vizion.smooth_image (Dot, Soft, 'mean', 3)
+Vizion.get_grayval (Soft, 1, 1, Soft11)
+Vizion.get_image_type (Dot, Kind)
+Vizion.gen_region_polygon_filled (Poly, [1, 1, 4, 4], [1, 5, 5, 1])
+Vizion.area_center (Poly, PolyArea, PolyRow, PolyCol)
+Vizion.gen_rectangle1 (Block, 0, 0, 2, 2)
+Vizion.test_region_points (Block, [1, 5], [1, 5], Inside)
+Vizion.gen_contour_polygon_xld (Line, [0, 1, 4], [0, 0, 3])
+Vizion.diameter_xld (Line, R1, C1, R2, C2, Diameter)
+Vizion.height_width_ratio_xld (Line, BoxH, BoxW, Ratio)
+In1 := Inside[1]
+In2 := Inside[2]
+Fast1 := FastArea[1]
+Bin1 := BinArea[1]
+Poly1 := PolyArea[1]
+Dist1 := Diameter[1]
+Ratio1 := Ratio[1]
+Vizion.dev_display (Sine)
+Vizion.dev_set_color ('green')
+Vizion.dev_disp_text ('正弦', 8, 8)
+"""
+
+
+HDEVELOP_BATCH124_PROGRAM = """* 矩陣複本和喬列斯基
+* [[1, 2], [3, 4]] 全部加起來是 10。複本在原矩陣把自己加上去之後仍是 1。
+* [[0, -1], [1, 0]] 的特徵值虛部是 -1 和 1，實部是 0。
+* [[25, 15], [15, 18]] 的喬列斯基下三角是 5、0、3、3。寫成文字再讀回來還是這四個數。
+Vizion.create_matrix (2, 2, [1, 2, 3, 4], A)
+Vizion.sum_matrix (A, 'full', Sum)
+Vizion.get_value_matrix (Sum, 0, 0, Total)
+Vizion.copy_matrix (A, Copy)
+Vizion.add_matrix_mod (A, A)
+Vizion.get_full_matrix (A, Doubled)
+Vizion.get_full_matrix (Copy, Original)
+D1 := Doubled[1]
+O1 := Original[1]
+Vizion.create_matrix (2, 2, [0, -1, 1, 0], Spin)
+Vizion.eigenvalues_general_matrix (Spin, 'none', RealEV, ImagEV, EmptyR, EmptyI)
+Vizion.get_full_matrix (RealEV, Real)
+Vizion.get_full_matrix (ImagEV, Imag)
+Vizion.tuple_sort (Imag, ImagSorted)
+Low := ImagSorted[1]
+High := ImagSorted[2]
+R1 := Real[1]
+R2 := Real[2]
+Vizion.create_matrix (2, 2, [25, 15, 15, 18], SPD)
+Vizion.decompose_matrix (SPD, 'positive_definite', Lower, Upper)
+Vizion.get_full_matrix (Lower, L)
+Vizion.get_full_matrix (Upper, U)
+L1 := L[1]
+L2 := L[2]
+L3 := L[3]
+L4 := L[4]
+U1 := U[1]
+U2 := U[2]
+U3 := U[3]
+U4 := U[4]
+Vizion.write_matrix (Lower, 'ascii', 'workspace/batch124_matrix.mtx')
+Vizion.read_matrix ('workspace/batch124_matrix.mtx', ReadBack)
+Vizion.get_full_matrix (ReadBack, Back)
+B1 := Back[1]
+"""
+
+
 HDEVELOP_BATCH104_PROGRAM = """* 輪廓 tuple 傳進程序仍是 HObject
 * 幾條輪廓收成同一個物件，再傳進程序。count_obj 數的是條數。
 * ho_XLDs[1] 是第一條。圖形視窗裡兩條顏色不同。
@@ -4890,109 +5732,133 @@ GENERATED_PROGRAMS = {
     "xld_circle.hdv": XLD_CIRCLE_PROGRAM,
     "image_filter.hdv": IMAGE_FILTER_PROGRAM,
     "tuple_stats.hdv": TUPLE_STATS_PROGRAM,
-    "ViZion_hdevelop_batch1.viz": HDEVELOP_BATCH1_PROGRAM,
-    "ViZion_hdevelop_batch2.viz": HDEVELOP_BATCH2_PROGRAM,
-    "ViZion_hdevelop_batch3.viz": HDEVELOP_BATCH3_PROGRAM,
-    "ViZion_hdevelop_batch4.viz": HDEVELOP_BATCH4_PROGRAM,
-    "ViZion_hdevelop_batch5.viz": HDEVELOP_BATCH5_PROGRAM,
-    "ViZion_hdevelop_batch6.viz": HDEVELOP_BATCH6_PROGRAM,
-    "ViZion_hdevelop_batch7.viz": HDEVELOP_BATCH7_PROGRAM,
-    "ViZion_hdevelop_batch8.viz": HDEVELOP_BATCH8_PROGRAM,
-    "ViZion_hdevelop_batch9.viz": HDEVELOP_BATCH9_PROGRAM,
-    "ViZion_hdevelop_batch10.viz": HDEVELOP_BATCH10_PROGRAM,
-    "ViZion_hdevelop_batch11.viz": HDEVELOP_BATCH11_PROGRAM,
-    "ViZion_hdevelop_batch12.viz": HDEVELOP_BATCH12_PROGRAM,
-    "ViZion_hdevelop_batch13.viz": HDEVELOP_BATCH13_PROGRAM,
-    "ViZion_hdevelop_batch14.viz": HDEVELOP_BATCH14_PROGRAM,
-    "ViZion_hdevelop_batch15.viz": HDEVELOP_BATCH15_PROGRAM,
-    "ViZion_hdevelop_batch16.viz": HDEVELOP_BATCH16_PROGRAM,
-    "ViZion_hdevelop_batch17.viz": HDEVELOP_BATCH17_PROGRAM,
-    "ViZion_hdevelop_batch18.viz": HDEVELOP_BATCH18_PROGRAM,
-    "ViZion_hdevelop_batch19.viz": HDEVELOP_BATCH19_PROGRAM,
-    "ViZion_hdevelop_batch20.viz": HDEVELOP_BATCH20_PROGRAM,
-    "ViZion_hdevelop_batch21.viz": HDEVELOP_BATCH21_PROGRAM,
-    "ViZion_hdevelop_batch22.viz": HDEVELOP_BATCH22_PROGRAM,
-    "ViZion_hdevelop_batch23.viz": HDEVELOP_BATCH23_PROGRAM,
-    "ViZion_hdevelop_batch24.viz": HDEVELOP_BATCH24_PROGRAM,
-    "ViZion_hdevelop_batch25.viz": HDEVELOP_BATCH25_PROGRAM,
-    "ViZion_hdevelop_batch26.viz": HDEVELOP_BATCH26_PROGRAM,
-    "ViZion_hdevelop_batch27.viz": HDEVELOP_BATCH27_PROGRAM,
-    "ViZion_hdevelop_batch28.viz": HDEVELOP_BATCH28_PROGRAM,
-    "ViZion_hdevelop_batch29.viz": HDEVELOP_BATCH29_PROGRAM,
-    "ViZion_hdevelop_batch30.viz": HDEVELOP_BATCH30_PROGRAM,
-    "ViZion_hdevelop_batch31.viz": HDEVELOP_BATCH31_PROGRAM,
-    "ViZion_hdevelop_batch32.viz": HDEVELOP_BATCH32_PROGRAM,
-    "ViZion_hdevelop_batch33.viz": HDEVELOP_BATCH33_PROGRAM,
-    "ViZion_hdevelop_batch34.viz": HDEVELOP_BATCH34_PROGRAM,
-    "ViZion_hdevelop_batch35.viz": HDEVELOP_BATCH35_PROGRAM,
-    "ViZion_hdevelop_batch36.viz": HDEVELOP_BATCH36_PROGRAM,
-    "ViZion_hdevelop_batch37.viz": HDEVELOP_BATCH37_PROGRAM,
-    "ViZion_hdevelop_batch38.viz": HDEVELOP_BATCH38_PROGRAM,
-    "ViZion_hdevelop_batch39.viz": HDEVELOP_BATCH39_PROGRAM,
-    "ViZion_hdevelop_batch40.viz": HDEVELOP_BATCH40_PROGRAM,
-    "ViZion_hdevelop_batch41.viz": HDEVELOP_BATCH41_PROGRAM,
-    "ViZion_hdevelop_batch42.viz": HDEVELOP_BATCH42_PROGRAM,
-    "ViZion_hdevelop_batch43.viz": HDEVELOP_BATCH43_PROGRAM,
-    "ViZion_hdevelop_batch44.viz": HDEVELOP_BATCH44_PROGRAM,
-    "ViZion_hdevelop_batch45.viz": HDEVELOP_BATCH45_PROGRAM,
-    "ViZion_hdevelop_batch46.viz": HDEVELOP_BATCH46_PROGRAM,
-    "ViZion_hdevelop_batch47.viz": HDEVELOP_BATCH47_PROGRAM,
-    "ViZion_hdevelop_batch48.viz": HDEVELOP_BATCH48_PROGRAM,
-    "ViZion_hdevelop_batch49.viz": HDEVELOP_BATCH49_PROGRAM,
-    "ViZion_hdevelop_batch50.viz": HDEVELOP_BATCH50_PROGRAM,
-    "ViZion_hdevelop_batch51.viz": HDEVELOP_BATCH51_PROGRAM,
-    "ViZion_hdevelop_batch52.viz": HDEVELOP_BATCH52_PROGRAM,
-    "ViZion_hdevelop_batch53.viz": HDEVELOP_BATCH53_PROGRAM,
-    "ViZion_hdevelop_batch54.viz": HDEVELOP_BATCH54_PROGRAM,
-    "ViZion_hdevelop_batch55.viz": HDEVELOP_BATCH55_PROGRAM,
-    "ViZion_hdevelop_batch56.viz": HDEVELOP_BATCH56_PROGRAM,
-    "ViZion_hdevelop_batch57.viz": HDEVELOP_BATCH57_PROGRAM,
-    "ViZion_hdevelop_batch58.viz": HDEVELOP_BATCH58_PROGRAM,
-    "ViZion_hdevelop_batch59.viz": HDEVELOP_BATCH59_PROGRAM,
-    "ViZion_hdevelop_batch60.viz": HDEVELOP_BATCH60_PROGRAM,
-    "ViZion_hdevelop_batch61.viz": HDEVELOP_BATCH61_PROGRAM,
-    "ViZion_hdevelop_batch62.viz": HDEVELOP_BATCH62_PROGRAM,
-    "ViZion_hdevelop_batch63.viz": HDEVELOP_BATCH63_PROGRAM,
-    "ViZion_hdevelop_batch64.viz": HDEVELOP_BATCH64_PROGRAM,
-    "ViZion_hdevelop_batch65.viz": HDEVELOP_BATCH65_PROGRAM,
-    "ViZion_hdevelop_batch66.viz": HDEVELOP_BATCH66_PROGRAM,
-    "ViZion_hdevelop_batch67.viz": HDEVELOP_BATCH67_PROGRAM,
-    "ViZion_hdevelop_batch68.viz": HDEVELOP_BATCH68_PROGRAM,
-    "ViZion_hdevelop_batch69.viz": HDEVELOP_BATCH69_PROGRAM,
-    "ViZion_hdevelop_batch70.viz": HDEVELOP_BATCH70_PROGRAM,
-    "ViZion_hdevelop_batch71.viz": HDEVELOP_BATCH71_PROGRAM,
-    "ViZion_hdevelop_batch72.viz": HDEVELOP_BATCH72_PROGRAM,
-    "ViZion_hdevelop_batch73.viz": HDEVELOP_BATCH73_PROGRAM,
-    "ViZion_hdevelop_batch74.viz": HDEVELOP_BATCH74_PROGRAM,
-    "ViZion_hdevelop_batch75.viz": HDEVELOP_BATCH75_PROGRAM,
-    "ViZion_hdevelop_batch76.viz": HDEVELOP_BATCH76_PROGRAM,
-    "ViZion_hdevelop_batch77.viz": HDEVELOP_BATCH77_PROGRAM,
-    "ViZion_hdevelop_batch78.viz": HDEVELOP_BATCH78_PROGRAM,
-    "ViZion_hdevelop_batch79.viz": HDEVELOP_BATCH79_PROGRAM,
-    "ViZion_hdevelop_batch80.viz": HDEVELOP_BATCH80_PROGRAM,
-    "ViZion_hdevelop_batch81.viz": HDEVELOP_BATCH81_PROGRAM,
-    "ViZion_hdevelop_batch82.viz": HDEVELOP_BATCH82_PROGRAM,
-    "ViZion_hdevelop_batch83.viz": HDEVELOP_BATCH83_PROGRAM,
-    "ViZion_hdevelop_batch84.viz": HDEVELOP_BATCH84_PROGRAM,
-    "ViZion_hdevelop_batch85.viz": HDEVELOP_BATCH85_PROGRAM,
-    "ViZion_hdevelop_batch86.viz": HDEVELOP_BATCH86_PROGRAM,
-    "ViZion_hdevelop_batch87.viz": HDEVELOP_BATCH87_PROGRAM,
-    "ViZion_hdevelop_batch88.viz": HDEVELOP_BATCH88_PROGRAM,
-    "ViZion_hdevelop_batch89.viz": HDEVELOP_BATCH89_PROGRAM,
-    "ViZion_hdevelop_batch90.viz": HDEVELOP_BATCH90_PROGRAM,
-    "ViZion_hdevelop_batch91.viz": HDEVELOP_BATCH91_PROGRAM,
-    "ViZion_hdevelop_batch92.viz": HDEVELOP_BATCH92_PROGRAM,
-    "ViZion_hdevelop_batch93.viz": HDEVELOP_BATCH93_PROGRAM,
-    "ViZion_hdevelop_batch94.viz": HDEVELOP_BATCH94_PROGRAM,
-    "ViZion_hdevelop_batch95.viz": HDEVELOP_BATCH95_PROGRAM,
-    "ViZion_hdevelop_batch96.viz": HDEVELOP_BATCH96_PROGRAM,
-    "ViZion_hdevelop_batch97.viz": HDEVELOP_BATCH97_PROGRAM,
-    "ViZion_hdevelop_batch98.viz": HDEVELOP_BATCH98_PROGRAM,
-    "ViZion_hdevelop_batch99.viz": HDEVELOP_BATCH99_PROGRAM,
-    "ViZion_hdevelop_batch100.viz": HDEVELOP_BATCH100_PROGRAM,
-    "ViZion_hdevelop_batch101.viz": HDEVELOP_BATCH101_PROGRAM,
-    "ViZion_hdevelop_batch102.viz": HDEVELOP_BATCH102_PROGRAM,
-    "ViZion_hdevelop_batch103.viz": HDEVELOP_BATCH103_PROGRAM,
-    "ViZion_hdevelop_batch104.viz": HDEVELOP_BATCH104_PROGRAM,
+    "ViZion_rgb1_to_gray_tuple_add_shift_local_threshold.viz": HDEVELOP_BATCH1_PROGRAM,
+    "ViZion_rgb1_to_gray_measure_metrology_scaled_shape.viz": HDEVELOP_BATCH2_PROGRAM,
+    "ViZion_create_matrix_rigid_barcode_text.viz": HDEVELOP_BATCH3_PROGRAM,
+    "ViZion_open_framegrabber_file_camera_Code39_quaternion_cloud.viz": HDEVELOP_BATCH4_PROGRAM,
+    "ViZion_gray_erosion_rect_ellipse_contrast.viz": HDEVELOP_BATCH5_PROGRAM,
+    "ViZion_get_image_size_gray_tophat.viz": HDEVELOP_BATCH6_PROGRAM,
+    "ViZion_get_grayval_ramp_diameter_shape.viz": HDEVELOP_BATCH7_PROGRAM,
+    "ViZion_scale_image_range_project_arrow.viz": HDEVELOP_BATCH8_PROGRAM,
+    "ViZion_distance_rr_align_corner_region_distance.viz": HDEVELOP_BATCH9_PROGRAM,
+    "ViZion_gen_region_points_power_ridge_intersection.viz": HDEVELOP_BATCH10_PROGRAM,
+    "ViZion_get_region_runs_filter_skeleton_circle.viz": HDEVELOP_BATCH11_PROGRAM,
+    "ViZion_inner_rectangle1_holes_rounded.viz": HDEVELOP_BATCH12_PROGRAM,
+    "ViZion_check_difference_chars_corners.viz": HDEVELOP_BATCH13_PROGRAM,
+    "ViZion_gen_empty_region_edge_plateau_flow.viz": HDEVELOP_BATCH14_PROGRAM,
+    "ViZion_distance_transform_highpass_corner.viz": HDEVELOP_BATCH15_PROGRAM,
+    "ViZion_eliminate_runs_plane_entropy.viz": HDEVELOP_BATCH16_PROGRAM,
+    "ViZion_sqrt_image_log_saddle_trim.viz": HDEVELOP_BATCH17_PROGRAM,
+    "ViZion_gray_features_distance_auto_threshold.viz": HDEVELOP_BATCH18_PROGRAM,
+    "ViZion_gamma_image_zero_cross_sector.viz": HDEVELOP_BATCH19_PROGRAM,
+    "ViZion_exp_image_polar_tophat.viz": HDEVELOP_BATCH20_PROGRAM,
+    "ViZion_reduce_domain_paint_corner_intersection.viz": HDEVELOP_BATCH21_PROGRAM,
+    "ViZion_abs_image_direction_crossing.viz": HDEVELOP_BATCH22_PROGRAM,
+    "ViZion_prewitt_amp_polar_split.viz": HDEVELOP_BATCH23_PROGRAM,
+    "ViZion_frei_amp_robinson_azimuth_circle.viz": HDEVELOP_BATCH24_PROGRAM,
+    "ViZion_bit_not_lut_bits_pyramid.viz": HDEVELOP_BATCH25_PROGRAM,
+    "ViZion_gen_measure_rectangle2_profile_funct1d.viz": HDEVELOP_BATCH26_PROGRAM,
+    "ViZion_create_funct_1d_pairs_integral_derivative_inverse.viz": HDEVELOP_BATCH27_PROGRAM,
+    "ViZion_fft_image_shift_phase_correlation.viz": HDEVELOP_BATCH28_PROGRAM,
+    "ViZion_fft_image_spectrum_mask_convolve_energy.viz": HDEVELOP_BATCH29_PROGRAM,
+    "ViZion_fft_image_correlation_shift_pad.viz": HDEVELOP_BATCH30_PROGRAM,
+    "ViZion_gen_object_model_3d_from_points_plane_box.viz": HDEVELOP_BATCH31_PROGRAM,
+    "ViZion_gen_object_model_3d_from_points_scale_project_axis.viz": HDEVELOP_BATCH32_PROGRAM,
+    "ViZion_gen_object_model_3d_from_points_intersect_grid_axis.viz": HDEVELOP_BATCH33_PROGRAM,
+    "ViZion_gen_object_model_3d_from_region_cloud_aligned_to_image.viz": HDEVELOP_BATCH34_PROGRAM,
+    "ViZion_fit_image_plane_height_normal_shade.viz": HDEVELOP_BATCH35_PROGRAM,
+    "ViZion_sub_plane_image_reference_tilt_volume.viz": HDEVELOP_BATCH36_PROGRAM,
+    "ViZion_fit_plane_region_plane_inside_region.viz": HDEVELOP_BATCH37_PROGRAM,
+    "ViZion_fit_plane_objects_plane_per_object.viz": HDEVELOP_BATCH38_PROGRAM,
+    "ViZion_fit_quad_region_parabola_quadric.viz": HDEVELOP_BATCH39_PROGRAM,
+    "ViZion_add_plane_image_height_map_difference.viz": HDEVELOP_BATCH40_PROGRAM,
+    "ViZion_sub_local_mean_local_mean_roughness.viz": HDEVELOP_BATCH41_PROGRAM,
+    "ViZion_sub_local_median_median_local_bump.viz": HDEVELOP_BATCH42_PROGRAM,
+    "ViZion_gray_spot_white_spots_smaller_than_kernel.viz": HDEVELOP_BATCH43_PROGRAM,
+    "ViZion_gray_opening_rect_opening_reconstruct.viz": HDEVELOP_BATCH44_PROGRAM,
+    "ViZion_thickness_max_how_thick.viz": HDEVELOP_BATCH45_PROGRAM,
+    "ViZion_area_intersection_overlap_area.viz": HDEVELOP_BATCH46_PROGRAM,
+    "ViZion_distance_objects_how_far_apart.viz": HDEVELOP_BATCH47_PROGRAM,
+    "ViZion_region_angle_which_side.viz": HDEVELOP_BATCH48_PROGRAM,
+    "ViZion_partition_nearest_gap_to_nearest.viz": HDEVELOP_BATCH49_PROGRAM,
+    "ViZion_sort_feature_pick_by_feature.viz": HDEVELOP_BATCH50_PROGRAM,
+    "ViZion_region_defects_fill_notches.viz": HDEVELOP_BATCH51_PROGRAM,
+    "ViZion_select_inner_who_contains_whom.viz": HDEVELOP_BATCH52_PROGRAM,
+    "ViZion_select_border_touches_border.viz": HDEVELOP_BATCH53_PROGRAM,
+    "ViZion_neighbor_distance_objects_touch.viz": HDEVELOP_BATCH54_PROGRAM,
+    "ViZion_shape_score_most_like_template.viz": HDEVELOP_BATCH55_PROGRAM,
+    "ViZion_align_delta_move_onto_template.viz": HDEVELOP_BATCH56_PROGRAM,
+    "ViZion_grid_size_rows_and_columns.viz": HDEVELOP_BATCH57_PROGRAM,
+    "ViZion_gray_offset_brightness_side.viz": HDEVELOP_BATCH58_PROGRAM,
+    "ViZion_edge_contrast_edge_clarity.viz": HDEVELOP_BATCH59_PROGRAM,
+    "ViZion_edge_min_weakest_edge.viz": HDEVELOP_BATCH60_PROGRAM,
+    "ViZion_band_count_bright_enough.viz": HDEVELOP_BATCH61_PROGRAM,
+    "ViZion_gray_mode_main_gray.viz": HDEVELOP_BATCH62_PROGRAM,
+    "ViZion_row_runs_horizontal_and_vertical.viz": HDEVELOP_BATCH63_PROGRAM,
+    "ViZion_symmetry_score_left_right_symmetry.viz": HDEVELOP_BATCH64_PROGRAM,
+    "ViZion_top_point_four_endpoints.viz": HDEVELOP_BATCH65_PROGRAM,
+    "ViZion_hole_count_hole_count_and_size.viz": HDEVELOP_BATCH66_PROGRAM,
+    "ViZion_window_inside_stays_inside_window.viz": HDEVELOP_BATCH67_PROGRAM,
+    "ViZion_major_phi_major_axis_direction.viz": HDEVELOP_BATCH68_PROGRAM,
+    "ViZion_edge_enhance_sharpen_edges_keep_flat.viz": HDEVELOP_BATCH69_PROGRAM,
+    "ViZion_area_center_catch_error_after_procedure.viz": HDEVELOP_BATCH70_PROGRAM,
+    "ViZion_diff_region_difference_from_golden.viz": HDEVELOP_BATCH71_PROGRAM,
+    "ViZion_gen_qrcode_print_qr_read_back.viz": HDEVELOP_BATCH72_PROGRAM,
+    "ViZion_ridge_region_dark_scratch_direction.viz": HDEVELOP_BATCH73_PROGRAM,
+    "ViZion_edge_region_edge_between_pixels.viz": HDEVELOP_BATCH74_PROGRAM,
+    "ViZion_phase_correlation_shift_under_one_pixel.viz": HDEVELOP_BATCH75_PROGRAM,
+    "ViZion_gen_contour_polygon_xld_line_outlier_stays_straight.viz": HDEVELOP_BATCH76_PROGRAM,
+    "ViZion_gen_contour_polygon_xld_arc_outlier.viz": HDEVELOP_BATCH77_PROGRAM,
+    "ViZion_gen_contour_region_xld_boundary_at_half_pixel.viz": HDEVELOP_BATCH78_PROGRAM,
+    "ViZion_gen_contour_polygon_xld_gauss_weight_ignores_outlier.viz": HDEVELOP_BATCH79_PROGRAM,
+    "ViZion_derivate_gauss_slope1_derivative_is_129.viz": HDEVELOP_BATCH80_PROGRAM,
+    "ViZion_get_grayval_interpolated_half_pixel_is_not_the_average.viz": HDEVELOP_BATCH81_PROGRAM,
+    "ViZion_teach_shape_model_least_squares_aligns_shape.viz": HDEVELOP_BATCH82_PROGRAM,
+    "ViZion_gauss_image_least_squares_row_near_39.25.viz": HDEVELOP_BATCH83_PROGRAM,
+    "ViZion_create_metrology_model_caliper_averages_spike.viz": HDEVELOP_BATCH84_PROGRAM,
+    "ViZion_points_foerstner_corner_inside_pixel.viz": HDEVELOP_BATCH85_PROGRAM,
+    "ViZion_vector_to_hom_mat2d_affine_ignores_outlier.viz": HDEVELOP_BATCH86_PROGRAM,
+    "ViZion_hom_vector_to_proj_hom_mat2d_projective_ignores_outlier.viz": HDEVELOP_BATCH87_PROGRAM,
+    "ViZion_gen_ellipse_contour_xld_ellipse_arc_outlier.viz": HDEVELOP_BATCH88_PROGRAM,
+    "ViZion_tuple_concat_rectangle_edge_outlier.viz": HDEVELOP_BATCH89_PROGRAM,
+    "ViZion_fit_plane_region_spike_does_not_tilt_plane.viz": HDEVELOP_BATCH90_PROGRAM,
+    "ViZion_gen_object_model_3d_from_points_cloud_plane_ignores_outlier.viz": HDEVELOP_BATCH91_PROGRAM,
+    "ViZion_gen_object_model_3d_from_points_axis_ignores_side_point.viz": HDEVELOP_BATCH92_PROGRAM,
+    "ViZion_gen_contour_polygon_xld_line_normal_ignores_corner.viz": HDEVELOP_BATCH93_PROGRAM,
+    "ViZion_points_harris_harris_corner_inside_pixel.viz": HDEVELOP_BATCH94_PROGRAM,
+    "ViZion_gen_contour_polygon_xld_smooth_keeps_endpoints.viz": HDEVELOP_BATCH95_PROGRAM,
+    "ViZion_zoom_image_size_zoomed_half_pixel_is_112.viz": HDEVELOP_BATCH96_PROGRAM,
+    "ViZion_elliptic_axis_wide_bar_0_tall_bar_90.viz": HDEVELOP_BATCH97_PROGRAM,
+    "ViZion_hom_mat2d_identity_pulled_back_half_pixel_is_112.viz": HDEVELOP_BATCH98_PROGRAM,
+    "ViZion_local_max_sub_pix_gauss_peak_at_30.33298.viz": HDEVELOP_BATCH99_PROGRAM,
+    "ViZion_points_lepetit_square_corner_inside_pixel.viz": HDEVELOP_BATCH100_PROGRAM,
+    "ViZion_create_scaled_shape_model_scale_refined_to_1.07505.viz": HDEVELOP_BATCH101_PROGRAM,
+    "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz": HDEVELOP_BATCH102_PROGRAM,
+    "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz": HDEVELOP_BATCH103_PROGRAM,
+    "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz": HDEVELOP_BATCH104_PROGRAM,
+    "ViZion_gen_pdf417_print_pdf417_read_VISDEV.viz": HDEVELOP_BATCH105_PROGRAM,
+    "ViZion_gen_aztec_print_aztec_read_VISDEV.viz": HDEVELOP_BATCH106_PROGRAM,
+    "ViZion_open_serial_serial_write_read_VISDEV.viz": HDEVELOP_BATCH107_PROGRAM,
+    "ViZion_open_socket_connect_tcp_send_read_VISDEV.viz": HDEVELOP_BATCH108_PROGRAM,
+    "ViZion_split_skeleton_cross_into_four.viz": HDEVELOP_BATCH109_PROGRAM,
+    "ViZion_set_serial_param_serial_baud_19200.viz": HDEVELOP_BATCH110_PROGRAM,
+    "ViZion_open_socket_accept_listen_read_VISDEV.viz": HDEVELOP_BATCH111_PROGRAM,
+    "ViZion_gen_ean8_print_ean8_read_55123453.viz": HDEVELOP_BATCH112_PROGRAM,
+    "ViZion_rectangularity_bar_rectangularity_and_direction.viz": HDEVELOP_BATCH113_PROGRAM,
+    "ViZion_circularity_xld_square_length_is_120.viz": HDEVELOP_BATCH114_PROGRAM,
+    "ViZion_remove_obj_two_blocks_drop_second.viz": HDEVELOP_BATCH115_PROGRAM,
+    "ViZion_bit_mask_40_and_240_is_32.viz": HDEVELOP_BATCH116_PROGRAM,
+    "ViZion_gen_sphere_object_model_3d_center_123_radius_4.viz": HDEVELOP_BATCH117_PROGRAM,
+    "ViZion_frangi_dark_line_brighter_than_block.viz": HDEVELOP_BATCH118_PROGRAM,
+    "ViZion_sauvola_bright_side_scratch_stays.viz": HDEVELOP_BATCH119_PROGRAM,
+    "ViZion_guided_filter_step_sides_stay.viz": HDEVELOP_BATCH120_PROGRAM,
+    "ViZion_emphasize_clahe_dark_corner_and_bright_field.viz": HDEVELOP_BATCH121_PROGRAM,
+    "ViZion_edges_zernike_edge_matches_measure.viz": HDEVELOP_BATCH122_PROGRAM,
+    "ViZion_tuple_is_handle_matrix_stays_after_clear.viz": HDEVELOP_BATCH123_PROGRAM,
+    "ViZion_sum_matrix_copy_cholesky_and_file.viz": HDEVELOP_BATCH124_PROGRAM,
+    "ViZion_sin_image_gray0_sine_is_128.viz": HDEVELOP_BATCH128_PROGRAM,
+    "ViZion_gray_dilation_shape_neighbor_is_9.viz": HDEVELOP_BATCH129_PROGRAM,
+    "ViZion_polar_trans_image_radius3_is_200.viz": HDEVELOP_BATCH130_PROGRAM,
+    "ViZion_equ_histo_image_rect_lower_right_is_255.viz": HDEVELOP_BATCH131_PROGRAM,
     "ocr_read.hdv": OCR_READ_PROGRAM,
 }

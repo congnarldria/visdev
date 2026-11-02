@@ -1,0 +1,11 @@
+* 暗線比方塊亮
+* 圖有光照斜坡、雜訊、一像素暗刮痕和一塊暗區。刮痕在第 70 列。
+* 全域門檻抓不住整條刮痕。Frangi 在刮痕上仍很亮，方塊內部是 0。
+Vizion.read_image (Scene, 'samples/hard_scene.png')
+Vizion.frangi (Scene, Response, 1.2, 1.2, 'dark')
+Vizion.threshold (Scene, Dark, 0, 40)
+Vizion.area_center (Dark, DarkArea, DarkRow, DarkCol)
+Vizion.get_grayval (Response, 70, 80, LineGray)
+Vizion.get_grayval (Response, 28, 40, BlockGray)
+Vizion.get_grayval (Response, 8, 8, FlatGray)
+Caught := DarkArea[1]

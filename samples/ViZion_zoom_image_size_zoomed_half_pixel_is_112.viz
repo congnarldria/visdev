@@ -1,0 +1,13 @@
+* 放大的半個像素是 112
+* zoom_image_size 的 bicubic 用 16 點 Keys 三次內插。半個像素不是兩點的平均。bilinear 仍是平均。
+* 4×4 圖裡只有列 1、行 1 是 200，其餘是 0。放大成寬 6、高 4 時，輸出列 1、行 1 正好落在原圖的半個像素上。
+* 兩點平均是 100。以前的三次核會得到 119。現在是 112。原圖那個亮點在一倍縮放時仍是 200。
+Vizion.gen_image_const (Base, 'byte', 4, 4)
+Vizion.set_grayval (Base, Dot, 1, 1, 200)
+Vizion.zoom_image_size (Dot, Zoomed, 6, 4, 'bicubic')
+Vizion.get_grayval (Zoomed, 1, 1, Mid)
+Vizion.zoom_image_size (Dot, Linear, 6, 4, 'bilinear')
+Vizion.get_grayval (Linear, 1, 1, Average)
+Vizion.zoom_image_factor (Dot, Same, 1, 1, 'bicubic')
+Vizion.get_grayval (Same, 1, 1, Kept)
+Vizion.dev_display (Zoomed)

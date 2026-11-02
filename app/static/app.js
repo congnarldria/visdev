@@ -393,6 +393,8 @@ function applyState(data) {
   if (data.error) {
     showTab("problems");
     showErrorDialog(data.error, data.errorLine);
+  } else {
+    closeErrorDialog();
   }
   publishCustomVars();
 }
@@ -482,7 +484,7 @@ function showTab(name) {
 
 function renderOps() {
   const query = opSearch.value.trim().toLowerCase();
-  const visible = operators.filter((op) => !query || (op.name + op.purpose + op.principle + op.setup).toLowerCase().includes(query));
+  const visible = operators.filter((op) => !query || (op.name + op.purpose + op.principle + op.setup + (op.note || "")).toLowerCase().includes(query));
   let html = "";
   let group = "";
   for (const op of visible) {
@@ -490,7 +492,8 @@ function renderOps() {
       group = op.group;
       html += `<div class="op-group">${esc(group)}</div>`;
     }
-    html += `<button class="op" data-name="${esc(op.name)}" type="button"><b>${esc(op.name)}</b><span>${esc(op.short)}</span></button>`;
+    const mark = op.note ? `<i class="op-new">新</i>` : "";
+    html += `<button class="op" data-name="${esc(op.name)}" type="button"><b>${esc(op.name)}${mark}</b><span>${esc(op.short)}</span></button>`;
   }
   opList.innerHTML = html || `<div class="hint" style="padding:10px">沒有符合的算子</div>`;
 }
@@ -502,6 +505,7 @@ function showOp(name) {
   const rows = op.params.map((param) => `<tr><td>${esc(param.name)}</td><td class="role">${esc(param.role)}</td><td>${esc(param.desc)}</td></tr>`).join("");
   opHelp.innerHTML = `
     <h2>${esc(op.name)}</h2>
+    ${noteBlock(op)}
     <h3>用途</h3>
     <p class="lead">${esc(op.purpose)}</p>
     <h3>原理</h3>
@@ -513,7 +517,18 @@ function showOp(name) {
     <div class="hint">${esc(op.prototype)}</div>
     <pre>${esc(op.example)}</pre>
     <button id="btnInsert" type="button">插入範本</button>`;
-  document.getElementById("btnInsert").onclick = () => insertAtCursor(op.example);
+  document.getElementById("btnInsert").onclick = () => insertAtCursor(commentedCall(op, op.example));
+}
+
+function noteBlock(op) {
+  if (!op.note) return "";
+  return `<h3>註解</h3><p class="prose">${esc(op.note)}</p>`;
+}
+
+function commentedCall(op, call) {
+  if (!op || !op.note) return call;
+  const comment = op.note.split("\n").map((line) => `* ${line}`).join("\n");
+  return `${comment}\n${call}`;
 }
 
 function insertAtCursor(text) {
@@ -745,6 +760,7 @@ function openOperatorForm(name, preset, lineIndex) {
   if (ok) ok.textContent = editingLine == null ? "插入" : "更新";
   document.getElementById("opDialogTitle").textContent = op.name;
   document.getElementById("opDialogGuide").innerHTML = `
+    ${noteBlock(op)}
     <h3>用途</h3>
     <p class="guide-body">${esc(op.purpose)}</p>
     <h3>原理</h3>
@@ -775,8 +791,7 @@ function openOperatorForm(name, preset, lineIndex) {
   });
   document.getElementById("opForm").innerHTML = html || `<p class="hint">這個算子沒有參數。</p>`;
   document.getElementById("opDialog").hidden = false;
-  const hint = document.getElementById("opDrawHint");
-  if (hint) hint.hidden = geometryTools(geometryInputs()).length === 0;
+  refreshShapeTools();
   refreshOpPreview();
   document.querySelector("#opForm input, #opForm select")?.focus();
 }
@@ -787,6 +802,7 @@ function closeOperatorDialog() {
   const ok = document.getElementById("opDialogOk");
   if (ok) ok.textContent = "插入";
   cancelShapeDraw();
+  refreshShapeTools();
 }
 
 function insertOperatorCall() {
@@ -818,7 +834,7 @@ function insertOperatorCall() {
     renderEditor();
   } else {
     rememberOperator(activeOperator, inputs);
-    insertAtCursor(call);
+    insertAtCursor(commentedCall(activeOperator, call));
     buildOperatorMenu();
   }
   closeOperatorDialog();
@@ -1267,6 +1283,7 @@ async function loadDisplay(display) {
     probe.height = baseImage.naturalHeight;
     probeCtx.drawImage(baseImage, 0, 0);
   }
+  publishDisplay(display);
   gfxEmpty.hidden = true;
   gfxTitle.textContent = `${display.width} × ${display.height}`;
   const sizeChanged = cam.fitW !== display.width || cam.fitH !== display.height;
@@ -1592,7 +1609,19 @@ code.addEventListener("keyup", (event) => {
     updateSense();
   }
 });
-code.addEventListener("click", () => updateSense());
+code.addEventListener("click", () => {
+  updateSense();
+  if (code.selectionStart !== code.selectionEnd) return;
+  const pos = code.selectionStart;
+  const lineIndex = code.value.slice(0, pos).split("\n").length - 1;
+  const line = code.value.split("\n")[lineIndex] || "";
+  const parsed = parseOperatorLine(line);
+  if (!parsed) return;
+  const nameAt = line.indexOf(parsed.name);
+  if (nameAt < 0) return;
+  const col = pos - (code.value.lastIndexOf("\n", Math.max(0, pos - 1)) + 1);
+  if (col >= nameAt && col <= nameAt + parsed.name.length) openOperatorAtLine(lineIndex);
+});
 code.addEventListener("dblclick", (event) => {
   const lines = code.value.split("\n");
   const style = getComputedStyle(code);
@@ -1737,15 +1766,52 @@ document.getElementById("fileImage").onchange = () => {
 };
 document.getElementById("btnOpen").onclick = () => document.getElementById("fileOpen").click();
 document.getElementById("fileOpen").onchange = async () => {
-  const file = document.getElementById("fileOpen").files[0];
-  if (!file) return;
-  code.value = (await file.text()).replace(/\r\n/g, "\n");
-  document.getElementById("progName").value = file.name;
+  const input = document.getElementById("fileOpen");
+  const file = input.files[0];
+  input.value = "";
+  if (file) await openLocalFile(file);
+};
+
+function isHalconProgram(name) {
+  const lower = String(name || "").toLowerCase();
+  return [".hdev", ".hdvp", ".hdpl", ".dev", ".dvp"].some((suffix) => lower.endsWith(suffix));
+}
+
+async function openLocalFile(file) {
+  let source = "";
+  let name = file.name;
+  let note = `已開啟 ${name}`;
+  if (isHalconProgram(file.name)) {
+    const body = new FormData();
+    body.append("file", file);
+    const res = await fetch("/api/import/hdevelop", { method: "POST", body });
+    const data = await res.json();
+    if (!res.ok) {
+      showDetail(data);
+      return;
+    }
+    source = data.source || "";
+    name = data.name || name;
+    if (data.skipped && data.skipped.length) {
+      const names = data.skipped;
+      note = names.length > 4
+        ? `已開啟 ${name}。${names.length} 個有密碼的程序沒有打開`
+        : `已開啟。有密碼的程序沒有打開：${names.join("、")}`;
+    } else {
+      note = `已開啟 ${name}`;
+    }
+  } else {
+    source = await file.text();
+  }
+  code.value = source.replace(/\r\n/g, "\n");
+  document.getElementById("progName").value = name;
   sessionId = null;
   breakpoints = new Set();
   renderEditor();
   await exec("reset");
-};
+  stState.textContent = note;
+  stState.className = "ok";
+}
 document.getElementById("btnSave").onclick = async () => {
   const name = document.getElementById("progName").value.trim() || "program.viz";
   const res = await fetch("/api/programs", {
@@ -1867,6 +1933,7 @@ window.VisDevCommands = {
     applyConnection(document.getElementById("connMin").value, document.getElementById("connDist").value);
   },
   layout() { if (window.VisDevDock) VisDevDock.reset(); },
+  floatGfx() { openGfxWindow(); },
   about() { document.getElementById("aboutDialog").hidden = false; },
   openOperator(name) { openOperatorForm(name); },
 };
@@ -1907,7 +1974,7 @@ opList.addEventListener("dblclick", (event) => {
   const node = event.target.closest(".op");
   if (!node) return;
   const op = operators.find((item) => item.name === node.dataset.name);
-  if (op) insertAtCursor(op.example);
+  if (op) insertAtCursor(commentedCall(op, op.example));
 });
 
 iconicList.addEventListener("click", async (event) => {
@@ -1953,10 +2020,16 @@ let dragging = null;
 let zoomBox = null;
 
 function applyMouseMode(mode) {
-  if (!mouseModes.includes(mode)) mode = "pan";
+  if (!mouseModes.includes(mode)) mode = "select";
   mouseMode = mode;
   canvas.classList.remove("mode-select", "mode-pan", "mode-zoom", "dragging");
   canvas.classList.add(`mode-${mode}`);
+  document.querySelectorAll("#gfxMouse button").forEach((button) => {
+    const on = button.dataset.mode === mode;
+    button.classList.toggle("on", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+  try { localStorage.setItem("visdev.gfxMouse", mode); } catch (_err) { /* 視窗還沒準備 */ }
 }
 
 function zoomAtScreen(sx, sy, factor) {
@@ -1981,7 +2054,11 @@ function zoomToRect(col0, row0, col1, row1) {
   cam.user = true;
 }
 
-applyMouseMode("pan");
+applyMouseMode(mouseModes.includes(localStorage.getItem("visdev.gfxMouse")) ? localStorage.getItem("visdev.gfxMouse") : "select");
+document.getElementById("gfxMouse").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-mode]");
+  if (button) applyMouseMode(button.dataset.mode);
+});
 
 const drawMenu = document.getElementById("drawMenu");
 const shapeConfirm = document.getElementById("shapeConfirm");
@@ -2005,6 +2082,20 @@ function geometryInputs() {
   return map;
 }
 
+function refreshShapeTools() {
+  const box = document.getElementById("shapeTools");
+  const hint = document.getElementById("opDrawHint");
+  const tools = geometryTools(geometryInputs());
+  if (hint) hint.hidden = tools.length === 0;
+  if (!box) return;
+  box.hidden = tools.length === 0;
+  box.querySelectorAll("button[data-draw]").forEach((button) => {
+    const on = tools.includes(button.dataset.draw);
+    button.hidden = !on;
+    button.classList.toggle("on", on && shapeDraw && shapeDraw.tool === button.dataset.draw);
+  });
+}
+
 function geometryTools(map) {
   const tools = [];
   if (map.Row1 && map.Column1 && map.Row2 && map.Column2) tools.push("rect");
@@ -2023,6 +2114,7 @@ function cancelShapeDraw() {
   hideDrawMenu();
   if (shapeConfirm) shapeConfirm.hidden = true;
   draw();
+  refreshShapeTools();
 }
 
 function draftBox(draw) {
@@ -2143,14 +2235,24 @@ function showDrawMenu(x, y) {
   drawMenu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - height - 8))}px`;
 }
 
+function beginShapeDraw(tool) {
+  shapeDraw = { tool, a: null, b: null, pending: false };
+  shapeConfirm.hidden = true;
+  hideDrawMenu();
+  refreshShapeTools();
+  draw();
+}
+
 drawMenu.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-draw]");
   if (!button) return;
-  shapeDraw = { tool: button.dataset.draw, a: null, b: null, pending: false };
-  shapeConfirm.hidden = true;
-  hideDrawMenu();
-  draw();
+  beginShapeDraw(button.dataset.draw);
 });
+document.getElementById("shapeTools").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-draw]");
+  if (button) beginShapeDraw(button.dataset.draw);
+});
+document.getElementById("btnFloatGfx").onclick = () => openGfxWindow();
 document.getElementById("shapeOk").onclick = () => applyShapeDraw();
 document.getElementById("shapeCancel").onclick = () => cancelShapeDraw();
 document.addEventListener("mousedown", (event) => {
@@ -2282,10 +2384,14 @@ function splitArgs(inner) {
   return parts;
 }
 
+function vizionCall(name, args) {
+  return `Vizion.${name} (${args})`;
+}
+
 function guessImageName(lines) {
   let name = "Image";
   for (const line of lines) {
-    const match = line.match(/^\s*(read_image|rgb1_to_gray|gauss_image|median_image|mean_image|emphasize|scale_image|invert_image)\s*\((.*)\)\s*$/i);
+    const match = line.match(/^\s*(?:Vizion\.)?(read_image|rgb1_to_gray|gauss_image|median_image|mean_image|emphasize|scale_image|invert_image)\s*\((.*)\)\s*$/i);
     if (!match) continue;
     const args = splitArgs(match[2]);
     const picked = match[1].toLowerCase() === "read_image" ? args[0] : args[1];
@@ -2296,7 +2402,7 @@ function guessImageName(lines) {
 
 function applyBinaryTool(tool) {
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
-  const index = lines.findIndex((line) => /^\s*(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
+  const index = lines.findIndex((line) => /^\s*(?:Vizion\.)?(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
   let image = guessImageName(lines);
   let region = "Region";
   let level = histo && Number.isFinite(histo.threshold) ? histo.threshold : (histo && Number.isFinite(histo.min) ? histo.min : 128);
@@ -2304,7 +2410,7 @@ function applyBinaryTool(tool) {
   let used = "UsedThreshold";
   let indent = "";
   if (index >= 0) {
-    const match = lines[index].match(/^(\s*)(?:threshold|opencv_threshold|binary_threshold)\s*\((.*)\)\s*$/i);
+    const match = lines[index].match(/^(\s*)(?:Vizion\.)?(?:threshold|opencv_threshold|binary_threshold)\s*\((.*)\)\s*$/i);
     if (match) {
       indent = match[1];
       const args = splitArgs(match[2]).map((item) => item.trim());
@@ -2321,15 +2427,15 @@ function applyBinaryTool(tool) {
       }
     }
   }
-  let call = `binary_threshold (${image}, ${region}, 'max_separability', 'light', ${used})`;
-  if (tool === "halcon") call = `threshold (${image}, ${region}, ${level}, ${maxGray})`;
-  else if (tool === "opencv") call = `opencv_threshold (${image}, ${region}, ${level}, 'binary')`;
-  else if (tool === "inv") call = `opencv_threshold (${image}, ${region}, ${level}, 'binary_inv')`;
-  else if (tool === "dark") call = `binary_threshold (${image}, ${region}, 'max_separability', 'dark', ${used})`;
-  else if (tool === "smooth") call = `binary_threshold (${image}, ${region}, 'smooth_histo', 'light', ${used})`;
-  else if (tool === "triangle") call = `binary_threshold (${image}, ${region}, 'triangle', 'light', ${used})`;
-  else if (tool === "local") call = `binary_threshold (${image}, ${region}, 'local_mean', 'light', ${used})`;
-  else if (tool === "lgauss") call = `binary_threshold (${image}, ${region}, 'local_gauss', 'light', ${used})`;
+  let call = vizionCall("binary_threshold", `${image}, ${region}, 'max_separability', 'light', ${used}`);
+  if (tool === "halcon") call = vizionCall("threshold", `${image}, ${region}, ${level}, ${maxGray}`);
+  else if (tool === "opencv") call = vizionCall("opencv_threshold", `${image}, ${region}, ${level}, 'binary'`);
+  else if (tool === "inv") call = vizionCall("opencv_threshold", `${image}, ${region}, ${level}, 'binary_inv'`);
+  else if (tool === "dark") call = vizionCall("binary_threshold", `${image}, ${region}, 'max_separability', 'dark', ${used}`);
+  else if (tool === "smooth") call = vizionCall("binary_threshold", `${image}, ${region}, 'smooth_histo', 'light', ${used}`);
+  else if (tool === "triangle") call = vizionCall("binary_threshold", `${image}, ${region}, 'triangle', 'light', ${used}`);
+  else if (tool === "local") call = vizionCall("binary_threshold", `${image}, ${region}, 'local_mean', 'light', ${used}`);
+  else if (tool === "lgauss") call = vizionCall("binary_threshold", `${image}, ${region}, 'local_gauss', 'light', ${used}`);
   if (index >= 0) lines[index] = indent + call;
   else {
     const displayAt = lines.findIndex((line) => /^\s*dev_display\s*\(/i.test(line));
@@ -2339,16 +2445,16 @@ function applyBinaryTool(tool) {
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
     if (opencv) {
-      const linked = line.match(/^(\s*)connection\s*\(\s*([^,]+)\s*,\s*([^,)]+)\s*(?:,\s*([^)]+))?\s*\)\s*$/i);
+      const linked = line.match(/^(\s*)(?:Vizion\.)?connection\s*\(\s*([^,]+)\s*,\s*([^,)]+)\s*(?:,\s*([^)]+))?\s*\)\s*$/i);
       if (linked && linked[2].trim() === region) {
         const dist = linked[4] ? linked[4].trim() : "1";
-        lines[lineIndex] = `${linked[1]}opencv_connection (${linked[2].trim()}, ${linked[3].trim()}, 8, ${dist})`;
+        lines[lineIndex] = `${linked[1]}${vizionCall("opencv_connection", `${linked[2].trim()}, ${linked[3].trim()}, 8, ${dist}`)}`;
       }
     } else {
-      const linked = line.match(/^(\s*)opencv_connection\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,)]+)\s*(?:,\s*([^)]+))?\s*\)\s*$/i);
+      const linked = line.match(/^(\s*)(?:Vizion\.)?opencv_connection\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,)]+)\s*(?:,\s*([^)]+))?\s*\)\s*$/i);
       if (linked && linked[2].trim() === region) {
         const dist = linked[5] ? linked[5].trim() : "1";
-        lines[lineIndex] = `${linked[1]}connection (${linked[2].trim()}, ${linked[3].trim()}, ${dist})`;
+        lines[lineIndex] = `${linked[1]}${vizionCall("connection", `${linked[2].trim()}, ${linked[3].trim()}, ${dist}`)}`;
       }
     }
   }
@@ -2363,61 +2469,61 @@ function applyConnection(minArea, dist) {
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
   let region = "Region";
   let opencv = false;
-  const bin = lines.findIndex((line) => /^\s*(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
+  const bin = lines.findIndex((line) => /^\s*(?:Vizion\.)?(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
   if (bin >= 0) {
     const inner = lines[bin].match(/\((.*)\)/);
     const args = inner ? splitArgs(inner[1]).map((item) => item.trim()) : [];
     if (args[1]) region = args[1];
-    opencv = /^\s*opencv_threshold/i.test(lines[bin]);
+    opencv = /(?:Vizion\.)?opencv_threshold/i.test(lines[bin]);
   }
   const regionPattern = region.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const connPattern = new RegExp(`^\\s*(connection|opencv_connection)\\s*\\(\\s*${regionPattern}\\s*,`, "i");
+  const connPattern = new RegExp(`^\\s*(?:Vizion\\.)?(connection|opencv_connection)\\s*\\(\\s*${regionPattern}\\s*,`, "i");
   let connIndex = lines.findIndex((line) => connPattern.test(line));
   let output = "Connected";
   if (connIndex >= 0) {
-    const match = lines[connIndex].match(/^(\s*)(connection|opencv_connection)\s*\((.*)\)\s*$/i);
+    const match = lines[connIndex].match(/^(\s*)(?:Vizion\.)?(connection|opencv_connection)\s*\((.*)\)\s*$/i);
     const args = splitArgs(match[3]).map((item) => item.trim());
     output = args[1] || output;
     if (match[2].toLowerCase() === "opencv_connection") {
       const linked = args[2] || "8";
-      lines[connIndex] = `${match[1]}opencv_connection (${args[0]}, ${output}, ${linked}, ${distance})`;
+      lines[connIndex] = `${match[1]}${vizionCall("opencv_connection", `${args[0]}, ${output}, ${linked}, ${distance}`)}`;
     } else {
-      lines[connIndex] = `${match[1]}connection (${args[0]}, ${output}, ${distance})`;
+      lines[connIndex] = `${match[1]}${vizionCall("connection", `${args[0]}, ${output}, ${distance}`)}`;
     }
   } else {
     const insertAt = bin >= 0 ? bin + 1 : lines.length;
     const call = opencv
-      ? `opencv_connection (${region}, ${output}, 8, ${distance})`
-      : `connection (${region}, ${output}, ${distance})`;
+      ? vizionCall("opencv_connection", `${region}, ${output}, 8, ${distance}`)
+      : vizionCall("connection", `${region}, ${output}, ${distance}`);
     lines.splice(insertAt, 0, call);
     connIndex = insertAt;
   }
   const outputPattern = output.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const shapePattern = new RegExp(`^\\s*select_shape\\s*\\(\\s*${outputPattern}\\s*,`, "i");
+  const shapePattern = new RegExp(`^\\s*(?:Vizion\\.)?select_shape\\s*\\(\\s*${outputPattern}\\s*,`, "i");
   const shapeIndex = lines.findIndex((line, index) => index > connIndex && shapePattern.test(line) && /area/i.test(line));
   let shown = output;
   if (shapeIndex >= 0) {
-    const match = lines[shapeIndex].match(/^(\s*)select_shape\s*\((.*)\)\s*$/i);
+    const match = lines[shapeIndex].match(/^(\s*)(?:Vizion\.)?select_shape\s*\((.*)\)\s*$/i);
     const args = splitArgs(match[2]);
     if (args.length >= 6) {
       args[4] = ` ${area}`;
-      lines[shapeIndex] = `${match[1]}select_shape (${args.map((item) => item.trim()).join(", ")})`;
+      lines[shapeIndex] = `${match[1]}${vizionCall("select_shape", args.map((item) => item.trim()).join(", "))}`;
     }
     if (args[1]) shown = args[1].trim();
   } else {
     shown = "Selected";
-    lines.splice(connIndex + 1, 0, `select_shape (${output}, Selected, 'area', 'and', ${area}, 99999999)`);
+    lines.splice(connIndex + 1, 0, vizionCall("select_shape", `${output}, Selected, 'area', 'and', ${area}, 99999999`));
   }
   const shownPattern = shown.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const alreadyShown = lines.some((line) => new RegExp(`^\\s*dev_display\\s*\\(\\s*${shownPattern}\\s*\\)`, "i").test(line));
+  const alreadyShown = lines.some((line) => new RegExp(`^\\s*(?:Vizion\\.)?dev_display\\s*\\(\\s*${shownPattern}\\s*\\)`, "i").test(line));
   if (!alreadyShown) {
-    const regionDisplay = new RegExp(`^(\\s*)dev_display\\s*\\(\\s*${regionPattern}\\s*\\)\\s*$`, "i");
+    const regionDisplay = new RegExp(`^(\\s*)(?:Vizion\\.)?dev_display\\s*\\(\\s*${regionPattern}\\s*\\)\\s*$`, "i");
     const displayIndex = lines.findIndex((line) => regionDisplay.test(line));
     if (displayIndex >= 0) {
-      lines[displayIndex] = `${lines[displayIndex].match(/^\s*/)[0]}dev_display (${shown})`;
+      lines[displayIndex] = `${lines[displayIndex].match(/^\s*/)[0]}${vizionCall("dev_display", shown)}`;
     } else {
-      lines.push("dev_set_draw ('fill')");
-      lines.push(`dev_display (${shown})`);
+      lines.push(vizionCall("dev_set_draw", "'fill'"));
+      lines.push(vizionCall("dev_display", shown));
     }
   }
   code.value = lines.join("\n");
@@ -2433,12 +2539,12 @@ function rewriteSubpix(level) {
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
   const original = lines[histo.line - 1];
   if (!original) return false;
-  const match = original.match(/^(\s*)threshold_sub_pix\s*\((.*)\)\s*$/i);
+  const match = original.match(/^(\s*)(?:Vizion\.)?threshold_sub_pix\s*\((.*)\)\s*$/i);
   if (!match) return false;
   const args = splitArgs(match[2]);
   if (args.length < 3 || !/^-?\d+(\.\d+)?$/.test(args[2].trim())) return false;
   args[2] = ` ${level}`;
-  lines[histo.line - 1] = `${match[1]}threshold_sub_pix (${args.join(",")})`;
+  lines[histo.line - 1] = `${match[1]}${vizionCall("threshold_sub_pix", args.join(","))}`;
   code.value = lines.join("\n");
   renderEditor();
   return true;
@@ -2449,29 +2555,29 @@ function applySubpix(level) {
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
   const image = guessImageName(lines);
   let regionName = "Region";
-  const bin = lines.findIndex((line) => /^\s*(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
+  const bin = lines.findIndex((line) => /^\s*(?:Vizion\.)?(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
   if (bin >= 0) {
     const inner = lines[bin].match(/\((.*)\)/);
     const args = inner ? splitArgs(inner[1]).map((item) => item.trim()) : [];
     if (args[1]) regionName = args[1];
   } else {
-    const at = lines.findIndex((line) => /^\s*dev_display\s*\(/i.test(line));
-    lines.splice(at >= 0 ? at : lines.length, 0, `threshold (${image}, ${regionName}, ${value}, 255)`);
+    const at = lines.findIndex((line) => /^\s*(?:Vizion\.)?dev_display\s*\(/i.test(line));
+    lines.splice(at >= 0 ? at : lines.length, 0, vizionCall("threshold", `${image}, ${regionName}, ${value}, 255`));
   }
   let output = "Border";
-  const index = lines.findIndex((line) => /^\s*threshold_sub_pix\s*\(/i.test(line));
+  const index = lines.findIndex((line) => /^\s*(?:Vizion\.)?threshold_sub_pix\s*\(/i.test(line));
   if (index >= 0) {
-    const match = lines[index].match(/^(\s*)threshold_sub_pix\s*\((.*)\)\s*$/i);
+    const match = lines[index].match(/^(\s*)(?:Vizion\.)?threshold_sub_pix\s*\((.*)\)\s*$/i);
     const args = splitArgs(match[2]).map((item) => item.trim());
     output = args[1] || output;
-    lines[index] = `${match[1]}threshold_sub_pix (${args[0] || image}, ${output}, ${value})`;
+    lines[index] = `${match[1]}${vizionCall("threshold_sub_pix", `${args[0] || image}, ${output}, ${value}`)}`;
   } else {
-    const at = lines.findIndex((line) => /^\s*dev_display\s*\(/i.test(line));
-    lines.splice(at >= 0 ? at : lines.length, 0, `threshold_sub_pix (${image}, ${output}, ${value})`);
+    const at = lines.findIndex((line) => /^\s*(?:Vizion\.)?dev_display\s*\(/i.test(line));
+    lines.splice(at >= 0 ? at : lines.length, 0, vizionCall("threshold_sub_pix", `${image}, ${output}, ${value}`));
   }
-  const shown = (name) => lines.some((line) => new RegExp(`^\\s*dev_display\\s*\\(\\s*${name}\\s*\\)`, "i").test(line));
-  if (!shown(regionName)) lines.push(`dev_display (${regionName})`);
-  if (!shown(output)) lines.push(`dev_display (${output})`);
+  const shown = (name) => lines.some((line) => new RegExp(`^\\s*(?:Vizion\\.)?dev_display\\s*\\(\\s*${name}\\s*\\)`, "i").test(line));
+  if (!shown(regionName)) lines.push(vizionCall("dev_display", regionName));
+  if (!shown(output)) lines.push(vizionCall("dev_display", output));
   code.value = lines.join("\n");
   renderEditor();
   exec("run");
@@ -2482,9 +2588,9 @@ function subpixNames() {
   let region = "Region";
   let contour = "Border";
   for (const line of lines) {
-    const binary = line.match(/^\s*(?:threshold|opencv_threshold|binary_threshold)\s*\(\s*[^,]+,\s*([^,)]+)/i);
+    const binary = line.match(/^\s*(?:Vizion\.)?(?:threshold|opencv_threshold|binary_threshold)\s*\(\s*[^,]+,\s*([^,)]+)/i);
     if (binary) region = binary[1].trim();
-    const sub = line.match(/^\s*threshold_sub_pix\s*\(\s*[^,]+,\s*([^,)]+)/i);
+    const sub = line.match(/^\s*(?:Vizion\.)?threshold_sub_pix\s*\(\s*[^,]+,\s*([^,)]+)/i);
     if (sub) contour = sub[1].trim();
   }
   return { region, contour };
@@ -2518,12 +2624,12 @@ function rewriteOpenCV(level) {
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
   const original = lines[histo.line - 1];
   if (!original) return false;
-  const match = original.match(/^(\s*)opencv_threshold\s*\((.*)\)\s*$/i);
+  const match = original.match(/^(\s*)(?:Vizion\.)?opencv_threshold\s*\((.*)\)\s*$/i);
   if (!match) return false;
   const args = splitArgs(match[2]);
   if (args.length < 3 || !/^-?\d+(\.\d+)?$/.test(args[2].trim())) return false;
   args[2] = ` ${level}`;
-  lines[histo.line - 1] = `${match[1]}opencv_threshold (${args.join(",")})`;
+  lines[histo.line - 1] = `${match[1]}${vizionCall("opencv_threshold", args.join(","))}`;
   code.value = lines.join("\n");
   renderEditor();
   return true;
@@ -2535,14 +2641,14 @@ function rewriteThreshold(minGray, maxGray) {
   const index = histo.line - 1;
   const original = lines[index];
   if (!original) return false;
-  const match = original.match(/^(\s*)threshold\s*\((.*)\)\s*$/i);
+  const match = original.match(/^(\s*)(?:Vizion\.)?threshold\s*\((.*)\)\s*$/i);
   if (!match) return false;
   const args = splitArgs(match[2]);
   if (args.length < 2) return false;
   if (!/^-?\d+(\.\d+)?$/.test(args.at(-1).trim()) || !/^-?\d+(\.\d+)?$/.test(args.at(-2).trim())) return false;
   args[args.length - 2] = ` ${minGray}`;
   args[args.length - 1] = ` ${maxGray}`;
-  lines[index] = `${match[1]}threshold (${args.join(",")})`;
+  lines[index] = `${match[1]}${vizionCall("threshold", args.join(","))}`;
   code.value = lines.join("\n");
   renderEditor();
   return true;
@@ -2650,8 +2756,8 @@ function applyOcr() {
   const method = document.getElementById("ocrMethod").value || "auto";
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
   const image = guessImageName(lines);
-  const call = `ocr_find (${image}, Words, '${method}', Text, Row, Column, Score)`;
-  const index = lines.findIndex((line) => /^\s*ocr_find\s*\(/i.test(line));
+  const call = vizionCall("ocr_find", `${image}, Words, '${method}', Text, Row, Column, Score`);
+  const index = lines.findIndex((line) => /^\s*(?:Vizion\.)?ocr_find\s*\(/i.test(line));
   if (index >= 0) lines[index] = call;
   else lines.push(call);
   code.value = lines.join("\n");
@@ -2748,6 +2854,41 @@ function selectedFeatures() {
   return { region, xld, gray, subpixel };
 }
 
+let displayChannel = null;
+
+function publishDisplay(display) {
+  if (!display) return;
+  const copy = {
+    width: display.width,
+    height: display.height,
+    image: display.image || null,
+    shapes: (display.shapes || []).map((shape) => {
+      const next = { ...shape };
+      delete next._img;
+      return next;
+    }),
+  };
+  const payload = { type: "display", id: sessionId, display: copy, at: Date.now() };
+  try {
+    if (!displayChannel) displayChannel = new BroadcastChannel("visdev-display");
+    displayChannel.postMessage(payload);
+  } catch (_err) { /* 拉出的視窗會自己讀目前畫面 */ }
+}
+
+async function openGfxWindow() {
+  while (inflight) await new Promise((resolve) => setTimeout(resolve, 100));
+  if (!sessionId) await exec("run");
+  while (inflight) await new Promise((resolve) => setTimeout(resolve, 100));
+  const url = `${location.origin}/gfx?id=${encodeURIComponent(sessionId || "")}`;
+  try {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.open_gfx_window) {
+      await window.pywebview.api.open_gfx_window(url);
+      return;
+    }
+  } catch (_err) { /* 沒有桌面視窗介面時改開瀏覽器視窗 */ }
+  window.open(url, "visdev-gfx", "popup=yes,width=960,height=720,left=120,top=60");
+}
+
 async function openFeatureWindow() {
   while (inflight) await new Promise((resolve) => setTimeout(resolve, 100));
   if (!sessionId) await exec("run");
@@ -2768,6 +2909,7 @@ function publishFeaturePick() {
   if (!pickedObject) return;
   const payload = {
     type: "pick",
+    from: "main",
     id: sessionId,
     name: pickedObject.name,
     index: pickedObject.index,
@@ -2782,7 +2924,7 @@ function clearPick() {
   pickedObject = null;
   featureLines = [];
   gfxBanner.hidden = true;
-  const payload = { type: "pick", clear: true, at: Date.now() };
+  const payload = { type: "pick", from: "main", clear: true, at: Date.now() };
   localStorage.setItem("visdev.featurePick", JSON.stringify(payload));
   featureChannel.postMessage(payload);
   draw();
@@ -2898,16 +3040,34 @@ async function loadFeatures() {
 }
 
 const featureChannel = new BroadcastChannel("visdev-features");
-featureChannel.onmessage = (event) => {
-  const data = event.data;
-  if (!data) return;
-  if (data.type === "features" && pickedObject) loadFeatures();
-  if (data.type === "pick" && (data.clear || data.name === "__preview__")) {
+function applyExternalPick(data) {
+  if (!data || data.type !== "pick" || data.from === "main") return;
+  if (data.clear || data.name === "__preview__") {
     pickedObject = null;
     featureLines = [];
     gfxBanner.hidden = true;
     draw();
+    return;
   }
+  if (!data.name) return;
+  pickedObject = {
+    name: data.name,
+    index: data.index,
+    kind: data.kind || "region",
+    group: data.kind === "xld" ? data.index : null,
+  };
+  const label = pickedObject.kind === "xld" ? "輪廓" : "區域";
+  gfxBanner.hidden = false;
+  gfxBanner.textContent = `已點選${label} ${data.name} #${pickedObject.index + 1}。白色虛線是這一個，特徵只顯示它。`;
+  draw();
+  loadFeatures();
+}
+
+featureChannel.onmessage = (event) => {
+  const data = event.data;
+  if (!data) return;
+  if (data.type === "features" && pickedObject) loadFeatures();
+  applyExternalPick(data);
 };
 window.addEventListener("storage", (event) => {
   if (event.key === "visdev.features" && pickedObject) loadFeatures();

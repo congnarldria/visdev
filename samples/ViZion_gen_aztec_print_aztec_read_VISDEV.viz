@@ -1,0 +1,8 @@
+* 印出 Aztec 再讀回 VISDEV
+* gen_aztec 畫出中心牛眼，外圈放文字和檢查碼，放大後四周留白。
+* SymbolType 用 Aztec。find_data_code_2d 讀回來仍是 VISDEV。
+Vizion.gen_aztec (Code, 'VISDEV')
+Vizion.create_data_code_2d_model ('Aztec', '', '', Handle)
+Vizion.find_data_code_2d (Code, Symbol, Handle, '', '', Ids, Decoded)
+Text := Decoded[1]
+Vizion.dev_display (Code)
