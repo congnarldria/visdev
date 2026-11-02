@@ -176,6 +176,8 @@ class Session:
         self.loops: dict = {}
         self.try_stack: list = []
         self.proc_depth = 0
+        self.proc_stack = []
+        self.step_into = False
         self.cancel = False
         self.defer_wait = False
         self.wait_until = 0.0
@@ -202,9 +204,24 @@ class Session:
             self.done = True
 
     def current_line(self):
+        frame = getattr(self, "_wait_frame", None)
+        if frame is not None and self.paused in ("breakpoint", "wait"):
+            inner = frame.get("pc")
+            if isinstance(inner, int) and inner < len(self.stmts):
+                return self.stmts[inner].line
         if not self.done and self.pc < len(self.stmts):
             return self.stmts[self.pc].line
         return self.arrow_line
+
+    def _paused_procedure(self):
+        if self.proc_stack:
+            return self.proc_stack[-1]["proc"].name
+        frame = getattr(self, "_wait_frame", None)
+        if frame is not None and self.paused in ("breakpoint", "wait"):
+            proc = frame.get("proc")
+            if proc is not None:
+                return proc.name
+        return None
 
     def set_line(self, line: int):
         """Move the program arrow. Variables stay; the next step starts at this line."""
@@ -354,23 +371,44 @@ class Session:
         self.paused = None
         self.break_skip = None
         self.prepare()
+        self._close_finished_procs()
         if self.done:
             return
-        self._execute_current()
-        if not self.error:
-            self.step_count += 1
+        self.step_into = True
+        try:
+            self._execute_current()
+            if not self.error:
+                self._close_finished_procs()
+        except Exception as exc:
+            if not self.error:
+                self.error = str(exc)
+                self.error_line = self.current_line()
+        finally:
+            self.step_into = False
+        if self.error:
+            return
+        self.step_count += 1
         self.prepare()
+        try:
+            self._close_finished_procs()
+        except Exception as exc:
+            self.error = str(exc)
+            self.error_line = self.current_line()
 
     def run(self, max_steps: int = 100000, *, resume: bool = False):
         with self.lock:
+            parked = getattr(self, "_wait_frame", None)
+            resume_parked = bool(resume or self.paused == "breakpoint")
             if not resume and (self.done or self.error):
                 self.reset()
+                parked = None
+                resume_parked = False
             self.paused = None
             if not resume:
                 self.cancel = False
-            if resume and getattr(self, "_wait_frame", None):
+            if parked and resume_parked:
                 self._resume_proc()
-                if self.paused == "wait" or self.error:
+                if self.paused in ("wait", "breakpoint") or self.error:
                     return
         taken = 0
         while taken < max_steps:
@@ -390,11 +428,12 @@ class Session:
                     return
                 self.break_skip = None
                 self._execute_current()
+                self._close_finished_procs()
                 if self.error:
                     return
                 self.step_count += 1
                 taken += 1
-                stop_now = self.paused in ("stop", "wait", "stopped")
+                stop_now = self.paused in ("stop", "wait", "stopped", "breakpoint")
             if stop_now:
                 return
         with self.lock:
@@ -440,8 +479,15 @@ class Session:
                 self.pc = index + 1
                 raise StopSignal()
             if stmt.name in self.procs:
+                if self.step_into:
+                    self._enter_proc(stmt, self.procs[stmt.name])
+                    return
                 self._call_proc(stmt, self.procs[stmt.name])
-                if self.paused == "wait":
+                if self.paused in ("wait", "breakpoint"):
+                    if self.proc_depth == 0:
+                        frame = getattr(self, "_wait_frame", None)
+                        if frame is not None:
+                            self.vars = frame["local"]
                     return
             else:
                 self._call(stmt)
@@ -522,6 +568,38 @@ class Session:
             self.loops.pop(for_index, None)
             self.pc = index + 1
 
+    def _enter_proc(self, stmt: Call, proc_index: int) -> None:
+        if self.proc_depth >= 32:
+            raise RuntimeError("程序遞迴超過 32 層")
+        proc = self.stmts[proc_index]
+        outer = self.vars
+        local: dict = {}
+        for name, src in zip(proc.iconic_in, stmt.iconic_in):
+            if src not in outer:
+                raise RuntimeError(f"變數 {src} 還沒有值")
+            local[name] = coerce_iconic(outer[src])
+        for name, expr in zip(proc.control_in, stmt.control_in):
+            local[name] = pythonize(eval_expr(expr, outer))
+        self.proc_stack.append({
+            "caller_vars": outer,
+            "end": self.proc_end[proc_index],
+            "saved_pc": self.pc,
+            "stmt": stmt,
+            "proc": proc,
+        })
+        self.proc_depth += 1
+        self.vars = local
+        self.pc = proc_index + 1
+
+    def _close_finished_procs(self) -> None:
+        while self.proc_stack and self.pc >= self.proc_stack[-1]["end"]:
+            frame = self.proc_stack.pop()
+            local = self.vars
+            self.vars = frame["caller_vars"]
+            self.proc_depth = max(0, self.proc_depth - 1)
+            self._export_proc(frame["stmt"], frame["proc"], local)
+            self.pc = frame["saved_pc"] + 1
+
     def _call_proc(self, stmt: Call, proc_index: int):
         if self.proc_depth >= 32:
             raise RuntimeError("程序遞迴超過 32 層")
@@ -543,6 +621,11 @@ class Session:
         try:
             steps = 0
             while self.pc < end and not self.error and self.paused not in ("stop", "breakpoint", "stopped", "wait"):
+                if self._on_breakpoint() and self.pc != self.break_skip:
+                    self.break_skip = self.pc
+                    self.paused = "breakpoint"
+                    break
+                self.break_skip = None
                 self._execute_current()
                 steps += 1
                 if steps > 100000:
@@ -552,10 +635,11 @@ class Session:
             local = self.vars
             inner_pc = self.pc
             waiting = self.paused == "wait"
+            breaking = self.paused == "breakpoint"
             self.vars = outer
             self.pc = saved_pc
             self.proc_depth -= 1
-        if waiting:
+        if waiting or breaking:
             self._park_wait({
                 "local": local,
                 "caller_vars": outer,
@@ -613,6 +697,11 @@ class Session:
         try:
             steps = 0
             while self.pc < frame["end"] and not self.error and self.paused not in ("stop", "breakpoint", "stopped", "wait"):
+                if self._on_breakpoint() and self.pc != self.break_skip:
+                    self.break_skip = self.pc
+                    self.paused = "breakpoint"
+                    break
+                self.break_skip = None
                 self._execute_current()
                 steps += 1
                 if steps > 100000:
@@ -622,13 +711,15 @@ class Session:
             local = self.vars
             inner_pc = self.pc
             waiting = self.paused == "wait"
+            breaking = self.paused == "breakpoint"
             self.vars = caller_vars
             self.pc = frame["saved_pc"]
             self.proc_depth -= 1
-        if waiting:
+        if waiting or breaking:
             frame["local"] = local
             frame["pc"] = inner_pc
             self._park_wait(frame)
+            self.vars = local
             return
         if self.error:
             return
@@ -836,6 +927,7 @@ class Session:
         return {
             "id": self.id,
             "line": self.current_line(),
+            "procedure": self._paused_procedure(),
             "done": self.done,
             "error": self.error,
             "errorLine": self.error_line,

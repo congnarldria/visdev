@@ -4791,6 +4791,90 @@ def test_relative_path_stays_inside_and_wait_does_not_block():
     assert time.perf_counter() - started < 1.0
 
 
+def test_step_lands_inside_the_procedure():
+    source = "\n".join([
+        "procedure add (: : Value : Result)",
+        "    Result := Value + 1",
+        "    Result := Result + 1",
+        "endprocedure",
+        "add (4, Out)",
+        "After := Out",
+    ])
+    session = Session(source, ROOT)
+    session.step()
+    assert session.current_line() == 5
+    session.step()
+    assert session.current_line() == 2
+    assert session.public_state()["procedure"] == "add"
+    assert session.vars["Value"] == 4
+    assert "Out" not in session.vars
+    session.step()
+    assert session.current_line() == 3
+    assert session.vars["Result"] == 5
+    session.step()
+    assert session.current_line() == 6
+    assert session.public_state()["procedure"] is None
+    assert session.vars["Out"] == 6
+    assert "Value" not in session.vars
+    session.step()
+    assert session.done
+    assert session.vars["After"] == 6
+
+    nested = "\n".join([
+        "procedure outer (: : Value : Result)",
+        "    inner (Value, Mid)",
+        "    Result := Mid + 3",
+        "endprocedure",
+        "procedure inner (: : Value : Result)",
+        "    Result := Value + 2",
+        "endprocedure",
+        "outer (4, Out)",
+    ])
+    entered = Session(nested, ROOT)
+    entered.step()
+    entered.step()
+    assert entered.current_line() == 8
+    entered.step()
+    assert entered.current_line() == 2
+    assert entered.public_state()["procedure"] == "outer"
+    entered.step()
+    assert entered.current_line() == 6
+    assert entered.public_state()["procedure"] == "inner"
+    assert "Out" not in entered.vars
+    entered.run()
+    assert entered.error is None, entered.error
+    assert entered.vars["Out"] == 9
+    assert entered.done
+
+    whole = run_source(nested)
+    assert whole.error is None, whole.error
+    assert whole.vars["Out"] == 9
+
+
+def test_run_stops_inside_a_procedure_breakpoint():
+    source = "\n".join([
+        "procedure add (: : Value : Result)",
+        "    Result := Value + 1",
+        "    Result := Result + 1",
+        "endprocedure",
+        "add (4, Out)",
+        "After := Out",
+    ])
+    session = Session(source, ROOT)
+    session.breakpoints = {3}
+    session.run()
+    assert session.paused == "breakpoint"
+    assert session.current_line() == 3
+    assert session.public_state()["procedure"] == "add"
+    assert session.vars["Result"] == 5
+    assert "Out" not in session.vars
+    session.run()
+    assert session.error is None, session.error
+    assert session.vars["Out"] == 6
+    assert session.vars["After"] == 6
+    assert session.done
+
+
 def test_wait_inside_procedure_resumes():
     import time
 

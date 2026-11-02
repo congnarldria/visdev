@@ -433,9 +433,10 @@ function setStatus() {
   } else {
     stState.textContent = "就緒";
   }
-  if (server.line && server.paused === "breakpoint") stLine.textContent = `中斷於第 ${server.line} 行`;
-  else if (server.line && server.done) stLine.textContent = `結束於第 ${server.line} 行`;
-  else if (server.line) stLine.textContent = `下一行 ${server.line}`;
+  const proc = server.procedure ? `程序 ${server.procedure} · ` : "";
+  if (server.line && server.paused === "breakpoint") stLine.textContent = `${proc}中斷於第 ${server.line} 行`;
+  else if (server.line && server.done) stLine.textContent = `${proc}結束於第 ${server.line} 行`;
+  else if (server.line) stLine.textContent = `${proc}下一行 ${server.line}`;
   else stLine.textContent = server.done ? "程式結束" : "";
 }
 
