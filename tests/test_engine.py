@@ -3214,13 +3214,22 @@ def test_hdevelop_batch100():
 
 def test_hdevelop_batch101():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_create_scaled_shape_model_scale_refined_to_1.07505.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_create_scaled_shape_model_scale_refined_to_1.08895.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     refined = float(sample.vars["S"])
     still = float(sample.vars["Still"])
     assert still == 1.0
-    assert 1.05 < refined <= 1.1 + 1e-6
+    assert abs(refined - 1.088948198788332) < 1e-9
     assert abs(refined - 1.1) < abs(still - 1.1)
+
+
+def test_expand_region_splits_overlap():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_expand_region_region_splits_overlap.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Count"] == 2
+    assert int(sample.vars["LeftArea"]) == 12
+    assert int(sample.vars["RightArea"]) == 8
 
 
 def test_hdevelop_batch102():
@@ -4587,6 +4596,37 @@ Outer := 2
     assert session.error is None, session.error
     assert session.vars["Out"] == 4
     assert session.vars["Outer"] == 2
+    assert session.done
+
+
+def test_wait_inside_nested_procedure_resumes():
+    import time
+
+    source = """
+procedure inner (: : : Result)
+    Seen := 3
+    Vizion.wait_seconds (2)
+    Result := Seen + 1
+endprocedure
+procedure outer (: : : Out)
+    inner (Mid)
+    Out := Mid + 5
+endprocedure
+outer (Value)
+After := 7
+"""
+    session = Session(source, ROOT)
+    session.defer_wait = True
+    started = time.perf_counter()
+    session.run()
+    assert time.perf_counter() - started < 0.3
+    assert session.paused == "wait"
+    assert "Value" not in session.vars
+    session.wait_until = time.monotonic()
+    session.run(resume=True)
+    assert session.error is None, session.error
+    assert session.vars["Value"] == 9
+    assert session.vars["After"] == 7
     assert session.done
 
 

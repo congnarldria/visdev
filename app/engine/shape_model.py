@@ -15,8 +15,6 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-cv2.setNumThreads(1)
-
 MATCH_COLORS = [
     "#ff3b30",
     "#00e05a",
@@ -77,6 +75,36 @@ def _gradients(gray: np.ndarray):
     gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
     mag = cv2.magnitude(gx, gy)
     return gx, gy, mag
+
+
+def _gradients_stable(gray: np.ndarray):
+    """Same 3x3 Sobel as OpenCV, evaluated in float64.
+
+    cv2.Sobel moves a few pixels by one ulp from call to call. That is enough
+    to change which edge points the scale fit keeps, so this copy is only used
+    for the scale least squares. Model creation and the search stay on cv2.
+    """
+    src = np.ascontiguousarray(gray, dtype=np.float64)
+    padded = np.pad(src, 1, mode="reflect")
+    height, width = src.shape
+    gx = (
+        padded[0:height, 0:width] * -1.0
+        + padded[0:height, 2 : width + 2]
+        + padded[1 : height + 1, 0:width] * -2.0
+        + padded[1 : height + 1, 2 : width + 2] * 2.0
+        + padded[2 : height + 2, 0:width] * -1.0
+        + padded[2 : height + 2, 2 : width + 2]
+    )
+    gy = (
+        padded[0:height, 0:width] * -1.0
+        + padded[2 : height + 2, 0:width]
+        + padded[0:height, 1 : width + 1] * -2.0
+        + padded[2 : height + 2, 1 : width + 1] * 2.0
+        + padded[0:height, 2 : width + 2] * -1.0
+        + padded[2 : height + 2, 2 : width + 2]
+    )
+    mag = np.sqrt(gx * gx + gy * gy)
+    return gx.astype(np.float32), gy.astype(np.float32), mag.astype(np.float32)
 
 
 def _sample(image: np.ndarray, xs: np.ndarray, ys: np.ndarray):
@@ -384,6 +412,29 @@ def _score_map(unit_x, unit_y, valid, level: _Level, angle: float, metric: str, 
     return score
 
 
+# A square larger than the model leaves a flat plateau. Corners differ only in the
+# last bits of the score, and that bit flips between runs. Treat them as one peak.
+_PLATEAU = 1e-4
+
+
+def _by_score(item):
+    """Nearly equal scores keep the upper-left peak, so a square does not flip corners."""
+    return (-round(float(item[3]), 5), float(item[0]), float(item[1]))
+
+
+def _takes_peak(score, row, col, best_score, best_row, best_col) -> bool:
+    """True when this sample should replace the current peak.
+
+    A clearly higher score wins. Inside the plateau the upper-left corner wins,
+    so the same square does not alternate between corners.
+    """
+    if score > best_score + _PLATEAU:
+        return True
+    if best_score - score > _PLATEAU:
+        return False
+    return (float(row), float(col)) < (float(best_row), float(best_col))
+
+
 def _local_peaks(score: np.ndarray, minimum: float, limit: int):
     kernel = np.ones((5, 5), np.uint8)
     dilated = cv2.dilate(score, kernel)
@@ -391,7 +442,7 @@ def _local_peaks(score: np.ndarray, minimum: float, limit: int):
     ys, xs = np.where(mask)
     if len(xs) == 0:
         return []
-    order = np.argsort(score[ys, xs])[::-1]
+    order = sorted(range(len(xs)), key=lambda index: (-round(float(score[ys[index], xs[index]]), 5), float(ys[index]), float(xs[index])))
     peaks = []
     for index in order[: limit * 4]:
         peaks.append((float(ys[index]), float(xs[index]), float(score[ys[index], xs[index]])))
@@ -522,6 +573,35 @@ def _least_squares_pose(magnitude, level: _Level, row: float, col: float, angle:
     return pose
 
 
+def _settle_plateau(field_x, field_y, magnitude, model: ShapeModel, row: float, col: float, angle: float):
+    """If the pose sits on a flat plateau, restart sub-pixel from its upper-left corner.
+
+    A unique peak is returned unchanged. Native search keeps its own order; only
+    this scale fit asks for one corner, so the least-squares scale stays put.
+    """
+    level = model.levels[0]
+    r0 = int(round(row))
+    c0 = int(round(col))
+    scored = []
+    for dr in range(-3, 4):
+        for dc in range(-3, 4):
+            rr = r0 + dr
+            cc = c0 + dc
+            value = _score_at(field_x, field_y, magnitude, level, rr, cc, angle, model.metric, model.min_contrast)
+            scored.append((value, rr, cc))
+    best = max(item[0] for item in scored)
+    tied = [item for item in scored if best - item[0] <= _PLATEAU]
+    if len(tied) <= 1:
+        return float(row), float(col), float(angle)
+    refined = []
+    for _value, rr, cc in tied:
+        sr, sc, sa, ss = _subpixel(field_x, field_y, magnitude, level, float(rr), float(cc), angle, model)
+        refined.append((ss, rr, cc, sr, sc, sa))
+    refined.sort(key=lambda item: (-round(float(item[0]), 5), item[1], item[2]))
+    _ss, _rr, _cc, sr, sc, sa = refined[0]
+    return float(sr), float(sc), float(sa)
+
+
 def _scale_window(model, scale: float, search_min: float, search_max: float) -> tuple[float, float]:
     taught = sorted(item[0] for item in model.scales)
     index = min(range(len(taught)), key=lambda item: abs(taught[item] - scale))
@@ -544,8 +624,10 @@ def _least_squares_scale(magnitude, level: _Level, row: float, col: float, angle
     step = max(1, int(math.ceil(len(level.cols) / 80)))
     point_col = level.cols[::step]
     point_row = level.rows[::step]
-    grad_x = level.gx[::step]
-    grad_y = level.gy[::step]
+    # Directions are built with cv2.Sobel, which moves a unit vector by one ulp
+    # between calls. Five decimals is coarser than that ulp and keeps the step.
+    grad_x = np.round(level.gx[::step], 5)
+    grad_y = np.round(level.gy[::step], 5)
     factor = 1.0
     pose = (float(row), float(col), float(angle), factor)
     for _turn in range(4):
@@ -726,7 +808,7 @@ def find_shape_model(
         score = _score_map(unit_x, unit_y, valid, level, angle, model.metric, greediness)
         for row, col, value in _local_peaks(score, coarse_min, 40):
             found.append((row, col, angle, value))
-    found.sort(key=lambda item: item[3], reverse=True)
+    found.sort(key=_by_score)
     found = _suppress(found, max(4.0, model.radius / (2**coarse) * 0.45), 80, np.deg2rad(20))
 
     for level_index in range(coarse - 1, -1, -1):
@@ -745,12 +827,12 @@ def find_shape_model(
                         rr = row * scale_row + dy
                         cc = col * scale_col + dx
                         value = _score_at(raw_x, raw_y, mag, level, rr, cc, angle_try, model.metric, model.min_contrast)
-                        if value > best[0]:
+                        if _takes_peak(value, rr, cc, best[0], best[1], best[2]):
                             best = (value, rr, cc, angle_try)
             if best[0] >= min_score * 0.8:
                 nudge = _local_angle(raw_x, raw_y, mag, level, best[1], best[2], best[3], fine_step, model)
                 refined.append(nudge)
-        refined.sort(key=lambda item: item[3], reverse=True)
+        refined.sort(key=_by_score)
         found = _suppress(
             [(item[0], item[1], item[2], item[3]) for item in refined],
             max(3.0, model.radius / (2**level_index) * 0.55),
@@ -770,7 +852,7 @@ def find_shape_model(
                 poses.append((row, col, angle, score))
     else:
         poses = [item for item in found if item[3] >= min_score]
-    poses.sort(key=lambda item: item[3], reverse=True)
+    poses.sort(key=_by_score)
     min_dist = model.radius * max(0.2, 1.0 - max_overlap)
     poses = _suppress(poses, min_dist, num_matches)
     rows = [item[0] for item in poses]
@@ -975,7 +1057,7 @@ def find_scaled_shape_model(
         raise RuntimeError("模型已經 clear，不能再搜尋")
     mode = _subpixel_mode(subpixel)
     # Which taught scale wins is decided without pose least squares. That step
-    # walks off the peak and the following scale fit no longer reaches 1.07505.
+    # walks off the peak, and the scale fit then stays at the taught step.
     child_subpixel = "none" if mode == "least_squares" else subpixel
     pool = []
     wanted = int(num_matches) if num_matches else 8
@@ -1016,7 +1098,7 @@ def find_scaled_shape_model(
         return [], [], [], [], []
     if mode == "least_squares":
         gray = np.ascontiguousarray(_gray(image), dtype=np.float32)
-        field_x, field_y, magnitude = _gradients(gray)
+        field_x, field_y, magnitude = _gradients_stable(gray)
         refined = []
         for score, row, col, angle, scale, radius in chosen:
             child = next(item[1] for item in model.scales if abs(item[0] - scale) < 1e-6)
@@ -1036,6 +1118,10 @@ def find_scaled_shape_model(
                 row = float(_flat(found_rows)[0])
                 col = float(_flat(found_cols)[0])
                 angle = float(_flat(found_angles)[0])
+            # A zero extent still lets the parabola walk the angle. The plateau
+            # lives at the requested angle, which is where the corners tie.
+            plateau_angle = float(angle_start) if abs(float(angle_extent)) <= 1e-9 else float(angle)
+            row, col, angle = _settle_plateau(field_x, field_y, magnitude, child, row, col, plateau_angle)
             low, high = _scale_window(model, scale, scale_min, scale_max)
             nrow, ncol, nangle, nscale = _least_squares_scale(
                 magnitude, child.levels[0], row, col, angle, scale, low, high, child.min_contrast

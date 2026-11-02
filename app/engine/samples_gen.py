@@ -120,7 +120,8 @@ SAMPLE_ORDER = (
     "ViZion_hom_mat2d_identity_pulled_back_half_pixel_is_112.viz",
     "ViZion_local_max_sub_pix_gauss_peak_at_30.33298.viz",
     "ViZion_points_lepetit_square_corner_inside_pixel.viz",
-    "ViZion_create_scaled_shape_model_scale_refined_to_1.07505.viz",
+    "ViZion_create_scaled_shape_model_scale_refined_to_1.08895.viz",
+    "ViZion_expand_region_region_splits_overlap.viz",
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz",
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz",
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz",
@@ -4912,9 +4913,9 @@ Vizion.dev_display (Image)
 """
 
 
-HDEVELOP_BATCH101_PROGRAM = """* 尺度修到 1.07505
+HDEVELOP_BATCH101_PROGRAM = """* 尺度修到 1.08895
 * 教導的尺度是 0.8、1.0、1.2。模板方塊高 30，場景方塊高 33，真正的尺度是 1.1。
-* 不修尺度時停在 1。least_squares 沿邊緣法線把尺度往 1.1 修，結果大於 1，而且比 1 更靠近 1.1。
+* 不修尺度時停在 1。least_squares 從分數平頂的左上角沿邊緣法線修尺度，結果是 1.08895。
 Vizion.gen_image_const (Base, 'byte', 80, 80)
 Vizion.gen_image_proto (Base, Sheet, 30)
 Vizion.gen_rectangle1 (Box, 20, 20, 49, 49)
@@ -4929,6 +4930,23 @@ Vizion.find_scaled_shape_model (Scene, ModelID, 0, 0, 0.8, 1.2, 0.4, 1, 0.5, 'no
 S := Scale[1]
 Still := NScale[1]
 Vizion.dev_display (Scene)
+"""
+
+
+HDEVELOP_BATCH101B_PROGRAM = """* region 模式把重疊拆開
+* 左邊矩形是列 0 到 3、行 0 到 2，右邊是列 0 到 3、行 2 到 4。中間一行 4 個像素重疊。
+* image 會往外長。region 不長大，距離一樣的重疊像素留給編號較小的物件。左邊仍是 12，右邊剩下 8。
+Vizion.gen_image_const (Image, 'byte', 5, 4)
+Vizion.gen_rectangle1 (Left, 0, 0, 3, 2)
+Vizion.gen_rectangle1 (Right, 0, 2, 3, 4)
+Vizion.concat_obj (Left, Right, Both)
+Vizion.gen_empty_region (Empty)
+Vizion.expand_region (Both, Empty, Split, 1, 'region')
+Vizion.area_center (Split, Area, Row, Column)
+LeftArea := Area[1]
+RightArea := Area[2]
+Vizion.count_obj (Split, Count)
+Vizion.dev_display (Split)
 """
 
 
@@ -5844,7 +5862,8 @@ GENERATED_PROGRAMS = {
     "ViZion_hom_mat2d_identity_pulled_back_half_pixel_is_112.viz": HDEVELOP_BATCH98_PROGRAM,
     "ViZion_local_max_sub_pix_gauss_peak_at_30.33298.viz": HDEVELOP_BATCH99_PROGRAM,
     "ViZion_points_lepetit_square_corner_inside_pixel.viz": HDEVELOP_BATCH100_PROGRAM,
-    "ViZion_create_scaled_shape_model_scale_refined_to_1.07505.viz": HDEVELOP_BATCH101_PROGRAM,
+    "ViZion_create_scaled_shape_model_scale_refined_to_1.08895.viz": HDEVELOP_BATCH101_PROGRAM,
+    "ViZion_expand_region_region_splits_overlap.viz": HDEVELOP_BATCH101B_PROGRAM,
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz": HDEVELOP_BATCH102_PROGRAM,
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz": HDEVELOP_BATCH103_PROGRAM,
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz": HDEVELOP_BATCH104_PROGRAM,

@@ -971,10 +971,10 @@ def select_gray(region, image, features, operation, min_value, max_value, *, ctx
     "形態學",
     [P("Regions", "要長大的物件"), P("ForbiddenRegion", "不能進入的區域")],
     [P("RegionExpanded", "長大後的物件")],
-    [P("Iterations", "長大幾次"), P("Mode", "這版只做 image", "'image'", ["'image'"])],
+    [P("Iterations", "長大幾次"), P("Mode", "image 往外長，region 只拆重疊", "'image'", ["'image'", "'region'"])],
     [],
     "把區域往外長",
-    "每次用 8 鄰域長一像素。不會進入 ForbiddenRegion，也不會讓物件互相覆蓋。Mode 這版只有 image。",
+    "image 每次用 8 鄰域長一像素，不進入 ForbiddenRegion，物件也不會互相覆蓋。region 不往外長，只把重疊像素分給距離自己獨占區較近的物件；距離一樣時留給編號較小的那個。Iterations 為 0 時，region 直接拿掉重疊。",
     "Vizion.expand_region (Regions, ForbiddenRegion, RegionExpanded, 2, 'image')",
 )
 def expand_region(region, forbidden, iterations, mode, *, ctx):
@@ -982,11 +982,16 @@ def expand_region(region, forbidden, iterations, mode, *, ctx):
     blocked = expect_region(forbidden, "ForbiddenRegion")
     if (source.width, source.height) != (blocked.width, blocked.height):
         raise ValueError("兩個區域的尺寸不同")
-    if text(mode, "Mode").lower() != "image":
-        raise ValueError("Mode 這版只接受 image")
+    mode_name = text(mode, "Mode").lower()
+    if mode_name not in ("image", "region"):
+        raise ValueError("Mode 只接受 image 或 region")
     steps = whole(iterations, "Iterations")
     if steps < 0:
         raise ValueError("Iterations 不能是負的")
+    if mode_name == "region":
+        objects = _split_region_overlap(source.objects, steps)
+        kept = [mask for mask in objects if int(cv2.countNonZero(mask))]
+        return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
     objects = [mask.copy() for mask in source.objects]
     wall = blocked.union_mask()
     kernel = np.ones((3, 3), np.uint8)
@@ -1004,6 +1009,41 @@ def expand_region(region, forbidden, iterations, mode, *, ctx):
         objects = grown
     kept = [mask for mask in objects if int(cv2.countNonZero(mask))]
     return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+def _split_region_overlap(objects: list, steps: int) -> list:
+    """Give each overlapping pixel to one object. Nothing grows past the original masks."""
+    if not objects:
+        return []
+    masks = [np.asarray(mask) > 0 for mask in objects]
+    count = np.zeros(masks[0].shape, np.int16)
+    for mask in masks:
+        count += mask.astype(np.int16)
+    height, width = count.shape
+    owner = np.full((height, width), -1, np.int16)
+    for index, mask in enumerate(masks):
+        owner[mask & (count == 1)] = index
+    overlap = count > 1
+    if steps > 0 and np.any(overlap):
+        distances = []
+        for mask in masks:
+            exclusive = mask & (count == 1)
+            if not np.any(exclusive):
+                distances.append(np.full((height, width), np.inf, np.float32))
+                continue
+            field = np.where(exclusive, np.uint8(0), np.uint8(255))
+            distances.append(cv2.distanceTransform(field, cv2.DIST_L1, 3))
+        stacked = np.where(np.stack(masks, axis=0), np.stack(distances, axis=0), np.inf)
+        owner[overlap] = np.argmin(stacked, axis=0).astype(np.int16)[overlap]
+    split = []
+    for index, mask in enumerate(masks):
+        kept = np.zeros((height, width), np.uint8)
+        chosen = owner == index
+        if steps <= 0:
+            chosen = chosen & (count == 1)
+        kept[chosen] = 255
+        split.append(kept)
+    return split
 
 
 def _points_on_canvas(rows, columns, ctx):

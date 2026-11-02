@@ -1,6 +1,6 @@
-* 尺度修到 1.07505
+* 尺度修到 1.08895
 * 教導的尺度是 0.8、1.0、1.2。模板方塊高 30，場景方塊高 33，真正的尺度是 1.1。
-* 不修尺度時停在 1。least_squares 沿邊緣法線把尺度往 1.1 修，結果大於 1，而且比 1 更靠近 1.1。
+* 不修尺度時停在 1。least_squares 從分數平頂的左上角沿邊緣法線修尺度，結果是 1.08895。
 Vizion.gen_image_const (Base, 'byte', 80, 80)
 Vizion.gen_image_proto (Base, Sheet, 30)
 Vizion.gen_rectangle1 (Box, 20, 20, 49, 49)

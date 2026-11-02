@@ -542,14 +542,15 @@ class Session:
             self.pc = saved_pc
             self.proc_depth -= 1
         if waiting:
-            self._wait_frame = {
+            self._park_wait({
                 "local": local,
+                "caller_vars": outer,
                 "pc": inner_pc,
                 "end": end,
                 "saved_pc": saved_pc,
                 "stmt": stmt,
                 "proc": proc,
-            }
+            })
             return
         if guard:
             raise RuntimeError(guard)
@@ -574,12 +575,26 @@ class Session:
             self.vars[name] = pythonize(local[src])
         self.trace_line(stmt, stmt.name)
 
+    def _park_wait(self, frame) -> None:
+        """Remember a procedure paused on wait. A caller stays linked behind the inner one."""
+        current = self._wait_frame
+        if current is None:
+            self._wait_frame = frame
+            return
+        node = current
+        while node.get("caller") is not None:
+            node = node["caller"]
+        node["caller"] = frame
+
     def _resume_proc(self) -> None:
         frame = self._wait_frame
         self._wait_frame = None
-        outer = self.vars
+        self._run_wait_frame(frame, frame["pc"])
+
+    def _run_wait_frame(self, frame, start_pc: int) -> None:
+        caller_vars = frame["caller_vars"]
         self.vars = frame["local"]
-        self.pc = frame["pc"]
+        self.pc = start_pc
         self.proc_depth += 1
         try:
             steps = 0
@@ -593,17 +608,21 @@ class Session:
             local = self.vars
             inner_pc = self.pc
             waiting = self.paused == "wait"
-            self.vars = outer
+            self.vars = caller_vars
             self.pc = frame["saved_pc"]
             self.proc_depth -= 1
         if waiting:
             frame["local"] = local
             frame["pc"] = inner_pc
-            self._wait_frame = frame
+            self._park_wait(frame)
             return
         if self.error:
             return
         self._export_proc(frame["stmt"], frame["proc"], local)
+        parent = frame.get("caller")
+        if parent is not None:
+            self._run_wait_frame(parent, frame["saved_pc"] + 1)
+            return
         self.pc = frame["saved_pc"] + 1
 
     def _call(self, stmt: Call):
