@@ -4563,6 +4563,33 @@ def test_relative_path_stays_inside_and_wait_does_not_block():
     assert time.perf_counter() - started < 1.0
 
 
+def test_wait_inside_procedure_resumes():
+    import time
+
+    source = """
+procedure pause (: : : Result)
+    Seen := 3
+    Vizion.wait_seconds (2)
+    Result := Seen + 1
+endprocedure
+pause (Out)
+Outer := 2
+"""
+    session = Session(source, ROOT)
+    session.defer_wait = True
+    started = time.perf_counter()
+    session.run()
+    assert time.perf_counter() - started < 0.3
+    assert session.paused == "wait"
+    assert "Out" not in session.vars
+    session.wait_until = time.monotonic()
+    session.run(resume=True)
+    assert session.error is None, session.error
+    assert session.vars["Out"] == 4
+    assert session.vars["Outer"] == 2
+    assert session.done
+
+
 def test_directshow_import_does_not_require_windows():
     import sys
 

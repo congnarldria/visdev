@@ -480,7 +480,7 @@ def wait_seconds(seconds, *, ctx):
         raise ValueError("等待不能超過 30 秒")
     if delay <= 0:
         return Result([], [])
-    if getattr(ctx, "defer_wait", False) and int(getattr(ctx, "proc_depth", 0)) == 0:
+    if getattr(ctx, "defer_wait", False):
         ctx.wait_until = time.monotonic() + delay
         ctx.paused = "wait"
         return Result([], [])

@@ -177,6 +177,7 @@ class Session:
         self.cancel = False
         self.defer_wait = False
         self.wait_until = 0.0
+        self._wait_frame = None
         self.break_skip = None
         self.arrow_line = None
         self.line_times: dict[int, dict] = {}
@@ -356,6 +357,10 @@ class Session:
         self.paused = None
         if not resume:
             self.cancel = False
+        if resume and getattr(self, "_wait_frame", None):
+            self._resume_proc()
+            if self.paused == "wait" or self.error:
+                return
         taken = 0
         while taken < max_steps:
             self.prepare()
@@ -422,6 +427,8 @@ class Session:
                 raise StopSignal()
             if stmt.name in self.procs:
                 self._call_proc(stmt, self.procs[stmt.name])
+                if self.paused == "wait":
+                    return
             else:
                 self._call(stmt)
             self.pc = index + 1
@@ -529,9 +536,21 @@ class Session:
                     break
         finally:
             local = self.vars
+            inner_pc = self.pc
+            waiting = self.paused == "wait"
             self.vars = outer
             self.pc = saved_pc
             self.proc_depth -= 1
+        if waiting:
+            self._wait_frame = {
+                "local": local,
+                "pc": inner_pc,
+                "end": end,
+                "saved_pc": saved_pc,
+                "stmt": stmt,
+                "proc": proc,
+            }
+            return
         if guard:
             raise RuntimeError(guard)
         if self.error:
@@ -539,18 +558,53 @@ class Session:
             self.error = None
             self.error_line = None
             raise RuntimeError(message)
+        self._export_proc(stmt, proc, local)
+
+    def _export_proc(self, stmt: Call, proc, local) -> None:
         for name, src in zip(stmt.iconic_out, proc.iconic_out):
             if src not in local:
                 raise RuntimeError(f"程序 {proc.name} 沒有設定輸出 {src}")
             value = coerce_iconic(local[src])
-            outer[name] = value
+            self.vars[name] = value
             if isinstance(value, Image):
                 self.ref_shape = (value.height, value.width)
         for name, src in zip(stmt.control_out, proc.control_out):
             if src not in local:
                 raise RuntimeError(f"程序 {proc.name} 沒有設定輸出 {src}")
-            outer[name] = pythonize(local[src])
+            self.vars[name] = pythonize(local[src])
         self.trace_line(stmt, stmt.name)
+
+    def _resume_proc(self) -> None:
+        frame = self._wait_frame
+        self._wait_frame = None
+        outer = self.vars
+        self.vars = frame["local"]
+        self.pc = frame["pc"]
+        self.proc_depth += 1
+        try:
+            steps = 0
+            while self.pc < frame["end"] and not self.error and self.paused not in ("stop", "breakpoint", "stopped", "wait"):
+                self._execute_current()
+                steps += 1
+                if steps > 100000:
+                    self.error = "程序超過 100000 步"
+                    break
+        finally:
+            local = self.vars
+            inner_pc = self.pc
+            waiting = self.paused == "wait"
+            self.vars = outer
+            self.pc = frame["saved_pc"]
+            self.proc_depth -= 1
+        if waiting:
+            frame["local"] = local
+            frame["pc"] = inner_pc
+            self._wait_frame = frame
+            return
+        if self.error:
+            return
+        self._export_proc(frame["stmt"], frame["proc"], local)
+        self.pc = frame["saved_pc"] + 1
 
     def _call(self, stmt: Call):
         bare = operator_bare(stmt.name)
