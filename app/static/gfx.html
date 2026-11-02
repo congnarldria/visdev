@@ -75,21 +75,31 @@
       }
       view.setSelection({ name: data.name, index: data.index, kind: data.kind });
     };
+    let displayRev = null;
+    function showDisplay(display) {
+      view.setDisplay(display);
+      title.textContent = display ? `${display.width} × ${display.height}` : "圖形視窗是空的";
+    }
     displayChannel.onmessage = (event) => {
       const data = event.data;
-      if (!data || data.type !== "display" || !data.display) return;
+      if (!data || data.type !== "display") return;
       if (sessionId && data.id && data.id !== sessionId) return;
-      view.setDisplay(data.display);
-      title.textContent = `${data.display.width} × ${data.display.height}`;
+      if (data.displayRev != null) displayRev = data.displayRev;
+      if (!data.display) {
+        showDisplay(null);
+        return;
+      }
+      showDisplay(data.display);
     };
     async function pull() {
       if (!sessionId) return;
-      const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/display`);
+      const query = displayRev == null ? "" : `?displayRev=${encodeURIComponent(displayRev)}`;
+      const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/display${query}`);
       if (!res.ok) return;
       const data = await res.json();
-      if (!data.display) return;
-      view.setDisplay(data.display);
-      title.textContent = `${data.display.width} × ${data.display.height}`;
+      if (data.displayRev != null) displayRev = data.displayRev;
+      if (data.displayKept) return;
+      showDisplay(data.display || null);
     }
     pull();
     setInterval(pull, 800);

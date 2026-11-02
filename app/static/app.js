@@ -403,6 +403,7 @@ function setStatus() {
 let imageStamp = null;
 
 function applyState(data) {
+  absorbKept(data);
   logHidden = false;
   const nextStamp = data.imageStamp;
   const imageChanged = imageStamp != null && nextStamp != null && nextStamp !== imageStamp;
@@ -418,8 +419,7 @@ function applyState(data) {
   renderVars();
   renderLog();
   setStatus();
-  if (data.display) loadDisplay(data.display);
-  else clearGraphics();
+  takeDisplay(data);
   if (localStorage.getItem("visdev.contourWidth") == null && data.display) {
     const xld = (data.display.shapes || []).find((shape) => shape.kind === "xld" && shape.width);
     const box = document.getElementById("contourWidth");
@@ -483,24 +483,51 @@ function showDetail(message) {
 }
 
 let liveDisplayStamp = null;
+let liveDisplayRev = null;
+let liveVarRev = null;
+let liveLogRev = null;
+let liveDisplaySession = null;
+
+function absorbKept(data) {
+  if (!server || !data || (data.id && server.id && data.id !== server.id)) return;
+  if (data.iconicKept) data.iconic = server.iconic;
+  if (data.controlKept) data.control = server.control;
+  if (data.logKept) data.log = server.log;
+  if (data.displayKept && server.display) data.display = server.display;
+}
+
+function takeDisplay(data) {
+  if (data.id && data.id !== liveDisplaySession) {
+    liveDisplaySession = data.id;
+    liveDisplayRev = null;
+    liveVarRev = null;
+    liveLogRev = null;
+  }
+  const rev = data.displayRev;
+  const same = rev != null && rev === liveDisplayRev;
+  if (rev != null) liveDisplayRev = rev;
+  if (data.varRev != null) liveVarRev = data.varRev;
+  if (data.logRev != null) liveLogRev = data.logRev;
+  if (data.displayStamp != null) liveDisplayStamp = data.displayStamp;
+  if (data.displayKept || same) return;
+  if (data.display) loadDisplay(data.display);
+  else clearGraphics();
+}
 
 function applyLiveState(data) {
+  absorbKept(data);
   sessionId = data.id;
   server = data;
   renderEditor();
   revealLine(data.line);
   renderLog();
+  if (!data.iconicKept && Array.isArray(data.iconic) && Array.isArray(data.control)) renderVars();
   setStatus();
   if (data.running) {
     stState.textContent = "執行中";
     stState.className = "";
   }
-  const stamp = data.displayStamp;
-  if (stamp != null && stamp !== liveDisplayStamp) {
-    liveDisplayStamp = stamp;
-    if (data.display) loadDisplay(data.display);
-    else clearGraphics();
-  }
+  takeDisplay(data);
 }
 
 async function exec(action, line) {
@@ -527,9 +554,19 @@ async function exec(action, line) {
       return;
     }
     if (data.running) {
+      if (data.id !== sessionId) {
+        liveDisplayRev = null;
+        liveVarRev = null;
+        liveLogRev = null;
+      }
       sessionId = data.id;
       while (true) {
-        const stateRes = await fetch(`/api/session/${encodeURIComponent(sessionId)}/state`);
+        const query = new URLSearchParams();
+        if (liveDisplayRev != null) query.set("displayRev", String(liveDisplayRev));
+        if (liveVarRev != null) query.set("varRev", String(liveVarRev));
+        if (liveLogRev != null) query.set("logRev", String(liveLogRev));
+        const qs = query.toString();
+        const stateRes = await fetch(`/api/session/${encodeURIComponent(sessionId)}/state${qs ? `?${qs}` : ""}`);
         const state = await stateRes.json();
         if (!stateRes.ok) {
           showDetail(state);
@@ -619,47 +656,11 @@ function insertAtCursor(text) {
 }
 
 function splitCall(text) {
-  const parts = [];
-  let buf = "";
-  let quote = "";
-  let depth = 0;
-  for (const ch of text) {
-    if (quote) {
-      buf += ch;
-      if (ch === quote) quote = "";
-      continue;
-    }
-    if (ch === "'" || ch === "\"") {
-      quote = ch;
-      buf += ch;
-      continue;
-    }
-    if (ch === "[" || ch === "(") {
-      depth += 1;
-      buf += ch;
-      continue;
-    }
-    if (ch === "]" || ch === ")") {
-      depth -= 1;
-      buf += ch;
-      continue;
-    }
-    if (ch === "," && depth === 0) {
-      parts.push(buf.trim());
-      buf = "";
-      continue;
-    }
-    buf += ch;
-  }
-  if (buf.trim()) parts.push(buf.trim());
-  return parts;
+  return VisdevCall.splitCall(text);
 }
 
 function exampleTokens(op) {
-  const open = op.example.indexOf("(");
-  const close = op.example.lastIndexOf(")");
-  if (open < 0 || close < open) return [];
-  return splitCall(op.example.slice(open + 1, close));
+  return VisdevCall.exampleTokens(op);
 }
 
 const OP_MEMORY = "visdev-op-memory";
@@ -674,24 +675,9 @@ function readJson(key, fallback) {
   }
 }
 
-function rememberedValues(op) {
-  const saved = readJson(OP_MEMORY, {})[op.name];
-  if (!saved) return null;
-  const values = callValues(op);
-  op.params.forEach((param, index) => {
-    if (param.role === "控制輸入" && saved[param.name]) values[index] = saved[param.name];
-  });
-  return values;
-}
-
-function rememberOperator(op, inputs) {
+function rememberOperator(op, values) {
   const memory = readJson(OP_MEMORY, {});
-  const fields = {};
-  inputs.forEach((node) => {
-    const param = op.params[Number(node.dataset.index)];
-    if (param && param.role === "控制輸入") fields[param.name] = node.value.trim();
-  });
-  memory[op.name] = fields;
+  memory[op.name] = VisdevCall.memoryRecord(op, values);
   const recent = readJson(OP_RECENT, []).filter((name) => name !== op.name);
   recent.unshift(op.name);
   try {
@@ -703,32 +689,7 @@ function rememberOperator(op, inputs) {
 }
 
 function callValues(op, tokens) {
-  const source = tokens === undefined ? exampleTokens(op) : tokens;
-  const controlIn = op.params.filter((param) => param.role === "控制輸入");
-  const controlOut = op.params.filter((param) => param.role === "控制輸出");
-  const leading = op.params.length - controlIn.length - controlOut.length;
-  const outTokens = controlOut.length ? source.slice(-controlOut.length) : [];
-  const head = controlOut.length ? source.slice(0, -controlOut.length) : source.slice();
-  const inTokens = head.slice(leading);
-  const headTokens = head.slice(0, leading);
-  let inIndex = 0;
-  let outIndex = 0;
-  let headIndex = 0;
-  return op.params.map((param) => {
-    if (param.role === "控制輸入") {
-      const value = inTokens[inIndex];
-      inIndex += 1;
-      return value ? value : (param.default || "");
-    }
-    if (param.role === "控制輸出") {
-      const value = outTokens[outIndex];
-      outIndex += 1;
-      return value || param.name;
-    }
-    const value = headTokens[headIndex];
-    headIndex += 1;
-    return value || param.name;
-  });
+  return VisdevCall.callValues(op, tokens);
 }
 
 let activeOperator = null;
@@ -779,43 +740,11 @@ function refreshOpPreview() {
   const preview = document.getElementById("opPreview");
   if (!preview || !activeOperator) return;
   const values = formFields().map((node) => node.value.trim());
-  preview.textContent = `${activeOperator.name} (${values.join(", ")})`;
+  preview.textContent = VisdevCall.formatCall(activeOperator.name, values);
 }
 
 function parseOperatorLine(text) {
-  const src = text.trim();
-  if (!src || src.startsWith("*")) return null;
-  const match = src.match(/^((?:Vizion\.)?[A-Za-z_][A-Za-z0-9_]*)\s*\(/i);
-  if (!match) return null;
-  let quote = "";
-  let depth = 1;
-  let body = "";
-  for (let i = match[0].length; i < src.length; i += 1) {
-    const ch = src[i];
-    if (quote) {
-      body += ch;
-      if (ch === quote) quote = "";
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      body += ch;
-      continue;
-    }
-    if (ch === "(") {
-      depth += 1;
-      body += ch;
-      continue;
-    }
-    if (ch === ")") {
-      depth -= 1;
-      if (depth === 0) return { name: match[1], args: splitCall(body) };
-      body += ch;
-      continue;
-    }
-    body += ch;
-  }
-  return null;
+  return VisdevCall.parseLine(text);
 }
 
 function openOperatorAtLine(lineIndex) {
@@ -832,9 +761,11 @@ function openOperatorForm(name, preset, lineIndex) {
   activeOperator = op;
   editingLine = Number.isInteger(lineIndex) ? lineIndex : null;
   showOp(name);
-  const values = preset || (editingLine == null ? rememberedValues(op) : null) || callValues(op);
+  const saved = readJson(OP_MEMORY, {})[op.name];
+  const plan = VisdevCall.dialogValues(op, { preset: preset || null, lineIndex: editingLine, memory: saved });
+  const values = plan.values;
   const ok = document.getElementById("opDialogOk");
-  if (ok) ok.textContent = editingLine == null ? "插入" : "更新";
+  if (ok) ok.textContent = plan.label;
   document.getElementById("opDialogTitle").textContent = op.name;
   document.getElementById("opDialogGuide").innerHTML = `
     ${noteBlock(op)}
@@ -900,21 +831,18 @@ function insertOperatorCall() {
     }
   }
   const values = inputs.map((node) => node.value.trim());
-  const call = `${activeOperator.name} (${values.join(", ")})`;
+  const call = VisdevCall.formatCall(activeOperator.name, values);
+  rememberOperator(activeOperator, values);
   if (editingLine != null) {
-    const lines = code.value.split("\n");
-    const indent = (lines[editingLine].match(/^\s*/) || [""])[0];
-    lines[editingLine] = `${indent}${call}`;
-    code.value = lines.join("\n");
-    const caret = lines.slice(0, editingLine + 1).join("\n").length;
-    code.selectionStart = code.selectionEnd = caret;
+    const replaced = VisdevCall.replaceLine(code.value, editingLine, call);
+    code.value = replaced.text;
+    code.selectionStart = code.selectionEnd = replaced.caret;
     commitProgram("checkpoint");
     renderEditor();
   } else {
-    rememberOperator(activeOperator, inputs);
     insertAtCursor(commentedCall(activeOperator, call));
-    buildOperatorMenu();
   }
+  buildOperatorMenu();
   closeOperatorDialog();
 }
 
@@ -1037,36 +965,7 @@ function commaCount(text) {
 }
 
 function splitCallArgs(example) {
-  const open = example.indexOf("(");
-  const close = example.lastIndexOf(")");
-  if (open < 0 || close <= open) return [];
-  const body = example.slice(open + 1, close);
-  const args = [];
-  let quote = "";
-  let depth = 0;
-  let current = "";
-  for (const ch of body) {
-    if (quote) {
-      current += ch;
-      if (ch === quote) quote = "";
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      current += ch;
-      continue;
-    }
-    if (ch === "(" || ch === "[") depth += 1;
-    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
-    if (ch === "," && depth === 0 && !quote) {
-      args.push(current.trim());
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-  if (current.trim()) args.push(current.trim());
-  return args;
+  return VisdevCall.exampleTokens({ example: example });
 }
 
 function logicalChunk() {
@@ -1339,6 +1238,7 @@ function clearGraphics() {
   gfxTitle.textContent = "";
   stZoom.textContent = "";
   draw();
+  publishDisplay(null);
 }
 
 async function loadDisplay(display) {
@@ -3013,8 +2913,7 @@ function selectedFeatures() {
 let displayChannel = null;
 
 function publishDisplay(display) {
-  if (!display) return;
-  const copy = {
+  const copy = display ? {
     width: display.width,
     height: display.height,
     image: display.image || null,
@@ -3023,8 +2922,8 @@ function publishDisplay(display) {
       delete next._img;
       return next;
     }),
-  };
-  const payload = { type: "display", id: sessionId, display: copy, at: Date.now() };
+  } : null;
+  const payload = { type: "display", id: sessionId, display: copy, displayRev: liveDisplayRev, at: Date.now() };
   try {
     if (!displayChannel) displayChannel = new BroadcastChannel("visdev-display");
     displayChannel.postMessage(payload);

@@ -4890,6 +4890,89 @@ def test_score_shift_matches_and_cancel_stops():
     assert session.step_count < 2000000
 
 
+def test_unchanged_display_is_not_reencoded():
+    from app.engine import render
+    from app.engine.session import omit_known_state
+
+    session = run_source(
+        "Vizion.gen_image_const (Image, 'byte', 64, 48)\n"
+        "Vizion.threshold (Image, Region, 0, 255)\n"
+    )
+    assert session.error is None, session.error
+    seen = {"n": 0}
+    original = render.png_data_url
+
+    def counting(array):
+        seen["n"] += 1
+        return original(array)
+
+    render.png_data_url = counting
+    try:
+        first = session.public_state()
+        encoded = seen["n"]
+        assert encoded >= 2
+        assert first["display"]["image"]
+        second = session.public_state()
+        assert seen["n"] == encoded
+        assert second["display"] is first["display"]
+        assert second["displayRev"] == first["displayRev"]
+        kept = omit_known_state(second, second["displayRev"], second["varRev"], second["logRev"])
+        assert kept["display"] is None and kept["displayKept"] is True
+        assert kept["iconic"] is None and kept["iconicKept"] is True
+        assert kept["control"] is None and kept["controlKept"] is True
+        assert kept["log"] is None and kept["logKept"] is True
+        assert second["display"]["image"] == first["display"]["image"]
+        assert second["iconic"][0]["name"]
+        assert omit_known_state(second, None, None, None)["display"] is first["display"]
+        session.vars["Mark"] = 7
+        marked = session.public_state()
+        assert marked["varRev"] != second["varRev"]
+        sent = omit_known_state(marked, marked["displayRev"], second["varRev"], marked["logRev"])
+        assert sent.get("controlKept") is not True
+        assert any(item["name"] == "Mark" for item in sent["control"])
+        session.display.overlays.append(
+            {"kind": "text", "text": "ok", "row": 4, "col": 4, "color": "#ffffff"}
+        )
+        third = session.public_state()
+        assert seen["n"] > encoded
+        assert third["displayRev"] != first["displayRev"]
+        assert third["display"]["image"] == first["display"]["image"]
+        assert any(shape.get("text") == "ok" for shape in third["display"]["shapes"])
+        session.region_color = "#3d8bff"
+        colored = session.public_state()
+        assert colored["displayRev"] != third["displayRev"]
+        assert colored["display"] is not third["display"]
+    finally:
+        render.png_data_url = original
+
+
+def test_unchanged_variable_thumbs_are_not_reencoded():
+    from app.engine import session as session_mod
+
+    session = run_source("Vizion.gen_image_const (Image, 'byte', 80, 60)\n")
+    assert session.error is None, session.error
+    seen = {"n": 0}
+    original = session_mod.jpeg_thumb
+
+    def counting(array, max_edge=112):
+        seen["n"] += 1
+        return original(array, max_edge)
+
+    session_mod.jpeg_thumb = counting
+    try:
+        first = session.public_state()
+        assert seen["n"] >= 1
+        encoded = seen["n"]
+        thumb = first["iconic"][0]["thumb"]
+        assert thumb.startswith("data:image/jpeg")
+        second = session.public_state()
+        assert seen["n"] == encoded
+        assert second["iconic"][0]["thumb"] == thumb
+        assert second["iconic"][0]["info"] == first["iconic"][0]["info"]
+    finally:
+        session_mod.jpeg_thumb = original
+
+
 def test_display_updates_before_the_program_finishes():
     import threading
     import time

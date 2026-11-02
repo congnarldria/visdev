@@ -191,6 +191,8 @@ class Session:
         self.threshold_mask = None
         self.threshold_region = None
         self.preview_region = None
+        self._display_cache = None
+        self._thumb_cache = {}
         self.prepare()
 
     def prepare(self):
@@ -674,37 +676,7 @@ class Session:
         message = stmt.name if not outputs else stmt.name + " → " + ", ".join(outputs)
         self.trace_line(stmt, message)
 
-    def public_state(self) -> dict:
-        iconic = []
-        control = []
-        for name, value in self.vars.items():
-            if isinstance(value, list) and value and all(isinstance(item, Image) for item in value):
-                kind, info, thumb = describe_iconic(value[-1])
-                iconic.append({
-                    "name": name, "kind": kind, "role": _var_role(name, kind, True),
-                    "info": f"{len(value)} 張  {info}", "thumb": thumb,
-                })
-            elif isinstance(value, (Image, Region, XLD)):
-                kind, info, thumb = describe_iconic(value)
-                iconic.append({
-                    "name": name, "kind": kind, "role": _var_role(name, kind, True),
-                    "info": info, "thumb": thumb,
-                })
-            elif isinstance(value, ShapeModel):
-                control.append({"name": name, "type": "shape_model", "text": value.summary(), "full": value.summary()})
-            elif isinstance(value, NccModel):
-                control.append({"name": name, "type": "ncc_model", "text": value.summary(), "full": value.summary()})
-            elif callable(getattr(value, "summary", None)):
-                text = value.summary()
-                control.append({"name": name, "type": "model", "text": text, "full": text})
-            else:
-                kind = "tuple" if isinstance(value, list) else "string" if isinstance(value, str) else "real" if isinstance(value, float) else "integer"
-                role = _var_role(name, kind, False)
-                control.append({"name": name, "type": role, "text": fmt_value(value), "full": full_value(value)})
-        histogram = None
-        if self.histogram is not None:
-            histogram = dict(self.histogram)
-            histogram["color"] = self.region_color
+    def _window_overlays(self) -> list:
         overlays = list(self.display.overlays)
         mask = self.threshold_mask
         base = self.display.base
@@ -752,6 +724,115 @@ class Session:
                     "alpha": 120,
                 },
             )
+        return overlays
+
+    def _display_token(self, overlays: list) -> tuple:
+        base = self.display.base
+        if base is None:
+            base_token = None
+        else:
+            domain = base.domain
+            base_token = (
+                id(base.data),
+                base.data.shape,
+                None if domain is None else id(domain),
+            )
+        parts = []
+        for item in overlays:
+            kind = item.get("kind")
+            if kind == "region":
+                region = item["region"]
+                parts.append(
+                    (
+                        "region",
+                        tuple(id(mask) for mask in region.objects),
+                        region.width,
+                        region.height,
+                        item.get("color"),
+                        item.get("draw"),
+                        item.get("width"),
+                        item.get("alpha"),
+                        tuple(item.get("colors") or ()),
+                    )
+                )
+            elif kind == "xld":
+                xld = item["xld"]
+                parts.append(
+                    (
+                        "xld",
+                        id(xld),
+                        len(xld.contours),
+                        item.get("color"),
+                        item.get("width"),
+                        tuple(item.get("colors") or ()),
+                    )
+                )
+            elif kind == "text":
+                parts.append(("text", item.get("text"), item.get("row"), item.get("col"), item.get("color")))
+            else:
+                parts.append((kind, id(item)))
+        return (base_token, tuple(parts))
+
+    def _revision(self, cache_name: str, token: tuple) -> int:
+        cached = getattr(self, cache_name, None)
+        if cached is not None and cached[0] == token:
+            return cached[1]
+        rev = int(cached[1] if cached is not None else 0) + 1
+        setattr(self, cache_name, (token, rev))
+        return rev
+
+    def window_display(self) -> tuple[dict | None, int]:
+        overlays = self._window_overlays()
+        token = self._display_token(overlays)
+        cached = getattr(self, "_display_cache", None)
+        if cached is not None and cached[0] == token:
+            return cached[1], cached[2]
+        payload = compose_display(self.display.base, overlays)
+        rev = int(getattr(self, "_display_rev", 0)) + 1
+        self._display_rev = rev
+        self._display_cache = (token, payload, rev)
+        return payload, rev
+
+    def public_state(self) -> dict:
+        iconic = []
+        control = []
+        for name, value in self.vars.items():
+            if isinstance(value, list) and value and all(isinstance(item, Image) for item in value):
+                kind, info, thumb = describe_iconic(value[-1], self._thumb_cache)
+                iconic.append({
+                    "name": name, "kind": kind, "role": _var_role(name, kind, True),
+                    "info": f"{len(value)} 張  {info}", "thumb": thumb,
+                })
+            elif isinstance(value, (Image, Region, XLD)):
+                kind, info, thumb = describe_iconic(value, self._thumb_cache)
+                iconic.append({
+                    "name": name, "kind": kind, "role": _var_role(name, kind, True),
+                    "info": info, "thumb": thumb,
+                })
+            elif isinstance(value, ShapeModel):
+                control.append({"name": name, "type": "shape_model", "text": value.summary(), "full": value.summary()})
+            elif isinstance(value, NccModel):
+                control.append({"name": name, "type": "ncc_model", "text": value.summary(), "full": value.summary()})
+            elif callable(getattr(value, "summary", None)):
+                text = value.summary()
+                control.append({"name": name, "type": "model", "text": text, "full": text})
+            else:
+                kind = "tuple" if isinstance(value, list) else "string" if isinstance(value, str) else "real" if isinstance(value, float) else "integer"
+                role = _var_role(name, kind, False)
+                control.append({"name": name, "type": role, "text": fmt_value(value), "full": full_value(value)})
+        histogram = None
+        if self.histogram is not None:
+            histogram = dict(self.histogram)
+            histogram["color"] = self.region_color
+        display, display_rev = self.window_display()
+        var_rev = self._revision(
+            "_var_cache",
+            (
+                tuple((item["name"], item["kind"], item["role"], item["info"], item["thumb"]) for item in iconic),
+                tuple((item["name"], item["type"], item["text"], item["full"]) for item in control),
+            ),
+        )
+        log_rev = self._revision("_log_cache", tuple(self.log[-300:]))
         return {
             "id": self.id,
             "line": self.current_line(),
@@ -762,7 +843,10 @@ class Session:
             "log": self.log[-300:],
             "iconic": iconic,
             "control": control,
-            "display": compose_display(self.display.base, overlays),
+            "display": display,
+            "displayRev": display_rev,
+            "varRev": var_rev,
+            "logRev": log_rev,
             "histogram": histogram,
             "steps": self.step_count,
             "imageStamp": int(getattr(self, "image_stamp", 0)),
@@ -806,6 +890,29 @@ class Session:
         return {"name": name, "kind": kind, "display": display}
 
 
+def _omit_when(state: dict, have: int | None, rev_key: str, drop: dict) -> dict:
+    if have is None or state.get(rev_key) != have:
+        return state
+    trimmed = dict(state)
+    trimmed.update(drop)
+    return trimmed
+
+
+def omit_known_display(state: dict, have: int | None) -> dict:
+    return _omit_when(state, have, "displayRev", {"display": None, "displayKept": True})
+
+
+def omit_known_state(state: dict, display_rev: int | None, var_rev: int | None, log_rev: int | None) -> dict:
+    state = omit_known_display(state, display_rev)
+    state = _omit_when(
+        state,
+        var_rev,
+        "varRev",
+        {"iconic": None, "control": None, "iconicKept": True, "controlKept": True},
+    )
+    return _omit_when(state, log_rev, "logRev", {"log": None, "logKept": True})
+
+
 def _num_literal(text: str) -> bool:
     return bool(re.fullmatch(r"-?\d+(?:\.\d+)?", str(text).strip()))
 
@@ -816,10 +923,25 @@ def _in_range(current: float, end: float, step: float) -> bool:
     return current >= end - 1e-9
 
 
-def describe_iconic(value):
+def _remember_thumb(thumbs, token, build):
+    if thumbs is None:
+        return build()
+    found = thumbs.get(token)
+    if found is not None:
+        return found
+    thumb = build()
+    if len(thumbs) > 64:
+        thumbs.clear()
+    thumbs[token] = thumb
+    return thumb
+
+
+def describe_iconic(value, thumbs=None):
     if isinstance(value, Image):
         channels = "byte" if value.channels == 1 else f"{value.channels} 通道"
-        thumb = jpeg_thumb(apply_domain_dim(value))
+        domain = value.domain
+        token = ("image", id(value.data), value.data.shape, None if domain is None else id(domain))
+        thumb = _remember_thumb(thumbs, token, lambda: jpeg_thumb(apply_domain_dim(value)))
         return "image", f"{value.width}×{value.height}  {channels}", thumb
     if isinstance(value, Region):
         info = f"{value.count()} 個物件  {value.width}×{value.height}"
@@ -832,5 +954,7 @@ def describe_iconic(value):
                     else:
                         holes += 1
             info += f"  link 外{outers} 孔{holes}"
-        return "region", info, jpeg_thumb(region_thumb(value))
-    return "xld", f"{len(value.contours)} 條輪廓", jpeg_thumb(xld_thumb(value))
+        token = ("region", tuple(id(mask) for mask in value.objects), value.width, value.height)
+        return "region", info, _remember_thumb(thumbs, token, lambda: jpeg_thumb(region_thumb(value)))
+    token = ("xld", id(value), len(value.contours), value.width, value.height)
+    return "xld", f"{len(value.contours)} 條輪廓", _remember_thumb(thumbs, token, lambda: jpeg_thumb(xld_thumb(value)))

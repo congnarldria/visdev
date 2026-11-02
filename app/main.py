@@ -37,7 +37,7 @@ from app.engine.operators import (
 from app.engine.parser import ParseError
 from app.engine.render import contours_of, fill_overlay, normalize_color, png_data_url, read_cv_image
 from app.engine.samples_gen import ensure_samples
-from app.engine.session import Session
+from app.engine.session import Session, omit_known_state
 from app.engine.shape_model import MATCH_COLORS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -174,15 +174,21 @@ def _snapshot(current: Session) -> dict:
 
 
 @app.get("/api/session/{sid}/display")
-def session_display(sid: str):
-    current = _session_or_404(sid)
-    state = _snapshot(current)
-    return {"id": sid, "display": state.get("display"), "displayStamp": state.get("displayStamp"), "running": state["running"]}
+def session_display(sid: str, displayRev: int | None = None):
+    state = omit_known_state(_snapshot(_session_or_404(sid)), displayRev, None, None)
+    return {
+        "id": sid,
+        "display": state.get("display"),
+        "displayStamp": state.get("displayStamp"),
+        "displayRev": state.get("displayRev"),
+        "displayKept": bool(state.get("displayKept")),
+        "running": state["running"],
+    }
 
 
 @app.get("/api/session/{sid}/state")
-def session_state(sid: str):
-    return _snapshot(_session_or_404(sid))
+def session_state(sid: str, displayRev: int | None = None, varRev: int | None = None, logRev: int | None = None):
+    return omit_known_state(_snapshot(_session_or_404(sid)), displayRev, varRev, logRev)
 
 
 @app.get("/api/operators")
