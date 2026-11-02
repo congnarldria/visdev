@@ -3417,6 +3417,54 @@ def test_clicking_a_calib_panel_shows_that_image():
     assert float(session.vars["Error"]) == mean_error
 
 
+def test_long_trace_and_thumb_cache_stay_bounded():
+    from app.engine.session import _remember_thumb
+
+    session = Session("for Index := 1 to 2500 by 1\nValue := Index\nendfor\n", ROOT)
+    session.trace = True
+    session.run()
+    assert session.error is None, session.error
+    assert session.vars["Value"] == 2500
+    assert 1500 <= len(session.log) <= 2000
+    assert any("Value := 2500" in line for line in session.log[-5:])
+    assert session.log[-1].startswith("執行完成")
+
+    thumbs = {}
+    for index in range(80):
+        _remember_thumb(thumbs, ("image", index), lambda index=index: f"t{index}")
+    assert len(thumbs) <= 48
+    assert thumbs[("image", 79)] == "t79"
+    assert ("image", 0) not in thumbs
+    oldest = next(iter(thumbs))
+    kept = thumbs[oldest]
+    _remember_thumb(thumbs, oldest, lambda: "unused")
+    for index in range(80, 90):
+        _remember_thumb(thumbs, ("image", index), lambda index=index: f"t{index}")
+    assert thumbs[oldest] == kept
+    assert len(thumbs) <= 48
+
+
+def test_inspect_gauge_template_measures_the_edge():
+    session = run_source((ROOT / "samples" / "inspect_gauge.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert session.vars["PCol"] == [107.5]
+    assert session.vars["LRow1"] == 199.5
+    assert session.vars["LCol1"] == 380.0
+    assert session.vars["LCol2"] == 480.0
+    assert abs(float(session.vars["Gap"]) - 286.8213729832559) < 1e-6
+    assert session.display.base is not None
+
+
+def test_inspect_locate_template_finds_four():
+    session = run_source((ROOT / "samples" / "inspect_locate.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 4
+    scores = session.vars["Score"]
+    assert len(scores) == 4
+    assert min(float(item) for item in scores) > 0.9
+    assert session.display.base is not None
+
+
 def test_inspect_parts_template_counts_eight_parts():
     session = run_source((ROOT / "samples" / "inspect_parts.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error

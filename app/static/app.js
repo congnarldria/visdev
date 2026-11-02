@@ -2074,9 +2074,18 @@ function syncViewMenu() {
 }
 
 window.VisDevCommands = {
-  async inspectTemplate() {
-    await openProgram("samples", "inspect_parts.viz");
-    stLine.textContent = "這是零件檢測範本。改 MinGray 和面積下限，再按執行。";
+  async openNamedTemplate(name, note) {
+    await openProgram("samples", name);
+    stLine.textContent = note;
+  },
+  inspectTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_parts.viz", "這是零件檢測範本。改 MinGray 和面積下限，再按執行。");
+  },
+  gaugeTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_gauge.viz", "這是邊緣量測範本。改量測線的列和行，再按執行。");
+  },
+  locateTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");
   },
   new() {
     code.value = "* 新程式\n";

@@ -195,7 +195,7 @@ class Session:
         self.error = text
         self.error_line = number
         if log:
-            self.log.append(text if text.startswith("錯誤") else f"錯誤 {text}")
+            self._append_log(text if text.startswith("錯誤") else f"錯誤 {text}")
 
     def reset(self):
         self._release_error_frames()
@@ -331,7 +331,7 @@ class Session:
         self._release_proc_jump(adjusted)
         if adjusted != target:
             self.arrow_note = "程序還沒呼叫，箭頭停在程序標題"
-            self.log.append(self.arrow_note)
+            self._append_log(self.arrow_note)
         self.pc = adjusted
         self.done = False
 
@@ -552,13 +552,20 @@ class Session:
             return None
         return [MATCH_COLORS[index % limit] for index in range(count)]
 
+    def _append_log(self, message: str) -> None:
+        log = self.log
+        log.append(message)
+        extra = len(log) - 2000
+        if extra > 0:
+            del log[: extra + 500]
+
     def trace_line(self, stmt, message: str):
         if not self.trace:
             return
         label = self._trace_proc_label()
         if label:
             message = f"{label}: {message}"
-        self.log.append(f"{stmt.line:>4}  {message}")
+        self._append_log(f"{stmt.line:>4}  {message}")
 
     def _trace_proc_label(self) -> str | None:
         names = [frame["proc"].name for frame in self.proc_stack]
@@ -645,16 +652,16 @@ class Session:
             with self.lock:
                 self.prepare()
                 if self.done:
-                    self.log.append(f"執行完成（{self.step_count} 步）")
+                    self._append_log(f"執行完成（{self.step_count} 步）")
                     return
                 if self.cancel:
                     self.paused = "stopped"
-                    self.log.append("已停止")
+                    self._append_log("已停止")
                     return
                 if self._on_breakpoint() and self.pc != self.break_skip:
                     self.break_skip = self.pc
                     self.paused = "breakpoint"
-                    self.log.append(f"中斷點 第 {self.stmts[self.pc].line} 行")
+                    self._append_log(f"中斷點 第 {self.stmts[self.pc].line} 行")
                     return
                 self.break_skip = None
                 self._execute_current()
@@ -678,7 +685,7 @@ class Session:
             self._execute(stmt, index)
         except StopSignal:
             self.paused = "stopped" if self.cancel else "stop"
-            self.log.append("已停止" if self.cancel else f"Vizion.stop() 於第 {stmt.line} 行")
+            self._append_log("已停止" if self.cancel else f"Vizion.stop() 於第 {stmt.line} 行")
         except (ExprError, ParseError, Exception) as exc:
             frame = self.try_stack[-1] if self.try_stack and self.try_stack[-1][2] == self.proc_depth else None
             if frame is not None:
@@ -686,7 +693,7 @@ class Session:
                 catch_index, var, _depth = frame
                 self.vars[var] = str(exc)
                 self.pc = catch_index + 1
-                self.log.append(f"catch {var} 第 {stmt.line} 行：{exc}")
+                self._append_log(f"catch {var} 第 {stmt.line} 行：{exc}")
             elif self.proc_depth:
                 line = getattr(exc, "line", None) or stmt.line
                 if getattr(exc, "already_reported", False):
@@ -1320,11 +1327,14 @@ def _remember_thumb(thumbs, token, build):
         return build()
     found = thumbs.get(token)
     if found is not None:
+        thumbs.pop(token)
+        thumbs[token] = found
         return found
     thumb = build()
-    if len(thumbs) > 64:
-        thumbs.clear()
     thumbs[token] = thumb
+    if len(thumbs) > 48:
+        while len(thumbs) > 32:
+            thumbs.pop(next(iter(thumbs)))
     return thumb
 
 

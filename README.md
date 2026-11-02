@@ -1,4 +1,4 @@
-# VisDev 1.0
+# VisDev 1.1
 
 VisDev 是一套桌面視覺開發環境。程式寫法接近 HDevelop，算子名稱前面加 `Vizion.`，影像計算用 OpenCV。
 
@@ -13,7 +13,7 @@ Vizion.connection (Region, Parts, 1)
 
 ## 怎麼開始
 
-在 Windows 上，`run.bat` 會用本機虛擬環境啟動，並打開編輯視窗。視窗標題是 VisDev 1.0。
+在 Windows 上，`run.bat` 會用本機虛擬環境啟動，並打開編輯視窗。視窗標題是 VisDev 1.1。
 
 裝好 `requirements.txt` 之後，也可以：
 
@@ -31,7 +31,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8765
 
 檔案選單：
 
-- **檢測範本**會打開 `samples/inspect_parts.viz`。它讀 `samples/parts.png`，用灰階 60 到 255 取零件，八連通後留下面積 80 以上的，再算個數和重心。這張圖是 8 個零件。改 `MinGray` 和面積下限即可換成自己的工件。
+- **範本**裡有三支可以打開就跑的程式。零件檢測讀 `samples/parts.png`，這張圖是 8 個零件，門檻和面積下限可以改。邊緣量測讀 `samples/gauge.png`，算出邊緣和一條直線的距離。形狀定位用 `samples/shape_template.png` 在 `samples/shapes_scene.png` 裡找，這張場景是 4 個。
 - **新增、開啟、儲存**。存檔在 `workspace/`。
 - **載入影像**把圖放進 `workspace/`，路徑可寫進 `read_image`。
 - **匯出 C#** 涵蓋讀圖、定義域、二值化、連通、篩選、矩形和圓形形態學、個數和重心。
