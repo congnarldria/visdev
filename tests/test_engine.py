@@ -3324,6 +3324,36 @@ def test_three_checkerboard_views_share_one_calib():
     assert int(again.vars["Count"]) == 0
 
 
+def test_code93_lowercase_reads_as_uppercase():
+    import numpy as np
+
+    from app.engine.barcode1d import render_code93
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_code93_lowercase_reads_VISDEV.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Text"] == "VISDEV"
+    assert sample.vars["Still"] == "VISDEV"
+    assert np.array_equal(render_code93("VISDEV"), render_code93("visdev"))
+    rejected = run_source("Vizion.gen_code93 (Code, 'visdev!')\n")
+    assert rejected.error is not None and "Code 93" in rejected.error
+
+
+def test_code2of5_odd_length_pads_a_zero():
+    import numpy as np
+
+    from app.engine.barcode1d import render_code2of5
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_code2of5_odd_length_reads_012345.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["OddText"] == "012345"
+    assert sample.vars["EvenText"] == "123456"
+    assert np.array_equal(render_code2of5("12345"), render_code2of5("012345"))
+    rejected = run_source("Vizion.gen_code2of5 (Code, '12a')\n")
+    assert rejected.error is not None and "只能是數字" in rejected.error
+
+
 def test_hdevelop_batch102():
     import numpy as np
 

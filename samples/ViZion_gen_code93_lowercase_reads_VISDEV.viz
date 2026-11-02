@@ -1,0 +1,10 @@
+* Code 93 小寫讀回 VISDEV
+* 小寫 visdev 以前會被拒絕。現在印出來再讀回是 VISDEV，和大寫 VISDEV 同一張條碼。
+Vizion.gen_code93 (Code, 'visdev')
+Vizion.create_bar_code_model (Handle)
+Vizion.find_bar_code (Code, Symbol, Handle, 'Code 93', Decoded)
+Text := Decoded[1]
+Vizion.gen_code93 (Upper, 'VISDEV')
+Vizion.find_bar_code (Upper, Symbol2, Handle, 'Code 93', Decoded2)
+Still := Decoded2[1]
+Vizion.dev_display (Code)

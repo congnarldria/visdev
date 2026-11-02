@@ -320,8 +320,10 @@ def decode_codabar_row(binary: np.ndarray):
 
 def render_code2of5(payload: str, module: int = 2, height: int = 80, quiet: int = 16) -> np.ndarray:
     digits = _digits(payload.strip(), "2/5 Interleaved")
-    if len(digits) < 2 or len(digits) % 2:
-        raise ValueError("2/5 Interleaved 要偶數位數字")
+    if not digits:
+        raise ValueError("2/5 Interleaved 不能是空的")
+    if len(digits) % 2:
+        digits = "0" + digits
     chunks = [(1, 1), (0, 1), (1, 1), (0, 1)]
     for index in range(0, len(digits), 2):
         bars = _WIDE[digits[index]]
@@ -436,8 +438,9 @@ def _code93_checks(values: list[int]):
 
 
 def render_code93(payload: str, module: int = 2, height: int = 80, quiet: int = 16) -> np.ndarray:
+    payload = payload.upper()
     if not payload or any(char not in _CODE93_CHARS for char in payload):
-        raise ValueError("Code 93 只接受數字、大寫英文和 - . 空白 $ / + %")
+        raise ValueError("Code 93 只接受數字、英文和 - . 空白 $ / + %。小寫會轉成大寫。")
     values = [_CODE93_CHARS.index(char) for char in payload]
     check_c, check_k = _code93_checks(values)
     chunks = []

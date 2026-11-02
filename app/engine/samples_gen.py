@@ -126,6 +126,8 @@ SAMPLE_ORDER = (
     "ViZion_convert_image_type_real_byte_roundtrip.viz",
     "ViZion_gen_image_surface_real_keeps_310.viz",
     "ViZion_find_calib_object_three_views_one_board.viz",
+    "ViZion_gen_code93_lowercase_reads_VISDEV.viz",
+    "ViZion_gen_code2of5_odd_length_reads_012345.viz",
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz",
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz",
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz",
@@ -5044,6 +5046,32 @@ Vizion.dev_display (Front)
 """
 
 
+HDEVELOP_BATCH101G_PROGRAM = """* Code 93 小寫讀回 VISDEV
+* 小寫 visdev 以前會被拒絕。現在印出來再讀回是 VISDEV，和大寫 VISDEV 同一張條碼。
+Vizion.gen_code93 (Code, 'visdev')
+Vizion.create_bar_code_model (Handle)
+Vizion.find_bar_code (Code, Symbol, Handle, 'Code 93', Decoded)
+Text := Decoded[1]
+Vizion.gen_code93 (Upper, 'VISDEV')
+Vizion.find_bar_code (Upper, Symbol2, Handle, 'Code 93', Decoded2)
+Still := Decoded2[1]
+Vizion.dev_display (Code)
+"""
+
+
+HDEVELOP_BATCH101H_PROGRAM = """* 交錯二五碼奇數位讀回 012345
+* 12345 以前會被拒絕。現在最前面補 0，讀回來是 012345。偶數位 123456 仍是 123456。
+Vizion.gen_code2of5 (Odd, '12345')
+Vizion.create_bar_code_model (Handle)
+Vizion.find_bar_code (Odd, Symbol, Handle, '2/5 Interleaved', Decoded)
+OddText := Decoded[1]
+Vizion.gen_code2of5 (Even, '123456')
+Vizion.find_bar_code (Even, Symbol2, Handle, '2/5 Interleaved', Decoded2)
+EvenText := Decoded2[1]
+Vizion.dev_display (Odd)
+"""
+
+
 HDEVELOP_BATCH102_PROGRAM = """* 平滑平移的列是 39.23
 * 教導框中心是列 39.5、行 47.5。圖案往上 0.25、往右 0.35，真的中心在列 39.25、行 47.85。
 * 整數峰停在列 40。列 39 的分數更高，三點拋物線卻會停在 40。
@@ -5962,6 +5990,8 @@ GENERATED_PROGRAMS = {
     "ViZion_convert_image_type_real_byte_roundtrip.viz": HDEVELOP_BATCH101D_PROGRAM,
     "ViZion_gen_image_surface_real_keeps_310.viz": HDEVELOP_BATCH101E_PROGRAM,
     "ViZion_find_calib_object_three_views_one_board.viz": HDEVELOP_BATCH101F_PROGRAM,
+    "ViZion_gen_code93_lowercase_reads_VISDEV.viz": HDEVELOP_BATCH101G_PROGRAM,
+    "ViZion_gen_code2of5_odd_length_reads_012345.viz": HDEVELOP_BATCH101H_PROGRAM,
     "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz": HDEVELOP_BATCH102_PROGRAM,
     "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz": HDEVELOP_BATCH103_PROGRAM,
     "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz": HDEVELOP_BATCH104_PROGRAM,
