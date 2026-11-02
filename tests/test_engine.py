@@ -5018,6 +5018,27 @@ def test_trace_names_each_line_inside_a_procedure():
     assert any(line.endswith("add: Result := 5") for line in stepped.log)
 
 
+def test_trace_shows_recursive_procedure_depth():
+    source = "\n".join([
+        "procedure down (: : N : Last)",
+        "    if (N > 0)",
+        "        down (N - 1, Last)",
+        "    else",
+        "        Last := 7",
+        "    endif",
+        "endprocedure",
+        "down (2, Out)",
+    ])
+    session = Session(source, ROOT)
+    session.trace = True
+    session.run()
+    assert session.error is None, session.error
+    assert session.vars["Out"] == 7
+    assert any(line.endswith("down×3: Last := 7") for line in session.log)
+    assert any(line.endswith("down×2: down → Last := 7") for line in session.log)
+    assert not any(line.endswith("down: Last := 7") for line in session.log)
+
+
 def test_trace_log_sends_only_new_lines():
     from app.engine.session import omit_known_state
 

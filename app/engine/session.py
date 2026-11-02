@@ -489,12 +489,19 @@ class Session:
     def trace_line(self, stmt, message: str):
         if not self.trace:
             return
-        name = self.proc_names[-1] if self.proc_names else None
-        if name is None and self.proc_stack:
-            name = self.proc_stack[-1]["proc"].name
-        if name:
-            message = f"{name}: {message}"
+        label = self._trace_proc_label()
+        if label:
+            message = f"{label}: {message}"
         self.log.append(f"{stmt.line:>4}  {message}")
+
+    def _trace_proc_label(self) -> str | None:
+        names = [frame["proc"].name for frame in self.proc_stack]
+        names.extend(self.proc_names)
+        if not names:
+            return None
+        name = names[-1]
+        depth = sum(1 for item in names if item == name)
+        return name if depth == 1 else f"{name}×{depth}"
 
     def _on_breakpoint(self) -> bool:
         if self.pc >= len(self.stmts) or not self.breakpoints:
