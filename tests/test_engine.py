@@ -4618,6 +4618,26 @@ def test_gauge():
     assert parallel.error and "平行" in parallel.error
 
 
+def test_breakpoint_added_during_run_stops_later():
+    import threading
+    import time
+
+    session = Session("for Index := 1 to 100000 by 1\nK := Index\nendfor\n", ROOT)
+
+    def add_break():
+        while session.step_count < 3 and not session.done and session.paused != "breakpoint":
+            time.sleep(0.002)
+        with session.lock:
+            session.breakpoints.add(2)
+
+    threading.Thread(target=add_break, daemon=True).start()
+    session.run()
+    assert session.paused == "breakpoint"
+    assert session.current_line() == 2
+    assert session.vars["K"] >= 1
+    assert session.step_count < 100000
+
+
 def test_breakpoint_stops_and_times_lines():
     source = "a := 1\n* note\nb := 2\nc := a + b\n"
     session = Session(source, ROOT)

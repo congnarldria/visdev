@@ -64,6 +64,10 @@ class ExecIn(BaseModel):
     line: int | None = None
 
 
+class BreakpointsIn(BaseModel):
+    lines: list[int] = []
+
+
 class SaveIn(BaseModel):
     name: str
     source: str
@@ -576,6 +580,15 @@ async def exec_program(body: ExecIn):
     current.runner = threading.Thread(target=background, daemon=True, name="visdev-run")
     current.runner.start()
     return {"id": current.id, "running": True}
+
+
+@app.post("/api/session/{sid}/breakpoints")
+def set_breakpoints(sid: str, body: BreakpointsIn):
+    current = _session_or_404(sid)
+    with current.lock:
+        current.breakpoints = {int(line) for line in body.lines}
+        lines = sorted(current.breakpoints)
+    return {"ok": True, "lines": lines}
 
 
 @app.post("/api/stop/{sid}")

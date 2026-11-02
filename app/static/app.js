@@ -50,6 +50,7 @@ const PAD = 8;
 let operators = [];
 let operatorNames = new Set();
 let sessionId = null;
+let runningSource = null;
 let savedText = "";
 let saveTarget = { kind: "sample", name: "blob_inspect.hdv" };
 
@@ -112,13 +113,49 @@ function renderHighlight() {
   hl.innerHTML = src.split("\n").map(highlightLine).join("\n");
 }
 
+async function pushBreakpoints() {
+  if (!sessionId || !server.running || runningSource == null) return;
+  if (!VisdevRun.sameProgram(runningSource, code.value)) return;
+  const lines = [...breakpoints];
+  try {
+    await fetch(`/api/session/${encodeURIComponent(sessionId)}/breakpoints`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lines }),
+    });
+  } catch (_err) {
+    /* 下一輪執行仍會帶上編輯器裡的中斷點 */
+  }
+}
+
+function programArrow() {
+  if (!server.line) return null;
+  if (runningSource == null) return server.line;
+  return VisdevRun.arrowLine(runningSource, code.value, server.line);
+}
+
+function noteRunningProgram() {
+  if (runningSource == null) return;
+  const note = VisdevRun.statusText(runningSource, code.value, server.line, !!server.running, server.paused);
+  if (!note) {
+    if (!server.running) {
+      runningSource = null;
+      setStatus();
+    }
+    return;
+  }
+  if (server.running) stState.textContent = "執行中";
+  stLine.textContent = note;
+}
+
 function renderGutter() {
   const count = Math.max(1, code.value.split("\n").length);
+  const arrow = programArrow();
   let html = "";
   for (let line = 1; line <= count; line += 1) {
     const cls = ["gl"];
     if (breakpoints.has(line)) cls.push("bp");
-    if (server.line === line) cls.push("cur");
+    if (arrow === line) cls.push("cur");
     if (server.errorLine === line || diagnostics.some((item) => item.line === line && item.sev === "error")) cls.push("err");
     else if (diagnostics.some((item) => item.line === line && item.sev === "warning")) cls.push("warn");
     html += `<div class="${cls.join(" ")}" data-line="${line}"><span class="pc"></span><span class="num">${line}</span></div>`;
@@ -128,9 +165,10 @@ function renderGutter() {
 
 function placeBars() {
   const topFor = (line) => PAD + (line - 1) * LINE - code.scrollTop;
-  if (server.line) {
+  const arrow = programArrow();
+  if (arrow) {
     currentBar.style.display = "block";
-    currentBar.style.top = `${topFor(server.line)}px`;
+    currentBar.style.top = `${topFor(arrow)}px`;
   } else {
     currentBar.style.display = "none";
   }
@@ -157,10 +195,11 @@ function formatLineTime(item) {
 function renderTimes() {
   const count = Math.max(1, code.value.split("\n").length);
   const times = new Map((server.lineTimes || []).map((item) => [item.line, item]));
+  const arrow = programArrow();
   let html = "";
   for (let line = 1; line <= count; line += 1) {
     const item = times.get(line);
-    html += `<div class="${server.line === line ? "on" : ""}">${item ? formatLineTime(item) : ""}</div>`;
+    html += `<div class="${arrow === line ? "on" : ""}">${item ? formatLineTime(item) : ""}</div>`;
   }
   lineTimes.innerHTML = html;
 }
@@ -415,7 +454,8 @@ function applyState(data) {
   server = data;
   gfxBanner.hidden = true;
   renderEditor();
-  revealLine(data.line);
+  const arrow = programArrow();
+  if (arrow) revealLine(arrow);
   renderVars();
   renderLog();
   setStatus();
@@ -434,6 +474,7 @@ function applyState(data) {
     closeErrorDialog();
   }
   publishCustomVars();
+  noteRunningProgram();
 }
 
 function publishCustomVars() {
@@ -522,7 +563,8 @@ function applyLiveState(data) {
   sessionId = data.id;
   server = data;
   renderEditor();
-  revealLine(data.line);
+  const arrow = programArrow();
+  if (arrow) revealLine(arrow);
   renderLog();
   if (!data.iconicKept && Array.isArray(data.iconic) && Array.isArray(data.control)) renderVars();
   setStatus();
@@ -532,19 +574,21 @@ function applyLiveState(data) {
   }
   takeDisplay(data);
   if (imageChanged) clearPick();
+  noteRunningProgram();
 }
 
 async function exec(action, line) {
   if (inflight) return;
   inflight = true;
   document.getElementById("btnRun").disabled = action === "run";
+  const submitted = code.value;
   try {
     const res = await fetch("/api/exec", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: sessionId,
-        source: code.value,
+        source: submitted,
         breakpoints: [...breakpoints],
         action,
         trace: document.getElementById("trace").checked,
@@ -558,6 +602,7 @@ async function exec(action, line) {
       return;
     }
     if (data.running) {
+      runningSource = submitted;
       if (data.id !== sessionId) {
         liveDisplayRev = null;
         liveVarRev = null;
@@ -585,6 +630,7 @@ async function exec(action, line) {
       }
       return;
     }
+    runningSource = null;
     applyState(data);
   } catch (err) {
     showDetail({ error: "無法連上 VisDev：" + err.message });
@@ -1528,6 +1574,7 @@ code.addEventListener("input", () => {
   refreshDirty();
   renderEditor();
   updateSense();
+  noteRunningProgram();
 });
 document.getElementById("btnClearLog").addEventListener("click", () => {
   logHidden = true;
@@ -1690,6 +1737,7 @@ gutter.addEventListener("click", (event) => {
   if (breakpoints.has(line)) breakpoints.delete(line);
   else breakpoints.add(line);
   renderGutter();
+  pushBreakpoints();
 });
 document.getElementById("errOk").onclick = () => closeErrorDialog();
 document.getElementById("errDialog").addEventListener("mousedown", (event) => {
