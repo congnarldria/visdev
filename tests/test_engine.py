@@ -3350,7 +3350,7 @@ def test_three_checkerboard_views_share_one_calib():
         "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
         "Vizion.set_calib_data_calib_object (CalibDataID, 0, 'board.cpd')\n"
     )
-    assert descr.error is not None and "不讀描述檔" in descr.error
+    assert descr.error is not None and "讀不到描述檔" in descr.error
     still = run_source(
         "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
         "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,10')\n"
@@ -3358,6 +3358,87 @@ def test_three_checkerboard_views_share_one_calib():
     )
     assert still.error is None, still.error
     assert int(still.vars["Count"]) == 0
+
+
+def test_plate_file_and_two_cameras():
+    import cv2
+    import numpy as np
+
+    from app.engine.chapters.calib_ops import (
+        calibrate_cameras,
+        create_calib_data,
+        find_calib_object,
+        get_calib_data,
+        parse_plate_description,
+        set_calib_data_calib_object,
+        set_calib_data_observ_points,
+    )
+    from app.engine.objects import Image
+
+    ensure_samples(ROOT)
+    plate = parse_plate_description((ROOT / "samples" / "calplate_4x5.cpd").read_text(encoding="utf-8"))
+    assert plate.kind == "circles"
+    assert plate.rows == 4 and plate.cols == 5
+    assert plate.polarity == "light"
+    assert plate.marks is not None and len(plate.marks) == 20
+    assert abs(float(plate.marks[0, 1]) - 0.03) < 1e-9
+    assert abs(float(plate.square) - 0.01) < 1e-9
+
+    class Ctx:
+        root = ROOT
+
+    def plate_image() -> np.ndarray:
+        image = np.zeros((240, 300), np.uint8)
+        for x_value, y_value, _zee in plate.marks:
+            cx = int(round(50 + float(x_value) * 5000))
+            cy = int(round(40 + (0.03 - float(y_value)) * 5000))
+            cv2.circle(image, (cx, cy), 10, 255, -1)
+        return image
+
+    model = create_calib_data("calibration_object", 1, 1, ctx=Ctx()).control[0]
+    set_calib_data_calib_object(model, 0, "samples/calplate_4x5.cpd", ctx=Ctx())
+    find_calib_object(Image(plate_image()), model, 0, 0, "", "", ctx=Ctx())
+    found = model.observations[0][1]
+    expected = np.array([[50 + float(x_value) * 5000, 40 + (0.03 - float(y_value)) * 5000] for x_value, y_value, _zee in plate.marks])
+    assert np.linalg.norm(found - expected, axis=1).max() < 1.0
+    set_calib_data_calib_object(model, 0, "samples/calplate_4x5.cpd", ctx=Ctx())
+    focal = 900.0
+    principal = (160.0, 120.0)
+    for distance, slide in ((0.35, -0.01), (0.5, 0.0), (0.7, 0.015)):
+        rows = []
+        cols = []
+        for x_value, y_value, _zee in plate.marks:
+            cols.append(focal * (float(x_value) + slide) / distance + principal[0])
+            rows.append(focal * (float(y_value) - 0.015) / distance + principal[1])
+        set_calib_data_observ_points(model, 0, 0, rows, cols, ctx=Ctx())
+    error = float(calibrate_cameras(model, ctx=Ctx()).control[0])
+    assert error < 0.05, error
+    params = get_calib_data(model, "camera", 0, "params", ctx=Ctx()).control[0]
+    assert len(params) == 9 and float(params[0]) > 0
+
+    both = create_calib_data("calibration_object", 2, 1, ctx=Ctx()).control[0]
+    set_calib_data_calib_object(both, 0, "samples/calplate_4x5.cpd", ctx=Ctx())
+    for camera in (0, 1):
+        for distance, slide in ((0.35, -0.01), (0.5, 0.0), (0.7, 0.015)):
+            rows = []
+            cols = []
+            for x_value, y_value, _zee in plate.marks:
+                cols.append(focal * (float(x_value) + slide + camera * 0.004) / distance + principal[0])
+                rows.append(focal * (float(y_value) - 0.015) / distance + principal[1])
+            set_calib_data_observ_points(both, camera, 0, rows, cols, ctx=Ctx())
+    both_error = float(calibrate_cameras(both, ctx=Ctx()).control[0])
+    assert both_error < 1.0, both_error
+    first = get_calib_data(both, "camera", 0, "params", ctx=Ctx()).control[0]
+    second = get_calib_data(both, "camera", 1, "params", ctx=Ctx()).control[0]
+    assert len(first) == 9 and len(second) == 9
+    assert len(both.observations) == 6
+    refused = run_source(
+        "Vizion.gen_image_const (Image, 'byte', 80, 60)\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,10')\n"
+        "Vizion.find_calib_object (Image, CalibDataID, 1, 0, '', '')\n"
+    )
+    assert refused.error is not None and "相機編號" in refused.error
 
 
 def test_code93_lowercase_reads_as_uppercase():
