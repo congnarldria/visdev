@@ -1,4 +1,25 @@
 const code = document.getElementById("code");
+const codeHistory = window.VisdevEdit.createEditorHistory();
+let applyingHistory = false;
+
+function commitProgram(mode) {
+  if (applyingHistory) return;
+  codeHistory.commit(code.value, code.selectionStart, code.selectionEnd, mode || "checkpoint");
+}
+
+function resetProgramHistory() {
+  codeHistory.reset(code.value, code.selectionStart, code.selectionEnd);
+}
+
+function applyHistoryEntry(entry) {
+  applyingHistory = true;
+  code.value = entry.value;
+  code.selectionStart = entry.start;
+  code.selectionEnd = entry.end;
+  applyingHistory = false;
+  renderEditor();
+  closeSense();
+}
 const hl = document.getElementById("hl");
 const gutter = document.getElementById("gutter");
 const lineTimes = document.getElementById("lineTimes");
@@ -537,6 +558,7 @@ function insertAtCursor(text) {
   code.value = code.value.slice(0, start) + text + "\n" + code.value.slice(start);
   const caret = start + text.length + 1;
   code.selectionStart = code.selectionEnd = caret;
+  commitProgram("checkpoint");
   renderEditor();
   code.focus();
 }
@@ -831,6 +853,7 @@ function insertOperatorCall() {
     code.value = lines.join("\n");
     const caret = lines.slice(0, editingLine + 1).join("\n").length;
     code.selectionStart = code.selectionEnd = caret;
+    commitProgram("checkpoint");
     renderEditor();
   } else {
     rememberOperator(activeOperator, inputs);
@@ -1230,6 +1253,7 @@ function acceptSense() {
   const caret = start + (item.caret == null ? item.insert.length : item.caret);
   code.selectionStart = code.selectionEnd = caret;
   senseLabel = "";
+  commitProgram("checkpoint");
   renderEditor();
   code.focus();
   updateSense();
@@ -1518,6 +1542,7 @@ function useNewImage(path) {
     const name = match ? match[2] : "Image";
     lines[index] = `${indent}read_image (${name}, '${path}')`;
     code.value = lines.join("\n");
+    commitProgram("checkpoint");
     renderEditor();
     return;
   }
@@ -1540,6 +1565,7 @@ async function uploadFile(file) {
 window.addEventListener("visdev-layout", () => resizeCanvas());
 
 code.addEventListener("input", () => {
+  if (!composing) commitProgram("type");
   renderEditor();
   updateSense();
 });
@@ -1572,6 +1598,14 @@ code.addEventListener("scroll", () => {
   placeSense();
 });
 code.addEventListener("keydown", (event) => {
+  if (!composing && !event.isComposing && (event.ctrlKey || event.metaKey) && !event.altKey) {
+    const key = event.key.toLowerCase();
+    if (key === "z" || key === "y") {
+      event.preventDefault();
+      applyHistoryEntry((key === "y" || event.shiftKey) ? codeHistory.redo() : codeHistory.undo());
+      return;
+    }
+  }
   if (event.key === " " && (event.ctrlKey || event.metaKey) && !event.altKey) {
     event.preventDefault();
     senseForce = true;
@@ -1631,10 +1665,12 @@ code.addEventListener("dblclick", (event) => {
 });
 code.addEventListener("compositionstart", () => {
   composing = true;
+  codeHistory.beginComposition();
   closeSense();
 });
 code.addEventListener("compositionend", () => {
   composing = false;
+  codeHistory.endComposition(code.value, code.selectionStart, code.selectionEnd);
   updateSense();
 });
 code.addEventListener("blur", () => {
@@ -1801,6 +1837,7 @@ async function openLocalFile(file) {
   document.getElementById("progName").value = name;
   sessionId = null;
   breakpoints = new Set();
+  resetProgramHistory();
   renderEditor();
   await exec("reset");
   stState.textContent = note;
@@ -1860,8 +1897,19 @@ document.addEventListener("click", (event) => {
 });
 
 function editCode(command) {
+  if (command === "undo") {
+    applyHistoryEntry(codeHistory.undo());
+    code.focus();
+    return;
+  }
+  if (command === "redo") {
+    applyHistoryEntry(codeHistory.redo());
+    code.focus();
+    return;
+  }
   code.focus();
   document.execCommand(command);
+  commitProgram("checkpoint");
   renderEditor();
 }
 
@@ -1880,6 +1928,7 @@ window.VisDevCommands = {
     document.getElementById("progName").value = "untitled.viz";
     sessionId = null;
     breakpoints = new Set();
+    resetProgramHistory();
     renderEditor();
     exec("reset");
   },
@@ -2413,6 +2462,7 @@ function applyBinaryTool(tool) {
     }
   }
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   exec("run");
 }
@@ -2481,6 +2531,7 @@ function applyConnection(minArea, dist) {
     }
   }
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   exec("run");
 }
@@ -2500,6 +2551,7 @@ function rewriteSubpix(level) {
   args[2] = ` ${level}`;
   lines[histo.line - 1] = `${match[1]}${vizionCall("threshold_sub_pix", args.join(","))}`;
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   return true;
 }
@@ -2533,6 +2585,7 @@ function applySubpix(level) {
   if (!shown(regionName)) lines.push(vizionCall("dev_display", regionName));
   if (!shown(output)) lines.push(vizionCall("dev_display", output));
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   exec("run");
 }
@@ -2585,6 +2638,7 @@ function rewriteOpenCV(level) {
   args[2] = ` ${level}`;
   lines[histo.line - 1] = `${match[1]}${vizionCall("opencv_threshold", args.join(","))}`;
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   return true;
 }
@@ -2604,6 +2658,7 @@ function rewriteThreshold(minGray, maxGray) {
   args[args.length - 1] = ` ${maxGray}`;
   lines[index] = `${match[1]}${vizionCall("threshold", args.join(","))}`;
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   return true;
 }
@@ -2715,6 +2770,7 @@ function applyOcr() {
   if (index >= 0) lines[index] = call;
   else lines.push(call);
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   exec("run");
 }
@@ -2750,6 +2806,7 @@ async function openProgram(kind, name) {
   sessionId = null;
   breakpoints = new Set();
   sampleMenu.hidden = true;
+  resetProgramHistory();
   renderEditor();
   await exec("reset");
 }
@@ -2991,6 +3048,7 @@ async function boot() {
   const sample = await fetch("/api/files/samples/blob_inspect.hdv").then((res) => res.json());
   code.value = sample.source;
   document.getElementById("progName").value = sample.name;
+  resetProgramHistory();
   renderEditor();
   resizeCanvas();
   await exec("reset");
