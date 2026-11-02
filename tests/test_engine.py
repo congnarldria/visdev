@@ -4860,6 +4860,57 @@ def test_parse_error():
     parse_program("Vizion.gen_rectangle1 (A, 0, 0, 1, 1)\n")
 
 
+def test_score_shift_matches_and_cancel_stops():
+    import threading
+    import time
+
+    import numpy as np
+
+    from app.engine.shape_model import _add_shifted, _shift_to_origin
+
+    source = np.arange(12, dtype=np.float32).reshape(3, 4)
+    for row_offset, col_offset in ((0, 0), (1, -1), (-2, 2), (5, 0)):
+        folded = np.zeros_like(source)
+        _add_shifted(folded, source, row_offset, col_offset)
+        assert np.array_equal(folded, _shift_to_origin(source, row_offset, col_offset))
+
+    session = Session(
+        "for Index := 1 to 2000000 by 1\nendfor\n",
+        ROOT,
+    )
+
+    def stop_soon():
+        while session.step_count < 30:
+            time.sleep(0.002)
+        session.cancel = True
+
+    threading.Thread(target=stop_soon, daemon=True).start()
+    session.run()
+    assert session.paused == "stopped"
+    assert session.step_count < 2000000
+
+
+def test_display_updates_before_the_program_finishes():
+    import threading
+    import time
+
+    session = Session(
+        "Vizion.gen_image_const (Image, 'byte', 8, 6)\nVizion.dev_display (Image)\nfor Index := 1 to 100000 by 1\nendfor\n",
+        ROOT,
+    )
+
+    def watch():
+        while session.display_stamp == 0 and session.paused != "stopped" and not session.done:
+            time.sleep(0.002)
+        if session.display_stamp:
+            session.cancel = True
+
+    threading.Thread(target=watch, daemon=True).start()
+    session.run()
+    assert session.display_stamp >= 1
+    assert session.paused == "stopped"
+
+
 if __name__ == "__main__":
     test_language()
     test_blob()

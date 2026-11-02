@@ -3737,25 +3737,29 @@ def find_shape_model(
     *,
     ctx,
 ):
-    from .shape_model import find_shape_model as search
+    from .shape_model import bind_search_cancel, find_shape_model as search, release_search_cancel
 
     picture = expect_image(image, "Image")
     shape = _expect_model(model)
     mode = text(subpixel, "SubPixel").lower()
     if mode not in ("none", "interpolation", "least_squares"):
         raise ValueError("SubPixel 只能是 none、interpolation 或 least_squares")
-    rows, cols, angles, scores = search(
-        picture,
-        shape,
-        scalar(angle_start, "AngleStart"),
-        scalar(angle_extent, "AngleExtent"),
-        scalar(min_score, "MinScore"),
-        whole(num_matches, "NumMatches"),
-        scalar(max_overlap, "MaxOverlap"),
-        mode,
-        whole(num_levels, "NumLevels"),
-        scalar(greediness, "Greediness"),
-    )
+    token = bind_search_cancel(lambda: bool(getattr(ctx, "cancel", False)))
+    try:
+        rows, cols, angles, scores = search(
+            picture,
+            shape,
+            scalar(angle_start, "AngleStart"),
+            scalar(angle_extent, "AngleExtent"),
+            scalar(min_score, "MinScore"),
+            whole(num_matches, "NumMatches"),
+            scalar(max_overlap, "MaxOverlap"),
+            mode,
+            whole(num_levels, "NumLevels"),
+            scalar(greediness, "Greediness"),
+        )
+    finally:
+        release_search_cancel(token)
     rows, cols = _with_origin(rows, cols, shape)
     return Result([], [rows, cols, angles, scores])
 

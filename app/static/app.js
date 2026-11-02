@@ -19,6 +19,7 @@ function applyHistoryEntry(entry) {
   applyingHistory = false;
   renderEditor();
   closeSense();
+  refreshDirty();
 }
 const hl = document.getElementById("hl");
 const gutter = document.getElementById("gutter");
@@ -49,6 +50,21 @@ const PAD = 8;
 let operators = [];
 let operatorNames = new Set();
 let sessionId = null;
+let savedText = "";
+let saveTarget = { kind: "sample", name: "blob_inspect.hdv" };
+
+function refreshDirty() {
+  const dirty = code.value !== savedText;
+  const button = document.getElementById("btnSave");
+  if (button) button.textContent = dirty ? "儲存 *" : "儲存";
+  const name = document.getElementById("progName").value.trim() || "程式";
+  document.title = `${dirty ? "* " : ""}${name} — VisDev`;
+}
+
+function markSaved() {
+  savedText = code.value;
+  refreshDirty();
+}
 let server = { line: null, done: false, error: null, errorLine: null, iconic: [], control: [], display: null, log: [], paused: null, lineTimes: [] };
 let diagnostics = [];
 let logHidden = false;
@@ -466,6 +482,27 @@ function showDetail(message) {
   showErrorDialog(parsed.text, parsed.line);
 }
 
+let liveDisplayStamp = null;
+
+function applyLiveState(data) {
+  sessionId = data.id;
+  server = data;
+  renderEditor();
+  revealLine(data.line);
+  renderLog();
+  setStatus();
+  if (data.running) {
+    stState.textContent = "執行中";
+    stState.className = "";
+  }
+  const stamp = data.displayStamp;
+  if (stamp != null && stamp !== liveDisplayStamp) {
+    liveDisplayStamp = stamp;
+    if (data.display) loadDisplay(data.display);
+    else clearGraphics();
+  }
+}
+
 async function exec(action, line) {
   if (inflight) return;
   inflight = true;
@@ -487,6 +524,24 @@ async function exec(action, line) {
     const data = await res.json();
     if (!res.ok) {
       showDetail(data);
+      return;
+    }
+    if (data.running) {
+      sessionId = data.id;
+      while (true) {
+        const stateRes = await fetch(`/api/session/${encodeURIComponent(sessionId)}/state`);
+        const state = await stateRes.json();
+        if (!stateRes.ok) {
+          showDetail(state);
+          return;
+        }
+        if (!state.running) {
+          applyState(state);
+          break;
+        }
+        applyLiveState(state);
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
       return;
     }
     applyState(data);
@@ -1566,6 +1621,7 @@ window.addEventListener("visdev-layout", () => resizeCanvas());
 
 code.addEventListener("input", () => {
   if (!composing) commitProgram("type");
+  refreshDirty();
   renderEditor();
   updateSense();
 });
@@ -1835,16 +1891,27 @@ async function openLocalFile(file) {
   }
   code.value = source.replace(/\r\n/g, "\n");
   document.getElementById("progName").value = name;
+  saveTarget = { kind: "import", name };
   sessionId = null;
   breakpoints = new Set();
   resetProgramHistory();
+  markSaved();
   renderEditor();
   await exec("reset");
   stState.textContent = note;
   stState.className = "ok";
 }
-document.getElementById("btnSave").onclick = async () => {
-  const name = document.getElementById("progName").value.trim() || "program.viz";
+function programFileName(name) {
+  const trimmed = String(name || "").trim() || "program.viz";
+  const lower = trimmed.toLowerCase();
+  return lower.endsWith(".hdv") || lower.endsWith(".viz") ? trimmed : `${trimmed}.viz`;
+}
+
+function desktopApi() {
+  return window.pywebview && window.pywebview.api;
+}
+
+async function saveToWorkspace(name, copy) {
   const res = await fetch("/api/programs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1853,13 +1920,61 @@ document.getElementById("btnSave").onclick = async () => {
   const data = await res.json();
   if (!res.ok) {
     showDetail(data);
-    return;
+    return false;
   }
   document.getElementById("progName").value = data.name;
-  stState.textContent = `已儲存 ${data.path}`;
+  saveTarget = { kind: "workspace", name: data.name };
+  markSaved();
+  stState.textContent = copy ? `範例已另存 ${data.path}` : `已儲存 ${data.path}`;
   stState.className = "ok";
   loadFiles();
-};
+  return true;
+}
+
+async function rememberFileSave(data) {
+  document.getElementById("progName").value = data.name;
+  saveTarget = { kind: "file", name: data.name, path: data.path };
+  markSaved();
+  stState.textContent = `已儲存 ${data.path}`;
+  stState.className = "ok";
+}
+
+async function saveCurrent(saveAs) {
+  const plan = window.VisdevProgram.savePlan(saveTarget, !!saveAs);
+  const api = desktopApi();
+  if (plan.mode === "file" && api && api.write_program_path) {
+    try {
+      await rememberFileSave(await api.write_program_path(plan.path, code.value));
+    } catch (err) {
+      showDetail({ error: "存檔失敗：" + err.message });
+    }
+    return;
+  }
+  if (plan.mode === "ask") {
+    if (api && api.save_program_dialog) {
+      try {
+        const data = await api.save_program_dialog(programFileName(plan.name), code.value);
+        if (!data || data.cancelled) return;
+        if (data.error) {
+          showDetail({ error: data.error });
+          return;
+        }
+        await rememberFileSave(data);
+      } catch (err) {
+        showDetail({ error: "存檔失敗：" + err.message });
+      }
+      return;
+    }
+    const name = window.prompt("另存新檔的檔名", programFileName(plan.name));
+    if (!name || !name.trim()) return;
+    await saveToWorkspace(programFileName(name), false);
+    return;
+  }
+  await saveToWorkspace(programFileName(plan.name), !!plan.copy);
+}
+
+document.getElementById("btnSave").onclick = () => saveCurrent(false);
+document.getElementById("progName").addEventListener("input", refreshDirty);
 function placeSampleMenu(anchor) {
   sampleMenu.hidden = false;
   if (!anchor) {
@@ -1926,23 +2041,51 @@ window.VisDevCommands = {
   new() {
     code.value = "* 新程式\n";
     document.getElementById("progName").value = "untitled.viz";
+    saveTarget = { kind: "workspace", name: "untitled.viz" };
+    savedText = "";
     sessionId = null;
     breakpoints = new Set();
     resetProgramHistory();
+    refreshDirty();
     renderEditor();
     exec("reset");
   },
-  open() { document.getElementById("fileOpen").click(); },
-  save() { document.getElementById("btnSave").click(); },
-  saveAs() {
-    const current = document.getElementById("progName").value.trim() || "program.viz";
-    const name = window.prompt("另存新檔的檔名", current);
-    if (!name || !name.trim()) return;
-    const lower = name.trim().toLowerCase();
-    const file = lower.endsWith(".hdv") || lower.endsWith(".viz") ? name.trim() : `${name.trim()}.viz`;
-    document.getElementById("progName").value = file;
-    document.getElementById("btnSave").click();
+  async open() {
+    const api = desktopApi();
+    if (api && api.open_program_dialog) {
+      try {
+        const picked = await api.open_program_dialog();
+        if (!picked || picked.cancelled) return;
+        if (picked.error) {
+          showDetail({ error: picked.error });
+          return;
+        }
+        let note = `已開啟 ${picked.name}`;
+        if (picked.skipped && picked.skipped.length) {
+          note = `已開啟 ${picked.name}。${picked.skipped.length} 個有密碼的程序沒有打開`;
+        }
+        code.value = String(picked.source || "").replace(/\r\n/g, "\n");
+        document.getElementById("progName").value = picked.name;
+        saveTarget = picked.path
+          ? { kind: "file", name: picked.name, path: picked.path }
+          : { kind: "import", name: picked.name };
+        sessionId = null;
+        breakpoints = new Set();
+        resetProgramHistory();
+        markSaved();
+        renderEditor();
+        await exec("reset");
+        stState.textContent = note;
+        stState.className = "ok";
+        return;
+      } catch (_err) {
+        /* 沒有桌面對話框時改用檔案選擇 */
+      }
+    }
+    document.getElementById("fileOpen").click();
   },
+  save() { saveCurrent(false); },
+  saveAs() { saveCurrent(true); },
   loadImage() { document.getElementById("fileImage").click(); },
   samples(anchor) { placeSampleMenu(anchor); },
   openSample(name) { openProgram("samples", name); },
@@ -2803,10 +2946,12 @@ async function openProgram(kind, name) {
   }
   code.value = data.source.replace(/\r\n/g, "\n");
   document.getElementById("progName").value = data.name;
+  saveTarget = { kind, name: data.name };
   sessionId = null;
   breakpoints = new Set();
   sampleMenu.hidden = true;
   resetProgramHistory();
+  markSaved();
   renderEditor();
   await exec("reset");
 }
@@ -3048,7 +3193,9 @@ async function boot() {
   const sample = await fetch("/api/files/samples/blob_inspect.hdv").then((res) => res.json());
   code.value = sample.source;
   document.getElementById("progName").value = sample.name;
+  saveTarget = { kind: "sample", name: sample.name };
   resetProgramHistory();
+  markSaved();
   renderEditor();
   resizeCanvas();
   await exec("reset");

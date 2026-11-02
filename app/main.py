@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import re
+import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -158,13 +159,30 @@ def gfx_tool():
     return FileResponse(STATIC / "gfx.html")
 
 
-@app.get("/api/session/{sid}/display")
-def session_display(sid: str):
+def _session_or_404(sid: str) -> Session:
     current = SESSIONS.get(sid)
     if current is None:
         raise HTTPException(404, "沒有這個執行階段，請先按重設")
-    state = current.public_state()
-    return {"id": sid, "display": state.get("display")}
+    return current
+
+
+def _snapshot(current: Session) -> dict:
+    with current.lock:
+        state = current.public_state()
+    state["running"] = bool(getattr(current, "running", False))
+    return state
+
+
+@app.get("/api/session/{sid}/display")
+def session_display(sid: str):
+    current = _session_or_404(sid)
+    state = _snapshot(current)
+    return {"id": sid, "display": state.get("display"), "displayStamp": state.get("displayStamp"), "running": state["running"]}
+
+
+@app.get("/api/session/{sid}/state")
+def session_state(sid: str):
+    return _snapshot(_session_or_404(sid))
 
 
 @app.get("/api/operators")
@@ -484,49 +502,74 @@ def set_region_color(body: RegionColorIn):
         return {"color": current.region_color, "display": state["display"]}
 
 
+def _prepare_action(current: Session, body: ExecIn, resume: bool) -> None:
+    if resume:
+        current.run(resume=True)
+        return
+    if body.regionColor:
+        try:
+            current.region_color = normalize_color(body.regionColor)
+        except ValueError:
+            current.region_color = "#ff3b30"
+    if body.action == "reset":
+        current.reset()
+    elif body.action == "step":
+        current.step()
+    elif body.action == "run":
+        current.defer_wait = True
+        current.run()
+    elif body.action == "goto":
+        if body.line is None:
+            raise HTTPException(400, "沒有指定要移到的行")
+        current.set_line(int(body.line))
+    else:
+        raise HTTPException(400, "未知動作")
+
+
+def _finish_wait(current: Session) -> None:
+    while current.paused == "wait" and not current.cancel:
+        left = float(getattr(current, "wait_until", 0.0)) - time.monotonic()
+        if left <= 0:
+            current.run(resume=True)
+            continue
+        time.sleep(min(0.05, max(0.0, left)))
+    if current.cancel and current.paused == "wait":
+        current.paused = "stopped"
+        current.log.append("已停止")
+
+
 @app.post("/api/exec")
 async def exec_program(body: ExecIn):
     try:
         current = session_for(body)
     except ParseError as exc:
         raise HTTPException(status_code=400, detail={"error": str(exc), "line": exc.line}) from exc
+    if body.action not in ("reset", "step", "run", "goto"):
+        raise HTTPException(400, "未知動作")
+    if body.action == "goto" and body.line is None:
+        raise HTTPException(400, "沒有指定要移到的行")
+    if body.action == "run" and getattr(current, "running", False):
+        raise HTTPException(409, "程式還在跑")
 
-    def drive(resume: bool):
-        with current.lock:
-            if not resume:
-                if body.regionColor:
-                    try:
-                        current.region_color = normalize_color(body.regionColor)
-                    except ValueError:
-                        current.region_color = "#ff3b30"
-                if body.action == "reset":
-                    current.reset()
-                elif body.action == "step":
-                    current.step()
-                elif body.action == "run":
-                    current.defer_wait = True
-                    current.run()
-                elif body.action == "goto":
-                    if body.line is None:
-                        raise HTTPException(400, "沒有指定要移到的行")
-                    current.set_line(int(body.line))
-                else:
-                    raise HTTPException(400, "未知動作")
-            else:
-                current.run(resume=True)
-            return current.public_state()
+    if body.action != "run":
+        def sync():
+            with current.lock:
+                _prepare_action(current, body, False)
+            return _snapshot(current)
 
-    await asyncio.to_thread(drive, False)
-    while current.paused == "wait" and not current.cancel:
-        left = float(getattr(current, "wait_until", 0.0)) - time.monotonic()
-        if left <= 0:
-            await asyncio.to_thread(drive, True)
-            continue
-        await asyncio.sleep(min(0.05, left))
-    if current.cancel and current.paused == "wait":
-        current.paused = "stopped"
-        current.log.append("已停止")
-    return current.public_state()
+        return await asyncio.to_thread(sync)
+
+    def background():
+        current.running = True
+        try:
+            _prepare_action(current, body, False)
+            _finish_wait(current)
+        finally:
+            current.running = False
+
+    current.runner = threading.Thread(target=background, daemon=True, name="visdev-run")
+    current.runner.start()
+    return {"id": current.id, "running": True}
 
 
 @app.post("/api/stop/{sid}")

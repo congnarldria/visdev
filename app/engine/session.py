@@ -155,6 +155,8 @@ class Session:
         self.threshold_mask = None
         self.threshold_region = None
         self.image_stamp = 0
+        self.display_stamp = 0
+        self.running = False
         self.reset()
 
     def _release_handles(self) -> None:
@@ -255,6 +257,7 @@ class Session:
             self.display.base_provisional = provisional
             self.display.overlays = []
             self.ref_shape = (obj.height, obj.width)
+            self._touch_display()
             return
         self.display.drop_provisional()
         if isinstance(obj, Region):
@@ -273,6 +276,7 @@ class Session:
                     "source": source,
                 }
             )
+            self._touch_display()
             return
         if isinstance(obj, XLD):
             self.ref_shape = self.ref_shape or (obj.height, obj.width)
@@ -295,8 +299,12 @@ class Session:
                     "source": source,
                 }
             )
+            self._touch_display()
             return
         raise TypeError("dev_display 只能顯示影像、區域或輪廓")
+
+    def _touch_display(self) -> None:
+        self.display_stamp = int(getattr(self, "display_stamp", 0)) + 1
 
     def region_palette(self, region: Region):
         count = region.count()
@@ -352,40 +360,44 @@ class Session:
         self.prepare()
 
     def run(self, max_steps: int = 100000, *, resume: bool = False):
-        if not resume and (self.done or self.error):
-            self.reset()
-        self.paused = None
-        if not resume:
-            self.cancel = False
-        if resume and getattr(self, "_wait_frame", None):
-            self._resume_proc()
-            if self.paused == "wait" or self.error:
-                return
+        with self.lock:
+            if not resume and (self.done or self.error):
+                self.reset()
+            self.paused = None
+            if not resume:
+                self.cancel = False
+            if resume and getattr(self, "_wait_frame", None):
+                self._resume_proc()
+                if self.paused == "wait" or self.error:
+                    return
         taken = 0
         while taken < max_steps:
-            self.prepare()
-            if self.done:
-                self.log.append(f"執行完成（{self.step_count} 步）")
+            with self.lock:
+                self.prepare()
+                if self.done:
+                    self.log.append(f"執行完成（{self.step_count} 步）")
+                    return
+                if self.cancel:
+                    self.paused = "stopped"
+                    self.log.append("已停止")
+                    return
+                if self._on_breakpoint() and self.pc != self.break_skip:
+                    self.break_skip = self.pc
+                    self.paused = "breakpoint"
+                    self.log.append(f"中斷點 第 {self.stmts[self.pc].line} 行")
+                    return
+                self.break_skip = None
+                self._execute_current()
+                if self.error:
+                    return
+                self.step_count += 1
+                taken += 1
+                stop_now = self.paused in ("stop", "wait", "stopped")
+            if stop_now:
                 return
-            if self.cancel:
-                self.paused = "stopped"
-                self.log.append("已停止")
-                return
-            if self._on_breakpoint() and self.pc != self.break_skip:
-                self.break_skip = self.pc
-                self.paused = "breakpoint"
-                self.log.append(f"中斷點 第 {self.stmts[self.pc].line} 行")
-                return
-            self.break_skip = None
-            self._execute_current()
-            if self.error:
-                return
-            self.step_count += 1
-            taken += 1
-            if self.paused in ("stop", "wait"):
-                return
-        self.error = "超過最大步數，可能有無窮迴圈"
-        self.log.append(self.error)
+        with self.lock:
+            self.error = "超過最大步數，可能有無窮迴圈"
+            self.log.append(self.error)
 
     def _execute_current(self):
         index = self.pc
@@ -395,8 +407,8 @@ class Session:
         try:
             self._execute(stmt, index)
         except StopSignal:
-            self.paused = "stop"
-            self.log.append(f"Vizion.stop() 於第 {stmt.line} 行")
+            self.paused = "stopped" if self.cancel else "stop"
+            self.log.append("已停止" if self.cancel else f"Vizion.stop() 於第 {stmt.line} 行")
         except (ExprError, ParseError, Exception) as exc:
             frame = self.try_stack[-1] if self.try_stack and self.try_stack[-1][2] == self.proc_depth else None
             if frame is not None:
@@ -754,6 +766,7 @@ class Session:
             "histogram": histogram,
             "steps": self.step_count,
             "imageStamp": int(getattr(self, "image_stamp", 0)),
+            "displayStamp": int(getattr(self, "display_stamp", 0)),
             "lineTimes": [
                 {"line": line, "ms": round(slot["total"] * 1000, 3), "count": slot["count"]}
                 for line, slot in sorted(self.line_times.items())

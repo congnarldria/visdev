@@ -9,11 +9,16 @@ along the gradient before that pose is applied.
 
 from __future__ import annotations
 
+import contextvars
 import math
 from dataclasses import dataclass
 
 import cv2
 import numpy as np
+
+from .objects import StopSignal
+
+_SEARCH_CANCEL: contextvars.ContextVar = contextvars.ContextVar("visdev_shape_cancel", default=None)
 
 MATCH_COLORS = [
     "#ff3b30",
@@ -370,9 +375,7 @@ def create_shape_model(
     return model
 
 
-def _shift_to_origin(source: np.ndarray, row_offset: int, col_offset: int) -> np.ndarray:
-    destination = np.zeros_like(source)
-    height, width = source.shape
+def _shift_slices(height: int, width: int, row_offset: int, col_offset: int):
     if row_offset >= 0:
         src_y, dst_y, rows = row_offset, 0, height - row_offset
     else:
@@ -382,9 +385,38 @@ def _shift_to_origin(source: np.ndarray, row_offset: int, col_offset: int) -> np
     else:
         src_x, dst_x, cols = 0, -col_offset, width + col_offset
     if rows <= 0 or cols <= 0:
-        return destination
-    destination[dst_y : dst_y + rows, dst_x : dst_x + cols] = source[src_y : src_y + rows, src_x : src_x + cols]
+        return None
+    return src_y, dst_y, rows, src_x, dst_x, cols
+
+
+def _shift_to_origin(source: np.ndarray, row_offset: int, col_offset: int) -> np.ndarray:
+    destination = np.zeros_like(source)
+    _add_shifted(destination, source, row_offset, col_offset)
     return destination
+
+
+def _add_shifted(total: np.ndarray, source: np.ndarray, row_offset: int, col_offset: int) -> None:
+    """Add `source` shifted onto the origin. Same values as adding `_shift_to_origin`."""
+    height, width = source.shape
+    slices = _shift_slices(height, width, row_offset, col_offset)
+    if slices is None:
+        return
+    src_y, dst_y, rows, src_x, dst_x, cols = slices
+    total[dst_y : dst_y + rows, dst_x : dst_x + cols] += source[src_y : src_y + rows, src_x : src_x + cols]
+
+
+def bind_search_cancel(check):
+    return _SEARCH_CANCEL.set(check)
+
+
+def release_search_cancel(token) -> None:
+    _SEARCH_CANCEL.reset(token)
+
+
+def _stop_if_cancelled() -> None:
+    check = _SEARCH_CANCEL.get()
+    if check is not None and check():
+        raise StopSignal()
 
 
 def _score_map(unit_x, unit_y, valid, level: _Level, angle: float, metric: str, greediness: float):
@@ -404,8 +436,8 @@ def _score_map(unit_x, unit_y, valid, level: _Level, angle: float, metric: str, 
             contrib = np.abs(contrib)
         iy = int(round(float(row)))
         ix = int(round(float(col)))
-        acc += _shift_to_origin(contrib, iy, ix)
-        seen += _shift_to_origin(valid, iy, ix)
+        _add_shifted(acc, contrib, iy, ix)
+        _add_shifted(seen, valid, iy, ix)
     score = np.zeros_like(acc)
     enough = seen >= max(8.0, 0.42 * len(cols))
     score[enough] = acc[enough] / seen[enough]
@@ -805,6 +837,7 @@ def find_shape_model(
     unit_x, unit_y, valid, _gx, _gy, _mag = fields[coarse]
     level = model.levels[coarse]
     for angle in coarse_angles:
+        _stop_if_cancelled()
         score = _score_map(unit_x, unit_y, valid, level, angle, model.metric, greediness)
         for row, col, value in _local_peaks(score, coarse_min, 40):
             found.append((row, col, angle, value))

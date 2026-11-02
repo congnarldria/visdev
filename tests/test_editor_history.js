@@ -46,4 +46,10 @@ back = history.undo();
 assert(back.value === "", "one composition is one undo step");
 assert(!history.canUndo(), "composition does not leave intermediate steps");
 
+const files = require("../app/static/program_file.js");
+assert(files.savePlan({ kind: "workspace", name: "note.viz" }, false).mode === "workspace", "a workspace file saves in place");
+assert(files.savePlan({ kind: "file", name: "note.viz", path: "D:/work/note.viz" }, false).path === "D:/work/note.viz", "a desktop file saves to its path");
+assert(files.savePlan({ kind: "sample", name: "blob.hdv" }, false).copy === true, "a sample is saved as a copy");
+assert(files.savePlan({ kind: "workspace", name: "note.viz" }, true).mode === "ask", "save as asks for a path");
+
 console.log("editor history ok");
