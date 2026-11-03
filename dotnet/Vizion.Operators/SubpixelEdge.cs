@@ -78,6 +78,12 @@ public static partial class Operators
             }
         }
 
+        var centerPacked = new byte[gray.Length];
+        for (int i = 0; i < gray.Length; i++)
+            centerPacked[i] = (byte)(center[i] ? 1 : 0);
+        if (NativeCore.TryEdgeChains(centerPacked, magnitude, width, height, low, high, shift, normalX, normalY, out EdgePoint[][] linked))
+            return linked;
+
         var keep = new bool[gray.Length];
         var seen = new bool[gray.Length];
         var stack = new Stack<int>();

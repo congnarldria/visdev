@@ -253,6 +253,51 @@ public static class NativeCore
         }
     }
 
+    public static bool TryEdgeChains(
+        byte[] center, float[] magnitude, int width, int height, double low, double high,
+        float[] shift, float[] normalX, float[] normalY, out EdgePoint[][] chains)
+    {
+        chains = Array.Empty<EdgePoint[]>();
+        if (!IsLoaded || !UseNative || width < 1 || height < 1)
+            return false;
+        try
+        {
+            int code = vizion_edge_chains(center, magnitude, low, high, width, height, shift, normalX, normalY, null, null, null, null, 0, 0, out int pointCount, out int chainCount);
+            if (code != 0)
+                return false;
+            if (chainCount == 0)
+                return true;
+            var rows = new double[pointCount];
+            var columns = new double[pointCount];
+            var offsets = new int[chainCount];
+            var counts = new int[chainCount];
+            code = vizion_edge_chains(center, magnitude, low, high, width, height, shift, normalX, normalY, rows, columns, offsets, counts, pointCount, chainCount, out int writtenPoints, out int writtenChains);
+            if (code != 0 || writtenChains != chainCount || writtenPoints != pointCount)
+                return false;
+            chains = new EdgePoint[chainCount][];
+            for (int chain = 0; chain < chainCount; chain++)
+            {
+                var line = new EdgePoint[counts[chain]];
+                for (int point = 0; point < counts[chain]; point++)
+                {
+                    int index = offsets[chain] + point;
+                    line[point] = new EdgePoint(rows[index], columns[index]);
+                }
+                chains[chain] = line;
+            }
+            return true;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TryIntensity(byte[] gray, int width, int[] rows, int[] columns, int[] lengths, out double mean, out double deviation)
     {
         mean = 0;
@@ -436,6 +481,13 @@ public static class NativeCore
             return false;
         }
     }
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_edge_chains(
+        byte[] center, float[] magnitude, double low, double high, int width, int height,
+        float[] shift, float[] normalX, float[] normalY,
+        double[]? rows, double[]? columns, int[]? offsets, int[]? counts,
+        int pointCapacity, int chainCapacity, out int pointCount, out int chainCount);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_rotate_nearest(byte[] source, byte[] destination, int width, int height, double cosine, double sine);

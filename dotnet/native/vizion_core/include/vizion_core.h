@@ -153,6 +153,16 @@ VIZION_EXPORT int VIZION_CALL vizion_rotate_nearest(
 
 VIZION_EXPORT int VIZION_CALL vizion_rotate_selftest(void);
 
+/* 次像素邊緣的遲滯和串鏈。列、行是 float 乘加後再存成 double。 */
+VIZION_EXPORT int VIZION_CALL vizion_edge_chains(
+    const unsigned char* center, const float* magnitude, double low, double high,
+    int width, int height,
+    const float* shift, const float* normal_x, const float* normal_y,
+    double* rows, double* columns, int* offsets, int* counts,
+    int point_capacity, int chain_capacity, int* point_count, int* chain_count);
+
+VIZION_EXPORT int VIZION_CALL vizion_edge_link_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

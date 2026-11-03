@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--link")
+{
+    LinkNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--rotate")
 {
     RotateNativeCheck();
@@ -925,6 +931,79 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void LinkNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var step = new byte[24 * 32];
+    for (int row = 0; row < 24; row++)
+        for (int col = 16; col < 32; col++)
+            step[row * 32 + col] = 255;
+    var edges = Operators.EdgesSubPix(ImageBuffer.Gray(32, 24, step), 1, 20, 40);
+    if (edges.Length != 1 || edges[0].Length != 24)
+        throw new InvalidOperationException($"階躍應是 1 條 24 點的邊緣，得到 {edges.Length} 條");
+    foreach (var point in edges[0])
+    {
+        if (Math.Abs(point.Column - 15.5) > 1e-3)
+            throw new InvalidOperationException($"邊緣應在行 15.5，得到 {point.Column}");
+    }
+    if (Math.Abs(edges[0][0].Row) > 1e-3 || Math.Abs(edges[0][^1].Row - 23) > 1e-3)
+        throw new InvalidOperationException($"邊緣應從列 0 到列 23，得到 {edges[0][0].Row} 到 {edges[0][^1].Row}");
+    var slanted = new byte[36 * 48];
+    for (int row = 0; row < 36; row++)
+        for (int col = 0; col < 48; col++)
+            slanted[row * 48 + col] = (byte)(col > row + 8 ? 200 : 20);
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedSlant = Operators.EdgesSubPix(ImageBuffer.Gray(48, 36, slanted), 1.2, 15, 30);
+    NativeCore.UseNative = true;
+    var nativeSlant = Operators.EdgesSubPix(ImageBuffer.Gray(48, 36, slanted), 1.2, 15, 30);
+    ExpectChains(nativeSlant, managedSlant, "斜向");
+    var grid = new byte[480 * 360];
+    for (int row = 0; row < 360; row++)
+        for (int col = 0; col < 480; col++)
+            grid[row * 480 + col] = (byte)(((row / 6) + (col / 6)) % 2 == 0 ? 0 : 255);
+    var gridImage = ImageBuffer.Gray(480, 360, grid);
+    var nativeGrid = Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    NativeCore.UseNative = false;
+    var managedGrid = Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    NativeCore.UseNative = true;
+    ExpectChains(nativeGrid, managedGrid, "格子");
+    Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 4; i++)
+        Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("串鏈原生檢查通過");
+    Console.WriteLine($"480×360 格子邊緣共 4 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void ExpectChains(EdgePoint[][] actual, EdgePoint[][] expected, string label)
+{
+    if (actual.Length != expected.Length)
+        throw new InvalidOperationException($"{label} 邊緣 {actual.Length} 條，C# {expected.Length} 條");
+    for (int chain = 0; chain < expected.Length; chain++)
+    {
+        if (actual[chain].Length != expected[chain].Length)
+            throw new InvalidOperationException($"{label} 第 {chain} 條點數 {actual[chain].Length}，C# {expected[chain].Length}");
+        for (int point = 0; point < expected[chain].Length; point++)
+        {
+            if (Math.Abs(actual[chain][point].Row - expected[chain][point].Row) > 1e-4
+                || Math.Abs(actual[chain][point].Column - expected[chain][point].Column) > 1e-4)
+                throw new InvalidOperationException($"{label} 第 {chain} 條第 {point} 點不同");
+        }
+    }
 }
 
 static void RotateNativeCheck()
