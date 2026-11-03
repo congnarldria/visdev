@@ -1528,6 +1528,7 @@ function draw() {
     }
   }
   strokePicked(ctx);
+  strokeGaugePreview(ctx);
   strokeDraft(ctx);
   ctx.restore();
   if (mouse) {
@@ -2321,6 +2322,12 @@ window.VisDevCommands = {
   gaugeTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_gauge.viz", "這是邊緣量測範本。改量測線的列和行，再按執行。");
   },
+  caliperTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_caliper.viz", "這是卡尺範本。執行後看 Diameter、Width、Height。");
+  },
+  defectTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_defect.viz", "這是瑕疵範本。執行後看 Count 和 Area。");
+  },
   locateTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");
   },
@@ -2596,6 +2603,8 @@ const drawMenu = document.getElementById("drawMenu");
 const shapeConfirm = document.getElementById("shapeConfirm");
 const shapeConfirmText = document.getElementById("shapeConfirmText");
 let shapeDraw = null;
+let gaugePreview = null;
+let gaugePreviewToken = 0;
 
 function fmtGeom(value) {
   const rounded = Math.round(Number(value) * 100) / 100;
@@ -2638,6 +2647,8 @@ function hideDrawMenu() {
 
 function cancelShapeDraw() {
   shapeDraw = null;
+  gaugePreviewToken += 1;
+  gaugePreview = null;
   hideDrawMenu();
   if (shapeConfirm) shapeConfirm.hidden = true;
   draw();
@@ -2655,7 +2666,12 @@ function strokeDraft(pen) {
   pen.strokeStyle = "#ffe14a";
   pen.lineWidth = 2 / cam.scale;
   pen.setLineDash([6 / cam.scale, 4 / cam.scale]);
-  if (draw.tool === "circle") {
+  if (draw.tool === "line") {
+    pen.beginPath();
+    pen.moveTo(draw.a.col, draw.a.row);
+    pen.lineTo(draw.b.col, draw.b.row);
+    pen.stroke();
+  } else if (draw.tool === "circle") {
     pen.beginPath();
     pen.arc(draw.a.col, draw.a.row, Math.hypot(draw.b.col - draw.a.col, draw.b.row - draw.a.row), 0, Math.PI * 2);
     pen.stroke();
@@ -2671,11 +2687,95 @@ function strokeDraft(pen) {
   pen.restore();
 }
 
+function formNumber(name, fallback) {
+  if (!activeOperator) return fallback;
+  const index = activeOperator.params.findIndex((param) => param.name === name);
+  const node = formFields()[index];
+  if (!node) return fallback;
+  const value = Number(String(node.value).replace(/['"]/g, ""));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function formText(name, fallback) {
+  if (!activeOperator) return fallback;
+  const index = activeOperator.params.findIndex((param) => param.name === name);
+  const node = formFields()[index];
+  if (!node || !String(node.value).trim()) return fallback;
+  return String(node.value).trim();
+}
+
+function strokeGaugePreview(pen) {
+  if (!gaugePreview || !Array.isArray(gaugePreview.hits) || !gaugePreview.hits.length) return;
+  pen.save();
+  pen.strokeStyle = "#7ee0a8";
+  pen.lineWidth = 1.5 / cam.scale;
+  gaugePreview.hits.forEach((hit) => {
+    const size = 6;
+    pen.beginPath();
+    pen.moveTo(hit.column - size, hit.row);
+    pen.lineTo(hit.column + size, hit.row);
+    pen.moveTo(hit.column, hit.row - size);
+    pen.lineTo(hit.column, hit.row + size);
+    pen.stroke();
+  });
+  pen.restore();
+}
+
+function scheduleGaugePreview() {
+  if (!shapeDraw || shapeDraw.tool !== "line" || !shapeDraw.a || !shapeDraw.b || !sessionId) {
+    gaugePreview = null;
+    return;
+  }
+  const token = ++gaugePreviewToken;
+  const draw = shapeDraw;
+  const body = {
+    id: sessionId,
+    row1: draw.a.row,
+    col1: draw.a.col,
+    row2: draw.b.row,
+    col2: draw.b.col,
+    sigma: formNumber("Sigma", 1),
+    threshold: formNumber("Threshold", 8),
+    transition: formText("Transition", "all"),
+    select: formText("Select", "all"),
+  };
+  clearTimeout(scheduleGaugePreview.timer);
+  scheduleGaugePreview.timer = setTimeout(async () => {
+    try {
+      const res = await fetch("/api/gauge-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (token !== gaugePreviewToken) return;
+      gaugePreview = res.ok ? data : null;
+    } catch (_err) {
+      if (token !== gaugePreviewToken) return;
+      gaugePreview = null;
+    }
+    if (shapeDraw && shapeDraw.tool === "line" && shapeDraw.a && shapeDraw.b) {
+      const length = Math.hypot(shapeDraw.b.col - shapeDraw.a.col, shapeDraw.b.row - shapeDraw.a.row);
+      let text = `卡尺  列 ${fmtGeom(shapeDraw.a.row)} 行 ${fmtGeom(shapeDraw.a.col)} → 列 ${fmtGeom(shapeDraw.b.row)} 行 ${fmtGeom(shapeDraw.b.col)}  長度 ${fmtGeom(length)}`;
+      const hits = gaugePreview && gaugePreview.hits ? gaugePreview.hits.length : 0;
+      if (gaugePreview && gaugePreview.span != null) text += `  邊緣 ${hits}  間距 ${fmtGeom(gaugePreview.span)}`;
+      else if (hits) text += `  邊緣 ${hits}`;
+      else text += "  沒有邊緣";
+      shapeConfirmText.textContent = text;
+    }
+    draw();
+  }, 80);
+}
+
 function showShapeConfirm() {
   const map = geometryInputs();
   const box = draftBox(shapeDraw);
   let text = "";
-  if (shapeDraw.tool === "circle") {
+  if (shapeDraw.tool === "line") {
+    const length = Math.hypot(shapeDraw.b.col - shapeDraw.a.col, shapeDraw.b.row - shapeDraw.a.row);
+    text = `卡尺  列 ${fmtGeom(shapeDraw.a.row)} 行 ${fmtGeom(shapeDraw.a.col)} → 列 ${fmtGeom(shapeDraw.b.row)} 行 ${fmtGeom(shapeDraw.b.col)}  長度 ${fmtGeom(length)}`;
+    scheduleGaugePreview();
+  } else if (shapeDraw.tool === "circle") {
     const radius = Math.hypot(shapeDraw.b.col - shapeDraw.a.col, shapeDraw.b.row - shapeDraw.a.row);
     text = `圓  列 ${fmtGeom(shapeDraw.a.row)}  行 ${fmtGeom(shapeDraw.a.col)}  半徑 ${fmtGeom(radius)}`;
   } else if (shapeDraw.tool === "ellipse") {
@@ -2723,7 +2823,7 @@ function showDrawMenu(x, y) {
     hideDrawMenu();
     return;
   }
-  const labels = { rect: "矩形", circle: "圓", ellipse: "橢圓" };
+  const labels = { line: "線", rect: "矩形", circle: "圓", ellipse: "橢圓" };
   drawMenu.innerHTML = tools.map((tool) => `<button type="button" data-draw="${tool}">${labels[tool]}</button>`).join("");
   drawMenu.hidden = false;
   const width = 120;

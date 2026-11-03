@@ -87,7 +87,9 @@ assert(box.col1 === 2 && box.col2 === 10 && box.row1 === 8 && box.row2 === 30, "
 assert(box.width === 8 && box.height === 22, "rectangle size follows the sorted corners");
 
 const cornerTools = geom.geometryTools(["Row1", "Column1", "Row2", "Column2", "Row", "Column", "Length1", "Length2"]);
-assert(cornerTools[0] === "rect" && cornerTools.length === 1, "corner fields choose the corner rectangle");
+assert(cornerTools[0] === "line" && cornerTools.indexOf("rect") !== -1, "endpoint fields offer a directed line and a rectangle");
+const caliper = geom.shapeNumbers("line", { col: 10, row: 30 }, { col: 2, row: 8 }, "axis");
+assert(caliper.Row1 === 30 && caliper.Column1 === 10 && caliper.Row2 === 8 && caliper.Column2 === 2, "a caliper keeps the drag direction");
 const centerTools = geom.geometryTools(["Row", "Column", "Length1", "Length2", "Radius"]);
 assert(centerTools.indexOf("rect") !== -1 && centerTools.indexOf("circle") !== -1, "a center rectangle can also draw a circle");
 

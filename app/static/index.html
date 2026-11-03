@@ -19,6 +19,8 @@
           <div class="menu-fly" hidden>
             <button type="button" data-cmd="inspectTemplate">零件檢測</button>
             <button type="button" data-cmd="gaugeTemplate">邊緣量測</button>
+            <button type="button" data-cmd="caliperTemplate">卡尺</button>
+            <button type="button" data-cmd="defectTemplate">瑕疵</button>
             <button type="button" data-cmd="locateTemplate">形狀定位</button>
             <button type="button" data-cmd="stereoTemplate">相對姿態</button>
             <button type="button" data-cmd="codeTemplate">條碼</button>
@@ -155,6 +157,7 @@
           <button type="button" data-mode="zoom" title="拉一個範圍放大。點一下也會放大" aria-label="放大"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path stroke="currentColor" stroke-width="1.5" d="M9.8 9.8 13.5 13.5M6.8 4.8v4M4.8 6.8h4"/></svg></button>
         </div>
         <span id="shapeTools" hidden>
+          <button type="button" data-draw="line" title="在圖上拖一條線。起點到終點的方向會保留，填進列和行">線</button>
           <button type="button" data-draw="rect" title="在圖上拖矩形，填進開啟中的算子參數">框選</button>
           <button type="button" data-draw="circle" title="在圖上拖圓">圓</button>
           <button type="button" data-draw="ellipse" title="在圖上拖橢圓">橢圓</button>
@@ -292,7 +295,7 @@ endfor</pre>
       <h3>執行</h3>
       <p>F5 執行，F6 單步，F7 步進程序。程式跑到一半失敗時，已經算出的圖和變數留著，狀態列會寫出第幾行。變數很多時，單步只改有變動的那一列。打字時語法著色、行號和該行時間只改有變動的列。輸出往上翻時，新的一行不會把畫面拉回底部。錯誤清單只改有變動的列。大圖在執行中會先縮小顯示，標題會寫預覽，跑完或停止後換成完整圖。</p>
       <h3>範本</h3>
-      <p>檔案、範本裡有五支，打開就能跑。零件檢測讀 <code>samples/parts.png</code>，這張圖是 8 個零件。邊緣量測讀 <code>samples/gauge.png</code>。形狀定位在場景裡找到 4 個。相對姿態用寫入的角點，兩台各三組，第 k 組是同一次擺放。<code>Pose1</code> 的第一個數約 0.04 公尺。條碼讀 <code>samples/codes.png</code>，<code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。</p>
+      <p>檔案、範本裡有七支，打開就能跑。零件檢測讀 <code>samples/parts.png</code>，這張圖是 8 個零件。瑕疵讀 <code>samples/hard_contrast.png</code>，暗塊面積是 3550。邊緣量測和卡尺讀 <code>samples/gauge.png</code>。卡尺的矩形寬 140、高 90，圓的直徑約 83.93。形狀定位在場景裡找到 4 個。相對姿態用寫入的角點，兩台各三組，第 k 組是同一次擺放。<code>Pose1</code> 的第一個數約 0.04 公尺。條碼讀 <code>samples/codes.png</code>，<code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。點量規或直線量規時，可以按「線」在圖上拖，起點到終點的方向會保留。</p>
       <h3>標定</h3>
       <p>棋盤寫 <code>'5,7,10'</code>，也可以用 <code>.cpd</code> 或 <code>.descr</code>。多台相機時，每一台的第 k 組要是同時看到的同一塊板。<code>camera/pose</code> 是相對第 0 台的姿態，第 0 台是 0。標完的圖可以點某一張看原圖，再點一下回到全部。</p>
       <h3>存檔與 Windows</h3>
@@ -343,7 +346,7 @@ endfor</pre>
     <span class="hint">取代 HALCON 的第一版。常用流程先用這套語法寫，缺的算子再補。</span>
   </footer>
   <script src="/static/dock.js?v=9"></script>
-  <script src="/static/geom.js?v=5"></script>
+  <script src="/static/geom.js?v=6"></script>
   <script src="/static/editor_history.js?v=1"></script>
   <script src="/static/program_file.js?v=1"></script>
   <script src="/static/operator_call.js?v=1"></script>
@@ -351,6 +354,6 @@ endfor</pre>
   <script src="/static/run_source.js?v=1"></script>
   <script src="/static/var_list.js?v=1"></script>
   <script src="/static/highlight_sync.js?v=3"></script>
-  <script src="/static/app.js?v=87"></script>
+  <script src="/static/app.js?v=89"></script>
 </body>
 </html>

@@ -3455,6 +3455,42 @@ def test_inspect_gauge_template_measures_the_edge():
     assert session.display.base is not None
 
 
+def test_inspect_caliper_template_measures_diameter_and_size():
+    session = run_source((ROOT / "samples" / "inspect_caliper.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert abs(float(session.vars["Diameter"]) - 83.92768304367884) < 1e-6
+    assert float(session.vars["Width"]) == 140.0
+    assert float(session.vars["Height"]) == 90.0
+    assert int(session.vars["CircleUsed"]) == 66
+    assert int(session.vars["RectUsed"]) > 0
+    assert session.display.base is not None
+
+
+def test_gauge_preview_reports_the_rectangle_width():
+    from app.main import SESSIONS, GaugePreviewIn, gauge_preview
+
+    session = run_source("Vizion.read_image (Image, 'samples/gauge.png')\nVizion.dev_display (Image)\n")
+    assert session.error is None, session.error
+    SESSIONS[session.id] = session
+    try:
+        found = gauge_preview(GaugePreviewIn(
+            id=session.id, row1=244.5, col1=340, row2=244.5, col2=520,
+            sigma=1, threshold=8, transition="all", select="all",
+        ))
+    finally:
+        SESSIONS.pop(session.id, None)
+    assert len(found["hits"]) >= 2
+    assert abs(float(found["span"]) - 140) < 1.5
+
+
+def test_inspect_defect_template_finds_the_dark_blob():
+    session = run_source((ROOT / "samples" / "inspect_defect.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 1
+    assert session.vars["Area"][0] == 3550
+    assert session.display.base is not None
+
+
 def test_inspect_locate_template_finds_four():
     session = run_source((ROOT / "samples" / "inspect_locate.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error

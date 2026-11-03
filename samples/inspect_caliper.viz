@@ -1,0 +1,14 @@
+* 卡尺範本。打開就能跑，再改名義圓和名義矩形。
+* 讀 samples/gauge.png。圓量直徑，矩形量全寬和全高。
+* Diameter 是直徑。Width、Height 是矩形的全寬和全高，不是半長。
+Vizion.read_image (Image, 'samples/gauge.png')
+Vizion.gauge_circle (Image, Circle, 110, 150, 42, 12, 1, 8, 'all', 'best', Row, Column, Radius, CircleUsed)
+Diameter := Radius * 2
+Vizion.gauge_rectangle (Image, Rectangle, 244.5, 429.5, 0, 70, 45, 12, 1, 8, 'all', 'best', RRow, RCol, Phi, Length1, Length2, RectUsed)
+Width := Length1 * 2
+Height := Length2 * 2
+Vizion.dev_display (Image)
+Vizion.dev_set_color ('yellow')
+Vizion.dev_display (Circle)
+Vizion.dev_set_color ('green')
+Vizion.dev_display (Rectangle)
