@@ -1,8 +1,8 @@
 # VisDev 1.1
 
-C# 形狀比對已經先在高斯金字塔的粗圖搜尋，再回到原圖。原圖用分數曲面的拋物線修列、行和角度，再沿邊緣法線做最小二乘。`samples/shapes_scene.png` 的 4 個和 Python 差在 1.5 像素、1 度以內。平移半個像素的方塊落在列 51.5、行 46.5 的 0.45 像素內。
+C# 正規相關已經能用。`Operators.FindNcc` 用 `shape_template.png` 和 `shapes_scene.png`，教導框 15 到 164。先在高斯金字塔的粗圖做灰階相關，再回到原圖。分數平頂取中心，再用拋物線修列、行和角度。4 個姿態和 Python 差在 1 像素、1.5 度以內。`ignoreGlobalPolarity` 為真時，黑白對調仍算對上；沒開則不算。不改 `find_ncc_model`，也不改 `.pyd`。
 
-Windows 執行時仍用 `visdev_match.pyd`。`inspect_locate.viz` 的分數仍高於 0.9，沒有改。棋盤 `'5,7,10'` 的 C# 仍是 5 列、7 行、邊長 10、35 個角點。次像素邊緣仍是行 15.5。找線、找圓的飛點仍拉不走。Visual Studio 開 `dotnet/Vizion.Display.sln`，起始專案 `Vizion.Operators.Check`，按 F5。說明在 `dotnet/README.md`。
+形狀比對的 C# 仍先在粗圖搜尋，再沿邊緣法線做最小二乘。那 4 個和 Python 差在 1.5 像素、1 度以內。`inspect_locate.viz` 的分數仍高於 0.9。棋盤 `'5,7,10'` 仍是 5 列、7 行、邊長 10、35 個角點。次像素邊緣仍是行 15.5。找線、找圓的飛點仍拉不走。Visual Studio 開 `dotnet/Vizion.Display.sln`，起始專案 `Vizion.Operators.Check`，按 F5。說明在 `dotnet/README.md`。
 
 最近開過的程式沒有做。孔距不做。
 
@@ -10,7 +10,7 @@ Windows 仍用 `app/engine/visdev_match.pyd`。開相機仍先問 DirectShow，�
 
 ## 下一項
 
-C# 正規相關。用同一張 `shape_template.png` 和 `shapes_scene.png`，教導框仍是 15 到 164。先在金字塔粗圖做正規相關，再在原圖把列、行修到次像素。找到 4 個，位置對上 Python 的那 4 個姿態。不改 `find_ncc_model` 的結果，也不改 `.pyd`。
+C# 正規相關的列、行再沿灰階梯度做一次 Lucas-Kanade，對齊 Python `least_squares` 的那一步。現在的拋物線已經把 4 個姿態收到 1 像素以內。這一步只在分數沒有變差時才留下。不改 `find_ncc_model` 的結果，也不改 `.pyd`。
 
 先不要做這些：最近開過的程式、孔和孔的間距、六角形標定板的尋找標記對位、更多 Modbus 功能碼、不合格圖的上一張下一張、編輯器局部更新、公差列再改版。`'5,7,10'` 和矩形圓點板維持可用。
 

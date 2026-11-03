@@ -51,6 +51,16 @@ var edges = Operators.EdgesSubPix(image, alpha: 1, low: 20, high: 40);
 var hits = Operators.FindShape(scene, template, 15, 15, 164, 164);
 ```
 
+## 正規相關
+
+`Operators.FindNcc` 用同一張樣板、同一張場景、同一個教導框。先在高斯金字塔的粗圖做灰階相關，再回到原圖。分數平頂會取中心，再用拋物線修列、行和角度。4 個姿態和 Python 差在 1 像素、1.5 度以內。
+
+這不是 `find_ncc_model`。Windows 執行時的正規相關仍走原來的路徑，分數沒有改。`ignoreGlobalPolarity: true` 會把相關係數取絕對值，黑白對調仍算對上。沒開時，對調不算對上。
+
+```csharp
+var hits = Operators.FindNcc(scene, template, 15, 15, 164, 164);
+```
+
 自我檢查會從目前目錄往上找 `samples/`。Visual Studio 按 F5 時，工作目錄若在 `bin` 裡也找得到。
 
 ## 棋盤標定板

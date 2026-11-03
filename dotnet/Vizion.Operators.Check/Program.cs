@@ -103,6 +103,39 @@ static void SelfTest()
         squareMod += 90;
     if (Math.Min(squareMod, 90 - squareMod) > 1)
         throw new InvalidOperationException($"方塊角度應靠近 90 度的倍數，得到 {squareDegrees:0.00}");
+    var squareNcc = Operators.FindNcc(ImageBuffer.Gray(96, 96, shifted), ImageBuffer.Gray(64, 64, block), 8, 8, 55, 55);
+    if (squareNcc.Length < 1)
+        throw new InvalidOperationException("正規相關應找得到平移的方塊");
+    var squareCorr = squareNcc.OrderByDescending(hit => hit.Score).First();
+    double nccRow = squareCorr.Row - 51.5;
+    double nccCol = squareCorr.Column - 46.5;
+    if (nccRow * nccRow + nccCol * nccCol > 0.75 * 0.75)
+        throw new InvalidOperationException($"正規相關的方塊中心應在列 51.5、行 46.5 的 0.75 像素內，得到 {squareCorr.Row:0.000},{squareCorr.Column:0.000} 角度 {squareCorr.Angle * 180 / Math.PI:0.00} 分 {squareCorr.Score:0.00}");
+    double nccDegrees = squareCorr.Angle * 180 / Math.PI;
+    double nccMod = nccDegrees % 90;
+    if (nccMod < 0)
+        nccMod += 90;
+    if (Math.Min(nccMod, 90 - nccMod) > 1)
+        throw new InvalidOperationException($"正規相關的方塊角度應靠近 90 度的倍數，得到 {nccDegrees:0.00}");
+    var inverted = new byte[shifted.Length];
+    for (int i = 0; i < shifted.Length; i++)
+        inverted[i] = (byte)(255 - shifted[i]);
+    var samePolarity = Operators.FindNcc(ImageBuffer.Gray(96, 96, inverted), ImageBuffer.Gray(64, 64, block), 8, 8, 55, 55);
+    if (samePolarity.Any(hit =>
+        {
+            double dRow = hit.Row - 51.5;
+            double dCol = hit.Column - 46.5;
+            return dRow * dRow + dCol * dCol <= 3 * 3;
+        }))
+        throw new InvalidOperationException("沒開反相時，黑白對調的方塊不該算對上");
+    var flipped = Operators.FindNcc(ImageBuffer.Gray(96, 96, inverted), ImageBuffer.Gray(64, 64, block), 8, 8, 55, 55, ignoreGlobalPolarity: true);
+    if (flipped.Length < 1)
+        throw new InvalidOperationException("開了反相應找得到黑白對調的方塊");
+    var flippedHit = flipped.OrderByDescending(hit => hit.Score).First();
+    double flippedRow = flippedHit.Row - 51.5;
+    double flippedCol = flippedHit.Column - 46.5;
+    if (flippedRow * flippedRow + flippedCol * flippedCol > 0.75 * 0.75)
+        throw new InvalidOperationException($"反相後的方塊中心應在 0.75 像素內，得到 {flippedHit.Row:0.000},{flippedHit.Column:0.000} 分 {flippedHit.Score:0.00}");
 
     var template = Operators.ReadImage(SampleFile("shape_template.png"));
     var scene = Operators.ReadImage(SampleFile("shapes_scene.png"));
@@ -141,6 +174,28 @@ static void SelfTest()
     }
     if (fractional < 3)
         throw new InvalidOperationException("次像素精修後，四個裡至少三個的列或行要離開整數。得到 " + string.Join("; ", found.Select(item => $"{item.Row:0.00},{item.Column:0.00}")));
+
+    var correlated = Operators.FindNcc(scene, template, 15, 15, 164, 164);
+    if (correlated.Length < 4)
+        throw new InvalidOperationException("正規相關應找到 4 個，得到 " + correlated.Length + "：" + string.Join("; ", correlated.Select(hit => $"{hit.Row:0.00},{hit.Column:0.00},{hit.Angle * 180 / Math.PI:0.00},{hit.Score:0.00}")));
+    foreach (var pose in expected)
+    {
+        var hit = correlated.OrderBy(item =>
+        {
+            double dRow = item.Row - pose.Row;
+            double dCol = item.Column - pose.Column;
+            return dRow * dRow + dCol * dCol;
+        }).First();
+        double dRow = hit.Row - pose.Row;
+        double dCol = hit.Column - pose.Column;
+        double dAngle = hit.Angle - pose.Angle;
+        while (dAngle > Math.PI)
+            dAngle -= 2 * Math.PI;
+        while (dAngle < -Math.PI)
+            dAngle += 2 * Math.PI;
+        if (dRow * dRow + dCol * dCol > 1.0 * 1.0 || Math.Abs(dAngle) > 1.5 * Math.PI / 180.0)
+            throw new InvalidOperationException($"正規相關沒有對上 Python 的 ({pose.Row:0.0},{pose.Column:0.0},{pose.Angle * 180 / Math.PI:0.00}°)。C# 得到 {hit.Row:0.00},{hit.Column:0.00},{hit.Angle * 180 / Math.PI:0.00}° 分 {hit.Score:0.00}");
+    }
 
     Expect(GrayConvert.Bgr(10, 20, 30), 22, "灰階 10,20,30");
     Expect(GrayConvert.Bgr(255, 128, 0), 104, "灰階 255,128,0");
