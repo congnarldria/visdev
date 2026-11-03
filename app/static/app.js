@@ -2344,7 +2344,7 @@ window.VisDevCommands = {
     return VisDevCommands.openNamedTemplate("inspect_stereo.viz", "這是相對姿態範本。第 k 組是同一次擺放。執行後看 Pose1。");
   },
   codeTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_code.viz", "這是條碼範本。執行後看 Text。");
+    return VisDevCommands.openNamedTemplate("inspect_code.viz", "這是條碼範本。執行後看 Text 和 QrText。");
   },
   new() {
     code.value = "* 新程式\n";

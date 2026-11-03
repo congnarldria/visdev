@@ -16,7 +16,7 @@ from .parser import (
     Assign, Call, CatchStmt, Comment, Blank, ElseStmt, EndForStmt, EndIfStmt, EndProcedureStmt,
     EndTryStmt, EndWhileStmt, ForStmt, IfStmt, ParseError, ProcedureStmt, TryStmt, WhileStmt, parse_program,
 )
-from .render import apply_domain_dim, compose_display, jpeg_thumb, region_thumb, xld_thumb
+from .render import apply_domain_dim, compose_display, copy_display_scene, jpeg_thumb, region_thumb, xld_thumb
 from .ncc_model import NccModel
 from .shape_model import MATCH_COLORS, ShapeModel
 
@@ -1153,61 +1153,102 @@ class Session:
         setattr(self, cache_name, (token, rev))
         return rev
 
-    def window_display(self) -> tuple[dict | None, int]:
+    def _calib_extra(self, base: Image | None, preview: bool) -> dict | None:
+        panels = getattr(self.display, "calib_panels", None)
+        note = getattr(self.display, "calib_note", None)
+        back = bool(getattr(self.display, "calib_back", False))
+        if not panels and not note and not back:
+            return None
+        extra = {}
+        if panels:
+            shown = [dict(item) for item in panels]
+            if preview and base is not None:
+                scale = 640 / max(base.width, base.height)
+                for item in shown:
+                    item["top"] = float(item["top"]) * scale
+                    item["bottom"] = float(item["bottom"]) * scale
+            extra["calibPanels"] = shown
+        if note:
+            extra["calibNote"] = note
+        if back:
+            extra["calibBack"] = True
+        return extra
+
+    def _paint_display(self, base, overlays, preview: bool, token: tuple, rev: int) -> dict | None:
+        payload = compose_display(base, overlays, preview=preview)
+        extra = self._calib_extra(base, preview)
+        if payload is not None and extra:
+            payload = dict(payload)
+            payload.update(extra)
+        self._display_cache = (token, payload, rev)
+        return payload
+
+    def render_display_job(self, job: dict) -> dict | None:
+        payload = compose_display(job["base"], job["overlays"], preview=bool(job["preview"]))
+        extra = job.get("extra")
+        if payload is not None and extra:
+            payload = dict(payload)
+            payload.update(extra)
+        return payload
+
+    def window_display(self, *, defer: bool = False):
         overlays = self._window_overlays()
         base = self.display.base
         preview = bool(getattr(self, "running", False)) and base is not None and max(base.width, base.height) > 640
         token = (self._display_token(overlays), preview)
         cached = getattr(self, "_display_cache", None)
         if cached is not None and cached[0] == token:
-            return cached[1], cached[2]
-        payload = compose_display(self.display.base, overlays, preview=preview)
-        if payload is not None:
-            panels = getattr(self.display, "calib_panels", None)
-            note = getattr(self.display, "calib_note", None)
-            back = bool(getattr(self.display, "calib_back", False))
-            if panels or note or back:
-                payload = dict(payload)
-                if panels:
-                    shown = panels
-                    if preview:
-                        scale = 640 / max(base.width, base.height)
-                        shown = [
-                            {**item, "top": float(item["top"]) * scale, "bottom": float(item["bottom"]) * scale}
-                            for item in panels
-                        ]
-                    payload["calibPanels"] = shown
-                if note:
-                    payload["calibNote"] = note
-                if back:
-                    payload["calibBack"] = True
+            return cached[1], cached[2], None
         rev = int(getattr(self, "_display_rev", 0)) + 1
         self._display_rev = rev
-        self._display_cache = (token, payload, rev)
-        return payload, rev
+        if not defer:
+            payload = self._paint_display(base, overlays, preview, token, rev)
+            return payload, rev, None
+        base_copy, overlay_copy = copy_display_scene(base, overlays)
+        return None, rev, {
+            "token": token,
+            "rev": rev,
+            "base": base_copy,
+            "overlays": overlay_copy,
+            "preview": preview,
+            "extra": self._calib_extra(base, preview),
+        }
 
-    def public_state(self) -> dict:
+    def store_display(self, job: dict, payload: dict | None) -> None:
+        if int(getattr(self, "_display_rev", 0)) == int(job["rev"]):
+            self._display_cache = (job["token"], payload, job["rev"])
+
+    def public_state(self, *, defer_display: bool = False) -> dict:
         iconic = []
         control = []
+        thumb_jobs = []
         variables, local_names = self._scoped_vars()
         for name, value in variables.items():
             scope = None
             if local_names:
                 scope = "程序" if name in local_names else "呼叫端"
             if isinstance(value, list) and value and all(isinstance(item, Image) for item in value):
-                kind, info, thumb = describe_iconic(value[-1], self._thumb_cache)
-                iconic.append({
+                kind, info, thumb, thumb_job = describe_iconic(value[-1], self._thumb_cache, defer=defer_display)
+                entry = {
                     "name": name, "kind": kind, "role": _var_role(name, kind, True),
                     "scope": scope,
                     "info": f"{len(value)} 張  {info}", "thumb": thumb,
-                })
+                }
+                if thumb_job is not None:
+                    thumb_job["target"] = entry
+                    thumb_jobs.append(thumb_job)
+                iconic.append(entry)
             elif isinstance(value, (Image, Region, XLD)):
-                kind, info, thumb = describe_iconic(value, self._thumb_cache)
-                iconic.append({
+                kind, info, thumb, thumb_job = describe_iconic(value, self._thumb_cache, defer=defer_display)
+                entry = {
                     "name": name, "kind": kind, "role": _var_role(name, kind, True),
                     "scope": scope,
                     "info": info, "thumb": thumb,
-                })
+                }
+                if thumb_job is not None:
+                    thumb_job["target"] = entry
+                    thumb_jobs.append(thumb_job)
+                iconic.append(entry)
             elif isinstance(value, ShapeModel):
                 control.append({"name": name, "type": "shape_model", "scope": scope, "text": value.summary(), "full": value.summary()})
             elif isinstance(value, NccModel):
@@ -1223,7 +1264,7 @@ class Session:
         if self.histogram is not None:
             histogram = dict(self.histogram)
             histogram["color"] = self.region_color
-        display, display_rev = self.window_display()
+        display, display_rev, display_job = self.window_display(defer=defer_display)
         var_rev = self._revision(
             "_var_cache",
             (
@@ -1232,7 +1273,7 @@ class Session:
             ),
         )
         log_rev = self._revision("_log_cache", tuple(self.log[-300:]))
-        return {
+        state = {
             "id": self.id,
             "line": self.current_line(),
             "procedure": self._paused_procedure(),
@@ -1258,6 +1299,11 @@ class Session:
                 for line, slot in sorted(self.line_times.items())
             ],
         }
+        if display_job is not None:
+            state["_display_job"] = display_job
+        if thumb_jobs:
+            state["_thumb_jobs"] = thumb_jobs
+        return state
 
     def view_object(self, name: str) -> dict:
         value = self.vars[name]
@@ -1361,13 +1407,25 @@ def _remember_thumb(thumbs, token, build):
     return thumb
 
 
-def describe_iconic(value, thumbs=None):
+def encode_thumb_job(job: dict) -> str:
+    kind = job["kind"]
+    if kind == "image":
+        return jpeg_thumb(job["array"])
+    if kind == "region":
+        return jpeg_thumb(region_thumb(job["region"]))
+    return jpeg_thumb(xld_thumb(job["xld"]))
+
+
+def describe_iconic(value, thumbs=None, *, defer: bool = False):
     if isinstance(value, Image):
         channels = "byte" if value.channels == 1 else f"{value.channels} 通道"
         domain = value.domain
         token = ("image", id(value.data), value.data.shape, None if domain is None else id(domain))
+        info = f"{value.width}×{value.height}  {channels}"
+        if defer and (thumbs is None or token not in thumbs):
+            return "image", info, "", {"token": token, "kind": "image", "array": apply_domain_dim(value).copy()}
         thumb = _remember_thumb(thumbs, token, lambda: jpeg_thumb(apply_domain_dim(value)))
-        return "image", f"{value.width}×{value.height}  {channels}", thumb
+        return "image", info, thumb, None
     if isinstance(value, Region):
         info = f"{value.count()} 個物件  {value.width}×{value.height}"
         if value.links:
@@ -1380,6 +1438,15 @@ def describe_iconic(value, thumbs=None):
                         holes += 1
             info += f"  link 外{outers} 孔{holes}"
         token = ("region", tuple(id(mask) for mask in value.objects), value.width, value.height)
-        return "region", info, _remember_thumb(thumbs, token, lambda: jpeg_thumb(region_thumb(value)))
+        if defer and (thumbs is None or token not in thumbs):
+            masks = [np.array(mask, copy=True) for mask in value.objects]
+            copied = Region(value.width, value.height, masks, bool(value.multi_color), None)
+            return "region", info, "", {"token": token, "kind": "region", "region": copied}
+        return "region", info, _remember_thumb(thumbs, token, lambda: jpeg_thumb(region_thumb(value))), None
     token = ("xld", id(value), len(value.contours), value.width, value.height)
-    return "xld", f"{len(value.contours)} 條輪廓", _remember_thumb(thumbs, token, lambda: jpeg_thumb(xld_thumb(value)))
+    info = f"{len(value.contours)} 條輪廓"
+    if defer and (thumbs is None or token not in thumbs):
+        contours = [[[float(point[0]), float(point[1])] for point in line] for line in value.contours]
+        copied = XLD(value.width, value.height, contours, bool(value.multi_color), None)
+        return "xld", info, "", {"token": token, "kind": "xld", "xld": copied}
+    return "xld", info, _remember_thumb(thumbs, token, lambda: jpeg_thumb(xld_thumb(value))), None

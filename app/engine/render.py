@@ -197,6 +197,42 @@ def fill_overlay(region: Region, color: str, alpha: int = 110, colors: list[str]
     return overlay
 
 
+def copy_display_scene(base: Image | None, overlays: list) -> tuple[Image | None, list]:
+    """鎖裡只抄下這一步的圖和疊圖。縮小和編碼在鎖外面做。"""
+    base_copy = None if base is None else base.copy()
+    copied = []
+    for item in overlays:
+        kind = item.get("kind")
+        if kind == "region":
+            region: Region = item["region"]
+            masks = [np.array(mask, copy=True) for mask in region.objects]
+            links = None
+            if region.links:
+                links = []
+                for link in region.links:
+                    if not isinstance(link, dict):
+                        links.append(link)
+                        continue
+                    dup = dict(link)
+                    points = dup.get("points")
+                    if points:
+                        dup["points"] = [[float(point[0]), float(point[1])] for point in points]
+                    links.append(dup)
+            fresh = dict(item)
+            fresh["region"] = Region(region.width, region.height, masks, bool(region.multi_color), links)
+            copied.append(fresh)
+        elif kind == "xld":
+            xld: XLD = item["xld"]
+            contours = [[[float(point[0]), float(point[1])] for point in line] for line in xld.contours]
+            groups = list(xld.groups) if getattr(xld, "groups", None) else None
+            fresh = dict(item)
+            fresh["xld"] = XLD(xld.width, xld.height, contours, bool(xld.multi_color), groups)
+            copied.append(fresh)
+        else:
+            copied.append(dict(item))
+    return base_copy, copied
+
+
 def compose_display(base: Image | None, overlays: list, *, preview: bool = False) -> dict | None:
     if base is None and not overlays:
         return None

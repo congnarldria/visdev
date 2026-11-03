@@ -3679,11 +3679,87 @@ def test_stop_during_wait_replaces_the_preview_with_the_full_image():
         SESSIONS.pop(sid, None)
 
 
+def test_polling_encodes_the_preview_outside_the_session_lock():
+    import base64
+
+    import app.engine.render as render
+    from app.main import _snapshot
+
+    session = run_source("Vizion.gen_image_const (Image, 'byte', 1200, 800)\n")
+    assert session.error is None, session.error
+    session.running = True
+    held = []
+    calls = []
+    real_jpeg = render._jpeg_data_url
+
+    def spy(array):
+        calls.append(array.shape[:2])
+        session.vars["Image"].data[:] = 255
+        acquired = session.lock.acquire(blocking=False)
+        held.append(acquired)
+        if acquired:
+            session.lock.release()
+        return real_jpeg(array)
+
+    render._jpeg_data_url = spy
+    try:
+        state = _snapshot(session)
+        again = _snapshot(session)
+    finally:
+        render._jpeg_data_url = real_jpeg
+    assert held == [True]
+    assert calls == [(427, 640)]
+    assert state["running"] is True
+    assert state["display"]["preview"] is True
+    assert state["display"]["width"] == 640
+    assert again["displayRev"] == state["displayRev"]
+    assert again["display"]["image"] == state["display"]["image"]
+    raw = base64.b64decode(state["display"]["image"].split(",", 1)[1])
+    view = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_GRAYSCALE)
+    assert int(view.max()) < 8
+    assert session.vars["Image"].width == 1200
+
+
+def test_variable_thumbs_are_encoded_outside_the_session_lock():
+    import app.engine.session as engine_session
+    from app.main import _snapshot
+
+    session = run_source("Vizion.gen_image_const (Image, 'byte', 900, 700)\n")
+    assert session.error is None, session.error
+    session._thumb_cache.clear()
+    held = []
+    arrays = []
+    real = engine_session.jpeg_thumb
+
+    def spy(array, max_edge=112):
+        arrays.append(int(array.max()))
+        session.vars["Image"].data[:] = 255
+        acquired = session.lock.acquire(blocking=False)
+        held.append(acquired)
+        if acquired:
+            session.lock.release()
+        return real(array, max_edge)
+
+    engine_session.jpeg_thumb = spy
+    try:
+        state = _snapshot(session)
+        again = _snapshot(session)
+    finally:
+        engine_session.jpeg_thumb = real
+    image = next(item for item in state["iconic"] if item["name"] == "Image")
+    assert held == [True]
+    assert arrays == [0]
+    assert image["thumb"].startswith("data:image/jpeg")
+    assert again["iconic"][0]["thumb"] == image["thumb"]
+    assert session.vars["Image"].width == 900
+
+
 def test_inspect_code_template_reads_the_ean():
     session = run_source((ROOT / "samples" / "inspect_code.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error
     assert int(session.vars["Count"]) == 1
     assert session.vars["Text"] == "4006381333931"
+    assert session.vars["QrText"] == "VISDEV-3"
     assert session.display.base is not None
 
 

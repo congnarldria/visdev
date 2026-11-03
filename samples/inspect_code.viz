@@ -1,10 +1,14 @@
 * 條碼檢測範本。打開就能跑。
-* 讀 samples/codes.png。auto 會讀到這張圖上的 EAN-13。
-* Count 是個數。Text 是第一個讀到的字，從 1 開始。
+* 讀 samples/codes.png。右邊是 EAN-13，左邊是 QR。
+* Text 是一維碼。QrText 是二維碼。兩個都從 1 開始。
 Vizion.read_image (Image, 'samples/codes.png')
 Vizion.create_bar_code_model ('', '', Handle)
 Vizion.find_bar_code (Image, Symbol, Handle, 'auto', Decoded)
 Vizion.tuple_length (Decoded, Count)
 Text := Decoded[1]
+Vizion.create_data_code_2d_model ('QR Code', '', '', DataCode)
+Vizion.find_data_code_2d (Image, CodeXld, DataCode, '', '', CodeId, CodeText)
+QrText := CodeText[1]
 Vizion.dev_display (Image)
 Vizion.dev_display (Symbol)
+Vizion.dev_display (CodeXld)

@@ -41,7 +41,7 @@ from app.engine.operators import (
 from app.engine.parser import ParseError
 from app.engine.render import contours_of, fill_overlay, normalize_color, png_data_url, read_cv_image
 from app.engine.samples_gen import ensure_samples
-from app.engine.session import Session, omit_known_state
+from app.engine.session import Session, _remember_thumb, encode_thumb_job, omit_known_state
 from app.engine.shape_model import MATCH_COLORS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -201,9 +201,29 @@ def _session_or_404(sid: str) -> Session:
 
 def _snapshot(current: Session) -> dict:
     with current.lock:
-        state = current.public_state()
+        state = current.public_state(defer_display=True)
         # 和這張畫面一起讀。執行緒只在鎖內改 running，避免預覽配上「已停止」。
         state["running"] = bool(getattr(current, "running", False))
+        job = state.pop("_display_job", None)
+        thumb_jobs = state.pop("_thumb_jobs", None)
+    if thumb_jobs:
+        for item in thumb_jobs:
+            item["thumb"] = encode_thumb_job(item)
+            item["target"]["thumb"] = item["thumb"]
+    if job is not None:
+        payload = current.render_display_job(job)
+        state["display"] = payload
+    if job is not None or thumb_jobs:
+        with current.lock:
+            if job is not None:
+                current.store_display(job, state["display"])
+            if thumb_jobs:
+                for item in thumb_jobs:
+                    token = item["token"]
+                    if token in current._thumb_cache:
+                        continue
+                    thumb = item["thumb"]
+                    _remember_thumb(current._thumb_cache, token, lambda thumb=thumb: thumb)
     return state
 
 

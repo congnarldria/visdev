@@ -292,7 +292,7 @@ endfor</pre>
       <h3>執行</h3>
       <p>F5 執行，F6 單步，F7 步進程序。程式跑到一半失敗時，已經算出的圖和變數留著，狀態列會寫出第幾行。大圖在執行中會先縮小顯示，標題會寫預覽，跑完或停止後換成完整圖。</p>
       <h3>範本</h3>
-      <p>檔案、範本裡有五支，打開就能跑。零件檢測讀 <code>samples/parts.png</code>，這張圖是 8 個零件。邊緣量測讀 <code>samples/gauge.png</code>。形狀定位在場景裡找到 4 個。相對姿態用寫入的角點，兩台各三組，第 k 組是同一次擺放。<code>Pose1</code> 的第一個數約 0.04 公尺。條碼讀 <code>samples/codes.png</code>，<code>Text</code> 是 4006381333931。</p>
+      <p>檔案、範本裡有五支，打開就能跑。零件檢測讀 <code>samples/parts.png</code>，這張圖是 8 個零件。邊緣量測讀 <code>samples/gauge.png</code>。形狀定位在場景裡找到 4 個。相對姿態用寫入的角點，兩台各三組，第 k 組是同一次擺放。<code>Pose1</code> 的第一個數約 0.04 公尺。條碼讀 <code>samples/codes.png</code>，<code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。</p>
       <h3>標定</h3>
       <p>棋盤寫 <code>'5,7,10'</code>，也可以用 <code>.cpd</code> 或 <code>.descr</code>。多台相機時，每一台的第 k 組要是同時看到的同一塊板。<code>camera/pose</code> 是相對第 0 台的姿態，第 0 台是 0。標完的圖可以點某一張看原圖，再點一下回到全部。</p>
       <h3>存檔與 Windows</h3>
@@ -349,6 +349,6 @@ endfor</pre>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
   <script src="/static/run_source.js?v=1"></script>
-  <script src="/static/app.js?v=82"></script>
+  <script src="/static/app.js?v=83"></script>
 </body>
 </html>
