@@ -293,7 +293,7 @@ def write_hard_zernike(path: Path):
 
 def write_ocr_label(path: Path):
     image = np.full((180, 720, 3), 255, np.uint8)
-    cv2.putText(image, "VISDEV OCR 168", (28, 110), cv2.FONT_HERSHEY_SIMPLEX, 1.8, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(image, "VISDEV 168", (36, 120), cv2.FONT_HERSHEY_SIMPLEX, 2.2, (0, 0, 0), 5, cv2.LINE_8)
     write_cv_image(path, image)
 
 

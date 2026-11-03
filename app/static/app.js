@@ -2544,6 +2544,9 @@ window.VisDevCommands = {
   colorTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_color.viz", "這是色彩範本。綠塊面積 1200、色調 60。紅塊不算。超出就不合格。");
   },
+  charsTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_chars.viz", "這是字元範本。讀 VISDEV 168。狀態列寫文字。讀錯就不合格。");
+  },
   stripeTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_stripe.viz", "這是條紋寬度範本。執行後看 Width。");
   },

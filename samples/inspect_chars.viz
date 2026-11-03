@@ -1,0 +1,31 @@
+* 字元範本。打開就能跑。讀 samples/ocr_label.png 上的 VISDEV 168。
+* Chars 是讀到的整段字。Count 是字塊個數。Score 是信心，0 到 1。
+* 讀對、只有一塊、信心至少 0.5，Judge 才是合格。否則是不合格，字改成紅色。
+* 這支用本機引擎，不把圖送到雲端。不開相機，也不改 Windows 開 COM 的方式。
+Vizion.read_image (Label, 'samples/ocr_label.png')
+Vizion.create_text_model_reader ('auto', 'auto', TextModel)
+Vizion.find_text (Label, TextModel, TextResult)
+Vizion.get_text_result (TextResult, 'num', Count)
+Vizion.get_text_result (TextResult, 'class', Words)
+Vizion.get_text_result (TextResult, 'confidence', Scores)
+if (Count >= 1)
+    Vizion.tuple_join (Words, ' ', Chars)
+    Score := Scores[1]
+else
+    Chars := ''
+    Score := 0
+endif
+if (Chars == 'VISDEV 168' and Count == 1 and Score >= 0.5)
+    Judge := '合格'
+else
+    Judge := '不合格'
+endif
+Vizion.get_text_object (Outline, TextResult)
+Vizion.dev_display (Label)
+if (Judge == '合格')
+    Vizion.dev_set_color ('green')
+else
+    Vizion.dev_set_color ('red')
+endif
+Vizion.dev_display (Outline)
+Vizion.dev_disp_text (Chars, 28, 36)

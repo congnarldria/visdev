@@ -91,5 +91,12 @@ const color = run.resultSummary([
   { name: "Area", text: "[1200]" },
 ]);
 assert(color === "判定 合格 · 個數 1 · 色調 60 · 面積 1200", "a color run names hue and area");
+const chars = run.resultSummary([
+  { name: "Judge", text: "'合格'" },
+  { name: "Chars", text: "'VISDEV 168'" },
+  { name: "Count", text: "1" },
+  { name: "Score", text: "[0.91]" },
+]);
+assert(chars === "判定 合格 · 文字 VISDEV 168 · 個數 1 · 最低分 0.91", "a character run names the text");
 
 console.log("run source ok");

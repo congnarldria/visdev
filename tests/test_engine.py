@@ -3516,6 +3516,24 @@ def test_inspect_color_template_measures_green_area_and_hue():
     assert "#ff2a2a" in failed_colors
 
 
+def test_inspect_chars_template_reads_visdev_168():
+    session = run_source((ROOT / "samples" / "inspect_chars.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert session.vars["Chars"] == "VISDEV 168"
+    assert int(session.vars["Count"]) == 1
+    assert float(session.vars["Score"]) >= 0.5
+    assert session.vars["Judge"] == "合格"
+    assert session.display.base is not None
+    assert len(session.vars["Outline"].contours) >= 1
+    texts = [shape.get("text") for shape in session.public_state()["display"]["shapes"]]
+    assert "VISDEV 168" in texts
+    wrong = (ROOT / "samples" / "inspect_chars.viz").read_text(encoding="utf-8").replace("'VISDEV 168'", "'NOPE'")
+    failed = run_source(wrong)
+    assert failed.error is None, failed.error
+    assert failed.vars["Chars"] == "VISDEV 168"
+    assert failed.vars["Judge"] == "不合格"
+
+
 def test_gauge_line_failure_keeps_the_image_and_says_what_to_try():
     session = run_source(
         "Vizion.read_image (Image, 'samples/gauge.png')\n"
@@ -3638,6 +3656,14 @@ def test_line_result_goes_out_on_tcp_and_serial():
     )
     assert serial.error is None, serial.error
     assert serial.vars["Line"] == "VISDEV,NG,1,2,ng_01.png\n"
+    told = run_source(
+        "Vizion.open_serial ('loopback', Port)\n"
+        "Vizion.send_text_result (Port, 'VISDEV 168')\n"
+        "Vizion.send_line_result (Port, 'NG', 0, 1, 'ng_01.png')\n"
+        "Vizion.read_serial (Port, 47, Line)\n"
+    )
+    assert told.error is None, told.error
+    assert told.vars["Line"] == "VISDEV,TEXT,VISDEV 168\nVISDEV,NG,0,1,ng_01.png\n"
     assert format_line_result("合格", 3, 0, "ok_03.png") == "VISDEV,OK,3,0,ok_03.png\n"
     refused = run_source(
         "Vizion.open_serial ('loopback', Port)\n"

@@ -34,6 +34,13 @@ def format_line_result(judge, ok_count, ng_count, file_name) -> str:
     return f"VISDEV,{verdict},{ok},{ng},{name}\n"
 
 
+def format_text_result(chars) -> str:
+    raw = text(chars, "Chars").strip().strip("'\"")
+    if any(ch in raw for ch in ",\r\n") or not raw.isascii():
+        raise ValueError("文字只能用英文、數字、空格和 -，中間不能有逗號")
+    return f"VISDEV,TEXT,{raw}\n"
+
+
 @operator(
     "通訊",
     [],
@@ -56,11 +63,33 @@ def format_line_result(judge, ok_count, ng_count, file_name) -> str:
 def send_line_result(link, judge, ok_count, ng_count, file_name, *, ctx):
     from ..objects import Result
 
-    payload = format_line_result(judge, ok_count, ng_count, file_name)
+    _write_link(link, format_line_result(judge, ok_count, ng_count, file_name), ctx)
+    return Result([], [])
+
+
+def _write_link(link, payload, ctx):
     if isinstance(link, SocketLink):
         send_data(link, payload, ctx=ctx)
     elif isinstance(link, SerialPort):
         write_serial(link, payload, ctx=ctx)
     else:
         raise TypeError("Link 必須是 TCP 連線或序列埠")
+
+
+@operator(
+    "通訊",
+    [],
+    [],
+    [P("Link", "TCP 連線或序列埠"), P("Chars", "讀到的文字", "''")],
+    [],
+    "送出讀到的文字",
+    "寫一行 VISDEV,TEXT,文字。結尾是換行。文字用英文、數字、空格或 -，不能有逗號。"
+    "這一行和產線的 OK、NG 那一行不同，不改合格張數。TCP 和序列埠用同一行。"
+    "Windows 的 COM 仍用原來的開啟方式。",
+    "Vizion.send_text_result (Link, 'VISDEV 168')",
+)
+def send_text_result(link, chars, *, ctx):
+    from ..objects import Result
+
+    _write_link(link, format_text_result(chars), ctx)
     return Result([], [])

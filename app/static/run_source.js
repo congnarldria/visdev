@@ -26,6 +26,7 @@
     ["Height", "高"],
     ["Gap", "間距"],
     ["BaselineX", "基線"],
+    ["Chars", "文字"],
     ["Text", "條碼"],
     ["QrText", "二維碼"],
     ["Count", "個數"],

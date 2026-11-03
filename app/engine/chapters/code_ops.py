@@ -1047,6 +1047,33 @@ def get_text_result(result, result_name, *, ctx):
 
 @operator(
     "文字",
+    [],
+    [P("Outline", "字塊外框")],
+    [P("TextResultID", "文字結果")],
+    [],
+    "取出字塊外框",
+    "每個字塊一條閉合輪廓。沒有字時是空的。用來畫在圖上，不改讀到的字。",
+    "Vizion.get_text_object (Outline, TextResultID)",
+)
+def get_text_object(result, *, ctx):
+    if not isinstance(result, TextResult):
+        raise TypeError("TextResultID 必須是 find_text 的結果")
+    if result.closed:
+        raise RuntimeError("文字結果已經 clear_text_result")
+    contours = []
+    for item in result.words:
+        pts = np.asarray(item["points"], np.float64).reshape(-1, 2)
+        ring = [[float(point[0]), float(point[1])] for point in pts]
+        if len(ring) < 2:
+            continue
+        if ring[0] != ring[-1]:
+            ring.append(ring[0])
+        contours.append(ring)
+    return Result([XLD(max(1, result.width), max(1, result.height), contours)], [])
+
+
+@operator(
+    "文字",
     [P("Character", "要讀的區域"), P("Image", "灰階或彩色影像")],
     [],
     [P("TextModel", "文字模型")],
