@@ -188,6 +188,62 @@ public static class NativeCore
         }
     }
 
+    public static bool TryShapeScore(
+        float[] gx, float[] gy, float[] mag, int width, int height, double column, double row,
+        float[] mx, float[] my, float[] mgx, float[] mgy, double minContrast, out double score)
+    {
+        score = 0;
+        if (!IsLoaded || !UseNative || mx.Length == 0)
+            return false;
+        try
+        {
+            score = vizion_shape_score(gx, gy, mag, width, height, column, row, mx, my, mgx, mgy, mx.Length, minContrast);
+            return true;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryNcc(
+        float[] gray, int width, int height, float[] x, float[] y, float[] value,
+        double column, double row, bool absolute, out double score)
+    {
+        score = 0;
+        if (!IsLoaded || !UseNative || x.Length == 0)
+            return false;
+        try
+        {
+            score = vizion_ncc_correlate(gray, width, height, x, y, value, x.Length, column, row, absolute ? 1 : 0);
+            return true;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern double vizion_shape_score(
+        float[] gx, float[] gy, float[] mag, int width, int height, double column, double row,
+        float[] mx, float[] my, float[] mgx, float[] mgy, int count, double minContrast);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern double vizion_ncc_correlate(
+        float[] gray, int width, int height, float[] x, float[] y, float[] value,
+        int count, double column, double row, int absolute);
+
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_mean(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
 

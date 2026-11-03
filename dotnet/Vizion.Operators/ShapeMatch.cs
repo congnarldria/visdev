@@ -531,6 +531,8 @@ public static partial class Operators
         double column, double row,
         float[] mx, float[] my, float[] mgx, float[] mgy, double minContrast)
     {
+        if (NativeCore.TryShapeScore(gx, gy, mag, width, height, column, row, mx, my, mgx, mgy, minContrast, out double nativeScore))
+            return nativeScore;
         double sum = 0;
         int count = mx.Length;
         for (int i = 0; i < count; i++)

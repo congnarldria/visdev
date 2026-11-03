@@ -84,6 +84,18 @@ VIZION_EXPORT int VIZION_CALL vizion_gauss(
 
 VIZION_EXPORT int VIZION_CALL vizion_filter_selftest(void);
 
+/* 形狀比對與正規相關在金字塔每一層的分數。雙線性取樣用 SIMD。 */
+VIZION_EXPORT double VIZION_CALL vizion_shape_score(
+    const float* gx, const float* gy, const float* mag, int width, int height,
+    double column, double row, const float* mx, const float* my, const float* mgx, const float* mgy,
+    int count, double min_contrast);
+
+VIZION_EXPORT double VIZION_CALL vizion_ncc_correlate(
+    const float* gray, int width, int height, const float* x, const float* y, const float* value,
+    int count, double column, double row, int absolute);
+
+VIZION_EXPORT int VIZION_CALL vizion_score_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

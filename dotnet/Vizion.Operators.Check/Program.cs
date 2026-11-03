@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--match")
+{
+    MatchNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--filter")
 {
     FilterNativeCheck();
@@ -877,6 +883,84 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void MatchNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var block = new byte[64 * 64];
+    for (int row = 16; row < 48; row++)
+        for (int col = 16; col < 48; col++)
+            block[row * 64 + col] = 255;
+    var shifted = new byte[96 * 96];
+    for (int row = 36; row < 68; row++)
+        for (int col = 31; col < 63; col++)
+            shifted[row * 96 + col] = 255;
+    var scene = ImageBuffer.Gray(96, 96, shifted);
+    var template = ImageBuffer.Gray(64, 64, block);
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    var managedNcc = Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    NativeCore.UseNative = true;
+    var nativeShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    var nativeNcc = Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    if (nativeShape.Length != managedShape.Length || nativeShape.Length < 1)
+        throw new InvalidOperationException($"形狀命中 {nativeShape.Length} 個，C# {managedShape.Length} 個");
+    for (int i = 0; i < managedShape.Length; i++)
+    {
+        if (Math.Abs(nativeShape[i].Row - managedShape[i].Row) > 1e-6
+            || Math.Abs(nativeShape[i].Column - managedShape[i].Column) > 1e-6
+            || Math.Abs(nativeShape[i].Angle - managedShape[i].Angle) > 1e-6
+            || Math.Abs(nativeShape[i].Score - managedShape[i].Score) > 1e-6)
+            throw new InvalidOperationException($"形狀分數和 C# 不同 {nativeShape[i].Score} / {managedShape[i].Score}");
+    }
+    if (nativeNcc.Length != managedNcc.Length || nativeNcc.Length < 1)
+        throw new InvalidOperationException($"正規相關命中 {nativeNcc.Length} 個，C# {managedNcc.Length} 個");
+    for (int i = 0; i < managedNcc.Length; i++)
+    {
+        if (Math.Abs(nativeNcc[i].Row - managedNcc[i].Row) > 1e-6
+            || Math.Abs(nativeNcc[i].Column - managedNcc[i].Column) > 1e-6
+            || Math.Abs(nativeNcc[i].Angle - managedNcc[i].Angle) > 1e-6
+            || Math.Abs(nativeNcc[i].Score - managedNcc[i].Score) > 1e-6)
+            throw new InvalidOperationException($"正規相關和 C# 不同 {nativeNcc[i].Score} / {managedNcc[i].Score}");
+    }
+    for (int i = 0; i < 2; i++)
+        Operators.FindShape(scene, template, 8, 8, 55, 55);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 4; i++)
+        Operators.FindShape(scene, template, 8, 8, 55, 55);
+    watch.Stop();
+    double nativeShapeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    for (int i = 0; i < 2; i++)
+        Operators.FindShape(scene, template, 8, 8, 55, 55);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.FindShape(scene, template, 8, 8, 55, 55);
+    watch.Stop();
+    double managedShapeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = true;
+    for (int i = 0; i < 2; i++)
+        Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    watch.Stop();
+    double nativeNccMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    for (int i = 0; i < 2; i++)
+        Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    watch.Stop();
+    double managedNccMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("比對分數原生檢查通過");
+    Console.WriteLine($"方塊形狀搜尋 4 次：原生 {nativeShapeMs:0.0} ms，C# {managedShapeMs:0.0} ms，加速 {managedShapeMs / nativeShapeMs:0.0} 倍");
+    Console.WriteLine($"方塊正規相關 4 次：原生 {nativeNccMs:0.0} ms，C# {managedNccMs:0.0} ms，加速 {managedNccMs / nativeNccMs:0.0} 倍");
 }
 
 static void FilterNativeCheck()
