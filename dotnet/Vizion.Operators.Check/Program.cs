@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--threshold")
+{
+    ThresholdNativeCheck();
+    return;
+}
+
 if (args.Length >= 2 && args[0] == "--compare")
 {
     SelfTest();
@@ -853,6 +859,100 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void ThresholdNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var pixels = new byte[48 * 6];
+    for (int i = 0; i < pixels.Length; i++)
+        pixels[i] = (byte)(i % 5 == 0 ? 0 : (i % 17 == 0 ? 128 : 255));
+    pixels[31] = 180;
+    pixels[32] = 180;
+    pixels[33] = 10;
+    SameRegion(Operators.Threshold(ImageBuffer.Gray(48, 6, pixels), 100, 255), ReferenceThreshold(pixels, 48, 6, 100, 255), "48x6");
+    SameRegion(Operators.Threshold(ImageBuffer.Gray(48, 6, pixels), -3, 400), ReferenceThreshold(pixels, 48, 6, -3, 400), "超出範圍");
+    SameRegion(Operators.Threshold(ImageBuffer.Gray(48, 6, pixels), 9, 4), ReferenceThreshold(pixels, 48, 6, 9, 4), "空門檻");
+    var wide = new byte[33];
+    for (int i = 0; i < wide.Length; i++)
+        wide[i] = (byte)(i >= 30 ? 200 : 0);
+    SameRegion(Operators.Threshold(ImageBuffer.Gray(33, 1, wide), 128, 255), ReferenceThreshold(wide, 33, 1, 128, 255), "跨 32");
+    var image = ImageBuffer.Gray(48, 6, pixels);
+    var domain = Operators.Rectangle(image, 1, 2, 4, 40);
+    var reduced = Operators.ReduceDomain(image, domain);
+    SameRegion(Operators.Threshold(reduced, 100, 255), Operators.Intersection(ReferenceThreshold(pixels, 48, 6, 100, 255), domain), "定義域");
+
+    const int benchWidth = 1920;
+    const int benchHeight = 1080;
+    var bench = new byte[benchWidth * benchHeight];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = 30;
+    for (int row = 120; row < 460; row++)
+    {
+        int offset = row * benchWidth;
+        for (int column = 240; column < 1100; column++)
+            bench[offset + column] = 180;
+    }
+    var benchImage = ImageBuffer.Gray(benchWidth, benchHeight, bench);
+    SameRegion(Operators.Threshold(benchImage, 40, 200), ReferenceThreshold(bench, benchWidth, benchHeight, 40, 200), "1080p");
+    Operators.Threshold(benchImage, 40, 200);
+    ReferenceThreshold(bench, benchWidth, benchHeight, 40, 200);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 20; i++)
+        Operators.Threshold(benchImage, 40, 200);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    watch.Restart();
+    for (int i = 0; i < 20; i++)
+        ReferenceThreshold(bench, benchWidth, benchHeight, 40, 200);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    string kind = (NativeCore.CpuFlags & 4) != 0 ? "AVX2" : (NativeCore.CpuFlags & 8) != 0 ? "SSE2" : "純 C";
+    double ratio = managedMs / nativeMs;
+    Console.WriteLine("閾值原生檢查通過");
+    Console.WriteLine($"1920x1080 共 20 次：原生 {kind} {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {ratio:0.0} 倍");
+}
+
+static Region ReferenceThreshold(byte[] gray, int width, int height, int minGray, int maxGray)
+{
+    if (minGray > maxGray)
+        return new Region(width, height, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<int>());
+    var rows = new List<int>();
+    var columns = new List<int>();
+    var lengths = new List<int>();
+    for (int row = 0; row < height; row++)
+    {
+        int offset = row * width;
+        int column = 0;
+        while (column < width)
+        {
+            if (gray[offset + column] < minGray || gray[offset + column] > maxGray)
+            {
+                column++;
+                continue;
+            }
+            int start = column;
+            column++;
+            while (column < width && gray[offset + column] >= minGray && gray[offset + column] <= maxGray)
+                column++;
+            rows.Add(row);
+            columns.Add(start);
+            lengths.Add(column - start);
+        }
+    }
+    return new Region(width, height, rows.ToArray(), columns.ToArray(), lengths.ToArray());
+}
+
+static void SameRegion(Region actual, Region expect, string label)
+{
+    if (actual.Rows.Length != expect.Rows.Length)
+        throw new InvalidOperationException($"{label} 行程 {actual.Rows.Length}，參考 {expect.Rows.Length}");
+    for (int i = 0; i < expect.Rows.Length; i++)
+    {
+        if (actual.Rows[i] != expect.Rows[i] || actual.Columns[i] != expect.Columns[i] || actual.Lengths[i] != expect.Lengths[i])
+            throw new InvalidOperationException($"{label} 第 {i} 段");
+    }
 }
 
 static void ExpectSameRuns(Region region, int[][]? expected, string label)
