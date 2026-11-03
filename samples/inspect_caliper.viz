@@ -1,0 +1,37 @@
+* 卡尺範本。打開就能跑。圖形視窗可以改上下限，再按執行。
+* 讀 samples/gauge.png。圓量直徑，矩形量全寬和全高。
+* 預設公差：直徑 80 到 90，寬 130 到 150，高 80 到 100。超出的那一個用紅線。
+* Diameter 是直徑。Width、Height 是全寬和全高。Judge 是合格或不合格。
+DiaMin := 80
+DiaMax := 90
+WidthMin := 130
+WidthMax := 150
+HeightMin := 80
+HeightMax := 100
+Vizion.read_image (Image, 'samples/gauge.png')
+Vizion.gauge_circle (Image, Circle, 110, 150, 42, 12, 1, 8, 'all', 'best', Row, Column, Radius, CircleUsed)
+Diameter := Radius * 2
+Vizion.gauge_rectangle (Image, Rectangle, 244.5, 429.5, 0, 70, 45, 12, 1, 8, 'all', 'best', RRow, RCol, Phi, Length1, Length2, RectUsed)
+Width := Length1 * 2
+Height := Length2 * 2
+DiaOk := Diameter >= DiaMin and Diameter <= DiaMax
+WidthOk := Width >= WidthMin and Width <= WidthMax
+HeightOk := Height >= HeightMin and Height <= HeightMax
+if (DiaOk and WidthOk and HeightOk)
+    Judge := '合格'
+else
+    Judge := '不合格'
+endif
+Vizion.dev_display (Image)
+if (DiaOk)
+    Vizion.dev_set_color ('yellow')
+else
+    Vizion.dev_set_color ('red')
+endif
+Vizion.dev_display (Circle)
+if (WidthOk and HeightOk)
+    Vizion.dev_set_color ('green')
+else
+    Vizion.dev_set_color ('red')
+endif
+Vizion.dev_display (Rectangle)

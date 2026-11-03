@@ -233,6 +233,88 @@ def copy_display_scene(base: Image | None, overlays: list) -> tuple[Image | None
     return base_copy, copied
 
 
+def _bgr(color: str) -> tuple[int, int, int]:
+    red, green, blue = hex_to_rgb(normalize_color(color))
+    return blue, green, red
+
+
+def _canvas_bgr(base: Image) -> np.ndarray:
+    data = apply_domain_dim(base)
+    if data.ndim == 2:
+        return cv2.cvtColor(data, cv2.COLOR_GRAY2BGR)
+    if data.shape[2] == 4:
+        return cv2.cvtColor(data, cv2.COLOR_BGRA2BGR)
+    return np.ascontiguousarray(data.copy())
+
+
+def _blend_fill(canvas: np.ndarray, overlay: np.ndarray) -> None:
+    if overlay.shape[:2] != canvas.shape[:2]:
+        return
+    alpha = overlay[:, :, 3:4].astype(np.float32) / 255.0
+    if not np.any(alpha):
+        return
+    mixed = overlay[:, :, :3].astype(np.float32) * alpha + canvas.astype(np.float32) * (1.0 - alpha)
+    canvas[:] = np.clip(mixed, 0, 255).astype(np.uint8)
+
+
+def _stroke(canvas: np.ndarray, points, color: str, width: int, closed: bool) -> None:
+    if len(points) < 2:
+        return
+    pts = np.round(np.asarray(points, np.float32)).astype(np.int32).reshape(-1, 1, 2)
+    cv2.polylines(canvas, [pts], closed, _bgr(color), max(1, min(10, int(width))), cv2.LINE_AA)
+
+
+def _paint_region(canvas: np.ndarray, item: dict) -> None:
+    region: Region = item["region"]
+    colors = item.get("colors")
+    width = int(item.get("width") or 2)
+    if item.get("draw") == "fill":
+        _blend_fill(canvas, fill_overlay(region, item["color"], alpha=int(item.get("alpha", 110)), colors=colors))
+        return
+    for index, mask in enumerate(region.objects):
+        color = colors[index] if colors and index < len(colors) else item["color"]
+        stored = region.links[index].get("points") if region.links and index < len(region.links) and isinstance(region.links[index], dict) else None
+        for points in (stored if stored else contours_of(mask)):
+            _stroke(canvas, points, color, width, True)
+
+
+def _paint_xld(canvas: np.ndarray, item: dict) -> None:
+    xld: XLD = item["xld"]
+    palette = item.get("colors")
+    groups = getattr(xld, "groups", None) or []
+    grouped = len(groups) == len(xld.contours) and len(xld.contours) > 0
+    width = int(item.get("width") or 2)
+    for index, points in enumerate(xld.contours):
+        object_index = groups[index] if grouped else index
+        color = palette[object_index] if palette and object_index < len(palette) else item["color"]
+        _stroke(canvas, points, color, width, False)
+
+
+def _paint_text(canvas: np.ndarray, item: dict) -> None:
+    label = str(item.get("text") or "")
+    if not label:
+        return
+    origin = (int(round(float(item["col"]))), int(round(float(item["row"]))))
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(canvas, label, origin, font, 0.45, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(canvas, label, origin, font, 0.45, _bgr(item["color"]), 1, cv2.LINE_AA)
+
+
+def paint_window(base: Image | None, overlays: list) -> np.ndarray:
+    if base is None:
+        raise RuntimeError("還沒有畫面可以存")
+    canvas = _canvas_bgr(base)
+    for item in overlays:
+        kind = item.get("kind")
+        if kind == "region":
+            _paint_region(canvas, item)
+        elif kind == "xld":
+            _paint_xld(canvas, item)
+        elif kind == "text":
+            _paint_text(canvas, item)
+    return canvas
+
+
 def compose_display(base: Image | None, overlays: list, *, preview: bool = False) -> dict | None:
     if base is None and not overlays:
         return None

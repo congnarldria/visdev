@@ -16,7 +16,7 @@ from .parser import (
     Assign, Call, CatchStmt, Comment, Blank, ElseStmt, EndForStmt, EndIfStmt, EndProcedureStmt,
     EndTryStmt, EndWhileStmt, ForStmt, IfStmt, ParseError, ProcedureStmt, TryStmt, WhileStmt, parse_program,
 )
-from .render import apply_domain_dim, compose_display, copy_display_scene, jpeg_thumb, region_thumb, xld_thumb
+from .render import apply_domain_dim, compose_display, copy_display_scene, jpeg_thumb, read_cv_image, region_thumb, xld_thumb
 from .ncc_model import NccModel
 from .shape_model import MATCH_COLORS, ShapeModel
 
@@ -135,6 +135,70 @@ def _var_role(name: str, kind: str, iconic: bool) -> str:
     return kind
 
 
+_NG_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
+
+
+def _ng_filename(name: str) -> str:
+    filename = str(name).strip().strip("'\"")
+    if not filename or filename in (".", "..") or "/" in filename or "\\" in filename or Path(filename).name != filename:
+        raise RuntimeError("不合格圖的檔名不正確")
+    if Path(filename).suffix.lower() not in _NG_SUFFIXES:
+        raise RuntimeError("不合格圖必須是影像檔")
+    return filename
+
+
+def _csv_cells(row: str) -> list[str]:
+    return [cell.strip() for cell in str(row).split(",")]
+
+
+def _csv_column(header: str, names: tuple[str, ...]) -> int | None:
+    cells = [cell.strip().lower() for cell in _csv_cells(header)]
+    for name in names:
+        if name in cells:
+            return cells.index(name)
+    return None
+
+
+def _csv_judge_token(row: str, judge_at: int | None) -> str:
+    if judge_at is None:
+        return ""
+    cells = _csv_cells(row)
+    if judge_at >= len(cells):
+        return ""
+    return cells[judge_at].strip().strip("'\"")
+
+
+def _csv_is_ng(row: str, judge_at: int | None) -> bool:
+    token = _csv_judge_token(row, judge_at)
+    return token.upper() == "NG" or token == "不合格"
+
+
+def _csv_is_ok(row: str, judge_at: int | None) -> bool:
+    token = _csv_judge_token(row, judge_at)
+    return token.upper() == "OK" or token == "合格"
+
+
+def _yield_percent(ok: int, total: int):
+    if total <= 0:
+        return None
+    rounded = round(1000 * ok / total) / 10
+    if abs(rounded - round(rounded)) < 1e-9:
+        return int(round(rounded))
+    return rounded
+
+
+def _csv_open_name(row: str, file_at: int | None, judge_at: int | None) -> str:
+    if file_at is None or not _csv_is_ng(row, judge_at):
+        return ""
+    cells = _csv_cells(row)
+    if file_at >= len(cells):
+        return ""
+    try:
+        return _ng_filename(cells[file_at])
+    except RuntimeError:
+        return ""
+
+
 class Session:
     def __init__(self, source: str, root: Path):
         self.id = uuid.uuid4().hex[:12]
@@ -196,6 +260,7 @@ class Session:
         self.error_line = number
         if log:
             self._append_log(text if text.startswith("錯誤") else f"錯誤 {text}")
+        self._release_handles()
 
     def reset(self):
         self._release_error_frames()
@@ -211,6 +276,9 @@ class Session:
         self.paused = None
         self.log: list[str] = []
         self.display = Display()
+        self._ng_hold = None
+        self._ng_showing = False
+        self._ng_file = ""
         self.loops: dict = {}
         self.try_stack: list = []
         self.proc_depth = 0
@@ -487,6 +555,134 @@ class Session:
             return self.display.base.height, self.display.base.width
         return 480, 640
 
+    def _drop_ng_view(self) -> None:
+        if getattr(self, "_ng_showing", False) and getattr(self, "_ng_hold", None) is not None:
+            self.display = self._ng_hold
+            self._touch_display()
+        self._ng_hold = None
+        self._ng_showing = False
+        self._ng_file = ""
+
+    def show_last_ng(self) -> str:
+        """Show workspace/line_ng/<LastNg>, or restore the program picture."""
+        if getattr(self, "_ng_showing", False):
+            self._drop_ng_view()
+            return ""
+        raw = self.vars.get("LastNg", "")
+        name = str(raw).strip().strip("'\"")
+        if not name:
+            raise RuntimeError("這一輪沒有不合格圖")
+        return self.show_ng_file(name)
+
+    def show_ng_file(self, name: str) -> str:
+        """Show one image already saved in workspace/line_ng. Counts stay."""
+        filename = _ng_filename(name)
+        folder = (self.root / "workspace" / "line_ng").resolve()
+        path = (folder / filename).resolve()
+        try:
+            path.relative_to(folder)
+        except ValueError as exc:
+            raise RuntimeError("不合格圖不能離開不合格圖資料夾") from exc
+        if not path.is_file():
+            raise RuntimeError(f"找不到不合格圖 {filename}。它可能已被清掉，請再跑一次產線。")
+        data = read_cv_image(path)
+        if data is None:
+            raise RuntimeError(f"無法讀取不合格圖 {filename}")
+        if not getattr(self, "_ng_showing", False) or getattr(self, "_ng_hold", None) is None:
+            self._ng_hold = self.display
+        fresh = Display()
+        fresh.line_width = self._ng_hold.line_width
+        fresh.color = "#ff2a2a"
+        self.display = fresh
+        self.display_obj(Image(np.array(data)), name="LastNg")
+        self._ng_showing = True
+        self._ng_file = filename
+        return filename
+
+    def _line_csv_lines(self) -> tuple[str, list[str]]:
+        raw = self.vars.get("CsvFile", "")
+        text = str(raw).strip().strip("'\"")
+        if not text:
+            raise RuntimeError("這一輪沒有明細")
+        normalized = text.replace("\\", "/")
+        if normalized.startswith("/") or ".." in Path(normalized).parts:
+            raise RuntimeError("明細路徑不正確")
+        path = (self.root / normalized).resolve()
+        workspace = (self.root / "workspace").resolve()
+        try:
+            path.relative_to(workspace)
+        except ValueError as exc:
+            raise RuntimeError("明細只能讀 workspace 裡的 CSV") from exc
+        if path.suffix.lower() != ".csv" or not path.is_file():
+            raise RuntimeError(f"找不到明細 {normalized}")
+        lines = path.read_text(encoding="utf-8").splitlines()
+        if not lines:
+            raise RuntimeError("明細是空的")
+        return normalized, lines
+
+    def line_csv_preview(self, limit: int = 20, only_ng: bool = False) -> dict:
+        """Read the line CSV named by CsvFile. Only files inside workspace.
+
+        only_ng keeps rows whose judge cell is NG. The file on disk is not changed.
+        """
+        normalized, lines = self._line_csv_lines()
+        header = lines[0]
+        body = lines[1:]
+        judge_at = _csv_column(header, ("judge", "判定"))
+        file_at = _csv_column(header, ("file", "檔名"))
+        ng_rows = [row for row in body if _csv_is_ng(row, judge_at)]
+        chosen = ng_rows if only_ng else body
+        shown = chosen[-limit:] if len(chosen) > limit else list(chosen)
+        return {
+            "file": normalized,
+            "total": len(body),
+            "ngTotal": len(ng_rows),
+            "header": header,
+            "rows": shown,
+            "opens": [_csv_open_name(row, file_at, judge_at) for row in shown],
+            "truncated": len(chosen) > limit,
+            "onlyNg": bool(only_ng),
+            "noJudge": judge_at is None,
+        }
+
+    def line_stats(self) -> dict:
+        """Count every row in the line CSV. The file on disk is not changed."""
+        normalized, lines = self._line_csv_lines()
+        header = lines[0]
+        body = lines[1:]
+        judge_at = _csv_column(header, ("judge", "判定"))
+        file_at = _csv_column(header, ("file", "檔名"))
+        if judge_at is None:
+            return {
+                "file": normalized,
+                "total": len(body),
+                "ok": 0,
+                "ng": 0,
+                "yield": None,
+                "noJudge": True,
+                "lastNg": "",
+            }
+        ok = 0
+        ng = 0
+        last = ""
+        for row in body:
+            if _csv_is_ng(row, judge_at):
+                ng += 1
+                name = _csv_open_name(row, file_at, judge_at)
+                if name:
+                    last = name
+            elif _csv_is_ok(row, judge_at):
+                ok += 1
+        return {
+            "file": normalized,
+            "total": len(body),
+            "ok": ok,
+            "ng": ng,
+            "yield": _yield_percent(ok, len(body)),
+            "noJudge": False,
+            "lastNg": last,
+        }
+
     def show_calib_view(self, index: int | None) -> None:
         from .chapters.calib_ops import show_saved_calibration
 
@@ -617,6 +813,7 @@ class Session:
     def step(self):
         if self.error:
             return
+        self._drop_ng_view()
         self.arrow_note = None
         self.paused = None
         self.break_skip = None
@@ -653,6 +850,8 @@ class Session:
                 self.reset()
                 parked = None
                 resume_parked = False
+            else:
+                self._drop_ng_view()
             self.arrow_note = None
             self.paused = None
             if not resume:
@@ -671,6 +870,7 @@ class Session:
                 if self.cancel:
                     self.paused = "stopped"
                     self._append_log("已停止")
+                    self._release_handles()
                     return
                 if self._on_breakpoint() and self.pc != self.break_skip:
                     self.break_skip = self.pc
@@ -1294,6 +1494,8 @@ class Session:
             "steps": self.step_count,
             "imageStamp": int(getattr(self, "image_stamp", 0)),
             "displayStamp": int(getattr(self, "display_stamp", 0)),
+            "ngShowing": bool(getattr(self, "_ng_showing", False)),
+            "ngFile": str(getattr(self, "_ng_file", "") or ""),
             "lineTimes": [
                 {"line": line, "ms": round(slot["total"] * 1000, 3), "count": slot["count"]}
                 for line, slot in sorted(self.line_times.items())

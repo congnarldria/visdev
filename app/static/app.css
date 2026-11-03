@@ -533,8 +533,11 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
   padding: 16px 18px 14px;
 }
 .dialog.about { border-color: #465066; }
-.dialog.guide { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; }
+.dialog.guide { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; border-color: #465066; }
+.dialog.guide h2 { color: var(--text); }
 .dialog.guide h3 { margin: 14px 0 6px; font-size: 13px; color: #9aa6bb; }
+.dialog.guide ul { margin: 0 0 10px; padding-left: 1.2em; }
+.dialog.guide li { margin: 0 0 6px; }
 .dialog.guide code { color: #d7e2f2; }
 .project-create { display: flex; gap: 8px; margin: 8px 0 12px; }
 .project-create input { flex: 1; }
@@ -655,6 +658,28 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
   user-select: none;
 }
 
+.tol-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  padding: 4px 8px;
+  background: #191d24;
+  border-bottom: 1px solid var(--line);
+  color: #c5ccd6;
+  font-size: 12px;
+  flex: none;
+}
+.tol-bar[hidden] { display: none; }
+.tol-bar label { display: flex; align-items: center; gap: 4px; }
+.tol-bar input { width: 64px; }
+.tol-bar select {
+  height: 22px;
+  background: #101318;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+.tol-bar input[data-kind="text"] { width: 180px; }
 .gfx-stage { position: relative; flex: 1; min-height: 0; background: #101216; }
 #probe {
   position: absolute;
@@ -945,6 +970,68 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
 .log { flex: 1; margin: 8px; overflow: auto; }
 .log .bad { color: #ffb0a6; }
 
+.status .hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#btnLastNg, #btnLineCsv, #btnLineStats {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 2px;
+  border: 1px solid var(--line);
+  background: #101318;
+  color: var(--text);
+  flex: none;
+}
+#btnLastNg { border-color: #a33b32; color: #ffd0c8; background: #3a2424; }
+#btnLastNg[hidden], #btnLineCsv[hidden], #btnLineStats[hidden] { display: none !important; }
+.template-list { max-height: min(460px, calc(100vh - 180px)); overflow: auto; margin: 8px 0 12px; }
+.template-row {
+  display: grid;
+  grid-template-columns: 6.5em 1fr;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 7px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.template-row:hover { background: #2a3344; }
+.template-name { color: #d7e2f2; }
+.template-expect { color: #9aa6bb; }
+.dialog.stats { border-color: #465066; }
+.dialog.stats h2 { color: var(--text); }
+.stats-grid { display: grid; grid-template-columns: 5em 1fr; gap: 6px 12px; margin: 8px 0 12px; }
+.yield-bar { display: flex; height: 14px; width: 100%; background: #2a303a; margin: 0 0 12px; }
+.yield-bar .ok { background: #1f8a4c; }
+.yield-bar .ng { background: #c4473a; }
+#csvBody {
+  max-height: 280px;
+  overflow: auto;
+  margin: 8px 0 12px;
+  font: 12px/1.5 var(--mono);
+}
+.csv-row {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 1px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  white-space: pre;
+}
+button.csv-row.ng { color: #ffd0c8; cursor: pointer; }
+button.csv-row.ng:hover { background: #3a2424; }
 #stState.bad { color: #ffb0a6; }
 #stState.ok { color: #b6f5cd; }
 #stState.pause { color: #ffe14a; }

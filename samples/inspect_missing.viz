@@ -1,0 +1,20 @@
+* 缺件範本。打開就能跑。samples/parts.png 應有 8 個零件。
+* CountMin、CountMax 是個數窗口，預設都是 8。圖形視窗可以改，再按執行。
+* 少於或多於這個範圍，Judge 是不合格。
+* 不開相機，也不改 Windows 開 COM 的方式。
+CountMin := 8
+CountMax := 8
+Vizion.read_image (Image, 'samples/parts.png')
+MinGray := 60
+Vizion.threshold (Image, Region, MinGray, 255)
+Vizion.connection (Region, Parts, 1)
+Vizion.select_shape (Parts, Kept, 'area', 'and', 80, 99999)
+Vizion.count_obj (Kept, Count)
+Vizion.area_center (Kept, Area, Row, Column)
+if (Count >= CountMin and Count <= CountMax)
+    Judge := '合格'
+else
+    Judge := '不合格'
+endif
+Vizion.dev_display (Image)
+Vizion.dev_display (Kept)

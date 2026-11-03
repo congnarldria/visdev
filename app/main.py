@@ -41,6 +41,8 @@ from app.engine.operators import (
 from app.engine.parser import ParseError
 from app.engine.render import contours_of, fill_overlay, normalize_color, png_data_url, read_cv_image
 from app.engine.samples_gen import ensure_samples
+from app.engine.gauge import distance_pp as gauge_distance_pp
+from app.engine.gauge import measure_point as gauge_measure_point
 from app.engine.session import Session, _remember_thumb, encode_thumb_job, omit_known_state
 from app.engine.shape_model import MATCH_COLORS
 
@@ -130,6 +132,18 @@ class SubpixIn(BaseModel):
 
 class CalibViewIn(BaseModel):
     index: int | None = None
+
+
+class GaugePreviewIn(BaseModel):
+    id: str
+    row1: float
+    col1: float
+    row2: float
+    col2: float
+    sigma: float = 1
+    threshold: float = 8
+    transition: str = "all"
+    select: str = "all"
 
 
 def trim_sessions():
@@ -746,6 +760,34 @@ def object_features(body: FeatureIn):
         }
 
 
+@app.post("/api/gauge-preview")
+def gauge_preview(body: GaugePreviewIn):
+    current = SESSIONS.get(body.id)
+    if current is None:
+        raise HTTPException(404, "請先執行程式，圖上要有一張影像")
+    with current.lock:
+        image = current.display.base
+        if image is None:
+            return {"hits": [], "span": None}
+        gray = image.gray().copy()
+        domain = None if image.domain is None else image.domain.copy()
+    try:
+        hits = gauge_measure_point(
+            gray, domain, body.row1, body.col1, body.row2, body.col2,
+            body.sigma, body.threshold, body.transition, body.select,
+        )
+    except ValueError:
+        return {"hits": [], "span": None}
+    payload = [
+        {"row": float(hit.row), "column": float(hit.column), "distance": float(hit.distance)}
+        for hit in hits
+    ]
+    span = None
+    if len(hits) >= 2:
+        span = float(gauge_distance_pp(hits[0].row, hits[0].column, hits[-1].row, hits[-1].column))
+    return {"hits": payload, "span": span}
+
+
 @app.post("/api/threshold-preview")
 def threshold_preview(body: PreviewIn):
     current = SESSIONS.get(body.id)
@@ -957,6 +999,63 @@ def stop(sid: str):
         return {"ok": False}
     current.cancel = True
     return {"ok": True}
+
+
+@app.post("/api/session/{sid}/last-ng")
+def show_last_ng_view(sid: str):
+    current = _session_or_404(sid)
+    if getattr(current, "running", False):
+        raise HTTPException(409, "程式還在跑，停下來才能看不合格圖")
+    with current.lock:
+        try:
+            current.show_last_ng()
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    state = _snapshot(current)
+    return state
+
+
+class NgFileIn(BaseModel):
+    name: str
+
+
+@app.post("/api/session/{sid}/ng-file")
+def show_ng_file_view(sid: str, body: NgFileIn):
+    current = _session_or_404(sid)
+    if getattr(current, "running", False):
+        raise HTTPException(409, "程式還在跑，停下來才能看不合格圖")
+    with current.lock:
+        try:
+            current.show_ng_file(body.name)
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return _snapshot(current)
+
+
+@app.post("/api/session/{sid}/line-stats")
+def show_line_stats(sid: str):
+    current = _session_or_404(sid)
+    if getattr(current, "running", False):
+        raise HTTPException(409, "程式還在跑，停下來才能看統計")
+    with current.lock:
+        try:
+            stats = current.line_stats()
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return stats
+
+
+@app.post("/api/session/{sid}/line-csv")
+def show_line_csv(sid: str, onlyNg: bool = False):
+    current = _session_or_404(sid)
+    if getattr(current, "running", False):
+        raise HTTPException(409, "程式還在跑，停下來才能看明細")
+    with current.lock:
+        try:
+            preview = current.line_csv_preview(only_ng=onlyNg)
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return preview
 
 
 @app.post("/api/session/{sid}/calib-view")

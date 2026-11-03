@@ -1,0 +1,78 @@
+* 孔數範本。打開就能跑。samples/holes.png 有 4 個暗孔。
+* 圓心應在 (50,50)、(50,170)、(120,50)、(120,170)。列在前，行在後。
+* 圖形視窗的「設為預期」把這次量到的圓心寫回這兩列。再跑一次，偏差是 0。
+* CountMin、CountMax 預設都是 4。ShiftMax 是允許的圓心偏差，預設 2。
+* 少孔、多孔、圓心偏離超過 ShiftMax，或直徑不在 26 到 30，Judge 是不合格，十字改成紅色。
+* 不開相機，也不改 Windows 開 COM 的方式。
+CountMin := 4
+CountMax := 4
+ShiftMin := 0
+ShiftMax := 2
+DiaMin := 26
+DiaMax := 30
+WantRow := [50, 50, 120, 120]
+WantCol := [50, 170, 50, 170]
+Vizion.read_image (Image, 'samples/holes.png')
+Vizion.threshold (Image, Region, 0, 60)
+Vizion.connection (Region, Parts, 1)
+Vizion.select_shape (Parts, Kept, 'area', 'and', 200, 2000)
+Vizion.count_obj (Kept, Count)
+Shift := 0
+Dia := 0
+CenterOk := 0
+if (Count >= 1)
+    Vizion.area_center (Kept, Area, Row, Column)
+    Vizion.smallest_circle (Kept, CircleRow, CircleCol, Radius)
+    Dia := 0
+    for Index := 1 to Count by 1
+        One := Radius[Index] * 2
+        if (One > Dia)
+            Dia := One
+        endif
+    endfor
+    CenterOk := CircleRow[1] + CircleCol[1]
+    for Index := 1 to Count by 1
+        Best := 9999
+        for Want := 1 to |WantRow| by 1
+            Dr := Row[Index] - WantRow[Want]
+            Dc := Column[Index] - WantCol[Want]
+            Dist := sqrt(Dr * Dr + Dc * Dc)
+            if (Dist < Best)
+                Best := Dist
+            endif
+        endfor
+        if (Best > Shift)
+            Shift := Best
+        endif
+    endfor
+    for Want := 1 to |WantRow| by 1
+        Best := 9999
+        for Index := 1 to Count by 1
+            Dr := WantRow[Want] - Row[Index]
+            Dc := WantCol[Want] - Column[Index]
+            Dist := sqrt(Dr * Dr + Dc * Dc)
+            if (Dist < Best)
+                Best := Dist
+            endif
+        endfor
+        if (Best > Shift)
+            Shift := Best
+        endif
+    endfor
+    Vizion.gen_cross_contour_xld (Cross, Row, Column, 16, 0)
+endif
+if (Count >= CountMin and Count <= CountMax and Shift <= ShiftMax and Shift >= ShiftMin and Dia >= DiaMin and Dia <= DiaMax and CenterOk >= 0)
+    Judge := '合格'
+else
+    Judge := '不合格'
+endif
+Vizion.dev_display (Image)
+Vizion.dev_display (Kept)
+if (Count >= 1)
+    if (Judge == '合格')
+        Vizion.dev_set_color ('green')
+    else
+        Vizion.dev_set_color ('red')
+    endif
+    Vizion.dev_display (Cross)
+endif

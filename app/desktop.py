@@ -279,7 +279,7 @@ def main() -> None:
     import webview
 
     window = webview.create_window(
-        "VisDev 1.1 beta",
+        "VisDev 1.1",
         f"http://127.0.0.1:{port}/",
         width=1440,
         height=900,

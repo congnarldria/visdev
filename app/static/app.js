@@ -60,7 +60,7 @@ function refreshDirty() {
   const button = document.getElementById("btnSave");
   if (button) button.textContent = dirty ? "儲存 *" : "儲存";
   const name = document.getElementById("progName").value.trim() || "程式";
-  document.title = `${dirty ? "* " : ""}${name} — VisDev beta`;
+  document.title = `${dirty ? "* " : ""}${name} — VisDev 1.1`;
 }
 
 function markSaved() {
@@ -93,25 +93,15 @@ function esc(value) {
 }
 
 function highlightLine(line) {
-  if (/^\s*(?:\*|\/\/)/.test(line)) return `<span class="tok-cmt">${esc(line)}</span>`;
-  const re = /('[^']*'|"[^"]*"|\b(?:if|else|endif|for|endfor|while|endwhile)\b|\b\d+(?:\.\d+)?\b|[A-Za-z_]\w*|\s+|.)/g;
-  let html = "";
-  let match;
-  while ((match = re.exec(line))) {
-    const token = match[0];
-    let cls = "";
-    if (token[0] === "'" || token[0] === '"') cls = "tok-str";
-    else if (/^\d/.test(token)) cls = "tok-num";
-    else if (/^(if|else|endif|for|endfor|while|endwhile)$/i.test(token)) cls = "tok-key";
-    else if (operatorNames.has(token.toLowerCase())) cls = "tok-op";
-    html += cls ? `<span class="${cls}">${esc(token)}</span>` : esc(token);
-  }
-  return html || " ";
+  return VisdevHighlight.highlightSource(line, (token) => operatorNames.has(String(token).toLowerCase()));
 }
 
 function renderHighlight() {
   const src = code.value.endsWith("\n") ? code.value + " " : code.value;
-  hl.innerHTML = src.split("\n").map(highlightLine).join("\n");
+  const lines = src.split("\n");
+  VisdevHighlight.syncHighlight(hl, lines, highlightLine);
+  hl.scrollTop = code.scrollTop;
+  hl.scrollLeft = code.scrollLeft;
   hl.dataset.paint = String(Number(hl.dataset.paint || 0) + 1);
 }
 
@@ -155,16 +145,27 @@ function noteRunningProgram() {
 function renderGutter() {
   const count = Math.max(1, code.value.split("\n").length);
   const arrow = programArrow();
-  let html = "";
+  const errorLines = new Set();
+  const warnLines = new Set();
+  diagnostics.forEach((item) => {
+    if (!item.line) return;
+    if (item.sev === "error") errorLines.add(item.line);
+    else if (item.sev === "warning" && !errorLines.has(item.line)) warnLines.add(item.line);
+  });
+  const rows = [];
   for (let line = 1; line <= count; line += 1) {
     const cls = ["gl"];
     if (breakpoints.has(line)) cls.push("bp");
     if (arrow === line) cls.push("cur");
-    if (server.errorLine === line || diagnostics.some((item) => item.line === line && item.sev === "error")) cls.push("err");
-    else if (diagnostics.some((item) => item.line === line && item.sev === "warning")) cls.push("warn");
-    html += `<div class="${cls.join(" ")}" data-line="${line}"><span class="pc"></span><span class="num">${line}</span></div>`;
+    if (server.errorLine === line || errorLines.has(line)) cls.push("err");
+    else if (warnLines.has(line)) cls.push("warn");
+    rows.push({
+      className: cls.join(" "),
+      line,
+      html: `<span class="pc"></span><span class="num">${line}</span>`,
+    });
   }
-  gutter.innerHTML = html;
+  VisdevHighlight.syncRows(gutter, rows);
 }
 
 function placeBars() {
@@ -200,12 +201,12 @@ function renderTimes() {
   const count = Math.max(1, code.value.split("\n").length);
   const times = new Map((server.lineTimes || []).map((item) => [item.line, item]));
   const arrow = programArrow();
-  let html = "";
+  const rows = [];
   for (let line = 1; line <= count; line += 1) {
     const item = times.get(line);
-    html += `<div class="${arrow === line ? "on" : ""}">${item ? formatLineTime(item) : ""}</div>`;
+    rows.push({ className: arrow === line ? "on" : "", text: item ? formatLineTime(item) : "" });
   }
-  lineTimes.innerHTML = html;
+  VisdevHighlight.syncRows(lineTimes, rows);
 }
 
 function revealLine(line) {
@@ -264,32 +265,186 @@ function renderEditor() {
   renderTimes();
   placeBars();
   gutterArrow = programArrow();
+  renderTolerances();
 }
+
+let applyingTolerance = false;
+
+function renderTolerances() {
+  const bar = document.getElementById("tolBar");
+  if (!bar || typeof VisdevTol === "undefined") return;
+  const fields = VisdevTol.readLimits(code.value);
+  const expects = VisdevTol.readExpects(code.value);
+  const outputs = VisdevTol.visibleOutputs(VisdevTol.readOutputs(code.value));
+  const points = VisdevTol.readPointLists(code.value);
+  const canTeach = points.some((item) => item.name === "WantRow") && points.some((item) => item.name === "WantCol");
+  const signature = JSON.stringify({ fields, expects, outputs, canTeach });
+  if (!fields.length && !expects.length && !outputs.length && !canTeach) {
+    bar.hidden = true;
+    bar.innerHTML = "";
+    bar.dataset.sig = "";
+    return;
+  }
+  bar.hidden = false;
+  if (bar.dataset.sig === signature) return;
+  if (applyingTolerance && bar.contains(document.activeElement)) return;
+  bar.dataset.sig = signature;
+  const note = outputs.length && !fields.length && !expects.length
+    ? "輸出方式會記在這台電腦，改完按執行"
+    : expects.length && !fields.length
+      ? "預期字會記在這台電腦，改完按執行"
+      : "公差會記在這台電腦，改完按執行";
+  const numbers = fields.map((field) => `
+    <label>${field.label}
+      <input data-kind="number" data-line="${field.minLine}" data-name="${field.minName}" value="${field.min}" inputmode="decimal" aria-label="${field.label}下限" title="${field.label}下限">
+      <span>到</span>
+      <input data-kind="number" data-line="${field.maxLine}" data-name="${field.maxName}" value="${field.max}" inputmode="decimal" aria-label="${field.label}上限" title="${field.label}上限">
+    </label>`).join("");
+  const words = expects.map((field) => `
+    <label>${field.label}
+      <input data-kind="text" data-line="${field.line}" data-name="${field.name}" value="${esc(field.value)}" aria-label="${field.label}" title="${field.label}">
+    </label>`).join("");
+  const kindField = VisdevTol.readOutputs(code.value).find((item) => item.name === "OutKind");
+  const kindSelect = kindField ? `
+    <label>方式
+      <select data-kind="choice" data-line="${kindField.line}" data-name="OutKind" aria-label="輸出方式" title="輸出方式">
+        <option value="tcp"${kindField.value === "tcp" ? " selected" : ""}>TCP</option>
+        <option value="serial"${kindField.value === "serial" ? " selected" : ""}>序列埠</option>
+        <option value="modbus"${kindField.value === "modbus" ? " selected" : ""}>Modbus</option>
+      </select>
+    </label>` : "";
+  const outs = outputs.map((field) => `
+    <label>${field.label}
+      <input data-kind="${field.kind}" data-line="${field.line}" data-name="${field.name}" value="${esc(field.value)}" aria-label="${field.label}" title="${field.label}">
+    </label>`).join("");
+  const teach = canTeach ? `<button type="button" id="tolTeach" title="把這次量到的圓心寫進 WantRow、WantCol">設為預期</button>` : "";
+  bar.innerHTML = `<span>${note}</span>${kindSelect}${numbers}${words}${outs}${teach}<button type="button" id="tolReset">預設</button>`;
+}
+
+function toleranceSignature() {
+  const points = VisdevTol.readPointLists(code.value);
+  return JSON.stringify({
+    fields: VisdevTol.readLimits(code.value),
+    expects: VisdevTol.readExpects(code.value),
+    outputs: VisdevTol.visibleOutputs(VisdevTol.readOutputs(code.value)),
+    canTeach: points.some((item) => item.name === "WantRow") && points.some((item) => item.name === "WantCol"),
+  });
+}
+
+function teachCenters() {
+  if (document.getElementById("btnRun").disabled) {
+    stLine.textContent = "執行中，先等這一輪結束";
+    return;
+  }
+  const control = server.control || [];
+  const row = control.find((item) => item.name === "Row");
+  const col = control.find((item) => item.name === "Column");
+  const next = VisdevTol.applyPointLists(
+    code.value,
+    row && (row.full || row.text),
+    col && (col.full || col.text),
+  );
+  if (next == null) {
+    stLine.textContent = "先執行，才有圓心可以寫回";
+    return;
+  }
+  if (next !== code.value) {
+    code.value = next;
+    commitProgram("checkpoint");
+    renderEditor();
+    const bar = document.getElementById("tolBar");
+    if (bar) bar.dataset.sig = toleranceSignature();
+  }
+  stLine.textContent = "已把圓心寫進預期位置";
+}
+
+function commitTolerance(input) {
+  if (input.dataset.kind === "text" || input.dataset.kind === "choice" || input.dataset.name === "OutPort" || input.dataset.name === "OutAddr") {
+    const next = input.dataset.name === "Expect"
+      ? VisdevTol.applyExpect(code.value, input.dataset.line, input.dataset.name, input.value)
+      : VisdevTol.applyOutput(code.value, input.dataset.line, input.dataset.name, input.value);
+    if (next === code.value) {
+      applyingTolerance = false;
+      const bar = document.getElementById("tolBar");
+      if (bar) bar.dataset.sig = "";
+      renderTolerances();
+      return;
+    }
+    applyingTolerance = true;
+    code.value = next;
+    commitProgram("checkpoint");
+    renderEditor();
+    applyingTolerance = false;
+    const bar = document.getElementById("tolBar");
+    if (bar) bar.dataset.sig = toleranceSignature();
+    VisdevTol.remember(localStorage, document.getElementById("progName").value, code.value);
+    return;
+  }
+  const value = input.value.trim();
+  if (!/^-?\d+(?:\.\d+)?$/.test(value)) {
+    applyingTolerance = false;
+    const bar = document.getElementById("tolBar");
+    if (bar) bar.dataset.sig = "";
+    renderTolerances();
+    return;
+  }
+  const next = VisdevTol.applyLimit(code.value, input.dataset.line, input.dataset.name, value);
+  if (next === code.value) return;
+  applyingTolerance = true;
+  code.value = next;
+  commitProgram("checkpoint");
+  renderEditor();
+  applyingTolerance = false;
+  const bar = document.getElementById("tolBar");
+  if (bar) bar.dataset.sig = toleranceSignature();
+  VisdevTol.remember(localStorage, document.getElementById("progName").value, code.value);
+}
+
+document.getElementById("tolBar").addEventListener("change", (event) => {
+  if (event.target.matches("input, select")) commitTolerance(event.target);
+});
+document.getElementById("tolBar").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && event.target.matches("input")) {
+    event.preventDefault();
+    commitTolerance(event.target);
+  }
+});
+document.getElementById("tolBar").addEventListener("click", async (event) => {
+  if (event.target.id === "tolTeach") {
+    teachCenters();
+    return;
+  }
+  if (event.target.id !== "tolReset") return;
+  const fileName = document.getElementById("progName").value;
+  VisdevTol.clearStored(localStorage, fileName);
+  if (saveTarget && saveTarget.name) {
+    await openProgram(saveTarget.kind, saveTarget.name);
+    const expects = VisdevTol.readExpects(code.value);
+    const outputs = VisdevTol.readOutputs(code.value);
+    const limits = VisdevTol.readLimits(code.value);
+    stLine.textContent = outputs.length && !limits.length && !expects.length
+      ? "已恢復預設輸出"
+      : expects.length && !limits.length
+        ? "已恢復預設預期字"
+        : "已恢復預設上下限";
+  }
+});
 
 function renderVars() {
   const iconic = server.iconic || [];
   const control = server.control || [];
-  iconicCount.textContent = iconic.length ? String(iconic.length) : "";
-  iconicList.innerHTML = iconic.map((item) => `
-    <button class="var ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="iconic">
-      <img alt="" src="${item.thumb || ""}">
-      <span class="vn">${esc(item.name)}</span>
-      <span class="vm">${esc(item.scope ? item.scope + " · " : "")}${esc(item.role && item.role !== item.kind ? item.role + " · " + item.kind : item.kind)} · ${esc(item.info)}</span>
-    </button>`).join("") || `<div class="hint">還沒有圖像變數</div>`;
-  controlList.innerHTML = control.map((item) => `
-    <button class="var ctrl ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="control" title="${esc(item.full || item.text)}">
-      <span class="vn">${esc(item.name)}<small>${esc(item.scope ? item.scope + " " : "")}${esc(item.type)}</small></span>
-      <span class="vm">${esc(item.text)}</span>
-    </button>`).join("") || `<div class="hint">還沒有控制變數</div>`;
+  const count = iconic.length ? String(iconic.length) : "";
+  if (iconicCount.textContent !== count) iconicCount.textContent = count;
+  VisdevVars.syncVarList(iconicList, iconic, "iconic", selectedVar, "還沒有圖像變數");
+  VisdevVars.syncVarList(controlList, control, "control", selectedVar, "還沒有控制變數");
 }
 
 function renderLog() {
   const lines = logHidden ? [] : (server.log || []);
-  logBox.innerHTML = lines.map((line) => {
-    const cls = String(line).startsWith("錯誤") ? "bad" : "";
-    return `<span class="${cls}">${esc(line)}</span>`;
-  }).join("\n");
-  logBox.scrollTop = logBox.scrollHeight;
+  const slack = logBox.scrollHeight - logBox.scrollTop - logBox.clientHeight;
+  const follow = slack < 24;
+  const change = VisdevVars.syncLog(logBox, lines);
+  if (follow && (change.appended > 0 || change.kept !== lines.length)) logBox.scrollTop = logBox.scrollHeight;
   renderProblems();
 }
 
@@ -429,15 +584,7 @@ function renderProblems() {
   }
   if (stMessages) stMessages.textContent = `訊息 ${counts.message}`;
   const visible = diagnostics.filter((item) => problemFilter[item.sev]);
-  const label = { error: "錯誤", warning: "警告", message: "訊息" };
-  body.innerHTML = visible.map((item) => `
-    <tr data-line="${item.line || ""}">
-      <td class="sev-${item.sev}">${label[item.sev]}</td>
-      <td>${esc(item.code)}</td>
-      <td class="desc">${esc(item.text)}</td>
-      <td>${esc(item.file)}</td>
-      <td>${item.line || ""}</td>
-    </tr>`).join("") || `<tr><td></td><td></td><td class="desc">沒有要顯示的項目</td><td></td><td></td></tr>`;
+  VisdevVars.syncProblems(body, visible, { error: "錯誤", warning: "警告", message: "訊息" });
 }
 
 function goToLine(line) {
@@ -479,9 +626,32 @@ function setStatus() {
   if (server.error) stLine.textContent = `${project}${proc}${server.error}`;
   else if (server.arrowNote) stLine.textContent = `${project}${server.arrowNote}`;
   else if (server.line && server.paused === "breakpoint") stLine.textContent = `${project}${proc}中斷於第 ${server.line} 行`;
-  else if (server.line && server.done) stLine.textContent = `${project}${proc}結束於第 ${server.line} 行`;
+  else if (server.line && server.done) {
+    const result = VisdevRun.resultSummary(server.control);
+    stLine.textContent = `${project}${proc}結束於第 ${server.line} 行${result ? ` · ${result}` : ""}`;
+  }
+  else if (server.paused === "stopped") {
+    const result = VisdevRun.resultSummary(server.control);
+    stLine.textContent = `${project}${proc}已停止${result ? ` · ${result}` : ""}`;
+  }
+  else if (server.running) stLine.textContent = VisdevRun.liveLine(`${project}${proc}`, server.line, server.control);
   else if (server.line) stLine.textContent = `${project}${proc}下一行 ${server.line}`;
   else stLine.textContent = currentProject ? `專案 ${currentProject}` : (server.done ? "程式結束" : "");
+  syncLineActions();
+}
+
+function syncLineActions() {
+  const ng = document.getElementById("btnLastNg");
+  const csv = document.getElementById("btnLineCsv");
+  const stats = document.getElementById("btnLineStats");
+  if (!ng || !csv || !stats || !window.VisdevRun) return;
+  const running = Boolean(server && server.running);
+  const name = server ? VisdevRun.namedText(server.control, "LastNg") : "";
+  const file = server ? VisdevRun.namedText(server.control, "CsvFile") : "";
+  ng.hidden = !name || running;
+  ng.textContent = server && server.ngShowing ? "回到程式畫面" : "看不合格圖";
+  csv.hidden = !file || running;
+  stats.hidden = !file || running;
 }
 
 let imageStamp = null;
@@ -512,6 +682,15 @@ function applyState(data) {
   } else if (data.display && data.display.calibNote) {
     gfxBanner.hidden = false;
     gfxBanner.textContent = data.display.calibNote;
+  } else if (data.ngShowing && data.ngFile) {
+    gfxBanner.hidden = false;
+    gfxBanner.textContent = `不合格圖 ${data.ngFile}`;
+  } else if (data.done || data.paused === "stopped") {
+    const result = VisdevRun.resultSummary(data.control);
+    if (result) {
+      gfxBanner.hidden = false;
+      gfxBanner.textContent = result;
+    }
   }
   if (localStorage.getItem("visdev.contourWidth") == null && data.display) {
     const xld = (data.display.shapes || []).find((shape) => shape.kind === "xld" && shape.width);
@@ -638,6 +817,7 @@ function applyLiveState(data) {
   if (data.running) {
     stState.textContent = "執行中";
     stState.className = "";
+    gfxBanner.hidden = true;
   }
   takeDisplay(data);
   if (imageChanged) clearPick();
@@ -1544,6 +1724,7 @@ function draw() {
     }
   }
   strokePicked(ctx);
+  strokeGaugePreview(ctx);
   strokeDraft(ctx);
   ctx.restore();
   if (mouse) {
@@ -1635,6 +1816,64 @@ function useNewImage(path) {
   }
   insertAtCursor(`read_image (Image, '${path}')`);
 }
+
+function paintSnapshot(g) {
+  g.drawImage(baseImage, 0, 0, disp.width, disp.height);
+  for (const shape of disp.shapes || []) {
+    if (shape.type === "fill" && shape._img) g.drawImage(shape._img, 0, 0);
+  }
+  for (const shape of disp.shapes || []) {
+    if (shape.type === "polyline" && shape.points && shape.points.length && !shape.hit) {
+      g.beginPath();
+      g.moveTo(shape.points[0][0], shape.points[0][1]);
+      for (let i = 1; i < shape.points.length; i += 1) g.lineTo(shape.points[i][0], shape.points[i][1]);
+      if (shape.closed) g.closePath();
+      g.strokeStyle = shape.color || "#00e05a";
+      const width = shape.kind === "xld" ? contourWidth(shape.width || 2) : (shape.width || 2);
+      g.lineWidth = width;
+      g.stroke();
+    } else if (shape.type === "text") {
+      g.font = "14px \"Segoe UI\", \"Microsoft JhengHei\", sans-serif";
+      g.lineWidth = 3;
+      g.strokeStyle = "rgba(0,0,0,0.75)";
+      g.strokeText(shape.text, shape.col, shape.row);
+      g.fillStyle = shape.color || "#fff";
+      g.fillText(shape.text, shape.col, shape.row);
+    }
+  }
+}
+
+async function saveView() {
+  if (server && server.running) {
+    stLine.textContent = "跑完再存畫面";
+    return;
+  }
+  if (!disp || !baseImage || !disp.width || !disp.height) {
+    stLine.textContent = "還沒有畫面可以存";
+    return;
+  }
+  const shot = document.createElement("canvas");
+  shot.width = disp.width;
+  shot.height = disp.height;
+  paintSnapshot(shot.getContext("2d"));
+  const blob = await new Promise((resolve) => shot.toBlob(resolve, "image/png"));
+  if (!blob) {
+    stLine.textContent = "存不了畫面";
+    return;
+  }
+  const body = new FormData();
+  body.append("file", blob, "view.png");
+  const query = currentProject ? `?project=${encodeURIComponent(currentProject)}` : "";
+  const res = await fetch(`/api/upload${query}`, { method: "POST", body });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  stLine.textContent = `已存畫面 ${data.path}`;
+}
+
+document.getElementById("btnSaveView").onclick = () => { saveView(); };
 
 async function uploadFile(file) {
   const body = new FormData();
@@ -1836,6 +2075,14 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     document.getElementById("aboutDialog").hidden = true;
   }
+  if (!document.getElementById("statsDialog").hidden) {
+    event.preventDefault();
+    document.getElementById("statsDialog").hidden = true;
+  }
+  if (!document.getElementById("templateDialog").hidden) {
+    event.preventDefault();
+    document.getElementById("templateDialog").hidden = true;
+  }
   if (shapeDraw) {
     event.preventDefault();
     cancelShapeDraw();
@@ -1853,6 +2100,184 @@ document.getElementById("btnReset").onclick = () => exec("reset");
 document.getElementById("btnStop").onclick = async () => {
   if (sessionId) await fetch(`/api/stop/${sessionId}`, { method: "POST" });
 };
+document.getElementById("btnLastNg").onclick = () => showLastNg();
+document.getElementById("btnLineCsv").onclick = () => showLineCsv(false);
+document.getElementById("btnLineStats").onclick = () => showLineStats();
+document.getElementById("statsOk").onclick = () => {
+  document.getElementById("statsDialog").hidden = true;
+};
+document.getElementById("statsDialog").addEventListener("mousedown", (event) => {
+  if (event.target.id === "statsDialog") document.getElementById("statsDialog").hidden = true;
+});
+document.getElementById("csvNg").onclick = () => showLineCsv(!csvOnlyNg);
+document.getElementById("csvOk").onclick = () => {
+  document.getElementById("csvDialog").hidden = true;
+};
+document.getElementById("csvBody").onclick = (event) => {
+  const button = event.target.closest("button[data-file]");
+  if (!button) return;
+  openNgFile(button.dataset.file);
+};
+
+async function showLastNg() {
+  if (!sessionId || server.running) return;
+  const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/last-ng`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  server.ngShowing = Boolean(data.ngShowing);
+  server.ngFile = data.ngFile || "";
+  clearPick();
+  if (data.display) await loadDisplay(data.display);
+  if (server.ngShowing) {
+    gfxBanner.hidden = false;
+    gfxBanner.textContent = `不合格圖 ${server.ngFile}`;
+  } else {
+    const result = VisdevRun.resultSummary(server.control);
+    gfxBanner.hidden = !result;
+    gfxBanner.textContent = result;
+  }
+  syncLineActions();
+}
+
+let csvOnlyNg = false;
+
+function renderStats(data) {
+  document.getElementById("statsNote").textContent = data.file || "";
+  const body = document.getElementById("statsBody");
+  body.replaceChildren();
+  if (data.noJudge) {
+    const note = document.createElement("p");
+    note.textContent = "這份明細沒有判定欄";
+    body.appendChild(note);
+    return;
+  }
+  const grid = document.createElement("div");
+  grid.className = "stats-grid";
+  const yieldText = data.yield == null || data.yield === "" ? "" : `${data.yield}%`;
+  [["總數", data.total], ["合格", data.ok], ["不合格", data.ng], ["良率", yieldText]].forEach((pair) => {
+    const label = document.createElement("div");
+    label.textContent = pair[0];
+    const value = document.createElement("div");
+    value.textContent = pair[1] == null ? "" : String(pair[1]);
+    grid.appendChild(label);
+    grid.appendChild(value);
+  });
+  body.appendChild(grid);
+  const total = Number(data.total) || 0;
+  const bar = document.createElement("div");
+  bar.className = "yield-bar";
+  const ok = document.createElement("div");
+  ok.className = "ok";
+  const ng = document.createElement("div");
+  ng.className = "ng";
+  if (total > 0) {
+    ok.style.flex = String(Number(data.ok) || 0);
+    ng.style.flex = String(Number(data.ng) || 0);
+  }
+  bar.appendChild(ok);
+  bar.appendChild(ng);
+  body.appendChild(bar);
+  if (data.lastNg) {
+    const last = document.createElement("p");
+    last.textContent = `最近不合格 ${data.lastNg}`;
+    body.appendChild(last);
+  }
+}
+
+async function showLineStats() {
+  if (!sessionId || server.running) return;
+  const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/line-stats`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  renderStats(data);
+  document.getElementById("statsDialog").hidden = false;
+}
+
+function csvNote(data) {
+  const ng = Number(data.ngTotal) || 0;
+  const total = Number(data.total) || 0;
+  if (data.noJudge) return `${data.file}，這份明細沒有判定欄`;
+  if (data.onlyNg && ng === 0) return `${data.file}，共 ${total} 列，沒有不合格的列`;
+  if (data.onlyNg && data.truncated) {
+    return `${data.file}，共 ${total} 列，不合格 ${ng} 列，這裡是最後 ${data.rows.length} 列不合格`;
+  }
+  if (data.onlyNg) return `${data.file}，共 ${total} 列，不合格 ${ng} 列`;
+  if (data.truncated) return `${data.file}，共 ${total} 列，不合格 ${ng} 列，這裡是最後 ${data.rows.length} 列`;
+  return `${data.file}，共 ${total} 列，不合格 ${ng} 列`;
+}
+
+function renderCsv(data) {
+  document.getElementById("csvNote").textContent = csvNote(data);
+  const body = document.getElementById("csvBody");
+  body.replaceChildren();
+  const header = document.createElement("div");
+  header.className = "csv-row";
+  header.textContent = data.header || "";
+  body.appendChild(header);
+  (data.rows || []).forEach((row, index) => {
+    const file = (data.opens || [])[index] || "";
+    if (!file) {
+      const line = document.createElement("div");
+      line.className = "csv-row";
+      line.textContent = row;
+      body.appendChild(line);
+      return;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "csv-row ng";
+    button.dataset.file = file;
+    button.title = "打開這張不合格圖";
+    button.textContent = row;
+    body.appendChild(button);
+  });
+  const toggle = document.getElementById("csvNg");
+  toggle.textContent = data.onlyNg ? "看全部" : "只看不合格";
+  toggle.setAttribute("aria-pressed", data.onlyNg ? "true" : "false");
+}
+
+async function showLineCsv(onlyNg) {
+  if (!sessionId || server.running) return;
+  const query = onlyNg ? "?onlyNg=true" : "";
+  const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/line-csv${query}`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  csvOnlyNg = Boolean(data.onlyNg);
+  renderCsv(data);
+  document.getElementById("csvDialog").hidden = false;
+  if (!onlyNg) document.getElementById("csvOk").focus();
+}
+
+async function openNgFile(name) {
+  if (!sessionId || server.running || !name) return;
+  const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/ng-file`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  server.ngShowing = Boolean(data.ngShowing);
+  server.ngFile = data.ngFile || "";
+  clearPick();
+  if (data.display) await loadDisplay(data.display);
+  gfxBanner.hidden = false;
+  gfxBanner.textContent = `不合格圖 ${server.ngFile}`;
+  document.getElementById("csvDialog").hidden = true;
+  syncLineActions();
+}
 document.getElementById("btnFit").onclick = () => { cam.user = false; fit(false); };
 document.getElementById("btnOne").onclick = () => {
   if (!disp) return;
@@ -2328,24 +2753,10 @@ function syncViewMenu() {
 
 window.VisDevCommands = {
   async openNamedTemplate(name, note) {
-    await openProgram("samples", name);
-    stLine.textContent = note;
+    const usedSaved = await openProgram("samples", name);
+    stLine.textContent = usedSaved ? `${note} 已用這台電腦上次的上下限。` : note;
   },
-  inspectTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_parts.viz", "這是零件檢測範本。改 MinGray 和面積下限，再按執行。");
-  },
-  gaugeTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_gauge.viz", "這是邊緣量測範本。改量測線的列和行，再按執行。");
-  },
-  locateTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");
-  },
-  stereoTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_stereo.viz", "這是相對姿態範本。第 k 組是同一次擺放。執行後看 Pose1。");
-  },
-  codeTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_code.viz", "這是條碼範本。執行後看 Text 和 QrText。");
-  },
+  templateList() { showTemplateList(); },
   new() {
     code.value = "* 新程式\n";
     document.getElementById("progName").value = "untitled.viz";
@@ -2454,6 +2865,69 @@ window.VisDevCommands = {
   help() { document.getElementById("helpDialog").hidden = false; },
   about() { document.getElementById("aboutDialog").hidden = false; },
   openOperator(name) { openOperatorForm(name); },
+};
+
+function openListedTemplate(cmd) {
+  const item = ((window.VisdevTemplates && VisdevTemplates.templates) || []).find((entry) => entry.cmd === cmd);
+  if (!item) return;
+  return VisDevCommands.openNamedTemplate(item.file, item.expect);
+}
+
+(window.VisdevTemplates.templates || []).forEach((item) => {
+  VisDevCommands[item.cmd] = () => openListedTemplate(item.cmd);
+});
+
+function fillTemplateMenu() {
+  const fly = document.getElementById("templateFly");
+  if (!fly || !window.VisdevTemplates) return;
+  fly.replaceChildren();
+  VisdevTemplates.templates.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.cmd = item.cmd;
+    button.textContent = item.title;
+    fly.appendChild(button);
+  });
+}
+
+function renderTemplateList() {
+  const body = document.getElementById("templateList");
+  if (!body || !window.VisdevTemplates) return;
+  body.replaceChildren();
+  VisdevTemplates.templates.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "template-row";
+    button.dataset.cmd = item.cmd;
+    const name = document.createElement("span");
+    name.className = "template-name";
+    name.textContent = item.title;
+    const expect = document.createElement("span");
+    expect.className = "template-expect";
+    expect.textContent = item.expect;
+    button.appendChild(name);
+    button.appendChild(expect);
+    body.appendChild(button);
+  });
+}
+
+function showTemplateList() {
+  renderTemplateList();
+  document.getElementById("templateDialog").hidden = false;
+}
+
+fillTemplateMenu();
+document.getElementById("templateClose").onclick = () => {
+  document.getElementById("templateDialog").hidden = true;
+};
+document.getElementById("templateDialog").addEventListener("mousedown", (event) => {
+  if (event.target.id === "templateDialog") document.getElementById("templateDialog").hidden = true;
+});
+document.getElementById("templateList").onclick = (event) => {
+  const button = event.target.closest("button[data-cmd]");
+  if (!button || !VisDevCommands[button.dataset.cmd]) return;
+  document.getElementById("templateDialog").hidden = true;
+  VisDevCommands[button.dataset.cmd]();
 };
 
 window.addEventListener("visdev-layout", syncViewMenu);
@@ -2612,6 +3086,8 @@ const drawMenu = document.getElementById("drawMenu");
 const shapeConfirm = document.getElementById("shapeConfirm");
 const shapeConfirmText = document.getElementById("shapeConfirmText");
 let shapeDraw = null;
+let gaugePreview = null;
+let gaugePreviewToken = 0;
 
 function fmtGeom(value) {
   const rounded = Math.round(Number(value) * 100) / 100;
@@ -2654,6 +3130,8 @@ function hideDrawMenu() {
 
 function cancelShapeDraw() {
   shapeDraw = null;
+  gaugePreviewToken += 1;
+  gaugePreview = null;
   hideDrawMenu();
   if (shapeConfirm) shapeConfirm.hidden = true;
   draw();
@@ -2671,7 +3149,12 @@ function strokeDraft(pen) {
   pen.strokeStyle = "#ffe14a";
   pen.lineWidth = 2 / cam.scale;
   pen.setLineDash([6 / cam.scale, 4 / cam.scale]);
-  if (draw.tool === "circle") {
+  if (draw.tool === "line") {
+    pen.beginPath();
+    pen.moveTo(draw.a.col, draw.a.row);
+    pen.lineTo(draw.b.col, draw.b.row);
+    pen.stroke();
+  } else if (draw.tool === "circle") {
     pen.beginPath();
     pen.arc(draw.a.col, draw.a.row, Math.hypot(draw.b.col - draw.a.col, draw.b.row - draw.a.row), 0, Math.PI * 2);
     pen.stroke();
@@ -2687,11 +3170,95 @@ function strokeDraft(pen) {
   pen.restore();
 }
 
+function formNumber(name, fallback) {
+  if (!activeOperator) return fallback;
+  const index = activeOperator.params.findIndex((param) => param.name === name);
+  const node = formFields()[index];
+  if (!node) return fallback;
+  const value = Number(String(node.value).replace(/['"]/g, ""));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function formText(name, fallback) {
+  if (!activeOperator) return fallback;
+  const index = activeOperator.params.findIndex((param) => param.name === name);
+  const node = formFields()[index];
+  if (!node || !String(node.value).trim()) return fallback;
+  return String(node.value).trim();
+}
+
+function strokeGaugePreview(pen) {
+  if (!gaugePreview || !Array.isArray(gaugePreview.hits) || !gaugePreview.hits.length) return;
+  pen.save();
+  pen.strokeStyle = "#7ee0a8";
+  pen.lineWidth = 1.5 / cam.scale;
+  gaugePreview.hits.forEach((hit) => {
+    const size = 6;
+    pen.beginPath();
+    pen.moveTo(hit.column - size, hit.row);
+    pen.lineTo(hit.column + size, hit.row);
+    pen.moveTo(hit.column, hit.row - size);
+    pen.lineTo(hit.column, hit.row + size);
+    pen.stroke();
+  });
+  pen.restore();
+}
+
+function scheduleGaugePreview() {
+  if (!shapeDraw || shapeDraw.tool !== "line" || !shapeDraw.a || !shapeDraw.b || !sessionId) {
+    gaugePreview = null;
+    return;
+  }
+  const token = ++gaugePreviewToken;
+  const draw = shapeDraw;
+  const body = {
+    id: sessionId,
+    row1: draw.a.row,
+    col1: draw.a.col,
+    row2: draw.b.row,
+    col2: draw.b.col,
+    sigma: formNumber("Sigma", 1),
+    threshold: formNumber("Threshold", 8),
+    transition: formText("Transition", "all"),
+    select: formText("Select", "all"),
+  };
+  clearTimeout(scheduleGaugePreview.timer);
+  scheduleGaugePreview.timer = setTimeout(async () => {
+    try {
+      const res = await fetch("/api/gauge-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (token !== gaugePreviewToken) return;
+      gaugePreview = res.ok ? data : null;
+    } catch (_err) {
+      if (token !== gaugePreviewToken) return;
+      gaugePreview = null;
+    }
+    if (shapeDraw && shapeDraw.tool === "line" && shapeDraw.a && shapeDraw.b) {
+      const length = Math.hypot(shapeDraw.b.col - shapeDraw.a.col, shapeDraw.b.row - shapeDraw.a.row);
+      let text = `卡尺  列 ${fmtGeom(shapeDraw.a.row)} 行 ${fmtGeom(shapeDraw.a.col)} → 列 ${fmtGeom(shapeDraw.b.row)} 行 ${fmtGeom(shapeDraw.b.col)}  長度 ${fmtGeom(length)}`;
+      const hits = gaugePreview && gaugePreview.hits ? gaugePreview.hits.length : 0;
+      if (gaugePreview && gaugePreview.span != null) text += `  邊緣 ${hits}  間距 ${fmtGeom(gaugePreview.span)}`;
+      else if (hits) text += `  邊緣 ${hits}`;
+      else text += "  沒有邊緣";
+      shapeConfirmText.textContent = text;
+    }
+    draw();
+  }, 80);
+}
+
 function showShapeConfirm() {
   const map = geometryInputs();
   const box = draftBox(shapeDraw);
   let text = "";
-  if (shapeDraw.tool === "circle") {
+  if (shapeDraw.tool === "line") {
+    const length = Math.hypot(shapeDraw.b.col - shapeDraw.a.col, shapeDraw.b.row - shapeDraw.a.row);
+    text = `卡尺  列 ${fmtGeom(shapeDraw.a.row)} 行 ${fmtGeom(shapeDraw.a.col)} → 列 ${fmtGeom(shapeDraw.b.row)} 行 ${fmtGeom(shapeDraw.b.col)}  長度 ${fmtGeom(length)}`;
+    scheduleGaugePreview();
+  } else if (shapeDraw.tool === "circle") {
     const radius = Math.hypot(shapeDraw.b.col - shapeDraw.a.col, shapeDraw.b.row - shapeDraw.a.row);
     text = `圓  列 ${fmtGeom(shapeDraw.a.row)}  行 ${fmtGeom(shapeDraw.a.col)}  半徑 ${fmtGeom(radius)}`;
   } else if (shapeDraw.tool === "ellipse") {
@@ -2739,7 +3306,7 @@ function showDrawMenu(x, y) {
     hideDrawMenu();
     return;
   }
-  const labels = { rect: "矩形", circle: "圓", ellipse: "橢圓" };
+  const labels = { line: "線", rect: "矩形", circle: "圓", ellipse: "橢圓" };
   drawMenu.innerHTML = tools.map((tool) => `<button type="button" data-draw="${tool}">${labels[tool]}</button>`).join("");
   drawMenu.hidden = false;
   const width = 120;
@@ -3318,8 +3885,13 @@ async function openProgram(kind, name) {
     showDetail(data);
     return;
   }
-  code.value = data.source.replace(/\r\n/g, "\n");
+  const opened = data.source.replace(/\r\n/g, "\n");
+  const restored = kind === "samples"
+    ? VisdevTol.restore(localStorage, data.name || name, opened)
+    : opened;
+  code.value = restored;
   document.getElementById("progName").value = data.name;
+  openProgram.usedSaved = restored !== opened;
   saveTarget = { kind, name: data.name };
   sessionId = null;
   breakpoints = new Set();
@@ -3328,6 +3900,7 @@ async function openProgram(kind, name) {
   markSaved();
   renderEditor();
   await exec("reset");
+  return Boolean(openProgram.usedSaved);
 }
 
 async function loadFiles() {

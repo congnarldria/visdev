@@ -3455,6 +3455,744 @@ def test_inspect_gauge_template_measures_the_edge():
     assert session.display.base is not None
 
 
+def test_inspect_caliper_template_measures_diameter_and_size():
+    session = run_source((ROOT / "samples" / "inspect_caliper.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert abs(float(session.vars["Diameter"]) - 83.92768304367884) < 1e-6
+    assert float(session.vars["Width"]) == 140.0
+    assert float(session.vars["Height"]) == 90.0
+    assert session.vars["Judge"] == "合格"
+    assert int(session.vars["CircleUsed"]) == 66
+    assert int(session.vars["RectUsed"]) > 0
+    assert session.display.base is not None
+
+
+def test_gauge_preview_reports_the_rectangle_width():
+    from app.main import SESSIONS, GaugePreviewIn, gauge_preview
+
+    session = run_source("Vizion.read_image (Image, 'samples/gauge.png')\nVizion.dev_display (Image)\n")
+    assert session.error is None, session.error
+    SESSIONS[session.id] = session
+    try:
+        found = gauge_preview(GaugePreviewIn(
+            id=session.id, row1=244.5, col1=340, row2=244.5, col2=520,
+            sigma=1, threshold=8, transition="all", select="all",
+        ))
+    finally:
+        SESSIONS.pop(session.id, None)
+    assert len(found["hits"]) >= 2
+    assert abs(float(found["span"]) - 140) < 1.5
+
+
+def test_inspect_defect_template_finds_dark_and_bright():
+    session = run_source((ROOT / "samples" / "inspect_defect.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 1
+    assert session.vars["Area"][0] == 3550
+    assert int(session.vars["BrightCount"]) == 1
+    assert session.vars["BrightArea"][0] == 144
+    assert session.vars["Judge"] == "合格"
+    assert session.display.base is not None
+
+
+def test_inspect_color_template_measures_green_area_and_hue():
+    session = run_source((ROOT / "samples" / "inspect_color.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 1
+    assert int(session.vars["AreaValue"]) == 1200
+    assert int(session.vars["Hue"]) == 60
+    assert session.vars["Judge"] == "合格"
+    colors = {shape.get("color") for shape in session.public_state()["display"]["shapes"]}
+    assert "#00e05a" in colors
+    assert session.display.base is not None
+    assert session.display.base.channels == 3
+    tight = (ROOT / "samples" / "inspect_color.viz").read_text(encoding="utf-8").replace("HueMax := 70", "HueMax := 55")
+    failed = run_source(tight)
+    assert failed.error is None, failed.error
+    assert int(failed.vars["Hue"]) == 60
+    assert int(failed.vars["AreaValue"]) == 1200
+    assert failed.vars["Judge"] == "不合格"
+    failed_colors = {shape.get("color") for shape in failed.public_state()["display"]["shapes"]}
+    assert "#ff2a2a" in failed_colors
+
+
+def test_inspect_chars_template_reads_visdev_168():
+    session = run_source((ROOT / "samples" / "inspect_chars.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert session.vars["Chars"] == "VISDEV 168"
+    assert int(session.vars["Count"]) == 1
+    assert float(session.vars["Score"]) >= 0.5
+    assert session.vars["Judge"] == "合格"
+    assert session.display.base is not None
+    assert len(session.vars["Outline"].contours) >= 1
+    texts = [shape.get("text") for shape in session.public_state()["display"]["shapes"]]
+    assert "VISDEV 168" in texts
+    wrong = (ROOT / "samples" / "inspect_chars.viz").read_text(encoding="utf-8").replace("Expect := 'VISDEV 168'", "Expect := 'NOPE'")
+    failed = run_source(wrong)
+    assert failed.error is None, failed.error
+    assert failed.vars["Chars"] == "VISDEV 168"
+    assert failed.vars["Expect"] == "NOPE"
+    assert failed.vars["Judge"] == "不合格"
+
+
+def test_gauge_line_failure_keeps_the_image_and_says_what_to_try():
+    session = run_source(
+        "Vizion.read_image (Image, 'samples/gauge.png')\n"
+        "Vizion.dev_display (Image)\n"
+        "Vizion.gauge_line (Image, Line, 10, 10, 10, 80, 4, 1, 80, 'all', 'best', R1, C1, R2, C2, Angle, Used)\n"
+    )
+    assert session.error
+    assert session.error_line == 3
+    assert "直線量規" in session.error
+    assert "降低 Threshold" in session.error
+    assert session.vars["Image"].width == 640
+    assert session.display.base is not None
+
+
+def test_inspect_stripe_template_measures_the_wide_band():
+    session = run_source((ROOT / "samples" / "inspect_stripe.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["EdgeCount"]) == 8
+    assert float(session.vars["Left"]) == 127.5
+    assert float(session.vars["Right"]) == 149.5
+    assert float(session.vars["Width"]) == 22.0
+    assert session.vars["Judge"] == "合格"
+    colors = {shape.get("color") for shape in session.public_state()["display"]["shapes"]}
+    assert "#ffe14a" in colors
+    assert session.display.base is not None
+
+
+def test_stripe_outside_tolerance_turns_the_marks_red():
+    source = (ROOT / "samples" / "inspect_stripe.viz").read_text(encoding="utf-8")
+    source = source.replace("WidthMin := 20", "WidthMin := 1").replace("WidthMax := 24", "WidthMax := 2")
+    session = run_source(source)
+    assert session.error is None, session.error
+    assert session.vars["Judge"] == "不合格"
+    colors = {shape.get("color") for shape in session.public_state()["display"]["shapes"]}
+    assert "#ff2a2a" in colors
+
+
+def test_inspect_line_template_counts_saves_ng_and_writes_csv():
+    import pytest
+    import shutil
+
+    folder = ROOT / "workspace" / "line_ng"
+    report = ROOT / "workspace" / "line_result.csv"
+    shutil.rmtree(folder, ignore_errors=True)
+    report.unlink(missing_ok=True)
+    try:
+        folder.mkdir(parents=True)
+        cv2.imwrite(str(folder / "old.png"), np.zeros((4, 4), np.uint8))
+        session = run_source((ROOT / "samples" / "inspect_line.viz").read_text(encoding="utf-8"))
+        assert session.error is None, session.error
+        assert int(session.vars["Total"]) == 5
+        assert int(session.vars["OkCount"]) == 3
+        assert int(session.vars["NgCount"]) == 2
+        assert session.vars["Judge"] == "不合格"
+        assert session.vars["LastNg"] == "ng_02.png"
+        lines = report.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "index,file,judge,count"
+        assert "1,ng_01.png,NG,0" in lines
+        assert "3,ok_01.png,OK,1" in lines
+        assert sorted(path.name for path in folder.glob("*.png")) == ["ng_01.png", "ng_02.png"]
+        assert not (folder / "old.png").exists()
+        assert session.display.base is not None
+        before = session.display.base.data.copy()
+        assert session.show_last_ng() == "ng_02.png"
+        assert session.public_state()["ngShowing"] is True
+        assert session.public_state()["ngFile"] == "ng_02.png"
+        from app.engine.render import read_cv_image
+
+        saved = read_cv_image(folder / "ng_02.png")
+        assert saved is not None and np.array_equal(session.display.base.data, saved)
+        assert saved.ndim == 3 and saved.shape[2] == 3
+        assert saved.shape[:2] == before.shape[:2]
+        red = (saved[:, :, 2].astype(np.int16) > saved[:, :, 1].astype(np.int16) + 30) & (
+            saved[:, :, 2].astype(np.int16) > saved[:, :, 0].astype(np.int16) + 30
+        )
+        assert int(red.sum()) > 8
+        raw = read_cv_image(ROOT / "samples" / "line_batch" / "ng_02.png")
+        assert raw is not None and raw.ndim == 2
+        assert not np.array_equal(saved[:, :, 0], raw)
+        missing = run_source("Vizion.dump_window ('workspace/line_ng/blank.png')\n")
+        assert missing.error and "還沒有畫面" in missing.error
+        assert not (folder / "blank.png").exists()
+        assert int(session.vars["OkCount"]) == 3
+        assert session.vars["Judge"] == "不合格"
+        assert session.show_last_ng() == ""
+        assert session.public_state()["ngShowing"] is False
+        assert np.array_equal(session.display.base.data, before)
+        saved_csv = report.read_bytes()
+        preview = session.line_csv_preview()
+        assert preview["header"] == "index,file,judge,count"
+        assert preview["total"] == 5
+        assert preview["ngTotal"] == 2
+        assert preview["truncated"] is False
+        assert preview["onlyNg"] is False
+        assert "1,ng_01.png,NG,0" in preview["rows"]
+        assert "3,ok_01.png,OK,1" in preview["rows"]
+        ng_only = session.line_csv_preview(only_ng=True)
+        assert ng_only["rows"] == ["1,ng_01.png,NG,0", "2,ng_02.png,NG,0"]
+        assert ng_only["opens"] == ["ng_01.png", "ng_02.png"]
+        assert ng_only["ngTotal"] == 2
+        assert ng_only["onlyNg"] is True
+        assert report.read_bytes() == saved_csv
+        stats = session.line_stats()
+        assert stats["total"] == 5 and stats["ok"] == 3 and stats["ng"] == 2
+        assert stats["yield"] == 60 and stats["lastNg"] == "ng_02.png"
+        assert stats["noJudge"] is False
+        assert report.read_bytes() == saved_csv
+        assert int(session.vars["OkCount"]) == 3
+        program = session.display.base.data.copy()
+        assert session.show_ng_file("ng_01.png") == "ng_01.png"
+        assert session.show_ng_file("ng_02.png") == "ng_02.png"
+        assert session.public_state()["ngFile"] == "ng_02.png"
+        assert int(session.vars["OkCount"]) == 3
+        assert session.show_last_ng() == ""
+        assert np.array_equal(session.display.base.data, program)
+        with pytest.raises(RuntimeError, match="檔名不正確"):
+            session.show_ng_file("..\\secret.png")
+        with pytest.raises(RuntimeError, match="找不到不合格圖"):
+            session.show_ng_file("ok_01.png")
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+        report.unlink(missing_ok=True)
+
+
+def test_line_result_goes_out_on_tcp_and_serial():
+    import shutil
+
+    from app.engine.chapters.line_out import format_line_result
+    from app.engine.chapters.serial_ops import _open_windows
+
+    assert "CreateFileW" in _open_windows.__code__.co_names
+
+    serial = run_source(
+        "Vizion.open_serial ('loopback', Port)\n"
+        "Vizion.send_line_result (Port, '不合格', 1, 2, 'ng_01.png')\n"
+        "Vizion.read_serial (Port, 24, Line)\n"
+    )
+    assert serial.error is None, serial.error
+    assert serial.vars["Line"] == "VISDEV,NG,1,2,ng_01.png\n"
+    told = run_source(
+        "Vizion.open_serial ('loopback', Port)\n"
+        "Vizion.send_text_result (Port, 'VISDEV 168')\n"
+        "Vizion.send_line_result (Port, 'NG', 0, 1, 'ng_01.png')\n"
+        "Vizion.read_serial (Port, 47, Line)\n"
+    )
+    assert told.error is None, told.error
+    assert told.vars["Line"] == "VISDEV,TEXT,VISDEV 168\nVISDEV,NG,0,1,ng_01.png\n"
+    assert format_line_result("合格", 3, 0, "ok_03.png") == "VISDEV,OK,3,0,ok_03.png\n"
+    refused = run_source(
+        "Vizion.open_serial ('loopback', Port)\n"
+        "Vizion.send_line_result (Port, 'maybe', 0, 0, 'a.png')\n"
+    )
+    assert refused.error and "判定只能是" in refused.error
+    comma = run_source(
+        "Vizion.open_serial ('loopback', Port)\n"
+        "Vizion.send_line_result (Port, 'OK', 0, 0, 'a,b.png')\n"
+    )
+    assert comma.error and "檔名" in comma.error
+
+    folder = ROOT / "workspace" / "line_ng"
+    report = ROOT / "workspace" / "line_out.csv"
+    shutil.rmtree(folder, ignore_errors=True)
+    report.unlink(missing_ok=True)
+    try:
+        session = run_source((ROOT / "samples" / "inspect_line_out.viz").read_text(encoding="utf-8"))
+        assert session.error is None, session.error
+        assert int(session.vars["OkCount"]) == 3
+        assert int(session.vars["NgCount"]) == 2
+        assert session.vars["Judge"] == "不合格"
+        assert session.vars["Wire"] == (
+            "VISDEV,NG,0,1,ng_01.png\n"
+            "VISDEV,NG,0,2,ng_02.png\n"
+            "VISDEV,OK,1,2,ok_01.png\n"
+            "VISDEV,OK,2,2,ok_02.png\n"
+            "VISDEV,OK,3,2,ok_03.png\n"
+        )
+        assert session.vars["Link"].closed is True
+        serial = run_source(
+            (ROOT / "samples" / "inspect_line_out.viz").read_text(encoding="utf-8").replace(
+                "OutKind := 'tcp'", "OutKind := 'serial'", 1
+            )
+        )
+        assert serial.error is None, serial.error
+        assert serial.vars["Wire"] == session.vars["Wire"]
+        assert int(serial.vars["OkCount"]) == 3
+        assert serial.vars["Link"].closed is True
+        import socket
+        import struct
+        import threading
+
+        ready = threading.Event()
+        holder = {}
+        regs = {}
+
+        def serve():
+            server = socket.socket()
+            server.bind(("127.0.0.1", 0))
+            server.listen(1)
+            server.settimeout(3)
+            holder["port"] = server.getsockname()[1]
+            ready.set()
+            for _ in range(12):
+                try:
+                    conn, _addr = server.accept()
+                except socket.timeout:
+                    break
+                data = b""
+                while len(data) < 12:
+                    chunk = conn.recv(12 - len(data))
+                    if not chunk:
+                        break
+                    data += chunk
+                function = data[7]
+                address, number = struct.unpack(">HH", data[8:12])
+                if function == 6:
+                    regs[address] = number
+                    conn.sendall(data)
+                elif function == 3:
+                    stored = regs.get(address, 0)
+                    trans = struct.unpack(">H", data[:2])[0]
+                    conn.sendall(struct.pack(">HHHBBBH", trans, 0, 5, 1, 3, 2, stored))
+                conn.close()
+            server.close()
+
+        threading.Thread(target=serve, daemon=True).start()
+        assert ready.wait(2)
+        modbus = run_source(
+            (ROOT / "samples" / "inspect_line_out.viz").read_text(encoding="utf-8")
+            .replace("OutKind := 'tcp'", "OutKind := 'modbus'", 1)
+            .replace("OutHost := 'loopback'", "OutHost := '127.0.0.1'", 1)
+            .replace("OutPort := 0", f"OutPort := {holder['port']}", 1)
+        )
+        assert modbus.error is None, modbus.error
+        assert int(modbus.vars["OkCount"]) == 3
+        assert int(modbus.vars["NgCount"]) == 2
+        assert int(modbus.vars["Register"]) == 1
+        assert regs[16] == 1
+        lines = report.read_text(encoding="utf-8").splitlines()
+        assert "1,ng_01.png,NG,0" in lines
+        assert "3,ok_01.png,OK,1" in lines
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+        report.unlink(missing_ok=True)
+
+
+def test_modbus_writes_one_register_and_leaves_com_alone():
+    import socket
+    import struct
+    import threading
+
+    import pytest
+
+    from app.engine.chapters.serial_ops import _open_windows
+
+    assert "CreateFileW" in _open_windows.__code__.co_names
+    got = {}
+    ready = threading.Event()
+
+    def serve():
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        got["port"] = server.getsockname()[1]
+        ready.set()
+        conn, _addr = server.accept()
+        data = b""
+        while len(data) < 12:
+            chunk = conn.recv(12 - len(data))
+            if not chunk:
+                break
+            data += chunk
+        got["request"] = data
+        conn.sendall(data)
+        conn.close()
+        server.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    assert ready.wait(2)
+    session = run_source(
+        f"Vizion.write_modbus_register ('127.0.0.1', {got['port']}, 16, 2)\n"
+    )
+    assert session.error is None, session.error
+    request = got["request"]
+    assert request[7] == 6
+    assert struct.unpack(">HH", request[8:12]) == (16, 2)
+    refused = run_source("Vizion.write_modbus_register ('127.0.0.1', 502, 70000, 1)\n")
+    assert refused.error and "65535" in refused.error
+    with pytest.raises(RuntimeError, match="連不上 Modbus"):
+        from app.engine.chapters.modbus_ops import write_holding_register
+
+        write_holding_register("127.0.0.1", 1, 0, 1)
+
+
+def test_modbus_reads_and_writes_several_registers():
+    import socket
+    import struct
+    import threading
+
+    from app.engine.chapters.serial_ops import _open_windows
+
+    assert "CreateFileW" in _open_windows.__code__.co_names
+    ready = threading.Event()
+    regs = {}
+    holder = {}
+
+    def serve():
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        server.settimeout(3)
+        holder["port"] = server.getsockname()[1]
+        ready.set()
+        for _ in range(4):
+            try:
+                conn, _addr = server.accept()
+            except socket.timeout:
+                break
+            conn.settimeout(2)
+            head = b""
+            while len(head) < 7:
+                chunk = conn.recv(7 - len(head))
+                if not chunk:
+                    break
+                head += chunk
+            length = struct.unpack(">H", head[4:6])[0]
+            rest = b""
+            while len(rest) < length - 1:
+                chunk = conn.recv(length - 1 - len(rest))
+                if not chunk:
+                    break
+                rest += chunk
+            data = head + rest
+            function = data[7]
+            address = struct.unpack(">H", data[8:10])[0]
+            if function == 16:
+                count = struct.unpack(">H", data[10:12])[0]
+                raw = data[13:13 + count * 2]
+                regs[address] = list(struct.unpack(">" + "H" * count, raw))
+                trans = struct.unpack(">H", data[:2])[0]
+                conn.sendall(struct.pack(">HHHBBHH", trans, 0, 6, 1, 16, address, count))
+            elif function == 3:
+                count = struct.unpack(">H", data[10:12])[0]
+                values = []
+                for offset in range(count):
+                    stored = regs.get(address)
+                    values.append(stored[offset] if stored and offset < len(stored) else 0)
+                trans = struct.unpack(">H", data[:2])[0]
+                body = struct.pack(">" + "H" * count, *values)
+                conn.sendall(struct.pack(">HHHBBB", trans, 0, 3 + len(body), 1, 3, len(body)) + body)
+            conn.close()
+        server.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    assert ready.wait(2)
+    port = holder["port"]
+    session = run_source(
+        f"Vizion.write_modbus_registers ('127.0.0.1', {port}, 16, [2, 3, 1])\n"
+        f"Vizion.read_modbus_registers ('127.0.0.1', {port}, 16, 3, Values)\n"
+    )
+    assert session.error is None, session.error
+    assert [int(item) for item in session.vars["Values"]] == [2, 3, 1]
+    too_many = run_source(f"Vizion.read_modbus_registers ('127.0.0.1', {port}, 16, 20, Values)\n")
+    assert too_many.error and "16" in too_many.error
+
+
+def test_modbus_reads_back_the_register_it_wrote():
+    import socket
+    import struct
+    import threading
+
+    from app.engine.chapters.serial_ops import _open_windows
+
+    assert "CreateFileW" in _open_windows.__code__.co_names
+    ready = threading.Event()
+    regs = {}
+    holder = {}
+
+    def serve():
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        server.settimeout(3)
+        holder["port"] = server.getsockname()[1]
+        ready.set()
+        for _ in range(12):
+            try:
+                conn, _addr = server.accept()
+            except socket.timeout:
+                break
+            conn.settimeout(2)
+            data = b""
+            while len(data) < 12:
+                chunk = conn.recv(12 - len(data))
+                if not chunk:
+                    break
+                data += chunk
+            function = data[7]
+            address, number = struct.unpack(">HH", data[8:12])
+            if function == 6:
+                regs[address] = number
+                conn.sendall(data)
+            elif function == 3:
+                stored = regs.get(address, 0)
+                if holder.get("lie"):
+                    stored = (stored + 1) & 0xFFFF
+                trans = struct.unpack(">H", data[:2])[0]
+                conn.sendall(struct.pack(">HHHBBBH", trans, 0, 5, 1, 3, 2, stored))
+            conn.close()
+        server.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    assert ready.wait(2)
+    port = holder["port"]
+    session = run_source(
+        f"Vizion.read_modbus_register ('127.0.0.1', {port}, 16, Register)\n"
+        f"Vizion.write_modbus_register ('127.0.0.1', {port}, 16, 2)\n"
+        f"Vizion.read_modbus_register ('127.0.0.1', {port}, 16, Register)\n"
+        f"Vizion.write_modbus_judge ('127.0.0.1', {port}, 16, '不合格', Checked)\n"
+        f"Vizion.write_modbus_judge ('127.0.0.1', {port}, 16, '合格', CheckedOk)\n"
+    )
+    assert session.error is None, session.error
+    assert int(session.vars["Register"]) == 2
+    assert int(session.vars["Checked"]) == 2
+    assert int(session.vars["CheckedOk"]) == 1
+    assert regs[16] == 1
+    holder["lie"] = True
+    mismatched = run_source(f"Vizion.write_modbus_judge ('127.0.0.1', {port}, 16, 'NG', Again)\n")
+    assert mismatched.error and "不一樣" in mismatched.error
+
+
+def test_last_ng_and_csv_stay_inside_the_workspace():
+    import pytest
+    from fastapi import HTTPException
+
+    from app.main import SESSIONS, show_last_ng_view, show_line_csv
+
+    session = run_source("OkCount := 3\n")
+    session.vars["LastNg"] = "..\\secret.png"
+    session.vars["CsvFile"] = "workspace/../../etc/passwd"
+    try:
+        with pytest.raises(RuntimeError, match="檔名不正確"):
+            session.show_last_ng()
+        assert session.vars["OkCount"] == 3
+        with pytest.raises(RuntimeError, match="明細路徑不正確"):
+            session.line_csv_preview()
+        session.vars["CsvFile"] = "/etc/passwd"
+        with pytest.raises(RuntimeError, match="明細路徑不正確"):
+            session.line_csv_preview()
+        session.vars["LastNg"] = ""
+        with pytest.raises(RuntimeError, match="沒有不合格圖"):
+            session.show_last_ng()
+        report = ROOT / "workspace" / "_line_preview.csv"
+        report.write_text(
+            "index,file,judge,count\n" + "".join(f"{i},a.png,NG,0\n" for i in range(1, 26)),
+            encoding="utf-8",
+        )
+        try:
+            session.vars["CsvFile"] = "workspace\\_line_preview.csv"
+            preview = session.line_csv_preview()
+            assert preview["total"] == 25
+            assert preview["truncated"] is True
+            assert len(preview["rows"]) == 20
+            assert preview["rows"][0] == "6,a.png,NG,0"
+            assert preview["rows"][-1] == "25,a.png,NG,0"
+            ng_only = session.line_csv_preview(only_ng=True)
+            assert ng_only["ngTotal"] == 25
+            assert ng_only["rows"][0] == "6,a.png,NG,0"
+            assert ng_only["opens"][0] == "a.png"
+            SESSIONS[session.id] = session
+            routed = show_line_csv(session.id, onlyNg=True)
+            assert routed["onlyNg"] is True
+            assert routed["rows"][-1] == "25,a.png,NG,0"
+            assert report.read_bytes().count(b"\n") == 26
+            mixed = ROOT / "workspace" / "_line_mixed.csv"
+            mixed_lines = ["index,file,judge,count"]
+            mixed_lines.extend(f"{i},ng_{i}.png,NG,0" for i in range(1, 6))
+            mixed_lines.extend(f"{i},ok_{i}.png,OK,1" for i in range(6, 31))
+            mixed.write_text("\n".join(mixed_lines) + "\n", encoding="utf-8")
+            try:
+                session.vars["CsvFile"] = "workspace/_line_mixed.csv"
+                recent = session.line_csv_preview()
+                assert recent["ngTotal"] == 5
+                assert all(",OK," in row for row in recent["rows"])
+                assert recent["opens"] == [""] * len(recent["rows"])
+                failed = session.line_csv_preview(only_ng=True)
+                assert failed["rows"] == [f"{i},ng_{i}.png,NG,0" for i in range(1, 6)]
+                assert failed["opens"] == [f"ng_{i}.png" for i in range(1, 6)]
+                assert failed["truncated"] is False
+                assert mixed.read_bytes().decode("utf-8").count(",OK,") == 25
+                stats = session.line_stats()
+                assert stats["total"] == 30 and stats["ok"] == 25 and stats["ng"] == 5
+                assert stats["yield"] == 83.3 and stats["lastNg"] == "ng_5.png"
+                assert mixed.read_bytes().decode("utf-8").count(",OK,") == 25
+            finally:
+                mixed.unlink(missing_ok=True)
+        finally:
+            report.unlink(missing_ok=True)
+        SESSIONS[session.id] = session
+        session.running = True
+        with pytest.raises(HTTPException) as caught:
+            show_last_ng_view(session.id)
+        assert caught.value.status_code == 409
+    finally:
+        session.running = False
+        SESSIONS.pop(session.id, None)
+
+
+def test_camera_line_stops_and_keeps_the_counts():
+    import asyncio
+    import inspect
+    import shutil
+    import time
+
+    import numpy as np
+
+    from app.engine.chapters import camera_ops
+    from app.main import SESSIONS, ExecIn, exec_program, stop
+
+    opened = inspect.getsource(camera_ops._open_camera)
+    assert opened.index("grab_bgr") < opened.index("CAP_DSHOW") < opened.rindex("VideoCapture(index)")
+
+    class FakeCap:
+        def __init__(self):
+            self.n = 0
+            self.opened = True
+            self.released = False
+
+        def isOpened(self):
+            return self.opened
+
+        def read(self):
+            time.sleep(0.05)
+            self.n += 1
+            image = np.zeros((40, 40), np.uint8)
+            if self.n % 2 == 0:
+                image[10:30, 10:30] = 255
+            else:
+                image[16:24, 16:24] = 255
+            return True, image
+
+        def release(self):
+            self.released = True
+            self.opened = False
+
+        def set(self, *_args):
+            return False
+
+    fake = FakeCap()
+    folder = ROOT / "workspace" / "line_ng"
+    report = ROOT / "workspace" / "line_camera.csv"
+    shutil.rmtree(folder, ignore_errors=True)
+    report.unlink(missing_ok=True)
+    original = camera_ops._open_camera
+    camera_ops._open_camera = lambda *_args, **_kwargs: fake
+    started = None
+    session = None
+    try:
+        source = (ROOT / "samples" / "inspect_line_camera.viz").read_text(encoding="utf-8")
+        started = asyncio.run(exec_program(ExecIn(source=source, action="run")))
+        session = SESSIONS[started["id"]]
+        deadline = time.time() + 2
+        while time.time() < deadline:
+            done = int(session.vars.get("OkCount", 0) or 0) + int(session.vars.get("NgCount", 0) or 0)
+            if done >= 1:
+                break
+            time.sleep(0.05)
+        stop(started["id"])
+        session.runner.join(timeout=3)
+        assert session.error is None, session.error
+        assert session.paused == "stopped"
+        grabbed = int(session.vars["OkCount"]) + int(session.vars["NgCount"])
+        assert grabbed >= 1
+        assert int(session.vars["Total"]) == grabbed
+        assert session.vars["Report"].closed is True
+        assert fake.released is True
+        lines = report.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "index,file,judge,count"
+        assert len(lines) == grabbed + 1
+        assert lines[1] == "1,camera_1.png,NG,0"
+        assert all(row.split(",")[2] in ("OK", "NG") for row in lines[1:])
+    finally:
+        camera_ops._open_camera = original
+        if session is not None:
+            stop(session.id)
+            runner = getattr(session, "runner", None)
+            if runner is not None:
+                runner.join(timeout=2)
+            SESSIONS.pop(session.id, None)
+        shutil.rmtree(folder, ignore_errors=True)
+        report.unlink(missing_ok=True)
+
+
+def test_camera_grab_failure_keeps_counts_and_closes_the_file():
+    import shutil
+
+    from app.engine.chapters import camera_ops
+
+    class FakeCap:
+        def __init__(self):
+            self.n = 0
+            self.released = False
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            self.n += 1
+            if self.n > 2:
+                return False, None
+            image = np.zeros((40, 40), np.uint8)
+            if self.n % 2 == 0:
+                image[10:30, 10:30] = 255
+            else:
+                image[16:24, 16:24] = 255
+            return True, image
+
+        def release(self):
+            self.released = True
+
+        def set(self, *_args):
+            return False
+
+    fake = FakeCap()
+    folder = ROOT / "workspace" / "line_ng"
+    report = ROOT / "workspace" / "line_camera.csv"
+    shutil.rmtree(folder, ignore_errors=True)
+    report.unlink(missing_ok=True)
+    original = camera_ops._open_camera
+    camera_ops._open_camera = lambda *_args, **_kwargs: fake
+    try:
+        folder.mkdir(parents=True)
+        cv2.imwrite(str(folder / "old.png"), np.zeros((4, 4), np.uint8))
+        session = run_source((ROOT / "samples" / "inspect_line_camera.viz").read_text(encoding="utf-8"))
+        assert session.error
+        assert "讀不到畫面" in session.error
+        assert "samples/line_batch" in session.error
+        assert int(session.vars["OkCount"]) == 1
+        assert int(session.vars["NgCount"]) == 1
+        assert int(session.vars["Total"]) == 2
+        assert session.vars["Judge"] == "不合格"
+        assert session.vars["LastNg"] == "camera_1.png"
+        assert session.vars["Report"].closed is True
+        assert session.vars["Acq"].closed is True
+        assert fake.released is True
+        assert session.display.base is not None
+        lines = report.read_text(encoding="utf-8").splitlines()
+        assert lines == [
+            "index,file,judge,count",
+            "1,camera_1.png,NG,0",
+            "2,camera_2.png,OK,1",
+        ]
+        assert sorted(path.name for path in folder.glob("*.png")) == ["camera_1.png"]
+    finally:
+        camera_ops._open_camera = original
+        shutil.rmtree(folder, ignore_errors=True)
+        report.unlink(missing_ok=True)
+
+
 def test_inspect_locate_template_finds_four():
     session = run_source((ROOT / "samples" / "inspect_locate.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error
@@ -3605,6 +4343,132 @@ def test_project_holds_two_programs_and_its_image():
         assert shared.vars["Image"].width > 8
     finally:
         shutil.rmtree(folder, ignore_errors=True)
+
+
+def test_subpixel_step_lands_on_the_half_pixel():
+    import numpy as np
+
+    from app.engine.chapters.xld_ops import edges_sub_pix
+    from app.engine.objects import Image
+
+    session = run_source((ROOT / "samples" / "inspect_edge.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 1
+    ends = {
+        (round(float(session.vars["RowBegin"][0]), 4), round(float(session.vars["ColBegin"][0]), 4)),
+        (round(float(session.vars["RowEnd"][0]), 4), round(float(session.vars["ColEnd"][0]), 4)),
+    }
+    assert ends == {(0.0, 15.5), (23.0, 15.5)}
+    noise = np.full((24, 32), 128, np.uint8)
+    noise[3, 4] = 131
+    noise[10, 20] = 125
+    empty = edges_sub_pix(Image(noise), "canny", 1.0, 20, 40, ctx=None)
+    assert empty.iconic[0].contours == []
+
+
+def test_inspect_fit_template_rejects_the_outliers():
+    session = run_source((ROOT / "samples" / "inspect_fit.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    ends = {
+        (round(session.vars["RowBegin"][0], 6), round(session.vars["ColBegin"][0], 6)),
+        (round(session.vars["RowEnd"][0], 6), round(session.vars["ColEnd"][0], 6)),
+    }
+    assert ends == {(0.0, 0.0), (0.0, 30.0)}
+    assert abs(session.vars["CenterRow"][0] - 50) < 1e-6
+    assert abs(session.vars["CenterCol"][0] - 80) < 1e-6
+    assert abs(session.vars["Radius"][0] - 20) < 1e-6
+
+
+def test_inspect_missing_template_accepts_eight_parts():
+    session = run_source((ROOT / "samples" / "inspect_missing.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 8
+    assert session.vars["Judge"] == "合格"
+    assert session.display.base is not None
+    short = (ROOT / "samples" / "inspect_missing.viz").read_text(encoding="utf-8").replace("CountMin := 8", "CountMin := 9")
+    failed = run_source(short)
+    assert failed.error is None, failed.error
+    assert int(failed.vars["Count"]) == 8
+    assert failed.vars["Judge"] == "不合格"
+
+
+def test_hole_line_uses_the_same_center_and_diameter_rules():
+    import shutil
+
+    from app.engine.render import read_cv_image
+
+    folder = ROOT / "workspace" / "line_ng"
+    report = ROOT / "workspace" / "line_holes.csv"
+    shutil.rmtree(folder, ignore_errors=True)
+    report.unlink(missing_ok=True)
+    try:
+        session = run_source((ROOT / "samples" / "inspect_line_holes.viz").read_text(encoding="utf-8"))
+        assert session.error is None, session.error
+        assert int(session.vars["Total"]) == 5
+        assert int(session.vars["OkCount"]) == 2
+        assert int(session.vars["NgCount"]) == 3
+        assert session.vars["Judge"] == "不合格"
+        assert session.vars["LastNg"] == "ng_wide.png"
+        rows = {}
+        lines = report.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "index,file,judge,count,shift,dia"
+        for line in lines[1:]:
+            index, name, judge, count, shift, dia = line.split(",")
+            rows[name] = (judge, int(count), float(shift), float(dia), int(index))
+        assert rows["ng_miss.png"][:3] == ("NG", 3, 70.0)
+        assert rows["ng_shift.png"][0] == "NG" and rows["ng_shift.png"][1] == 4
+        assert abs(rows["ng_shift.png"][2] - 10) < 1e-6
+        assert rows["ng_wide.png"][0] == "NG" and abs(rows["ng_wide.png"][3] - 40) < 0.01
+        assert rows["ok_01.png"][0] == "OK" and rows["ok_01.png"][1] == 4 and rows["ok_01.png"][2] == 0
+        assert abs(rows["ok_01.png"][3] - 28) < 0.01
+        assert rows["ok_02.png"][0] == "OK"
+        assert sorted(path.name for path in folder.glob("*.png")) == ["ng_miss.png", "ng_shift.png", "ng_wide.png"]
+        saved = read_cv_image(folder / "ng_wide.png")
+        assert saved is not None and saved.ndim == 3
+        red = (saved[:, :, 2].astype(np.int16) > saved[:, :, 1].astype(np.int16) + 30) & (
+            saved[:, :, 2].astype(np.int16) > saved[:, :, 0].astype(np.int16) + 30
+        )
+        assert int(red.sum()) > 8
+        assert session.show_last_ng() == "ng_wide.png"
+        assert int(session.vars["OkCount"]) == 2
+        stats = session.line_stats()
+        assert stats["total"] == 5 and stats["ok"] == 2 and stats["ng"] == 3
+        assert stats["yield"] == 40 and stats["lastNg"] == "ng_wide.png"
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+        report.unlink(missing_ok=True)
+
+
+def test_inspect_holes_template_counts_four():
+    session = run_source((ROOT / "samples" / "inspect_holes.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 4
+    assert [int(item) for item in session.vars["Area"]] == [613, 613, 613, 613]
+    assert float(session.vars["Shift"]) == 0
+    assert abs(float(session.vars["Dia"]) - 28) < 0.01
+    assert session.vars["Judge"] == "合格"
+    assert len(session.vars["Cross"].contours) == 8
+    short = (ROOT / "samples" / "inspect_holes.viz").read_text(encoding="utf-8").replace("CountMax := 4", "CountMax := 3")
+    failed = run_source(short)
+    assert failed.error is None, failed.error
+    assert int(failed.vars["Count"]) == 4
+    assert failed.vars["Judge"] == "不合格"
+    moved = (ROOT / "samples" / "inspect_holes.viz").read_text(encoding="utf-8").replace(
+        "WantRow := [50, 50, 120, 120]", "WantRow := [55, 50, 120, 120]", 1
+    )
+    off = run_source(moved)
+    assert off.error is None, off.error
+    assert int(off.vars["Count"]) == 4
+    assert abs(float(off.vars["Shift"]) - 5) < 1e-6
+    assert off.vars["Judge"] == "不合格"
+    narrow = (ROOT / "samples" / "inspect_holes.viz").read_text(encoding="utf-8").replace(
+        "DiaMax := 30", "DiaMax := 20", 1
+    )
+    small = run_source(narrow)
+    assert small.error is None, small.error
+    assert abs(float(small.vars["Dia"]) - 28) < 0.01
+    assert small.vars["Judge"] == "不合格"
+    assert float(session.vars["CenterOk"]) > 0
 
 
 def test_inspect_parts_template_counts_eight_parts():
@@ -3884,6 +4748,29 @@ def test_calibration_draws_points_and_errors():
     assert any(text.startswith("平均誤差") for text in labels)
     assert sum("誤差" in text for text in labels) >= 3
     assert sum(1 for shape in drawn["shapes"] if shape["type"] == "polyline") > 200
+
+
+def test_chessboard_5_7_10_is_thirty_five_corners():
+    from app.engine.chapters.calib_ops import CalibData, _object_points, _parse_descr
+
+    class Ctx:
+        root = ROOT
+
+    plate = _parse_descr("5,7,10", Ctx())
+    assert plate.kind == "chessboard"
+    assert plate.rows == 5 and plate.cols == 7 and plate.square == 10
+    same = _parse_descr("5x7x10", Ctx())
+    assert (same.rows, same.cols, same.square) == (5, 7, 10)
+    wide = _parse_descr("5，7，10", Ctx())
+    assert (wide.rows, wide.cols, wide.square) == (5, 7, 10)
+    model = CalibData()
+    model.rows, model.cols, model.square = plate.rows, plate.cols, plate.square
+    points = _object_points(model)
+    assert len(points) == 35
+    assert points[0].tolist() == [0.0, 0.0, 0.0]
+    assert points[1].tolist() == [10.0, 0.0, 0.0]
+    assert points[7].tolist() == [0.0, 10.0, 0.0]
+    assert points[-1].tolist() == [60.0, 40.0, 0.0]
 
 
 def test_plate_file_and_two_cameras():
@@ -4222,7 +5109,10 @@ def test_unopened_camera_error_stays_the_same():
         try:
             camera_ops._open_camera(0, 0, 0)
         except RuntimeError as exc:
-            assert str(exc) == "打不開相機 0。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。"
+            assert str(exc) == (
+                "打不開相機 0。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。"
+                "沒有相機時，請改跑檔案、範本裡的產線，用 samples/line_batch。"
+            )
         else:
             raise AssertionError("camera should not open")
     finally:

@@ -1,0 +1,64 @@
+* 產線相機。需要本機相機，編號 0。沒有相機時，請改跑檔案、範本裡的產線，用 samples/line_batch。
+* Windows 先問 DirectShow，打不開再試 OpenCV。這支不改那個順序。
+* 白塊面積 200 以上算合格。執行中狀態列會寫出合格和不合格。
+* 按停止就停，已經計的張數留著。出錯也會關掉相機和 CSV。
+* 不合格的圖寫到 workspace/line_ng，帶著沒過的區域和 NG 字。相機打開後會先清掉上一輪的圖。
+* 明細在 workspace/line_camera.csv。每一列是這張的 OK 或 NG。
+OkCount := 0
+NgCount := 0
+Grabbed := 0
+LastNg := ''
+CsvFile := 'workspace/line_camera.csv'
+Vizion.open_framegrabber ('OpenCV', '0', 'gray', 0, 0, Acq)
+Vizion.file_exists ('workspace/line_ng', NgDir)
+if (NgDir == 1)
+    Vizion.list_files ('workspace/line_ng', 'files', OldNg)
+    Vizion.tuple_length (OldNg, OldCount)
+    for OldIndex := 1 to OldCount by 1
+        Vizion.delete_file (OldNg[OldIndex])
+    endfor
+endif
+Vizion.open_file (CsvFile, 'output', Report)
+Vizion.fwrite_string (Report, 'index,file,judge,count')
+Vizion.fnew_line (Report)
+while (1)
+    Vizion.grab_image (Image, Acq)
+    Grabbed := Grabbed + 1
+    Vizion.get_framegrabber_param (Acq, 'image_name', Name)
+    if (Name == '')
+        Name := 'camera_' + Grabbed + '.png'
+    endif
+    Vizion.threshold (Image, Region, 128, 255)
+    Vizion.connection (Region, Parts, 1)
+    Vizion.select_shape (Parts, Kept, 'area', 'and', 200, 99999)
+    Vizion.count_obj (Kept, Count)
+    if (Count >= 1)
+        Piece := 'OK'
+        OkCount := OkCount + 1
+    else
+        Piece := 'NG'
+        NgCount := NgCount + 1
+        LastNg := Name
+    endif
+    Total := OkCount + NgCount
+    if (NgCount == 0 and LastNg == '')
+        Judge := '合格'
+    else
+        Judge := '不合格'
+    endif
+    Row := Grabbed + ',' + Name + ',' + Piece + ',' + Count
+    Vizion.fwrite_string (Report, Row)
+    Vizion.fnew_line (Report)
+    Vizion.dev_display (Image)
+    if (Count >= 1)
+        Vizion.dev_set_color ('green')
+        Vizion.dev_display (Kept)
+    else
+        Vizion.dev_set_color ('red')
+        Vizion.dev_display (Parts)
+        Vizion.dev_disp_text ('NG', 12, 4)
+        Vizion.dump_window ('workspace/line_ng/' + Name)
+    endif
+endwhile
+Vizion.close_file (Report)
+Vizion.close_framegrabber (Acq)

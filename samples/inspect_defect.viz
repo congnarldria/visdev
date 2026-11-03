@@ -1,0 +1,30 @@
+* 瑕疵範本。打開就能跑。圖形視窗可以改灰階範圍，再按執行。
+* 讀 samples/hard_contrast.png。
+* 暗缺陷：DarkMin 到 DarkMax，預設 0 到 40，留下面積 100 以上。Count 是個數，Area[1] 是面積。
+* 亮點：BrightMin 到 BrightMax，預設 210 到 255。背景噪點不到這個亮度。
+* 暗塊和亮點都要剛好落在各自的個數範圍。預設是各 1 個。
+DarkMin := 0
+DarkMax := 40
+BrightMin := 210
+BrightMax := 255
+Vizion.read_image (Image, 'samples/hard_contrast.png')
+Vizion.threshold (Image, Dark, DarkMin, DarkMax)
+Vizion.connection (Dark, Blobs, 1)
+Vizion.select_shape (Blobs, Defects, 'area', 'and', 100, 99999)
+Vizion.count_obj (Defects, Count)
+Vizion.area_center (Defects, Area, Row, Column)
+Vizion.threshold (Image, Bright, BrightMin, BrightMax)
+Vizion.connection (Bright, Specks, 1)
+Vizion.select_shape (Specks, Hot, 'area', 'and', 20, 400)
+Vizion.count_obj (Hot, BrightCount)
+Vizion.area_center (Hot, BrightArea, BrightRow, BrightCol)
+if (Count == 1 and BrightCount == 1)
+    Judge := '合格'
+else
+    Judge := '不合格'
+endif
+Vizion.dev_display (Image)
+Vizion.dev_set_color ('red')
+Vizion.dev_display (Defects)
+Vizion.dev_set_color ('green')
+Vizion.dev_display (Hot)

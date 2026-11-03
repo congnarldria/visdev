@@ -151,7 +151,10 @@
   function geometryTools(names) {
     const has = (name) => (names || []).indexOf(name) !== -1;
     const tools = [];
-    if (has("Row1") && has("Column1") && has("Row2") && has("Column2")) tools.push("rect");
+    if (has("Row1") && has("Column1") && has("Row2") && has("Column2")) {
+      tools.push("line");
+      tools.push("rect");
+    }
     if (has("Row") && has("Column") && has("Length1") && has("Length2") && tools.indexOf("rect") === -1) tools.push("rect");
     if (has("Row") && has("Column") && has("Radius")) tools.push("circle");
     if (has("Row") && has("Column") && has("Radius1") && has("Radius2")) tools.push("ellipse");
@@ -160,6 +163,9 @@
 
   function shapeNumbers(tool, a, b, mode) {
     const box = draftBox(a, b);
+    if (tool === "line") {
+      return { Row1: a.row, Column1: a.col, Row2: b.row, Column2: b.col };
+    }
     if (tool === "rect" && mode === "corners") {
       return { Row1: box.row1, Column1: box.col1, Row2: box.row2, Column2: box.col2 };
     }

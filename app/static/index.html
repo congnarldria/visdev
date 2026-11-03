@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VisDev 視覺開發環境</title>
+  <title>VisDev 1.1</title>
   <link rel="icon" href="/static/magpie.ico">
-  <link rel="stylesheet" href="/static/app.css?v=33">
+  <link rel="stylesheet" href="/static/app.css?v=43">
 </head>
 <body>
   <nav class="menubar" aria-label="主選單">
@@ -16,14 +16,9 @@
         <button type="button" data-cmd="project">專案</button>
         <div class="menu-sub">
           <button type="button" data-submenu="1">範本<span class="menu-arrow">▸</span></button>
-          <div class="menu-fly" hidden>
-            <button type="button" data-cmd="inspectTemplate">零件檢測</button>
-            <button type="button" data-cmd="gaugeTemplate">邊緣量測</button>
-            <button type="button" data-cmd="locateTemplate">形狀定位</button>
-            <button type="button" data-cmd="stereoTemplate">相對姿態</button>
-            <button type="button" data-cmd="codeTemplate">條碼</button>
-          </div>
+          <div class="menu-fly" id="templateFly" hidden></div>
         </div>
+        <button type="button" data-cmd="templateList">範本一覽</button>
         <button type="button" data-cmd="open">開啟<span class="menu-kbd">Ctrl+O</span></button>
         <button type="button" data-cmd="save">儲存<span class="menu-kbd">Ctrl+S</span></button>
         <button type="button" data-cmd="saveAs">另存新檔</button>
@@ -155,6 +150,7 @@
           <button type="button" data-mode="zoom" title="拉一個範圍放大。點一下也會放大" aria-label="放大"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path stroke="currentColor" stroke-width="1.5" d="M9.8 9.8 13.5 13.5M6.8 4.8v4M4.8 6.8h4"/></svg></button>
         </div>
         <span id="shapeTools" hidden>
+          <button type="button" data-draw="line" title="在圖上拖一條線。起點到終點的方向會保留，填進列和行">線</button>
           <button type="button" data-draw="rect" title="在圖上拖矩形，填進開啟中的算子參數">框選</button>
           <button type="button" data-draw="circle" title="在圖上拖圓">圓</button>
           <button type="button" data-draw="ellipse" title="在圖上拖橢圓">橢圓</button>
@@ -163,6 +159,7 @@
         <button id="btnFloatGfx" type="button" title="把圖形單獨拉成新視窗，不擋住主視窗">拉出</button>
         <button id="btnFit" type="button" title="符合視窗">符合</button>
         <button id="btnOne" type="button" title="原始像素">1:1</button>
+        <button id="btnSaveView" type="button" title="把現在圖形視窗的底圖、區域和十字存成一張圖">存畫面</button>
         <button id="btnZoomOut" type="button" title="縮小">−</button>
         <button id="btnZoomIn" type="button" title="放大">+</button>
         <label class="conn-min">線寬 <input id="contourWidth" type="number" min="1" max="10" step="1" value="2" title="輪廓線寬 1 到 10，單位是螢幕像素"></label>
@@ -178,6 +175,7 @@
         <label class="conn-min">下限 <input id="connMin" type="number" min="0" step="1" value="1" title="連通物件的最小面積"></label>
         <input id="fileImage" type="file" accept="image/*" hidden>
       </div>
+      <div id="tolBar" class="tol-bar" hidden></div>
       <div id="gfxStage" class="gfx-stage">
         <canvas id="canvas"></canvas>
         <div id="probe" hidden></div>
@@ -288,11 +286,34 @@ endfor</pre>
   <div id="helpDialog" class="modal" hidden>
     <div class="dialog guide" role="dialog" aria-labelledby="helpTitle">
       <h2 id="helpTitle">使用說明</h2>
-      <p>這是 VisDev 1.1 beta，不是正式版。</p>
+      <p>這是 VisDev 1.1。</p>
       <h3>執行</h3>
-      <p>F5 執行，F6 單步，F7 步進程序。程式跑到一半失敗時，已經算出的圖和變數留著，狀態列會寫出第幾行。大圖在執行中會先縮小顯示，標題會寫預覽，跑完或停止後換成完整圖。</p>
+      <p>F5 執行，F6 單步，F7 步進程序。程式跑到一半失敗時，已經算出的圖和變數留著，狀態列會寫出第幾行，相機和檔案會關掉。執行中若已經有直徑、寬度、合格或不合格，狀態列會直接寫出來。跑完或停止後也會留著這些數字。變數很多時，單步只改有變動的那一列。打字時語法著色、行號和該行時間只改有變動的列。輸出往上翻時，新的一行不會把畫面拉回底部。錯誤清單只改有變動的列。大圖在執行中會先縮小顯示，標題會寫預覽，跑完或停止後換成完整圖。</p>
       <h3>範本</h3>
-      <p>檔案、範本裡有五支，打開就能跑。零件檢測讀 <code>samples/parts.png</code>，這張圖是 8 個零件。邊緣量測讀 <code>samples/gauge.png</code>。形狀定位在場景裡找到 4 個。相對姿態用寫入的角點，兩台各三組，第 k 組是同一次擺放。<code>Pose1</code> 的第一個數約 0.04 公尺。條碼讀 <code>samples/codes.png</code>，<code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。</p>
+      <p>檔案、範本打開就能跑。檔案、範本一覽列出每一支該有的結果，點一列就打開。跑完後，狀態列和圖形視窗會寫出下面這些數字。</p>
+      <ul class="guide-list">
+        <li>零件檢測：<code>samples/parts.png</code>，8 個零件。狀態列寫個數。</li>
+        <li>瑕疵：<code>samples/hard_contrast.png</code>。暗塊 1 個、面積 3550；亮點 1 個、面積 144。預設灰階是暗塊 0 到 40、亮點 210 到 255。圖形視窗可以改這兩個範圍，再按執行。</li>
+        <li>色彩：<code>samples/color_part.png</code>。綠塊面積 1200、色調 60。紅塊色調是 0，灰底飽和度是 0，都不計。預設色調 50 到 70、面積 1100 到 1300。圖形視窗可以改這兩個範圍。超出時判定不合格，區域是紅色。</li>
+        <li>字元：<code>samples/ocr_label.png</code> 寫著 VISDEV 168。<code>Chars</code> 是讀到的字，<code>Expect</code> 是要對上的字。圖形視窗可以改預期字，再按執行。改過的字會記在這台電腦，按「預設」回到 VISDEV 168。讀對且信心至少 0.5 才合格，否則是紅色。狀態列同時寫讀到的字和預期字。這支用本機引擎，不把圖送到雲端。</li>
+        <li>邊緣量測：<code>samples/gauge.png</code>。狀態列寫間距。</li>
+        <li>卡尺：同一張圖。直徑約 83.93，寬 140，高 90。預設公差是直徑 80 到 90、寬 130 到 150、高 80 到 100。圖形視窗可以改上下限，再按執行。卡尺、條紋和瑕疵改過的範圍會記在這台電腦，再打開同一支範本會填回去。按「預設」回到程式裡的數字。存進專案的程式以檔案裡的數字為準。超出的線是紅色。</li>
+        <li>條紋寬度：<code>samples/stripes.png</code>。最寬的亮條是 22，預設公差 20 到 24。圖形視窗可以改上下限，再按執行。超出時十字是紅色。</li>
+        <li>產線：<code>samples/line_batch</code> 有 5 張，白塊面積 200 以上算合格。合格 3、不合格 2。不合格的圖在 <code>workspace/line_ng</code>，畫著沒過的區域和 NG 字。明細在 <code>workspace/line_result.csv</code>。這支用檔案資料夾，不開相機。再跑一次會先清掉上一輪的不合格圖。狀態列的不合格圖是最近一張，<code>ng_02.png</code>。按「看不合格圖」把它開回圖形視窗，再按一次回到程式畫面。按「看明細」可看 CSV。明細裡可以只看不合格，點不合格那一列會打開那張圖。按「統計」可看整份明細的總數、合格、不合格和良率，不只最後 20 列。不必開資料夾。</li>
+        <li>產線相機：本機相機編號 0。Windows 先問 DirectShow，打不開再試 OpenCV。沒有相機時，請改跑上面的產線，用 <code>samples/line_batch</code>。規則和產線相同，明細每一列是這張的 OK 或 NG。執行中狀態列會寫出合格和不合格。按停止就停，已經計的張數留著，不合格圖是最近一張的檔名。出錯也會關掉相機和 CSV。明細在 <code>workspace/line_camera.csv</code>。</li>
+        <li>產線輸出：同一套 5 張。每一張多送一行 <code>VISDEV,OK 或 NG,合格張數,不合格張數,檔名</code>。圖形視窗先選 TCP、序列埠或 Modbus，再填該出現的欄位。預設是 TCP loopback，<code>Wire</code> 讀回 5 行，合格 3、不合格 2。序列埠預設名稱是 loopback，不開真的 COM。Windows 開 COM 的方式沒有改。</li>
+        <li>缺件：<code>samples/parts.png</code> 應有 8 個。少於或多於 8 個就不合格。圖形視窗可改個數上下限，再按執行。</li>
+        <li>孔數：<code>samples/holes.png</code> 有 4 個暗孔，每個面積 613。圓心應在列 50 或 120、行 50 或 170。預設要剛好 4 個，圓心偏差不超過 2，直徑 26 到 30。少了、偏了或直徑不對就不合格，十字改成紅色。圖形視窗可改個數、偏移和直徑。按「設為預期」把這次量到的圓心寫進程式，再按執行，偏差就是 0。按「預設」回到檔案裡的位置。跑完後按「存畫面」，底圖、區域和十字寫進 <code>workspace/view.png</code>，程式裡的讀圖路徑不會改。</li>
+        <li>孔數產線：<code>samples/hole_batch</code> 有 5 張，規則和孔數相同。合格 2、不合格 3：少一孔、圓心偏 10、直徑約 40。不合格圖在 <code>workspace/line_ng</code>，十字是紅色並寫 NG。明細在 <code>workspace/line_holes.csv</code>，有個數、偏移和直徑。這支不開相機，也不改白塊產線的合格 3、不合格 2。</li>
+        <li>形狀定位：場景裡找到 4 個。狀態列寫個數和最低分。</li>
+        <li>相對姿態：<code>Pose1</code> 的第一個數約 0.04 公尺。狀態列寫基線。</li>
+        <li>條碼：<code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。</li>
+        <li>找線找圓：<code>samples/inspect_fit.viz</code>。直線飛點在列 8，擬合後仍是列 0、行 0 到行 30。圓的飛點在行 108，圓心仍是列 50、行 80，半徑 20。</li>
+        <li>次像素邊緣：<code>samples/inspect_edge.viz</code>。左半是 0、右半是 255。邊緣在行 15.5，從列 0 到列 23。</li>
+      </ul>
+      <p>點量規或直線量規時，可以按「線」在圖上拖。起點到終點的方向會保留。圖上已有影像時，確認前會畫出沿這條線找到的邊緣和首尾間距。</p>
+      <h3>把結果送到外面</h3>
+      <p>產線輸出每一張寫一行，TCP 和序列埠相同：<code>VISDEV,OK 或 NG,合格張數,不合格張數,檔名</code>，結尾換行。合格、不合格會寫成 OK、NG。檔名用英文。範本用 loopback，<code>Wire</code> 讀回那 5 行，所以合格仍是 3、不合格仍是 2。讀到的字另送一行 <code>VISDEV,TEXT,文字</code>，不改上面那一行的欄位。Modbus TCP 一次可讀或寫最多 16 個連續暫存器。<code>write_modbus_judge</code> 把合格寫成 1、不合格寫成 2。不開 COM。圖形視窗可改這支的主機和埠，再按執行。要改序列埠，把 <code>open_socket_connect</code> 換成 <code>open_serial ('COM3', Link)</code>，並拿掉 <code>receive_data</code>。Windows 開 COM 仍用原來的 API，不在這一行裡重開。</p>
       <h3>標定</h3>
       <p>棋盤寫 <code>'5,7,10'</code>，也可以用 <code>.cpd</code> 或 <code>.descr</code>。多台相機時，每一台的第 k 組要是同時看到的同一塊板。<code>camera/pose</code> 是相對第 0 台的姿態，第 0 台是 0。標完的圖可以點某一張看原圖，再點一下回到全部。</p>
       <h3>存檔與 Windows</h3>
@@ -302,7 +323,7 @@ endfor</pre>
   </div>
   <div id="aboutDialog" class="modal" hidden>
     <div class="dialog about" role="dialog" aria-labelledby="aboutTitle">
-      <h2 id="aboutTitle">VisDev 1.1 beta</h2>
+      <h2 id="aboutTitle">VisDev 1.1</h2>
       <p>視覺開發環境。程式寫法接近 HDevelop，影像計算用 OpenCV。</p>
       <p>上方選單：檔案可以新增、開啟、儲存、載入影像，也可以把讀圖、定義域、二值化、連通、篩選、矩形和圓形形態學、個數和重心匯出成 C#。編輯可以復原、剪貼。檢視可以開關窗格和縮放。執行是 F5、F6、F7。運算子依分類列出，點了會開參數窗再插入程式。工具會另開二值化、次像素、特徵和 OCR。</p>
       <div class="actions"><button id="aboutOk" type="button">確定</button></div>
@@ -321,6 +342,33 @@ endfor</pre>
     </div>
   </div>
   <div id="opFileMenu" class="op-file-menu" hidden></div>
+  <div id="templateDialog" class="modal" hidden>
+    <div class="dialog guide" role="dialog" aria-labelledby="templateTitle">
+      <h2 id="templateTitle">範本一覽</h2>
+      <p class="hint">點一列就打開。右邊是跑完該看到的結果。</p>
+      <div id="templateList" class="template-list"></div>
+      <div class="actions"><button id="templateClose" type="button">關閉</button></div>
+    </div>
+  </div>
+  <div id="statsDialog" class="modal" hidden>
+    <div class="dialog stats" role="dialog" aria-labelledby="statsTitle">
+      <h2 id="statsTitle">產線統計</h2>
+      <p id="statsNote" class="hint"></p>
+      <div id="statsBody"></div>
+      <div class="actions"><button id="statsOk" type="button">關閉</button></div>
+    </div>
+  </div>
+  <div id="csvDialog" class="modal" hidden>
+    <div class="dialog" role="dialog" aria-labelledby="csvTitle">
+      <h2 id="csvTitle">產線明細</h2>
+      <p id="csvNote" class="hint"></p>
+      <div id="csvBody"></div>
+      <div class="actions">
+        <button id="csvNg" type="button">只看不合格</button>
+        <button id="csvOk" type="button">關閉</button>
+      </div>
+    </div>
+  </div>
   <div id="errDialog" class="modal" hidden>
     <div class="dialog" role="alertdialog" aria-labelledby="errTitle">
       <h2 id="errTitle">錯誤</h2>
@@ -333,6 +381,9 @@ endfor</pre>
   <footer class="status">
     <span id="stState">就緒</span>
     <span id="stLine"></span>
+    <button id="btnLastNg" type="button" hidden>看不合格圖</button>
+    <button id="btnLineStats" type="button" hidden>統計</button>
+    <button id="btnLineCsv" type="button" hidden>看明細</button>
     <span id="stZoom"></span>
     <span id="stPix">Row — &nbsp; Column — &nbsp; R — G — B —</span>
     <button id="stErrors" class="problem-count" type="button">錯誤 0</button>
@@ -343,12 +394,16 @@ endfor</pre>
     <span class="hint">取代 HALCON 的第一版。常用流程先用這套語法寫，缺的算子再補。</span>
   </footer>
   <script src="/static/dock.js?v=9"></script>
-  <script src="/static/geom.js?v=5"></script>
+  <script src="/static/geom.js?v=6"></script>
   <script src="/static/editor_history.js?v=1"></script>
   <script src="/static/program_file.js?v=1"></script>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
-  <script src="/static/run_source.js?v=1"></script>
-  <script src="/static/app.js?v=83"></script>
+  <script src="/static/run_source.js?v=13"></script>
+  <script src="/static/tolerance.js?v=8"></script>
+  <script src="/static/var_list.js?v=1"></script>
+  <script src="/static/highlight_sync.js?v=3"></script>
+  <script src="/static/templates.js?v=3"></script>
+  <script src="/static/app.js?v=111"></script>
 </body>
 </html>

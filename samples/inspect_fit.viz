@@ -1,0 +1,14 @@
+* 找線、找圓。打開就能跑。不開相機，也不改 Windows。
+* 直線在列 0，行 0 到 30。列 8、行 15 是飛點，擬合後不把線拉走。
+* 圓心在列 50、行 80，半徑 20。行 108 的點偏出去，擬合後半徑仍是 20。
+LineRow := [0, 0, 8, 0, 0]
+LineCol := [0, 10, 15, 20, 30]
+Vizion.gen_contour_polygon_xld (LinePts, LineRow, LineCol)
+Vizion.fit_line_contour_xld (LinePts, Line, RowBegin, ColBegin, RowEnd, ColEnd)
+CircleRow := [50, 60, 67.3205080757, 70, 67.3205080757, 60, 50, 40, 32.6794919243, 30, 32.6794919243, 40, 50]
+CircleCol := [100, 97.3205080757, 90, 80, 70, 62.6794919243, 60, 62.6794919243, 70, 80, 90, 97.3205080757, 108]
+Vizion.gen_contour_polygon_xld (CirclePts, CircleRow, CircleCol)
+Vizion.fit_circle_contour_xld (CirclePts, Circle, CenterRow, CenterCol, Radius)
+Vizion.dev_display (Line)
+Vizion.dev_set_color ('green')
+Vizion.dev_display (Circle)

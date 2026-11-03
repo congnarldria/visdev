@@ -152,7 +152,10 @@ def _open_camera(index: int, width: int, height: int):
         cap.release()
         cap = cv2.VideoCapture(index)
     if not cap.isOpened():
-        raise RuntimeError(f"打不開相機 {index}。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。")
+        raise RuntimeError(
+            f"打不開相機 {index}。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。"
+            "沒有相機時，請改跑檔案、範本裡的產線，用 samples/line_batch。"
+        )
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if width > 0:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -195,7 +198,10 @@ def _load_camera(handle: AcqHandle, flush: bool) -> np.ndarray:
         if ok and grabbed is not None:
             frame = grabbed
     if frame is None:
-        raise RuntimeError("讀不到畫面。請確認相機還接著、沒有被別的程式占用，然後再抓一次。")
+        raise RuntimeError(
+            "讀不到畫面。請確認相機還接著、沒有被別的程式占用，然後再抓一次。"
+            "沒有相機時，請改跑檔案、範本裡的產線，用 samples/line_batch。"
+        )
     return _paint(frame, handle.color, handle.width, handle.height)
 
 
@@ -356,3 +362,28 @@ def set_framegrabber_param(handle, param, value, *, ctx):
     else:
         raise ValueError("Param 只能是 image_dir、color_space 或 start_index")
     return Result([], [])
+
+
+@operator(
+    "相機",
+    [],
+    [],
+    [
+        P("AcqHandle", "採集"),
+        P("Param", "image_count 或 image_name", "'image_count'", ["'image_count'", "'image_name'"]),
+    ],
+    [P("Value", "張數或檔名")],
+    "讀取採集狀態",
+    "image_count 是 File 資料夾裡的影像張數，本機相機是 0。image_name 是剛剛抓到的檔名，相機沒有檔名。Windows 上開相機的順序沒有改。",
+    "Vizion.get_framegrabber_param (AcqHandle, 'image_count', Value)",
+)
+def get_framegrabber_param(handle, param, *, ctx):
+    handle = _alive(handle, "AcqHandle")
+    name = text(param, "Param").strip().strip("'\"").lower()
+    if name == "image_count":
+        return Result([], [len(handle.paths) if handle.kind == "file" else 0])
+    if name == "image_name":
+        if handle.kind != "file" or handle.cursor <= 0:
+            return Result([], [""])
+        return Result([], [handle.paths[handle.cursor - 1].name])
+    raise ValueError("Param 只能是 image_count 或 image_name")
