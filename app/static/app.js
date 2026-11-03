@@ -2326,7 +2326,10 @@ window.VisDevCommands = {
     return VisDevCommands.openNamedTemplate("inspect_caliper.viz", "這是卡尺範本。執行後看 Diameter、Width、Height。");
   },
   defectTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_defect.viz", "這是瑕疵範本。執行後看 Count 和 Area。");
+    return VisDevCommands.openNamedTemplate("inspect_defect.viz", "這是瑕疵範本。暗塊看 Count、Area，亮點看 BrightCount、BrightArea。");
+  },
+  stripeTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_stripe.viz", "這是條紋寬度範本。執行後看 Width。");
   },
   locateTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");

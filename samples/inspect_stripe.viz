@@ -1,0 +1,12 @@
+* 條紋寬度範本。打開就能跑，再改搜尋線。
+* 讀 samples/stripes.png。沿第 40 列、從行 5 到 220 找全部邊緣。
+* 第 5 個和第 6 個邊緣夾住最寬的亮條。Width 是這兩點的距離。
+Vizion.read_image (Image, 'samples/stripes.png')
+Vizion.gauge_point (Image, Mark, 40, 5, 40, 220, 1, 8, 'all', 'all', PRow, PCol, Amp, Dist)
+Vizion.tuple_length (PCol, EdgeCount)
+Left := PCol[5]
+Right := PCol[6]
+Vizion.distance_pp (PRow[5], PCol[5], PRow[6], PCol[6], Width)
+Vizion.dev_display (Image)
+Vizion.dev_set_color ('yellow')
+Vizion.dev_display (Mark)

@@ -1,12 +1,20 @@
-* 瑕疵範本。打開就能跑，再改灰階上限和面積。
-* 讀 samples/hard_contrast.png。灰階 0 到 40 當成暗缺陷，留下面積 100 以上的。
-* Count 是個數。Area[1] 是第一塊的面積。
+* 瑕疵範本。打開就能跑，再改門檻和面積。
+* 讀 samples/hard_contrast.png。
+* 暗缺陷：灰階 0 到 40，留下面積 100 以上。Count 是個數，Area[1] 是面積。
+* 亮點：灰階 210 到 255。背景噪點不到這個亮度。BrightCount 是個數，BrightArea[1] 是面積。
 Vizion.read_image (Image, 'samples/hard_contrast.png')
 Vizion.threshold (Image, Dark, 0, 40)
 Vizion.connection (Dark, Blobs, 1)
 Vizion.select_shape (Blobs, Defects, 'area', 'and', 100, 99999)
 Vizion.count_obj (Defects, Count)
 Vizion.area_center (Defects, Area, Row, Column)
+Vizion.threshold (Image, Bright, 210, 255)
+Vizion.connection (Bright, Specks, 1)
+Vizion.select_shape (Specks, Hot, 'area', 'and', 20, 400)
+Vizion.count_obj (Hot, BrightCount)
+Vizion.area_center (Hot, BrightArea, BrightRow, BrightCol)
 Vizion.dev_display (Image)
 Vizion.dev_set_color ('red')
 Vizion.dev_display (Defects)
+Vizion.dev_set_color ('green')
+Vizion.dev_display (Hot)

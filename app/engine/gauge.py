@@ -135,7 +135,7 @@ def measure_line(gray, domain, row1, col1, row2, col2, tolerance, sigma, thresho
     sx0, sy0, sx1, sy1 = _shrink(x0, y0, x1, y1, min(4.0, length * 0.08))
     points = _along(gray, domain, sx0, sy0, sx1, sy1, tolerance, sigma, threshold, transition, select, width)
     if len(points) < 2:
-        raise ValueError("直線量規找不到足夠的邊緣")
+        raise ValueError("直線量規找不到足夠的邊緣。請加長名義直線、加大 Tolerance，或降低 Threshold")
     origin, direction, kept = _refit_line(points, dx, dy)
     start = _project(origin, direction, x0, y0)
     end = _project(origin, direction, x1, y1)
@@ -162,7 +162,7 @@ def measure_circle(gray, domain, row, col, radius, tolerance, sigma, threshold, 
     radius = _number("Radius", radius, 1)
     points = _circle_points(gray, domain, row, col, radius, tolerance, sigma, threshold, transition, select, width)
     if len(points) < 3:
-        raise ValueError("圓量規找不到足夠的邊緣")
+        raise ValueError("圓量規找不到足夠的邊緣。請把名義圓心移近真實圓心、加大 Tolerance，或降低 Threshold")
     fitted_row, fitted_col, fitted_radius, kept = _refit_circle(points, row, col, radius, tolerance)
     return CircleFit(fitted_row, fitted_col, fitted_radius, len(kept), _arc(fitted_row, fitted_col, fitted_radius, 0.0, math.tau, 96))
 
@@ -187,7 +187,7 @@ def measure_rectangle(
     for index, (start, end) in enumerate(_sides(corners)):
         points = _side_points(gray, domain, start, end, tolerance, sigma, threshold, transition, select)
         if len(points) < 2:
-            raise ValueError(f"矩形的第 {index + 1} 邊找不到邊緣")
+            raise ValueError(f"矩形的第 {index + 1} 邊找不到邊緣。請把名義矩形移近目標、加大 Tolerance，或降低 Threshold")
         direction = _unit(end[0] - start[0], end[1] - start[1], "矩形的邊長度是 0")
         origin, direction_xy, kept = _refit_line(points, direction[0], direction[1])
         lines.append((origin, direction_xy))
@@ -242,17 +242,17 @@ def measure_wedge(
     outer = _arc_points(gray, domain, row, col, radius2, start, extent, tolerance, sigma, threshold, transition, select, 0.08)
     inner = _arc_points(gray, domain, row, col, radius1, start, extent, tolerance, sigma, threshold, transition, select, 0.08)
     if len(outer) < 3:
-        raise ValueError("扇形的外弧找不到足夠的邊緣")
+        raise ValueError("扇形的外弧找不到足夠的邊緣。請把名義圓心移近、加大 Tolerance，或降低 Threshold")
     if len(inner) < 3:
-        raise ValueError("扇形的內弧找不到足夠的邊緣")
+        raise ValueError("扇形的內弧找不到足夠的邊緣。請把名義圓心移近、加大 Tolerance，或降低 Threshold")
     begin = _radial_points(gray, domain, row, col, radius1, radius2, start, tolerance, sigma, threshold, transition, select)
     end = _radial_points(
         gray, domain, row, col, radius1, radius2, start + extent, tolerance, sigma, threshold, transition, select
     )
     if len(begin) < 2:
-        raise ValueError("扇形的起始邊找不到邊緣")
+        raise ValueError("扇形的起始邊找不到邊緣。請調整起始角、加大 Tolerance，或降低 Threshold")
     if len(end) < 2:
-        raise ValueError("扇形的結束邊找不到邊緣")
+        raise ValueError("扇形的結束邊找不到邊緣。請調整張角、加大 Tolerance，或降低 Threshold")
     fitted_row, fitted_col, _radius, kept = _refit_circle(outer, row, col, radius2, tolerance)
     radius_out = _median_radius(kept, fitted_row, fitted_col)
     radius_in = _median_radius(inner, fitted_row, fitted_col)
@@ -303,7 +303,7 @@ def measure_polygon(gray, domain, rows, cols, tolerance, sigma, threshold, trans
         end = points[(index + 1) % len(points)]
         found = _side_points(gray, domain, start, end, tolerance, sigma, threshold, transition, select)
         if len(found) < 2:
-            raise ValueError(f"多邊形的第 {index + 1} 邊找不到邊緣")
+            raise ValueError(f"多邊形的第 {index + 1} 邊找不到邊緣。請把該邊移近目標、加大 Tolerance，或降低 Threshold")
         direction = _unit(end[0] - start[0], end[1] - start[1], "多邊形有一邊的長度是 0")
         origin, direction_xy, kept = _refit_line(found, direction[0], direction[1])
         lines.append((origin, direction_xy, start, end))

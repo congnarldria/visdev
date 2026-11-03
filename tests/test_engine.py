@@ -3483,11 +3483,37 @@ def test_gauge_preview_reports_the_rectangle_width():
     assert abs(float(found["span"]) - 140) < 1.5
 
 
-def test_inspect_defect_template_finds_the_dark_blob():
+def test_inspect_defect_template_finds_dark_and_bright():
     session = run_source((ROOT / "samples" / "inspect_defect.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error
     assert int(session.vars["Count"]) == 1
     assert session.vars["Area"][0] == 3550
+    assert int(session.vars["BrightCount"]) == 1
+    assert session.vars["BrightArea"][0] == 144
+    assert session.display.base is not None
+
+
+def test_gauge_line_failure_keeps_the_image_and_says_what_to_try():
+    session = run_source(
+        "Vizion.read_image (Image, 'samples/gauge.png')\n"
+        "Vizion.dev_display (Image)\n"
+        "Vizion.gauge_line (Image, Line, 10, 10, 10, 80, 4, 1, 80, 'all', 'best', R1, C1, R2, C2, Angle, Used)\n"
+    )
+    assert session.error
+    assert session.error_line == 3
+    assert "直線量規" in session.error
+    assert "降低 Threshold" in session.error
+    assert session.vars["Image"].width == 640
+    assert session.display.base is not None
+
+
+def test_inspect_stripe_template_measures_the_wide_band():
+    session = run_source((ROOT / "samples" / "inspect_stripe.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["EdgeCount"]) == 8
+    assert float(session.vars["Left"]) == 127.5
+    assert float(session.vars["Right"]) == 149.5
+    assert float(session.vars["Width"]) == 22.0
     assert session.display.base is not None
 
 
