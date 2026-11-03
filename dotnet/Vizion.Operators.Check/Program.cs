@@ -51,6 +51,30 @@ static void SelfTest()
     if (Math.Abs(edges[0][0].Row) > 1e-3 || Math.Abs(edges[0][^1].Row - 23) > 1e-3)
         throw new InvalidOperationException($"邊緣應從列 0 到列 23，得到 {edges[0][0].Row} 到 {edges[0][^1].Row}");
 
+    var template = Operators.ReadImage(SampleFile("shape_template.png"));
+    var scene = Operators.ReadImage(SampleFile("shapes_scene.png"));
+    var found = Operators.FindShape(scene, template, 15, 15, 164, 164);
+    var expected = new (double Row, double Column)[]
+    {
+        (130.107, 160.439),
+        (359.343, 169.994),
+        (124.702, 469.511),
+        (349.923, 479.0),
+    };
+    if (found.Length < 4)
+        throw new InvalidOperationException("場景裡應找到 4 個，得到 " + found.Length + "：" + string.Join("; ", found.Select(hit => $"{hit.Row:0.0},{hit.Column:0.0},{hit.Score:0.00}")));
+    foreach (var pose in expected)
+    {
+        bool close = found.Any(hit =>
+        {
+            double dRow = hit.Row - pose.Row;
+            double dCol = hit.Column - pose.Column;
+            return dRow * dRow + dCol * dCol <= 12 * 12;
+        });
+        if (!close)
+            throw new InvalidOperationException($"沒有對上 Python 的 ({pose.Row:0.0},{pose.Column:0.0})。C# 得到 " + string.Join("; ", found.Select(hit => $"{hit.Row:0.0},{hit.Column:0.0}")));
+    }
+
     Expect(GrayConvert.Bgr(10, 20, 30), 22, "灰階 10,20,30");
     Expect(GrayConvert.Bgr(255, 128, 0), 104, "灰階 255,128,0");
     Expect(GrayConvert.Bgr(1, 2, 3), 2, "灰階 1,2,3");
@@ -105,6 +129,19 @@ static void SelfTest()
     int red = dest[(0 * 3 + 1) * 4 + 2];
     if (red < 200)
         throw new InvalidOperationException($"行程沒有畫上影像，紅色通道是 {red}");
+}
+
+static string SampleFile(string name)
+{
+    var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+    while (dir != null)
+    {
+        string path = Path.Combine(dir.FullName, "samples", name);
+        if (File.Exists(path))
+            return path;
+        dir = dir.Parent;
+    }
+    throw new FileNotFoundException($"找不到 samples/{name}。請在存放 samples 的那一層，或它的子目錄裡執行。");
 }
 
 static void Compare(string path)

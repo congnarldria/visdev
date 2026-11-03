@@ -1,8 +1,8 @@
 # VisDev 1.1
 
-次像素邊緣已經能對照。`samples/inspect_edge.viz` 左半是 0、右半是 255，邊緣在行 15.5，從列 0 到列 23。C# 的 `Operators.EdgesSubPix` 用同一張圖，得到同一個位置。差幾個灰階的雜訊不會留下。
+形狀比對的 C# 參考已經能用。`Operators.FindShape` 讀 `samples/shape_template.png` 和 `samples/shapes_scene.png`，教導框是 15 到 164，找到 4 個，位置和 Python 差在 12 像素以內。Windows 執行時仍用 `app/engine/visdev_match.pyd`，`samples/inspect_locate.viz` 的分數仍高於 0.9。C# 沒有金字塔，也沒有 `least_squares`，分數不是 `.pyd` 的分數。
 
-找線、找圓仍在 `samples/inspect_fit.viz`。C# 的 `FitLine`、`FitCircle` 用同一組點。Visual Studio 開 `dotnet/Vizion.Display.sln`，起始專案 `Vizion.Operators.Check`，按 F5。說明在 `dotnet/README.md`。
+次像素邊緣仍是行 15.5。找線、找圓的飛點仍拉不走。Visual Studio 開 `dotnet/Vizion.Display.sln`，起始專案 `Vizion.Operators.Check`，按 F5。說明在 `dotnet/README.md`。
 
 最近開過的程式沒有做。孔距不做。
 
@@ -10,7 +10,7 @@ Windows 仍用 `app/engine/visdev_match.pyd`。開相機仍先問 DirectShow，�
 
 ## 下一項
 
-形狀比對的 C# 參考。Windows 上的匹配仍用 `app/engine/visdev_match.pyd`，數字不改。C# 先做一份可讀的呼叫範例或純 C# 的簡化比對，用同一張樣板和場景，說清楚和 `.pyd` 哪裡相同、哪裡不同。標定的九個參數這輪不改。
+標定的 C# 參考。只示範棋盤 `'5,7,10'` 怎麼解釋成內角點和方格邊長，並對一下 Python 已有的角點數量。不改單台相機標完的九個參數，也不做六角形標定板。
 
 先不要做這些：最近開過的程式、孔和孔的間距、六角形標定板的尋找標記對位、更多 Modbus 功能碼、不合格圖的上一張下一張、編輯器局部更新、公差列再改版。
 
