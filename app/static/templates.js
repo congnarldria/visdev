@@ -16,6 +16,7 @@
     { cmd: "locateTemplate", title: "形狀定位", file: "inspect_locate.viz", expect: "場景裡找到 4 個" },
     { cmd: "stereoTemplate", title: "相對姿態", file: "inspect_stereo.viz", expect: "Pose1 的第一個數約 0.04 公尺" },
     { cmd: "codeTemplate", title: "條碼", file: "inspect_code.viz", expect: "Text 是 4006381333931，QrText 是 VISDEV-3" },
+    { cmd: "fitTemplate", title: "找線找圓", file: "inspect_fit.viz", expect: "直線到行 30，圓心列 50 行 80，半徑 20" },
   ];
 
   const api = { templates: TEMPLATES };

@@ -4345,6 +4345,19 @@ def test_project_holds_two_programs_and_its_image():
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def test_inspect_fit_template_rejects_the_outliers():
+    session = run_source((ROOT / "samples" / "inspect_fit.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    ends = {
+        (round(session.vars["RowBegin"][0], 6), round(session.vars["ColBegin"][0], 6)),
+        (round(session.vars["RowEnd"][0], 6), round(session.vars["ColEnd"][0], 6)),
+    }
+    assert ends == {(0.0, 0.0), (0.0, 30.0)}
+    assert abs(session.vars["CenterRow"][0] - 50) < 1e-6
+    assert abs(session.vars["CenterCol"][0] - 80) < 1e-6
+    assert abs(session.vars["Radius"][0] - 20) < 1e-6
+
+
 def test_inspect_missing_template_accepts_eight_parts():
     session = run_source((ROOT / "samples" / "inspect_missing.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error

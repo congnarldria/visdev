@@ -14,6 +14,28 @@ Console.WriteLine("算子自我檢查通過");
 
 static void SelfTest()
 {
+    var straight = Operators.FitLine(new (double Row, double Col)[]
+    {
+        (0, 0), (0, 10), (8, 15), (0, 20), (0, 30),
+    });
+    bool At(double row, double col, double wantRow, double wantCol) =>
+        Math.Abs(row - wantRow) < 1e-6 && Math.Abs(col - wantCol) < 1e-6;
+    bool lineEnds =
+        (At(straight.RowBegin, straight.ColBegin, 0, 0) && At(straight.RowEnd, straight.ColEnd, 0, 30))
+        || (At(straight.RowBegin, straight.ColBegin, 0, 30) && At(straight.RowEnd, straight.ColEnd, 0, 0));
+    if (!lineEnds)
+        throw new InvalidOperationException($"飛點不該把直線拉走，得到 ({straight.RowBegin},{straight.ColBegin})-({straight.RowEnd},{straight.ColEnd})");
+
+    var circle = Operators.FitCircle(new (double Row, double Col)[]
+    {
+        (50, 100), (60, 97.3205080757), (67.3205080757, 90), (70, 80),
+        (67.3205080757, 70), (60, 62.6794919243), (50, 60), (40, 62.6794919243),
+        (32.6794919243, 70), (30, 80), (32.6794919243, 90), (40, 97.3205080757),
+        (50, 108),
+    });
+    if (Math.Abs(circle.Row - 50) > 1e-6 || Math.Abs(circle.Column - 80) > 1e-6 || Math.Abs(circle.Radius - 20) > 1e-6)
+        throw new InvalidOperationException($"飛點不該把圓拉走，得到列 {circle.Row} 行 {circle.Column} 半徑 {circle.Radius}");
+
     Expect(GrayConvert.Bgr(10, 20, 30), 22, "灰階 10,20,30");
     Expect(GrayConvert.Bgr(255, 128, 0), 104, "灰階 255,128,0");
     Expect(GrayConvert.Bgr(1, 2, 3), 2, "灰階 1,2,3");
