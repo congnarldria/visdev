@@ -320,7 +320,7 @@ endfor</pre>
       </ul>
       <p>點量規或直線量規時，可以按「線」在圖上拖。起點到終點的方向會保留。圖上已有影像時，確認前會畫出沿這條線找到的邊緣和首尾間距。</p>
       <h3>把結果送到外面</h3>
-      <p>產線輸出每一張寫一行，TCP 和序列埠相同：<code>VISDEV,OK 或 NG,合格張數,不合格張數,檔名</code>，結尾換行。合格、不合格會寫成 OK、NG。檔名用英文。範本用 loopback，<code>Wire</code> 讀回那 5 行，所以合格仍是 3、不合格仍是 2。讀到的字另送一行 <code>VISDEV,TEXT,文字</code>，不改上面那一行的欄位。Modbus TCP 可以用 <code>write_modbus_register</code> 寫一個 0 到 65535 的暫存器，不開 COM。送到外面時，把 <code>open_socket_connect</code> 的 loopback 改成主機和埠號，或改成 <code>open_serial ('COM3', Link)</code>，並拿掉 <code>receive_data</code>。Windows 開 COM 仍用原來的 API，不在這一行裡重開。</p>
+      <p>產線輸出每一張寫一行，TCP 和序列埠相同：<code>VISDEV,OK 或 NG,合格張數,不合格張數,檔名</code>，結尾換行。合格、不合格會寫成 OK、NG。檔名用英文。範本用 loopback，<code>Wire</code> 讀回那 5 行，所以合格仍是 3、不合格仍是 2。讀到的字另送一行 <code>VISDEV,TEXT,文字</code>，不改上面那一行的欄位。Modbus TCP 用 <code>write_modbus_register</code> 寫、用 <code>read_modbus_register</code> 讀，一次一個 0 到 65535 的暫存器。<code>write_modbus_judge</code> 把合格寫成 1、不合格寫成 2，再讀回核對。不開 COM。變數名叫 <code>Register</code> 時，狀態列會寫出這個數。送到外面時，把 <code>open_socket_connect</code> 的 loopback 改成主機和埠號，或改成 <code>open_serial ('COM3', Link)</code>，並拿掉 <code>receive_data</code>。Windows 開 COM 仍用原來的 API，不在這一行裡重開。</p>
       <h3>標定</h3>
       <p>棋盤寫 <code>'5,7,10'</code>，也可以用 <code>.cpd</code> 或 <code>.descr</code>。多台相機時，每一台的第 k 組要是同時看到的同一塊板。<code>camera/pose</code> 是相對第 0 台的姿態，第 0 台是 0。標完的圖可以點某一張看原圖，再點一下回到全部。</p>
       <h3>存檔與 Windows</h3>
@@ -389,7 +389,7 @@ endfor</pre>
   <script src="/static/program_file.js?v=1"></script>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
-  <script src="/static/run_source.js?v=10"></script>
+  <script src="/static/run_source.js?v=11"></script>
   <script src="/static/tolerance.js?v=4"></script>
   <script src="/static/var_list.js?v=1"></script>
   <script src="/static/highlight_sync.js?v=3"></script>

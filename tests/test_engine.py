@@ -3751,6 +3751,71 @@ def test_modbus_writes_one_register_and_leaves_com_alone():
         write_holding_register("127.0.0.1", 1, 0, 1)
 
 
+def test_modbus_reads_back_the_register_it_wrote():
+    import socket
+    import struct
+    import threading
+
+    from app.engine.chapters.serial_ops import _open_windows
+
+    assert "CreateFileW" in _open_windows.__code__.co_names
+    ready = threading.Event()
+    regs = {}
+    holder = {}
+
+    def serve():
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        server.settimeout(3)
+        holder["port"] = server.getsockname()[1]
+        ready.set()
+        for _ in range(12):
+            try:
+                conn, _addr = server.accept()
+            except socket.timeout:
+                break
+            conn.settimeout(2)
+            data = b""
+            while len(data) < 12:
+                chunk = conn.recv(12 - len(data))
+                if not chunk:
+                    break
+                data += chunk
+            function = data[7]
+            address, number = struct.unpack(">HH", data[8:12])
+            if function == 6:
+                regs[address] = number
+                conn.sendall(data)
+            elif function == 3:
+                stored = regs.get(address, 0)
+                if holder.get("lie"):
+                    stored = (stored + 1) & 0xFFFF
+                trans = struct.unpack(">H", data[:2])[0]
+                conn.sendall(struct.pack(">HHHBBBH", trans, 0, 5, 1, 3, 2, stored))
+            conn.close()
+        server.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    assert ready.wait(2)
+    port = holder["port"]
+    session = run_source(
+        f"Vizion.read_modbus_register ('127.0.0.1', {port}, 16, Register)\n"
+        f"Vizion.write_modbus_register ('127.0.0.1', {port}, 16, 2)\n"
+        f"Vizion.read_modbus_register ('127.0.0.1', {port}, 16, Register)\n"
+        f"Vizion.write_modbus_judge ('127.0.0.1', {port}, 16, '不合格', Checked)\n"
+        f"Vizion.write_modbus_judge ('127.0.0.1', {port}, 16, '合格', CheckedOk)\n"
+    )
+    assert session.error is None, session.error
+    assert int(session.vars["Register"]) == 2
+    assert int(session.vars["Checked"]) == 2
+    assert int(session.vars["CheckedOk"]) == 1
+    assert regs[16] == 1
+    holder["lie"] = True
+    mismatched = run_source(f"Vizion.write_modbus_judge ('127.0.0.1', {port}, 16, 'NG', Again)\n")
+    assert mismatched.error and "不一樣" in mismatched.error
+
+
 def test_last_ng_and_csv_stay_inside_the_workspace():
     import pytest
     from fastapi import HTTPException

@@ -99,5 +99,6 @@ const chars = run.resultSummary([
   { name: "Score", text: "[0.91]" },
 ]);
 assert(chars === "判定 合格 · 文字 VISDEV 168 · 預期 VISDEV 168 · 個數 1 · 最低分 0.91", "a character run names the text and the expected word");
+assert(run.resultSummary([{ name: "Register", text: "2" }]) === "暫存器 2", "a modbus read names the register");
 
 console.log("run source ok");
