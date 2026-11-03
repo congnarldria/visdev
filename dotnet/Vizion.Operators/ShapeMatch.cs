@@ -568,6 +568,8 @@ public static partial class Operators
         gx = new float[width * height];
         gy = new float[width * height];
         mag = new float[width * height];
+        if (NativeCore.TrySobel(gray, width, height, gx, gy, mag))
+            return;
         for (int row = 0; row < height; row++)
         {
             for (int col = 0; col < width; col++)

@@ -123,6 +123,12 @@ VIZION_EXPORT int VIZION_CALL vizion_remap(
 
 VIZION_EXPORT int VIZION_CALL vizion_edge_selftest(void);
 
+/* 3x3 Sobel。邊界把 -1 映到 0。gx、gy、模長和 C# 的 float 相同。 */
+VIZION_EXPORT int VIZION_CALL vizion_sobel(
+    const uint8_t* gray, int width, int height, float* gx, float* gy, float* mag);
+
+VIZION_EXPORT int VIZION_CALL vizion_sobel_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

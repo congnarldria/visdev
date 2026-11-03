@@ -234,6 +234,25 @@ public static class NativeCore
         }
     }
 
+    public static bool TrySobel(byte[] gray, int width, int height, float[] gx, float[] gy, float[] magnitude)
+    {
+        if (!IsLoaded || !UseNative || gray.Length < width * height)
+            return false;
+        try
+        {
+            return vizion_sobel(gray, width, height, gx, gy, magnitude) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TrySubpix(
         float[] gray, int width, int height, float[] smooth, float[] deriv,
         float[] dx, float[] dy, float[] magnitude, float[] normalX, float[] normalY,
@@ -337,6 +356,9 @@ public static class NativeCore
             return false;
         }
     }
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_sobel(byte[] gray, int width, int height, float[] gx, float[] gy, float[] magnitude);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_subpix(

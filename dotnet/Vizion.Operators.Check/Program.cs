@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--sobel")
+{
+    SobelNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--edge")
 {
     EdgeNativeCheck();
@@ -895,6 +901,119 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void SobelNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var pattern = new byte[18 * 11];
+    for (int i = 0; i < pattern.Length; i++)
+        pattern[i] = (byte)((i * 17 + 3) & 255);
+    var nativeGx = new float[pattern.Length];
+    var nativeGy = new float[pattern.Length];
+    var nativeMag = new float[pattern.Length];
+    if (!NativeCore.TrySobel(pattern, 18, 11, nativeGx, nativeGy, nativeMag))
+        throw new InvalidOperationException("Sobel 沒有走到 C 核心");
+    var gx = new float[pattern.Length];
+    var gy = new float[pattern.Length];
+    var mag = new float[pattern.Length];
+    SobelFill(pattern, 18, 11, gx, gy, mag);
+    for (int i = 0; i < pattern.Length; i++)
+    {
+        if (nativeGx[i] != gx[i] || nativeGy[i] != gy[i] || nativeMag[i] != mag[i])
+            throw new InvalidOperationException($"梯度像素 {i} 和 C# 不同：{nativeGx[i]} / {gx[i]}");
+    }
+    var block = new byte[64 * 64];
+    for (int row = 16; row < 48; row++)
+        for (int col = 16; col < 48; col++)
+            block[row * 64 + col] = 255;
+    var shifted = new byte[96 * 96];
+    for (int row = 36; row < 68; row++)
+        for (int col = 31; col < 63; col++)
+            shifted[row * 96 + col] = 255;
+    var scene = ImageBuffer.Gray(96, 96, shifted);
+    var template = ImageBuffer.Gray(64, 64, block);
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    NativeCore.UseNative = true;
+    var nativeShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    if (nativeShape.Length != managedShape.Length || nativeShape.Length < 1)
+        throw new InvalidOperationException($"形狀命中 {nativeShape.Length} 個，C# {managedShape.Length} 個");
+    for (int i = 0; i < managedShape.Length; i++)
+    {
+        if (Math.Abs(nativeShape[i].Row - managedShape[i].Row) > 1e-6
+            || Math.Abs(nativeShape[i].Column - managedShape[i].Column) > 1e-6
+            || Math.Abs(nativeShape[i].Angle - managedShape[i].Angle) > 1e-6
+            || Math.Abs(nativeShape[i].Score - managedShape[i].Score) > 1e-6)
+            throw new InvalidOperationException($"形狀分數和 C# 不同 {nativeShape[i].Score} / {managedShape[i].Score}");
+    }
+    var bench = new byte[960 * 540];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)((i * 13) & 255);
+    var benchGx = new float[bench.Length];
+    var benchGy = new float[bench.Length];
+    var benchMag = new float[bench.Length];
+    var managedGx = new float[bench.Length];
+    var managedGy = new float[bench.Length];
+    var managedMag = new float[bench.Length];
+    NativeCore.TrySobel(bench, 960, 540, benchGx, benchGy, benchMag);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 8; i++)
+        NativeCore.TrySobel(bench, 960, 540, benchGx, benchGy, benchMag);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    SobelFill(bench, 960, 540, managedGx, managedGy, managedMag);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        SobelFill(bench, 960, 540, managedGx, managedGy, managedMag);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    if (benchGx[960 * 20 + 30] != managedGx[960 * 20 + 30] || benchMag[960 * 200 + 400] != managedMag[960 * 200 + 400])
+        throw new InvalidOperationException("大圖梯度和 C# 不同");
+    Console.WriteLine("梯度原生檢查通過");
+    Console.WriteLine($"960×540 Sobel 共 8 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static int SobelReflect(int position, int length)
+{
+    if ((uint)position < (uint)length)
+        return position;
+    if (length == 1)
+        return 0;
+    do
+    {
+        if (position < 0)
+            position = -position - 1;
+        else
+            position = length - 1 - (position - length);
+    }
+    while ((uint)position >= (uint)length);
+    return position;
+}
+
+static void SobelFill(byte[] gray, int width, int height, float[] gx, float[] gy, float[] magnitude)
+{
+    float At(int y, int x) => gray[SobelReflect(y, height) * width + SobelReflect(x, width)];
+    for (int row = 0; row < height; row++)
+    {
+        for (int col = 0; col < width; col++)
+        {
+            float dx =
+                -At(row - 1, col - 1) + At(row - 1, col + 1)
+                - 2 * At(row, col - 1) + 2 * At(row, col + 1)
+                - At(row + 1, col - 1) + At(row + 1, col + 1);
+            float dy =
+                -At(row - 1, col - 1) - 2 * At(row - 1, col) - At(row - 1, col + 1)
+                + At(row + 1, col - 1) + 2 * At(row + 1, col) + At(row + 1, col + 1);
+            int index = row * width + col;
+            gx[index] = dx;
+            gy[index] = dy;
+            magnitude[index] = (float)Math.Sqrt(dx * dx + dy * dy);
+        }
+    }
 }
 
 static void EdgeNativeCheck()
