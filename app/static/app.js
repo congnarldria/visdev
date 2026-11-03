@@ -93,25 +93,15 @@ function esc(value) {
 }
 
 function highlightLine(line) {
-  if (/^\s*(?:\*|\/\/)/.test(line)) return `<span class="tok-cmt">${esc(line)}</span>`;
-  const re = /('[^']*'|"[^"]*"|\b(?:if|else|endif|for|endfor|while|endwhile)\b|\b\d+(?:\.\d+)?\b|[A-Za-z_]\w*|\s+|.)/g;
-  let html = "";
-  let match;
-  while ((match = re.exec(line))) {
-    const token = match[0];
-    let cls = "";
-    if (token[0] === "'" || token[0] === '"') cls = "tok-str";
-    else if (/^\d/.test(token)) cls = "tok-num";
-    else if (/^(if|else|endif|for|endfor|while|endwhile)$/i.test(token)) cls = "tok-key";
-    else if (operatorNames.has(token.toLowerCase())) cls = "tok-op";
-    html += cls ? `<span class="${cls}">${esc(token)}</span>` : esc(token);
-  }
-  return html || " ";
+  return VisdevHighlight.highlightSource(line, (token) => operatorNames.has(String(token).toLowerCase()));
 }
 
 function renderHighlight() {
   const src = code.value.endsWith("\n") ? code.value + " " : code.value;
-  hl.innerHTML = src.split("\n").map(highlightLine).join("\n");
+  const lines = src.split("\n");
+  VisdevHighlight.syncHighlight(hl, lines, highlightLine);
+  hl.scrollTop = code.scrollTop;
+  hl.scrollLeft = code.scrollLeft;
   hl.dataset.paint = String(Number(hl.dataset.paint || 0) + 1);
 }
 
@@ -155,16 +145,27 @@ function noteRunningProgram() {
 function renderGutter() {
   const count = Math.max(1, code.value.split("\n").length);
   const arrow = programArrow();
-  let html = "";
+  const errorLines = new Set();
+  const warnLines = new Set();
+  diagnostics.forEach((item) => {
+    if (!item.line) return;
+    if (item.sev === "error") errorLines.add(item.line);
+    else if (item.sev === "warning" && !errorLines.has(item.line)) warnLines.add(item.line);
+  });
+  const rows = [];
   for (let line = 1; line <= count; line += 1) {
     const cls = ["gl"];
     if (breakpoints.has(line)) cls.push("bp");
     if (arrow === line) cls.push("cur");
-    if (server.errorLine === line || diagnostics.some((item) => item.line === line && item.sev === "error")) cls.push("err");
-    else if (diagnostics.some((item) => item.line === line && item.sev === "warning")) cls.push("warn");
-    html += `<div class="${cls.join(" ")}" data-line="${line}"><span class="pc"></span><span class="num">${line}</span></div>`;
+    if (server.errorLine === line || errorLines.has(line)) cls.push("err");
+    else if (warnLines.has(line)) cls.push("warn");
+    rows.push({
+      className: cls.join(" "),
+      line,
+      html: `<span class="pc"></span><span class="num">${line}</span>`,
+    });
   }
-  gutter.innerHTML = html;
+  VisdevHighlight.syncRows(gutter, rows);
 }
 
 function placeBars() {
@@ -200,12 +201,12 @@ function renderTimes() {
   const count = Math.max(1, code.value.split("\n").length);
   const times = new Map((server.lineTimes || []).map((item) => [item.line, item]));
   const arrow = programArrow();
-  let html = "";
+  const rows = [];
   for (let line = 1; line <= count; line += 1) {
     const item = times.get(line);
-    html += `<div class="${arrow === line ? "on" : ""}">${item ? formatLineTime(item) : ""}</div>`;
+    rows.push({ className: arrow === line ? "on" : "", text: item ? formatLineTime(item) : "" });
   }
-  lineTimes.innerHTML = html;
+  VisdevHighlight.syncRows(lineTimes, rows);
 }
 
 function revealLine(line) {

@@ -66,4 +66,5 @@ uvicorn app.main:app --host 127.0.0.1 --port 8765
 python -m pytest tests/test_engine.py
 node tests/test_view_key.js
 node tests/test_var_list.js
+node tests/test_highlight_sync.js
 ```
