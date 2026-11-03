@@ -15,7 +15,7 @@ import numpy as np
 from . import gauge
 from .objects import Image, Region, Result, StopSignal, XLD, coerce_iconic
 from .ocr import describe_catalog, method_choices, read_text
-from .render import normalize_color, read_cv_image, to_uint8, write_cv_image
+from .render import normalize_color, paint_window, read_cv_image, to_uint8, write_cv_image
 
 REGISTRY: dict[str, "Operator"] = {}
 _ORDER = 0
@@ -3288,6 +3288,25 @@ def gen_cross_contour_xld(row, column, size, angle, *, ctx):
 )
 def dev_display(obj, *, ctx):
     ctx.display_obj(obj)
+    return Result([], [])
+
+
+@operator(
+    "顯示",
+    [],
+    [],
+    [P("FileName", "輸出路徑。相對路徑從專案目錄起算", browse="image")],
+    [],
+    "儲存圖形視窗",
+    "把目前的底圖、區域、輪廓和文字畫成一張圖再存檔。write_image 仍只存原圖。",
+    "Vizion.dump_window ('workspace/line_ng/ng.png')",
+)
+def dump_window(filename, *, ctx):
+    image = paint_window(ctx.display.base, list(ctx.display.overlays))
+    path = ctx.resolve_write_path(text(filename, "FileName"))
+    if not write_cv_image(path, image):
+        raise RuntimeError(f"無法寫入 {path}")
+    ctx.log.append(f"已寫入 {path}")
     return Result([], [])
 
 

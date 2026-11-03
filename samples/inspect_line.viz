@@ -1,6 +1,6 @@
 * 產線範本。打開就能跑。用資料夾模擬連續取像，不必接相機。
 * samples/line_batch 裡有 5 張，按檔名排序。白塊面積 200 以上算合格。
-* OkCount、NgCount 是合格和不合格張數。不合格的圖寫到 workspace/line_ng。
+* OkCount、NgCount 是合格和不合格張數。不合格的圖寫到 workspace/line_ng，帶著沒過的區域和 NG 字。
 * 再跑一次會先清掉 workspace/line_ng 裡上一輪的圖。
 * workspace/line_result.csv 每一行是序號、檔名、判定、個數。
 * Windows 相機仍先問 DirectShow。這支用 File，不開相機。
@@ -35,7 +35,6 @@ for Index := 1 to Total by 1
         Judge := 'NG'
         NgCount := NgCount + 1
         LastNg := Name
-        Vizion.write_image (Image, 'workspace/line_ng/' + Name)
     endif
     Row := Index + ',' + Name + ',' + Judge + ',' + Count
     Vizion.fwrite_string (Report, Row)
@@ -43,10 +42,13 @@ for Index := 1 to Total by 1
     Vizion.dev_display (Image)
     if (Count >= 1)
         Vizion.dev_set_color ('green')
+        Vizion.dev_display (Kept)
     else
         Vizion.dev_set_color ('red')
+        Vizion.dev_display (Parts)
+        Vizion.dev_disp_text ('NG', 12, 4)
+        Vizion.dump_window ('workspace/line_ng/' + Name)
     endif
-    Vizion.dev_display (Kept)
 endfor
 if (NgCount == 0 and LastNg == '')
     Judge := '合格'

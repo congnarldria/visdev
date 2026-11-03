@@ -3605,6 +3605,18 @@ def test_inspect_line_template_counts_saves_ng_and_writes_csv():
 
         saved = read_cv_image(folder / "ng_02.png")
         assert saved is not None and np.array_equal(session.display.base.data, saved)
+        assert saved.ndim == 3 and saved.shape[2] == 3
+        assert saved.shape[:2] == before.shape[:2]
+        red = (saved[:, :, 2].astype(np.int16) > saved[:, :, 1].astype(np.int16) + 30) & (
+            saved[:, :, 2].astype(np.int16) > saved[:, :, 0].astype(np.int16) + 30
+        )
+        assert int(red.sum()) > 8
+        raw = read_cv_image(ROOT / "samples" / "line_batch" / "ng_02.png")
+        assert raw is not None and raw.ndim == 2
+        assert not np.array_equal(saved[:, :, 0], raw)
+        missing = run_source("Vizion.dump_window ('workspace/line_ng/blank.png')\n")
+        assert missing.error and "還沒有畫面" in missing.error
+        assert not (folder / "blank.png").exists()
         assert int(session.vars["OkCount"]) == 3
         assert session.vars["Judge"] == "不合格"
         assert session.show_last_ng() == ""
