@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VisDev 1.1</title>
   <link rel="icon" href="/static/magpie.ico">
-  <link rel="stylesheet" href="/static/app.css?v=41">
+  <link rel="stylesheet" href="/static/app.css?v=43">
 </head>
 <body>
   <nav class="menubar" aria-label="主選單">
@@ -16,25 +16,9 @@
         <button type="button" data-cmd="project">專案</button>
         <div class="menu-sub">
           <button type="button" data-submenu="1">範本<span class="menu-arrow">▸</span></button>
-          <div class="menu-fly" hidden>
-            <button type="button" data-cmd="inspectTemplate">零件檢測</button>
-            <button type="button" data-cmd="gaugeTemplate">邊緣量測</button>
-            <button type="button" data-cmd="caliperTemplate">卡尺</button>
-            <button type="button" data-cmd="defectTemplate">瑕疵</button>
-            <button type="button" data-cmd="colorTemplate">色彩</button>
-            <button type="button" data-cmd="charsTemplate">字元</button>
-            <button type="button" data-cmd="stripeTemplate">條紋寬度</button>
-            <button type="button" data-cmd="lineTemplate">產線</button>
-            <button type="button" data-cmd="lineCameraTemplate">產線相機</button>
-            <button type="button" data-cmd="lineOutTemplate">產線輸出</button>
-            <button type="button" data-cmd="missingTemplate">缺件</button>
-            <button type="button" data-cmd="holesTemplate">孔數</button>
-            <button type="button" data-cmd="lineHolesTemplate">孔數產線</button>
-            <button type="button" data-cmd="locateTemplate">形狀定位</button>
-            <button type="button" data-cmd="stereoTemplate">相對姿態</button>
-            <button type="button" data-cmd="codeTemplate">條碼</button>
-          </div>
+          <div class="menu-fly" id="templateFly" hidden></div>
         </div>
+        <button type="button" data-cmd="templateList">範本一覽</button>
         <button type="button" data-cmd="open">開啟<span class="menu-kbd">Ctrl+O</span></button>
         <button type="button" data-cmd="save">儲存<span class="menu-kbd">Ctrl+S</span></button>
         <button type="button" data-cmd="saveAs">另存新檔</button>
@@ -306,7 +290,7 @@ endfor</pre>
       <h3>執行</h3>
       <p>F5 執行，F6 單步，F7 步進程序。程式跑到一半失敗時，已經算出的圖和變數留著，狀態列會寫出第幾行，相機和檔案會關掉。執行中若已經有直徑、寬度、合格或不合格，狀態列會直接寫出來。跑完或停止後也會留著這些數字。變數很多時，單步只改有變動的那一列。打字時語法著色、行號和該行時間只改有變動的列。輸出往上翻時，新的一行不會把畫面拉回底部。錯誤清單只改有變動的列。大圖在執行中會先縮小顯示，標題會寫預覽，跑完或停止後換成完整圖。</p>
       <h3>範本</h3>
-      <p>檔案、範本打開就能跑。跑完後，狀態列和圖形視窗會寫出下面這些數字。</p>
+      <p>檔案、範本打開就能跑。檔案、範本一覽列出每一支該有的結果，點一列就打開。跑完後，狀態列和圖形視窗會寫出下面這些數字。</p>
       <ul class="guide-list">
         <li>零件檢測：<code>samples/parts.png</code>，8 個零件。狀態列寫個數。</li>
         <li>瑕疵：<code>samples/hard_contrast.png</code>。暗塊 1 個、面積 3550；亮點 1 個、面積 144。預設灰階是暗塊 0 到 40、亮點 210 到 255。圖形視窗可以改這兩個範圍，再按執行。</li>
@@ -356,6 +340,14 @@ endfor</pre>
     </div>
   </div>
   <div id="opFileMenu" class="op-file-menu" hidden></div>
+  <div id="templateDialog" class="modal" hidden>
+    <div class="dialog guide" role="dialog" aria-labelledby="templateTitle">
+      <h2 id="templateTitle">範本一覽</h2>
+      <p class="hint">點一列就打開。右邊是跑完該看到的結果。</p>
+      <div id="templateList" class="template-list"></div>
+      <div class="actions"><button id="templateClose" type="button">關閉</button></div>
+    </div>
+  </div>
   <div id="statsDialog" class="modal" hidden>
     <div class="dialog stats" role="dialog" aria-labelledby="statsTitle">
       <h2 id="statsTitle">產線統計</h2>
@@ -409,6 +401,7 @@ endfor</pre>
   <script src="/static/tolerance.js?v=8"></script>
   <script src="/static/var_list.js?v=1"></script>
   <script src="/static/highlight_sync.js?v=3"></script>
-  <script src="/static/app.js?v=110"></script>
+  <script src="/static/templates.js?v=1"></script>
+  <script src="/static/app.js?v=111"></script>
 </body>
 </html>

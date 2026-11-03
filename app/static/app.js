@@ -2079,6 +2079,10 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     document.getElementById("statsDialog").hidden = true;
   }
+  if (!document.getElementById("templateDialog").hidden) {
+    event.preventDefault();
+    document.getElementById("templateDialog").hidden = true;
+  }
   if (shapeDraw) {
     event.preventDefault();
     cancelShapeDraw();
@@ -2752,54 +2756,7 @@ window.VisDevCommands = {
     const usedSaved = await openProgram("samples", name);
     stLine.textContent = usedSaved ? `${note} 已用這台電腦上次的上下限。` : note;
   },
-  inspectTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_parts.viz", "這是零件檢測範本。改 MinGray 和面積下限，再按執行。");
-  },
-  gaugeTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_gauge.viz", "這是邊緣量測範本。改量測線的列和行，再按執行。");
-  },
-  caliperTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_caliper.viz", "這是卡尺範本。執行後看 Diameter、Width、Height。");
-  },
-  defectTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_defect.viz", "這是瑕疵範本。暗塊看 Count、Area，亮點看 BrightCount、BrightArea。");
-  },
-  colorTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_color.viz", "這是色彩範本。綠塊面積 1200、色調 60。紅塊不算。超出就不合格。");
-  },
-  charsTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_chars.viz", "這是字元範本。圖形視窗可改預期字，再按執行。讀錯就不合格。");
-  },
-  stripeTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_stripe.viz", "這是條紋寬度範本。執行後看 Width。");
-  },
-  lineTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_line.viz", "這是產線範本。執行後看合格、不合格。沒有相機時用這支。NG 圖和 CSV 在 workspace。");
-  },
-  lineCameraTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_line_camera.viz", "這是相機產線。編號 0。沒有相機時改跑檔案產線。執行中會看到合格和不合格。按停止就停。");
-  },
-  lineOutTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_line_out.viz", "這是產線輸出。圖形視窗可改主機和埠。這支用 loopback，合格仍是 3、不合格仍是 2。");
-  },
-  missingTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_missing.viz", "這是缺件範本。應有 8 個零件。少了就不合格。");
-  },
-  holesTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_holes.viz", "這是孔數範本。應有 4 個暗孔。少了就不合格。");
-  },
-  lineHolesTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_line_holes.viz", "這是孔數產線。5 張用同一套圓心、個數和直徑。合格 2、不合格 3。NG 圖和明細在 workspace。");
-  },
-  locateTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");
-  },
-  stereoTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_stereo.viz", "這是相對姿態範本。第 k 組是同一次擺放。執行後看 Pose1。");
-  },
-  codeTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_code.viz", "這是條碼範本。執行後看 Text 和 QrText。");
-  },
+  templateList() { showTemplateList(); },
   new() {
     code.value = "* 新程式\n";
     document.getElementById("progName").value = "untitled.viz";
@@ -2908,6 +2865,69 @@ window.VisDevCommands = {
   help() { document.getElementById("helpDialog").hidden = false; },
   about() { document.getElementById("aboutDialog").hidden = false; },
   openOperator(name) { openOperatorForm(name); },
+};
+
+function openListedTemplate(cmd) {
+  const item = ((window.VisdevTemplates && VisdevTemplates.templates) || []).find((entry) => entry.cmd === cmd);
+  if (!item) return;
+  return VisDevCommands.openNamedTemplate(item.file, item.expect);
+}
+
+(window.VisdevTemplates.templates || []).forEach((item) => {
+  VisDevCommands[item.cmd] = () => openListedTemplate(item.cmd);
+});
+
+function fillTemplateMenu() {
+  const fly = document.getElementById("templateFly");
+  if (!fly || !window.VisdevTemplates) return;
+  fly.replaceChildren();
+  VisdevTemplates.templates.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.cmd = item.cmd;
+    button.textContent = item.title;
+    fly.appendChild(button);
+  });
+}
+
+function renderTemplateList() {
+  const body = document.getElementById("templateList");
+  if (!body || !window.VisdevTemplates) return;
+  body.replaceChildren();
+  VisdevTemplates.templates.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "template-row";
+    button.dataset.cmd = item.cmd;
+    const name = document.createElement("span");
+    name.className = "template-name";
+    name.textContent = item.title;
+    const expect = document.createElement("span");
+    expect.className = "template-expect";
+    expect.textContent = item.expect;
+    button.appendChild(name);
+    button.appendChild(expect);
+    body.appendChild(button);
+  });
+}
+
+function showTemplateList() {
+  renderTemplateList();
+  document.getElementById("templateDialog").hidden = false;
+}
+
+fillTemplateMenu();
+document.getElementById("templateClose").onclick = () => {
+  document.getElementById("templateDialog").hidden = true;
+};
+document.getElementById("templateDialog").addEventListener("mousedown", (event) => {
+  if (event.target.id === "templateDialog") document.getElementById("templateDialog").hidden = true;
+});
+document.getElementById("templateList").onclick = (event) => {
+  const button = event.target.closest("button[data-cmd]");
+  if (!button || !VisDevCommands[button.dataset.cmd]) return;
+  document.getElementById("templateDialog").hidden = true;
+  VisDevCommands[button.dataset.cmd]();
 };
 
 window.addEventListener("visdev-layout", syncViewMenu);
