@@ -2338,6 +2338,9 @@ window.VisDevCommands = {
   locateTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");
   },
+  stereoTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_stereo.viz", "這是相對姿態範本。第 k 組是同一次擺放。執行後看 Pose1。");
+  },
   new() {
     code.value = "* 新程式\n";
     document.getElementById("progName").value = "untitled.viz";

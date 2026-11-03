@@ -3617,6 +3617,18 @@ def test_inspect_parts_template_counts_eight_parts():
     assert session.display.base is not None
 
 
+def test_inspect_stereo_template_shows_the_baseline():
+    session = run_source((ROOT / "samples" / "inspect_stereo.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    pose0 = [float(item) for item in session.vars["Pose0"]]
+    pose1 = [float(item) for item in session.vars["Pose1"]]
+    assert pose0 == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    assert abs(float(session.vars["BaselineX"]) - 0.04) < 0.008
+    assert abs(pose1[1] + 0.01) < 0.008
+    assert abs(pose1[2] - 0.005) < 0.008
+    assert "相機1相對" in session.vars["CalibDataID"].summary()
+
+
 def test_second_camera_pose_is_the_baseline():
     import cv2
     import numpy as np
