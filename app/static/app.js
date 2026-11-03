@@ -276,8 +276,10 @@ function renderTolerances() {
   const fields = VisdevTol.readLimits(code.value);
   const expects = VisdevTol.readExpects(code.value);
   const outputs = VisdevTol.visibleOutputs(VisdevTol.readOutputs(code.value));
-  const signature = JSON.stringify({ fields, expects, outputs });
-  if (!fields.length && !expects.length && !outputs.length) {
+  const points = VisdevTol.readPointLists(code.value);
+  const canTeach = points.some((item) => item.name === "WantRow") && points.some((item) => item.name === "WantCol");
+  const signature = JSON.stringify({ fields, expects, outputs, canTeach });
+  if (!fields.length && !expects.length && !outputs.length && !canTeach) {
     bar.hidden = true;
     bar.innerHTML = "";
     bar.dataset.sig = "";
@@ -315,15 +317,45 @@ function renderTolerances() {
     <label>${field.label}
       <input data-kind="${field.kind}" data-line="${field.line}" data-name="${field.name}" value="${esc(field.value)}" aria-label="${field.label}" title="${field.label}">
     </label>`).join("");
-  bar.innerHTML = `<span>${note}</span>${kindSelect}${numbers}${words}${outs}<button type="button" id="tolReset">預設</button>`;
+  const teach = canTeach ? `<button type="button" id="tolTeach" title="把這次量到的圓心寫進 WantRow、WantCol">設為預期</button>` : "";
+  bar.innerHTML = `<span>${note}</span>${kindSelect}${numbers}${words}${outs}${teach}<button type="button" id="tolReset">預設</button>`;
 }
 
 function toleranceSignature() {
+  const points = VisdevTol.readPointLists(code.value);
   return JSON.stringify({
     fields: VisdevTol.readLimits(code.value),
     expects: VisdevTol.readExpects(code.value),
     outputs: VisdevTol.visibleOutputs(VisdevTol.readOutputs(code.value)),
+    canTeach: points.some((item) => item.name === "WantRow") && points.some((item) => item.name === "WantCol"),
   });
+}
+
+function teachCenters() {
+  if (document.getElementById("btnRun").disabled) {
+    stLine.textContent = "執行中，先等這一輪結束";
+    return;
+  }
+  const control = server.control || [];
+  const row = control.find((item) => item.name === "Row");
+  const col = control.find((item) => item.name === "Column");
+  const next = VisdevTol.applyPointLists(
+    code.value,
+    row && (row.full || row.text),
+    col && (col.full || col.text),
+  );
+  if (next == null) {
+    stLine.textContent = "先執行，才有圓心可以寫回";
+    return;
+  }
+  if (next !== code.value) {
+    code.value = next;
+    commitProgram("checkpoint");
+    renderEditor();
+    const bar = document.getElementById("tolBar");
+    if (bar) bar.dataset.sig = toleranceSignature();
+  }
+  stLine.textContent = "已把圓心寫進預期位置";
 }
 
 function commitTolerance(input) {
@@ -378,6 +410,10 @@ document.getElementById("tolBar").addEventListener("keydown", (event) => {
   }
 });
 document.getElementById("tolBar").addEventListener("click", async (event) => {
+  if (event.target.id === "tolTeach") {
+    teachCenters();
+    return;
+  }
   if (event.target.id !== "tolReset") return;
   const fileName = document.getElementById("progName").value;
   VisdevTol.clearStored(localStorage, fileName);

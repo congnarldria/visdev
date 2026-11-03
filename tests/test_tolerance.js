@@ -73,4 +73,15 @@ assert(tol.visibleOutputs(allOut, "modbus").map((item) => item.name).join(",") =
 assert(tol.applyOutput(modes, 0, "OutKind", "serial").startsWith("OutKind := 'serial'"), "the output kind can be switched");
 assert(tol.applyOutput(modes, 0, "OutKind", "file") === modes, "an unknown output kind is refused");
 
+const holes = "WantRow := [55, 50, 120, 120]\nWantCol := [50, 170, 50, 170]\n";
+const points = tol.readPointLists(holes);
+assert(points.map((item) => item.name).join(",") === "WantRow,WantCol", "hole positions are the two arrays");
+const taught = tol.applyPointLists(holes, "[50, 50, 120, 120]", "[50, 170, 50, 170]");
+assert(taught.includes("WantRow := [50, 50, 120, 120]"), "measured rows replace the expected rows");
+assert(taught.includes("WantCol := [50, 170, 50, 170]"), "measured columns stay with the rows");
+assert(tol.applyPointLists(holes, "[50, 50]", "[50, 170, 50, 170]") === null, "a short row list is not written");
+assert(tol.applyPointLists(holes, "[50, …]  (4)", "[50, 170, 50, 170]") === null, "a truncated list is not written");
+assert(tol.applyPointLists("Count := 4\n", "[50]", "[50]") === null, "a program without expected centers is unchanged");
+assert(tol.applyPointLists("  WantRow := [1]\n  WantCol := [2]\n", "[50.004]", "[170]") === "  WantRow := [50]\n  WantCol := [170]\n", "near integers are written as integers and the indent stays");
+
 console.log("tolerance ok");

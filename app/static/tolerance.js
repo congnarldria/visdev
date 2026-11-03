@@ -131,6 +131,50 @@
     return lines.join("\n");
   }
 
+  function readPointLists(source) {
+    const lines = String(source || "").split("\n");
+    const found = [];
+    lines.forEach((line, index) => {
+      const match = line.match(/^(\s*)(WantRow|WantCol)\s*:=\s*\[[^\]]*\]\s*$/);
+      if (!match) return;
+      found.push({ name: match[2], line: index });
+    });
+    return found;
+  }
+
+  function parsePoints(text) {
+    const raw = String(text || "");
+    const match = raw.match(/\[([^\]]*)\]/);
+    if (!match || match[1].includes("…")) return null;
+    const parts = match[1].split(",").map((item) => item.trim()).filter((item) => item);
+    if (!parts.length || parts.length > 64) return null;
+    const numbers = [];
+    for (let i = 0; i < parts.length; i += 1) {
+      if (!/^-?\d+(?:\.\d+)?$/.test(parts[i])) return null;
+      const number = Number(parts[i]);
+      if (!Number.isFinite(number)) return null;
+      const rounded = Math.round(number * 100) / 100;
+      numbers.push(String(Object.is(rounded, -0) ? 0 : rounded));
+    }
+    return numbers;
+  }
+
+  function applyPointLists(source, rowText, colText) {
+    const rows = parsePoints(rowText);
+    const cols = parsePoints(colText);
+    if (!rows || !cols || rows.length !== cols.length) return null;
+    const lists = readPointLists(source);
+    const rowLine = lists.find((item) => item.name === "WantRow");
+    const colLine = lists.find((item) => item.name === "WantCol");
+    if (!rowLine || !colLine) return null;
+    const lines = String(source || "").split("\n");
+    [ [rowLine, "WantRow", rows], [colLine, "WantCol", cols] ].forEach((slot) => {
+      const indent = (lines[slot[0].line].match(/^\s*/) || [""])[0];
+      lines[slot[0].line] = indent + slot[1] + " := [" + slot[2].join(", ") + "]";
+    });
+    return lines.join("\n");
+  }
+
   const STORE_KEY = "visdev.tolerances";
 
   function fileKey(name) {
@@ -211,6 +255,8 @@
     applyOutput: applyOutput,
     applyLimit: applyLimit,
     applyExpect: applyExpect,
+    readPointLists: readPointLists,
+    applyPointLists: applyPointLists,
     remember: remember,
     restore: restore,
     clearStored: clearStored,

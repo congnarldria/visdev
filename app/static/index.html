@@ -317,7 +317,7 @@ endfor</pre>
         <li>產線相機：本機相機編號 0。Windows 先問 DirectShow，打不開再試 OpenCV。沒有相機時，請改跑上面的產線，用 <code>samples/line_batch</code>。規則和產線相同，明細每一列是這張的 OK 或 NG。執行中狀態列會寫出合格和不合格。按停止就停，已經計的張數留著，不合格圖是最近一張的檔名。出錯也會關掉相機和 CSV。明細在 <code>workspace/line_camera.csv</code>。</li>
         <li>產線輸出：同一套 5 張。每一張多送一行 <code>VISDEV,OK 或 NG,合格張數,不合格張數,檔名</code>。圖形視窗先選 TCP、序列埠或 Modbus，再填該出現的欄位。預設是 TCP loopback，<code>Wire</code> 讀回 5 行，合格 3、不合格 2。序列埠預設名稱是 loopback，不開真的 COM。Windows 開 COM 的方式沒有改。</li>
         <li>缺件：<code>samples/parts.png</code> 應有 8 個。少於或多於 8 個就不合格。圖形視窗可改個數上下限，再按執行。</li>
-        <li>孔數：<code>samples/holes.png</code> 有 4 個暗孔，每個面積 613。圓心應在列 50 或 120、行 50 或 170。預設要剛好 4 個，圓心偏差不超過 2，直徑 26 到 30。少了、偏了或直徑不對就不合格，十字改成紅色。圖形視窗可改個數、偏移和直徑。</li>
+        <li>孔數：<code>samples/holes.png</code> 有 4 個暗孔，每個面積 613。圓心應在列 50 或 120、行 50 或 170。預設要剛好 4 個，圓心偏差不超過 2，直徑 26 到 30。少了、偏了或直徑不對就不合格，十字改成紅色。圖形視窗可改個數、偏移和直徑。按「設為預期」把這次量到的圓心寫進程式，再按執行，偏差就是 0。按「預設」回到檔案裡的位置。</li>
         <li>形狀定位：場景裡找到 4 個。狀態列寫個數和最低分。</li>
         <li>相對姿態：<code>Pose1</code> 的第一個數約 0.04 公尺。狀態列寫基線。</li>
         <li>條碼：<code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。</li>
@@ -394,9 +394,9 @@ endfor</pre>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
   <script src="/static/run_source.js?v=13"></script>
-  <script src="/static/tolerance.js?v=7"></script>
+  <script src="/static/tolerance.js?v=8"></script>
   <script src="/static/var_list.js?v=1"></script>
   <script src="/static/highlight_sync.js?v=3"></script>
-  <script src="/static/app.js?v=106"></script>
+  <script src="/static/app.js?v=107"></script>
 </body>
 </html>
