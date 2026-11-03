@@ -234,6 +234,25 @@ public static class NativeCore
         }
     }
 
+    public static bool TryBgrGray(byte[] bgr, int count, byte[] gray)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || bgr.Length < count * 3 || gray.Length < count)
+            return false;
+        try
+        {
+            return vizion_bgr_gray(bgr, count, gray) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TryPyrDown(byte[] source, int width, int height, byte[] destination)
     {
         int destWidth = (width + 1) / 2;
@@ -377,6 +396,9 @@ public static class NativeCore
             return false;
         }
     }
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_bgr_gray(byte[] bgr, int count, byte[] gray);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);

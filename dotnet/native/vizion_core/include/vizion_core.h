@@ -134,6 +134,11 @@ VIZION_EXPORT int VIZION_CALL vizion_pyrdown(const uint8_t* src, int width, int 
 
 VIZION_EXPORT int VIZION_CALL vizion_pyrdown_selftest(void);
 
+/* BGR 轉灰階。count 是像素數，來源是 count*3。和 OpenCV 的整數式相同。 */
+VIZION_EXPORT int VIZION_CALL vizion_bgr_gray(const uint8_t* bgr, int count, uint8_t* gray);
+
+VIZION_EXPORT int VIZION_CALL vizion_bgr_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

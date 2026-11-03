@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--gray")
+{
+    GrayNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--pyr")
 {
     PyrNativeCheck();
@@ -907,6 +913,92 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void GrayNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    byte[] locked =
+    {
+        10, 20, 30,
+        255, 128, 0,
+        1, 2, 3,
+        0, 0, 255,
+        68, 0, 153
+    };
+    int[] expect = { 22, 104, 2, 76, 53 };
+    var native = new byte[5];
+    if (!NativeCore.TryBgrGray(locked, 5, native))
+        throw new InvalidOperationException("轉灰階沒有走到 C 核心");
+    for (int i = 0; i < 5; i++)
+    {
+        int managed = GrayConvert.Bgr(locked[i * 3], locked[i * 3 + 1], locked[i * 3 + 2]);
+        if (native[i] != expect[i] || native[i] != managed)
+            throw new InvalidOperationException($"灰階 {i} 應是 {expect[i]}，得到 {native[i]}");
+    }
+    var pattern = new byte[17 * 3];
+    for (int i = 0; i < pattern.Length; i++)
+        pattern[i] = (byte)((i * 17 + 9) & 255);
+    ExpectGray(pattern, 17);
+    var wide = new byte[1920 * 1080 * 3];
+    for (int i = 0; i < wide.Length; i++)
+        wide[i] = (byte)((i * 13) & 255);
+    var nativeWide = new byte[1920 * 1080];
+    var managedWide = new byte[1920 * 1080];
+    if (!NativeCore.TryBgrGray(wide, nativeWide.Length, nativeWide))
+        throw new InvalidOperationException("轉灰階沒有走到 C 核心");
+    GrayFill(wide, managedWide);
+    for (int i = 0; i < nativeWide.Length; i++)
+    {
+        if (nativeWide[i] != managedWide[i])
+            throw new InvalidOperationException($"大圖灰階 {i} 原生 {nativeWide[i]}，C# {managedWide[i]}");
+    }
+    var color = ImageBuffer.Bgr(5, 1, locked);
+    bool previous = NativeCore.UseNative;
+    var fromImage = color.GrayBytes();
+    NativeCore.UseNative = false;
+    var managedImage = color.GrayBytes();
+    NativeCore.UseNative = previous;
+    for (int i = 0; i < fromImage.Length; i++)
+    {
+        if (fromImage[i] != managedImage[i])
+            throw new InvalidOperationException($"GrayBytes {i} 原生 {fromImage[i]}，C# {managedImage[i]}");
+    }
+    NativeCore.TryBgrGray(wide, nativeWide.Length, nativeWide);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 8; i++)
+        NativeCore.TryBgrGray(wide, nativeWide.Length, nativeWide);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    GrayFill(wide, managedWide);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        GrayFill(wide, managedWide);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    Console.WriteLine("灰階原生檢查通過");
+    Console.WriteLine($"1920×1080 彩色轉灰階共 8 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void ExpectGray(byte[] bgr, int count)
+{
+    var native = new byte[count];
+    var managed = new byte[count];
+    if (!NativeCore.TryBgrGray(bgr, count, native))
+        throw new InvalidOperationException("轉灰階沒有走到 C 核心");
+    GrayFill(bgr, managed);
+    for (int i = 0; i < count; i++)
+    {
+        if (native[i] != managed[i])
+            throw new InvalidOperationException($"灰階像素 {i} 原生 {native[i]}，C# {managed[i]}");
+    }
+}
+
+static void GrayFill(byte[] bgr, byte[] gray)
+{
+    for (int i = 0, pixel = 0; i < gray.Length; i++, pixel += 3)
+        gray[i] = (byte)GrayConvert.Bgr(bgr[pixel], bgr[pixel + 1], bgr[pixel + 2]);
 }
 
 static void PyrNativeCheck()

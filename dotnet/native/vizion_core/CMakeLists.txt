@@ -44,7 +44,10 @@ add_library(vizion_core SHARED
     src/sobel_avx2.c
     src/pyrdown.c
     src/pyrdown_sse2.c
-    src/pyrdown_avx2.c)
+    src/pyrdown_avx2.c
+    src/bgr.c
+    src/bgr_sse2.c
+    src/bgr_avx2.c)
 target_include_directories(vizion_core PUBLIC include PRIVATE src)
 target_compile_definitions(vizion_core PRIVATE VIZION_BUILD)
 
@@ -54,11 +57,11 @@ target_link_libraries(vizion_core PUBLIC Threads::Threads m)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(vizion_core PRIVATE -fvisibility=hidden -Wall -Wextra -Wno-unused-parameter)
     set_source_files_properties(src/threshold_scalar.c src/region_runs.c src/gray_morph.c src/region_morph.c src/filter.c src/score.c src/measure.c PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize")
-    set_source_files_properties(src/edge.c src/sobel.c src/pyrdown.c PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize;-ffp-contract=off")
+    set_source_files_properties(src/edge.c src/sobel.c src/pyrdown.c src/bgr.c PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize;-ffp-contract=off")
     set_source_files_properties(src/threshold_sse2.c src/gray_rect_sse2.c src/filter_mean_sse2.c src/score_sse2.c src/measure_sample_sse2.c PROPERTIES COMPILE_OPTIONS "-msse2")
-    set_source_files_properties(src/edge_sep_sse2.c src/remap_sse2.c src/sobel_sse2.c src/pyrdown_sse2.c PROPERTIES COMPILE_OPTIONS "-msse2;-ffp-contract=off")
+    set_source_files_properties(src/edge_sep_sse2.c src/remap_sse2.c src/sobel_sse2.c src/pyrdown_sse2.c src/bgr_sse2.c PROPERTIES COMPILE_OPTIONS "-msse2;-ffp-contract=off")
     set_source_files_properties(src/threshold_avx2.c src/gray_rect_avx2.c src/filter_mean_avx2.c src/score_avx2.c src/measure_sample_avx2.c PROPERTIES COMPILE_OPTIONS "-mavx2")
-    set_source_files_properties(src/edge_sep_avx2.c src/remap_avx2.c src/sobel_avx2.c src/pyrdown_avx2.c PROPERTIES COMPILE_OPTIONS "-mavx2;-ffp-contract=off")
+    set_source_files_properties(src/edge_sep_avx2.c src/remap_avx2.c src/sobel_avx2.c src/pyrdown_avx2.c src/bgr_avx2.c PROPERTIES COMPILE_OPTIONS "-mavx2;-ffp-contract=off")
 endif()
 
 add_executable(vizion_core_check src/check_threshold.c)
