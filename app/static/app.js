@@ -53,6 +53,7 @@ let sessionId = null;
 let runningSource = null;
 let savedText = "";
 let saveTarget = { kind: "sample", name: "blob_inspect.hdv" };
+let currentProject = null;
 
 function refreshDirty() {
   const dirty = code.value !== savedText;
@@ -474,12 +475,13 @@ function setStatus() {
     stState.textContent = "就緒";
   }
   const proc = server.procedure ? `程序 ${server.procedure} · ` : "";
-  if (server.error) stLine.textContent = `${proc}${server.error}`;
-  else if (server.arrowNote) stLine.textContent = server.arrowNote;
-  else if (server.line && server.paused === "breakpoint") stLine.textContent = `${proc}中斷於第 ${server.line} 行`;
-  else if (server.line && server.done) stLine.textContent = `${proc}結束於第 ${server.line} 行`;
-  else if (server.line) stLine.textContent = `${proc}下一行 ${server.line}`;
-  else stLine.textContent = server.done ? "程式結束" : "";
+  const project = currentProject ? `專案 ${currentProject} · ` : "";
+  if (server.error) stLine.textContent = `${project}${proc}${server.error}`;
+  else if (server.arrowNote) stLine.textContent = `${project}${server.arrowNote}`;
+  else if (server.line && server.paused === "breakpoint") stLine.textContent = `${project}${proc}中斷於第 ${server.line} 行`;
+  else if (server.line && server.done) stLine.textContent = `${project}${proc}結束於第 ${server.line} 行`;
+  else if (server.line) stLine.textContent = `${project}${proc}下一行 ${server.line}`;
+  else stLine.textContent = currentProject ? `專案 ${currentProject}` : (server.done ? "程式結束" : "");
 }
 
 let imageStamp = null;
@@ -662,6 +664,7 @@ async function exec(action, line) {
         trace: document.getElementById("trace").checked,
         regionColor: regionColorValue(),
         line: line ?? null,
+        project: currentProject,
       }),
     });
     const data = await res.json();
@@ -1968,7 +1971,9 @@ async function browseOperatorFile(button) {
     if (picked && !picked.cancelled && picked.path) fillOperatorPath(index, picked.path);
     return;
   }
-  const res = await fetch(`/api/data-files?kind=${encodeURIComponent(kind)}`);
+  const query = new URLSearchParams({ kind });
+  if (currentProject) query.set("project", currentProject);
+  const res = await fetch(`/api/data-files?${query.toString()}`);
   const files = await res.json();
   if (!res.ok) {
     showDetail(files);
@@ -2003,6 +2008,133 @@ async function saveToWorkspace(name, copy) {
   return true;
 }
 
+function openProjectDialog() {
+  document.getElementById("projectDialog").hidden = false;
+  refreshProjectDialog();
+  document.getElementById("projectName").focus();
+}
+
+async function refreshProjectDialog() {
+  const list = document.getElementById("projectList");
+  const programs = document.getElementById("projectPrograms");
+  if (!list || !programs) return;
+  const res = await fetch("/api/projects");
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  list.innerHTML = (data || []).map((item) => `<button type="button" data-project="${esc(item.name)}" class="${item.name === currentProject ? "on" : ""}">${esc(item.name)}</button>`).join("")
+    || `<div class="hint">還沒有專案。</div>`;
+  if (!currentProject) {
+    programs.innerHTML = `<div class="hint">選一個專案，或先建立。</div>`;
+    return;
+  }
+  const detail = await fetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+  const body = await detail.json();
+  if (!detail.ok) {
+    showDetail(body);
+    return;
+  }
+  programs.innerHTML = `<div class="hint">專案 ${esc(body.name)}</div>` + ((body.programs || []).map((item) => `<button type="button" data-program="${esc(item.name)}">${esc(item.name)}</button>`).join("")
+    || `<div class="hint">這個專案還沒有程式。</div>`);
+}
+
+async function createProjectFromDialog() {
+  const name = document.getElementById("projectName").value.trim();
+  const res = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  currentProject = data.name;
+  document.getElementById("projectName").value = "";
+  await refreshProjectDialog();
+  stLine.textContent = `專案 ${data.name}`;
+}
+
+async function saveCurrentIntoProject() {
+  if (!currentProject) {
+    stLine.textContent = "先建立或選一個專案";
+    return;
+  }
+  await saveToProject(currentProject, programFileName(document.getElementById("progName").value));
+}
+
+async function openProjectProgram(project, name) {
+  if (code.value !== savedText && !window.confirm("這支程式還沒存。仍要打開另一支？")) return;
+  const res = await fetch(`/api/projects/${encodeURIComponent(project)}/programs/${encodeURIComponent(name)}`);
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  currentProject = data.project;
+  code.value = String(data.source || "").replace(/\r\n/g, "\n");
+  document.getElementById("progName").value = data.name;
+  saveTarget = { kind: "project", project: data.project, name: data.name };
+  sessionId = null;
+  breakpoints = new Set();
+  resetProgramHistory();
+  markSaved();
+  renderEditor();
+  await exec("reset");
+  stLine.textContent = `專案 ${data.project} · ${data.name}`;
+  document.getElementById("projectDialog").hidden = true;
+}
+
+async function addProjectProgram() {
+  if (!currentProject) {
+    stLine.textContent = "先建立或選一個專案";
+    return;
+  }
+  if (code.value !== savedText && !window.confirm("這支程式還沒存。仍要新增另一支？")) return;
+  const detail = await fetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+  const body = await detail.json();
+  if (!detail.ok) {
+    showDetail(body);
+    return;
+  }
+  const used = new Set((body.programs || []).map((item) => item.name));
+  let filename = "program.viz";
+  let number = 2;
+  while (used.has(filename)) {
+    filename = `program${number}.viz`;
+    number += 1;
+  }
+  code.value = "* 新程式\n";
+  document.getElementById("progName").value = filename;
+  renderEditor();
+  await saveToProject(currentProject, filename);
+}
+
+async function saveToProject(project, name) {
+  const res = await fetch(`/api/projects/${encodeURIComponent(project)}/programs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, source: code.value }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return false;
+  }
+  document.getElementById("progName").value = data.name;
+  saveTarget = { kind: "project", project: data.project, name: data.name };
+  currentProject = data.project;
+  markSaved();
+  stState.textContent = `已存進專案 ${data.project}`;
+  stState.className = "ok";
+  stLine.textContent = `專案 ${data.project} · ${data.name}`;
+  refreshProjectDialog();
+  return true;
+}
+
 async function rememberFileSave(data) {
   document.getElementById("progName").value = data.name;
   saveTarget = { kind: "file", name: data.name, path: data.path };
@@ -2020,6 +2152,10 @@ async function saveCurrent(saveAs) {
     } catch (err) {
       showDetail({ error: "存檔失敗：" + err.message });
     }
+    return;
+  }
+  if (plan.mode === "project") {
+    await saveToProject(plan.project, programFileName(plan.name));
     return;
   }
   if (plan.mode === "ask") {
@@ -2226,6 +2362,7 @@ window.VisDevCommands = {
   },
   layout() { if (window.VisDevDock) VisDevDock.reset(); },
   floatGfx() { openGfxWindow(); },
+  project() { openProjectDialog(); },
   help() { document.getElementById("helpDialog").hidden = false; },
   about() { document.getElementById("aboutDialog").hidden = false; },
   openOperator(name) { openOperatorForm(name); },
@@ -2235,6 +2372,21 @@ window.addEventListener("visdev-layout", syncViewMenu);
 syncViewMenu();
 document.getElementById("aboutOk").onclick = () => { document.getElementById("aboutDialog").hidden = true; };
 document.getElementById("helpOk").onclick = () => { document.getElementById("helpDialog").hidden = true; };
+document.getElementById("projectClose").onclick = () => { document.getElementById("projectDialog").hidden = true; };
+document.getElementById("projectCreate").onclick = () => createProjectFromDialog();
+document.getElementById("projectSave").onclick = () => saveCurrentIntoProject();
+document.getElementById("projectNewProgram").onclick = () => addProjectProgram();
+document.getElementById("projectList").onclick = (event) => {
+  const button = event.target.closest("[data-project]");
+  if (!button) return;
+  currentProject = button.dataset.project;
+  refreshProjectDialog();
+};
+document.getElementById("projectPrograms").onclick = (event) => {
+  const button = event.target.closest("[data-program]");
+  if (!button || !currentProject) return;
+  openProjectProgram(currentProject, button.dataset.program);
+};
 document.getElementById("opDialogCancel").onclick = () => closeOperatorDialog();
 document.getElementById("opDialogOk").onclick = () => insertOperatorCall();
 document.getElementById("opDialog").addEventListener("keydown", (event) => {

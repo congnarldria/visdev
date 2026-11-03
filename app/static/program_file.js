@@ -3,6 +3,9 @@
     const name = (target && target.name) || "program.viz";
     if (saveAs) return { mode: "ask", name: name };
     if (target && target.kind === "file" && target.path) return { mode: "file", path: target.path, name: name };
+    if (target && target.kind === "project" && target.project && target.name) {
+      return { mode: "project", project: target.project, name: target.name };
+    }
     if (target && target.kind === "workspace" && target.name) return { mode: "workspace", name: target.name };
     return {
       mode: "workspace",

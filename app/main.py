@@ -62,6 +62,7 @@ class ExecIn(BaseModel):
     trace: bool = False
     regionColor: str | None = None
     line: int | None = None
+    project: str | None = None
 
 
 class BreakpointsIn(BaseModel):
@@ -71,6 +72,10 @@ class BreakpointsIn(BaseModel):
 class SaveIn(BaseModel):
     name: str
     source: str
+
+
+class ProjectIn(BaseModel):
+    name: str
 
 
 class ExportCsIn(BaseModel):
@@ -136,6 +141,13 @@ def session_for(body: ExecIn) -> Session:
         trim_sessions()
     current.breakpoints = {int(line) for line in body.breakpoints}
     current.trace = bool(body.trace)
+    if body.project:
+        try:
+            current.project_name = clean_project_name(body.project)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    else:
+        current.project_name = None
     return current
 
 
@@ -254,11 +266,20 @@ _DATA_SUFFIX = {
 
 
 @app.get("/api/data-files")
-def data_files(kind: str = "image"):
+def data_files(kind: str = "image", project: str | None = None):
     suffixes = _DATA_SUFFIX.get(kind)
     if suffixes is None:
         raise HTTPException(400, "不認識的檔案種類")
     found = []
+    if project:
+        try:
+            folder = project_dir(project)
+        except ValueError:
+            folder = None
+        if folder is not None and folder.is_dir():
+            for path in sorted(folder.iterdir()):
+                if path.is_file() and not path.name.startswith(".") and path.suffix.lower() in suffixes:
+                    found.append({"name": path.name, "path": path.name})
     for folder, prefix in ((ROOT / "samples", "samples"), (ROOT / "workspace", "workspace")):
         if not folder.is_dir():
             continue
@@ -324,6 +345,114 @@ def save_program(body: SaveIn):
     path = ROOT / "workspace" / name
     path.write_text(body.source.replace("\r\n", "\n").replace("\r", "\n"), encoding="utf-8")
     return {"name": name, "path": f"workspace/{name}"}
+
+
+def clean_project_name(name: str) -> str:
+    text = str(name or "").strip()
+    if not text or text in (".", "..") or any(ch in text for ch in '\\/:*?"<>|'):
+        raise ValueError("專案名稱不正確")
+    return text
+
+
+def clean_program_name(name: str) -> str:
+    text = Path(str(name or "")).name.strip() or "program.viz"
+    if text in (".", "..") or any(ch in text for ch in '\\/:*?"<>|'):
+        raise ValueError("程式名稱不正確")
+    if not text.lower().endswith((".hdv", ".viz")):
+        text += ".viz"
+    return text
+
+
+def projects_dir() -> Path:
+    folder = ROOT / "workspace" / "projects"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def project_dir(name: str) -> Path:
+    return projects_dir() / clean_project_name(name)
+
+
+def list_project_records() -> list[dict]:
+    folder = projects_dir()
+    names = []
+    for path in folder.iterdir():
+        if path.is_dir() and (path / "visdev.json").is_file():
+            names.append(path.name)
+    return [{"name": name} for name in sorted(names)]
+
+
+def create_project_record(name: str) -> dict:
+    folder = project_dir(name)
+    if folder.exists():
+        raise ValueError("已經有這個專案")
+    folder.mkdir(parents=True)
+    (folder / "visdev.json").write_text("{}\n", encoding="utf-8")
+    return {"name": folder.name, "programs": []}
+
+
+def project_programs(name: str) -> dict:
+    folder = project_dir(name)
+    if not folder.is_dir() or not (folder / "visdev.json").is_file():
+        raise ValueError("找不到專案")
+    files = sorted(path.name for path in folder.iterdir() if path.is_file() and path.suffix.lower() in (".viz", ".hdv"))
+    return {"name": folder.name, "programs": [{"name": item} for item in files]}
+
+
+def write_project_program(project: str, name: str, source: str) -> dict:
+    folder = project_dir(project)
+    if not folder.is_dir():
+        raise ValueError("找不到專案")
+    filename = clean_program_name(name)
+    path = folder / filename
+    path.write_text(str(source).replace("\r\n", "\n").replace("\r", "\n"), encoding="utf-8")
+    return {"project": folder.name, "name": filename, "path": f"workspace/projects/{folder.name}/{filename}"}
+
+
+def read_project_program(project: str, name: str) -> dict:
+    folder = project_dir(project)
+    filename = clean_program_name(name)
+    path = folder / filename
+    if not path.is_file():
+        raise ValueError("找不到程式")
+    return {"project": folder.name, "name": filename, "source": path.read_text(encoding="utf-8")}
+
+
+@app.get("/api/projects")
+def api_list_projects():
+    return list_project_records()
+
+
+@app.post("/api/projects")
+def api_create_project(body: ProjectIn):
+    try:
+        return create_project_record(body.name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/projects/{name}")
+def api_project_programs(name: str):
+    try:
+        return project_programs(name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/projects/{name}/programs")
+def api_write_project_program(name: str, body: SaveIn):
+    try:
+        return write_project_program(name, body.name, body.source)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/projects/{name}/programs/{filename}")
+def api_read_project_program(name: str, filename: str):
+    try:
+        return read_project_program(name, filename)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.post("/api/import/hdevelop")

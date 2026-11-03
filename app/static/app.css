@@ -536,6 +536,10 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
 .dialog.guide { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; }
 .dialog.guide h3 { margin: 14px 0 6px; font-size: 13px; color: #9aa6bb; }
 .dialog.guide code { color: #d7e2f2; }
+.project-create { display: flex; gap: 8px; margin: 8px 0 12px; }
+.project-create input { flex: 1; }
+.project-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.project-list button.on { border-color: #7aa2ff; }
 .dialog.about h2 { color: var(--text); }
 .dialog h2 { margin: 0 0 8px; color: #ffb0a6; font-size: 15px; }
 .dialog p { margin: 0 0 10px; white-space: pre-wrap; }

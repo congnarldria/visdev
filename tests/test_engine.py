@@ -3465,6 +3465,54 @@ def test_inspect_locate_template_finds_four():
     assert session.display.base is not None
 
 
+def test_project_holds_two_programs_and_its_image():
+    import shutil
+
+    import cv2
+    import numpy as np
+
+    from app.main import (
+        create_project_record,
+        list_project_records,
+        project_programs,
+        read_project_program,
+        write_project_program,
+    )
+
+    name = "beta_case_hold"
+    folder = ROOT / "workspace" / "projects" / name
+    shutil.rmtree(folder, ignore_errors=True)
+    try:
+        created = create_project_record(name)
+        assert created["name"] == name
+        assert any(item["name"] == name for item in list_project_records())
+        write_project_program(name, "first", "Count := 1\n")
+        write_project_program(name, "second.hdv", "Count := 2\n")
+        listed = [item["name"] for item in project_programs(name)["programs"]]
+        assert listed == ["first.viz", "second.hdv"]
+        assert "Count := 2" in read_project_program(name, "second.hdv")["source"]
+        try:
+            create_project_record("../outside")
+        except ValueError as exc:
+            assert "不正確" in str(exc)
+        else:
+            raise AssertionError("專案名稱應該拒絕路徑")
+        cv2.imwrite(str(folder / "mark.png"), np.full((8, 6), 180, np.uint8))
+        local = Session("Vizion.read_image (Image, 'mark.png')\n", ROOT)
+        local.project_name = name
+        local.run()
+        assert local.error is None, local.error
+        assert local.vars["Image"].height == 8
+        assert local.vars["Image"].width == 6
+        shared = Session("Vizion.read_image (Image, 'samples/parts.png')\n", ROOT)
+        shared.project_name = name
+        shared.run()
+        assert shared.error is None, shared.error
+        assert shared.vars["Image"].width > 8
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def test_inspect_parts_template_counts_eight_parts():
     session = run_source((ROOT / "samples" / "inspect_parts.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error

@@ -13,6 +13,7 @@
       <button type="button">檔案</button>
       <div class="menu-drop" hidden>
         <button type="button" data-cmd="new">新增<span class="menu-kbd">Ctrl+N</span></button>
+        <button type="button" data-cmd="project">專案</button>
         <div class="menu-sub">
           <button type="button" data-submenu="1">範本<span class="menu-arrow">▸</span></button>
           <div class="menu-fly" hidden>
@@ -263,6 +264,23 @@ endfor</pre>
     </section>
   </main>
 
+  <div id="projectDialog" class="modal" hidden>
+    <div class="dialog guide" role="dialog" aria-labelledby="projectTitle">
+      <h2 id="projectTitle">專案</h2>
+      <p>一個專案放多支程式。圖可以放在專案資料夾，程式裡寫檔名就讀得到；<code>samples/</code> 和 <code>workspace/</code> 也還找得到。</p>
+      <div class="project-create">
+        <input id="projectName" placeholder="專案名稱" spellcheck="false">
+        <button id="projectCreate" type="button">新專案</button>
+      </div>
+      <div id="projectList" class="project-list"></div>
+      <div id="projectPrograms" class="project-list"></div>
+      <div class="actions">
+        <button id="projectSave" type="button">把這支程式存進專案</button>
+        <button id="projectNewProgram" type="button">在專案裡新增程式</button>
+        <button id="projectClose" type="button">關閉</button>
+      </div>
+    </div>
+  </div>
   <div id="helpDialog" class="modal" hidden>
     <div class="dialog guide" role="dialog" aria-labelledby="helpTitle">
       <h2 id="helpTitle">使用說明</h2>
@@ -274,7 +292,7 @@ endfor</pre>
       <h3>標定</h3>
       <p>棋盤寫 <code>'5,7,10'</code>，也可以用 <code>.cpd</code> 或 <code>.descr</code>。多台相機時，每一台的第 k 組要是同時看到的同一塊板。<code>camera/pose</code> 是相對第 0 台的姿態，第 0 台是 0。標完的圖可以點某一張看原圖，再點一下回到全部。</p>
       <h3>存檔與 Windows</h3>
-      <p>存檔在 <code>workspace/</code>。Windows 上用 <code>run.bat</code> 開啟，用 <code>build_windows.bat</code> 打包。打包需要 Python 3.9 或更新版本、<code>visdev_match.pyd</code> 和 PyInstaller。形狀匹配在 Windows 用這個 <code>.pyd</code>。</p>
+      <p>存檔在 <code>workspace/</code>。檔案、專案可以把多支程式放在同一個案子裡，圖放在專案資料夾就寫檔名。Windows 上用 <code>run.bat</code> 開啟，用 <code>build_windows.bat</code> 打包。打包需要 Python 3.9 或更新版本、<code>visdev_match.pyd</code> 和 PyInstaller。形狀匹配在 Windows 用這個 <code>.pyd</code>。</p>
       <div class="actions"><button id="helpOk" type="button">確定</button></div>
     </div>
   </div>
@@ -327,6 +345,6 @@ endfor</pre>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
   <script src="/static/run_source.js?v=1"></script>
-  <script src="/static/app.js?v=76"></script>
+  <script src="/static/app.js?v=78"></script>
 </body>
 </html>

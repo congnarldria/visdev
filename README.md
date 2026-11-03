@@ -34,7 +34,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8765
 檔案選單：
 
 - **範本**裡有三支可以打開就跑的程式。零件檢測讀 `samples/parts.png`，這張圖是 8 個零件，門檻和面積下限可以改。邊緣量測讀 `samples/gauge.png`，算出邊緣和一條直線的距離。形狀定位用 `samples/shape_template.png` 在 `samples/shapes_scene.png` 裡找，這張場景是 4 個。
-- **新增、開啟、儲存**。存檔在 `workspace/`。
+- **新增、開啟、儲存**。存檔在 `workspace/`。**專案**可以把多支程式放在同一個資料夾，圖放在裡面時程式寫檔名就讀得到，`samples/` 也還找得到。
 - **載入影像**把圖放進 `workspace/`，路徑可寫進 `read_image`。
 - **匯出 C#** 涵蓋讀圖、定義域、二值化、連通、篩選、矩形和圓形形態學、個數和重心。
 

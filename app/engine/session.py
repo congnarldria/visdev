@@ -453,7 +453,21 @@ class Session:
 
     def resolve_read_path(self, filename: str) -> Path:
         path = Path(filename).expanduser()
-        candidates = [path] if path.is_absolute() else [self.root / path, self.root / "samples" / path, self.root / "workspace" / path]
+        candidates = []
+        if path.is_absolute():
+            candidates.append(path)
+        else:
+            project = getattr(self, "project_name", None)
+            if project:
+                folder = (self.root / "workspace" / "projects" / project).resolve()
+                candidate = (folder / path).resolve()
+                try:
+                    candidate.relative_to(folder)
+                except ValueError:
+                    candidate = None
+                if candidate is not None:
+                    candidates.append(candidate)
+            candidates.extend([self.root / path, self.root / "samples" / path, self.root / "workspace" / path])
         for candidate in candidates:
             if candidate.is_file():
                 return candidate

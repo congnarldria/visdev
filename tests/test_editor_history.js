@@ -51,5 +51,6 @@ assert(files.savePlan({ kind: "workspace", name: "note.viz" }, false).mode === "
 assert(files.savePlan({ kind: "file", name: "note.viz", path: "D:/work/note.viz" }, false).path === "D:/work/note.viz", "a desktop file saves to its path");
 assert(files.savePlan({ kind: "sample", name: "blob.hdv" }, false).copy === true, "a sample is saved as a copy");
 assert(files.savePlan({ kind: "workspace", name: "note.viz" }, true).mode === "ask", "save as asks for a path");
+assert(files.savePlan({ kind: "project", project: "demo", name: "note.viz" }, false).mode === "project", "a project file saves in that project");
 
 console.log("editor history ok");
