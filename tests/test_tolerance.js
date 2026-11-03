@@ -65,5 +65,12 @@ assert(tol.applyOutput(output, outs[1].line, "OutPort", "70000") === output, "a 
 const outStore = memoryStore();
 tol.remember(outStore, "inspect_line_out.viz", "OutHost := 'plc.local'\nOutPort := 502\n");
 assert(tol.restore(outStore, "samples/inspect_line_out.viz", output).includes("OutPort := 502"), "reopening the line template fills the saved port");
+const modes = "OutKind := 'tcp'\nOutHost := 'loopback'\nOutPort := 0\nOutCom := 'loopback'\nOutAddr := 16\n";
+const allOut = tol.readOutputs(modes);
+assert(tol.visibleOutputs(allOut, "tcp").map((item) => item.name).join(",") === "OutHost,OutPort", "tcp shows host and port");
+assert(tol.visibleOutputs(allOut, "serial").map((item) => item.name).join(",") === "OutCom", "serial shows only the port name");
+assert(tol.visibleOutputs(allOut, "modbus").map((item) => item.name).join(",") === "OutHost,OutPort,OutAddr", "modbus shows host, port, and address");
+assert(tol.applyOutput(modes, 0, "OutKind", "serial").startsWith("OutKind := 'serial'"), "the output kind can be switched");
+assert(tol.applyOutput(modes, 0, "OutKind", "file") === modes, "an unknown output kind is refused");
 
 console.log("tolerance ok");

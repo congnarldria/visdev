@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VisDev 視覺開發環境</title>
   <link rel="icon" href="/static/magpie.ico">
-  <link rel="stylesheet" href="/static/app.css?v=39">
+  <link rel="stylesheet" href="/static/app.css?v=40">
 </head>
 <body>
   <nav class="menubar" aria-label="主選單">
@@ -28,6 +28,7 @@
             <button type="button" data-cmd="lineCameraTemplate">產線相機</button>
             <button type="button" data-cmd="lineOutTemplate">產線輸出</button>
             <button type="button" data-cmd="missingTemplate">缺件</button>
+            <button type="button" data-cmd="holesTemplate">孔數</button>
             <button type="button" data-cmd="locateTemplate">形狀定位</button>
             <button type="button" data-cmd="stereoTemplate">相對姿態</button>
             <button type="button" data-cmd="codeTemplate">條碼</button>
@@ -314,8 +315,9 @@ endfor</pre>
         <li>條紋寬度：<code>samples/stripes.png</code>。最寬的亮條是 22，預設公差 20 到 24。圖形視窗可以改上下限，再按執行。超出時十字是紅色。</li>
         <li>產線：<code>samples/line_batch</code> 有 5 張，白塊面積 200 以上算合格。合格 3、不合格 2。不合格的圖在 <code>workspace/line_ng</code>，明細在 <code>workspace/line_result.csv</code>。這支用檔案資料夾，不開相機。再跑一次會先清掉上一輪的不合格圖。狀態列的不合格圖是最近一張，<code>ng_02.png</code>。按「看不合格圖」把它開回圖形視窗，再按一次回到程式畫面。按「看明細」可看 CSV。明細裡可以只看不合格，點不合格那一列會打開那張圖。不必開資料夾。</li>
         <li>產線相機：本機相機編號 0。Windows 先問 DirectShow，打不開再試 OpenCV。沒有相機時，請改跑上面的產線，用 <code>samples/line_batch</code>。規則和產線相同，明細每一列是這張的 OK 或 NG。執行中狀態列會寫出合格和不合格。按停止就停，已經計的張數留著，不合格圖是最近一張的檔名。出錯也會關掉相機和 CSV。明細在 <code>workspace/line_camera.csv</code>。</li>
-        <li>產線輸出：同一套 5 張。每一張多送一行 <code>VISDEV,OK 或 NG,合格張數,不合格張數,檔名</code>。這支用 TCP loopback，變數 <code>Wire</code> 是讀回來的 5 行。合格仍是 3、不合格仍是 2。圖形視窗可改主機和埠，再按執行。要改序列埠，把 <code>open_socket_connect</code> 換成 <code>open_serial</code> 的 COM 名稱。Windows 開 COM 的方式沒有改。</li>
+        <li>產線輸出：同一套 5 張。每一張多送一行 <code>VISDEV,OK 或 NG,合格張數,不合格張數,檔名</code>。圖形視窗先選 TCP、序列埠或 Modbus，再填該出現的欄位。預設是 TCP loopback，<code>Wire</code> 讀回 5 行，合格 3、不合格 2。序列埠預設名稱是 loopback，不開真的 COM。Windows 開 COM 的方式沒有改。</li>
         <li>缺件：<code>samples/parts.png</code> 應有 8 個。少於或多於 8 個就不合格。圖形視窗可改個數上下限，再按執行。</li>
+        <li>孔數：<code>samples/holes.png</code> 有 4 個暗孔，每個面積 613。預設要剛好 4 個。少了就不合格。圖形視窗可改個數上下限。</li>
         <li>形狀定位：場景裡找到 4 個。狀態列寫個數和最低分。</li>
         <li>相對姿態：<code>Pose1</code> 的第一個數約 0.04 公尺。狀態列寫基線。</li>
         <li>條碼：<code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。</li>
@@ -392,9 +394,9 @@ endfor</pre>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
   <script src="/static/run_source.js?v=11"></script>
-  <script src="/static/tolerance.js?v=5"></script>
+  <script src="/static/tolerance.js?v=6"></script>
   <script src="/static/var_list.js?v=1"></script>
   <script src="/static/highlight_sync.js?v=3"></script>
-  <script src="/static/app.js?v=104"></script>
+  <script src="/static/app.js?v=105"></script>
 </body>
 </html>

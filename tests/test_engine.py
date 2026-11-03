@@ -3695,6 +3695,66 @@ def test_line_result_goes_out_on_tcp_and_serial():
             "VISDEV,OK,3,2,ok_03.png\n"
         )
         assert session.vars["Link"].closed is True
+        serial = run_source(
+            (ROOT / "samples" / "inspect_line_out.viz").read_text(encoding="utf-8").replace(
+                "OutKind := 'tcp'", "OutKind := 'serial'", 1
+            )
+        )
+        assert serial.error is None, serial.error
+        assert serial.vars["Wire"] == session.vars["Wire"]
+        assert int(serial.vars["OkCount"]) == 3
+        assert serial.vars["Link"].closed is True
+        import socket
+        import struct
+        import threading
+
+        ready = threading.Event()
+        holder = {}
+        regs = {}
+
+        def serve():
+            server = socket.socket()
+            server.bind(("127.0.0.1", 0))
+            server.listen(1)
+            server.settimeout(3)
+            holder["port"] = server.getsockname()[1]
+            ready.set()
+            for _ in range(12):
+                try:
+                    conn, _addr = server.accept()
+                except socket.timeout:
+                    break
+                data = b""
+                while len(data) < 12:
+                    chunk = conn.recv(12 - len(data))
+                    if not chunk:
+                        break
+                    data += chunk
+                function = data[7]
+                address, number = struct.unpack(">HH", data[8:12])
+                if function == 6:
+                    regs[address] = number
+                    conn.sendall(data)
+                elif function == 3:
+                    stored = regs.get(address, 0)
+                    trans = struct.unpack(">H", data[:2])[0]
+                    conn.sendall(struct.pack(">HHHBBBH", trans, 0, 5, 1, 3, 2, stored))
+                conn.close()
+            server.close()
+
+        threading.Thread(target=serve, daemon=True).start()
+        assert ready.wait(2)
+        modbus = run_source(
+            (ROOT / "samples" / "inspect_line_out.viz").read_text(encoding="utf-8")
+            .replace("OutKind := 'tcp'", "OutKind := 'modbus'", 1)
+            .replace("OutHost := 'loopback'", "OutHost := '127.0.0.1'", 1)
+            .replace("OutPort := 0", f"OutPort := {holder['port']}", 1)
+        )
+        assert modbus.error is None, modbus.error
+        assert int(modbus.vars["OkCount"]) == 3
+        assert int(modbus.vars["NgCount"]) == 2
+        assert int(modbus.vars["Register"]) == 1
+        assert regs[16] == 1
         lines = report.read_text(encoding="utf-8").splitlines()
         assert "1,ng_01.png,NG,0" in lines
         assert "3,ok_01.png,OK,1" in lines
@@ -4274,6 +4334,19 @@ def test_inspect_missing_template_accepts_eight_parts():
     failed = run_source(short)
     assert failed.error is None, failed.error
     assert int(failed.vars["Count"]) == 8
+    assert failed.vars["Judge"] == "不合格"
+
+
+def test_inspect_holes_template_counts_four():
+    session = run_source((ROOT / "samples" / "inspect_holes.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 4
+    assert [int(item) for item in session.vars["Area"]] == [613, 613, 613, 613]
+    assert session.vars["Judge"] == "合格"
+    short = (ROOT / "samples" / "inspect_holes.viz").read_text(encoding="utf-8").replace("CountMax := 4", "CountMax := 3")
+    failed = run_source(short)
+    assert failed.error is None, failed.error
+    assert int(failed.vars["Count"]) == 4
     assert failed.vars["Judge"] == "不合格"
 
 

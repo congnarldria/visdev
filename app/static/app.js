@@ -275,7 +275,7 @@ function renderTolerances() {
   if (!bar || typeof VisdevTol === "undefined") return;
   const fields = VisdevTol.readLimits(code.value);
   const expects = VisdevTol.readExpects(code.value);
-  const outputs = VisdevTol.readOutputs(code.value);
+  const outputs = VisdevTol.visibleOutputs(VisdevTol.readOutputs(code.value));
   const signature = JSON.stringify({ fields, expects, outputs });
   if (!fields.length && !expects.length && !outputs.length) {
     bar.hidden = true;
@@ -288,7 +288,7 @@ function renderTolerances() {
   if (applyingTolerance && bar.contains(document.activeElement)) return;
   bar.dataset.sig = signature;
   const note = outputs.length && !fields.length && !expects.length
-    ? "輸出會記在這台電腦，改完按執行"
+    ? "輸出方式會記在這台電腦，改完按執行"
     : expects.length && !fields.length
       ? "預期字會記在這台電腦，改完按執行"
       : "公差會記在這台電腦，改完按執行";
@@ -302,23 +302,32 @@ function renderTolerances() {
     <label>${field.label}
       <input data-kind="text" data-line="${field.line}" data-name="${field.name}" value="${esc(field.value)}" aria-label="${field.label}" title="${field.label}">
     </label>`).join("");
+  const kindField = VisdevTol.readOutputs(code.value).find((item) => item.name === "OutKind");
+  const kindSelect = kindField ? `
+    <label>方式
+      <select data-kind="choice" data-line="${kindField.line}" data-name="OutKind" aria-label="輸出方式" title="輸出方式">
+        <option value="tcp"${kindField.value === "tcp" ? " selected" : ""}>TCP</option>
+        <option value="serial"${kindField.value === "serial" ? " selected" : ""}>序列埠</option>
+        <option value="modbus"${kindField.value === "modbus" ? " selected" : ""}>Modbus</option>
+      </select>
+    </label>` : "";
   const outs = outputs.map((field) => `
     <label>${field.label}
       <input data-kind="${field.kind}" data-line="${field.line}" data-name="${field.name}" value="${esc(field.value)}" aria-label="${field.label}" title="${field.label}">
     </label>`).join("");
-  bar.innerHTML = `<span>${note}</span>${numbers}${words}${outs}<button type="button" id="tolReset">預設</button>`;
+  bar.innerHTML = `<span>${note}</span>${kindSelect}${numbers}${words}${outs}<button type="button" id="tolReset">預設</button>`;
 }
 
 function toleranceSignature() {
   return JSON.stringify({
     fields: VisdevTol.readLimits(code.value),
     expects: VisdevTol.readExpects(code.value),
-    outputs: VisdevTol.readOutputs(code.value),
+    outputs: VisdevTol.visibleOutputs(VisdevTol.readOutputs(code.value)),
   });
 }
 
 function commitTolerance(input) {
-  if (input.dataset.kind === "text" || input.dataset.name === "OutPort") {
+  if (input.dataset.kind === "text" || input.dataset.kind === "choice" || input.dataset.name === "OutPort" || input.dataset.name === "OutAddr") {
     const next = input.dataset.name === "Expect"
       ? VisdevTol.applyExpect(code.value, input.dataset.line, input.dataset.name, input.value)
       : VisdevTol.applyOutput(code.value, input.dataset.line, input.dataset.name, input.value);
@@ -360,7 +369,7 @@ function commitTolerance(input) {
 }
 
 document.getElementById("tolBar").addEventListener("change", (event) => {
-  if (event.target.matches("input")) commitTolerance(event.target);
+  if (event.target.matches("input, select")) commitTolerance(event.target);
 });
 document.getElementById("tolBar").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && event.target.matches("input")) {
@@ -2613,6 +2622,9 @@ window.VisDevCommands = {
   },
   missingTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_missing.viz", "這是缺件範本。應有 8 個零件。少了就不合格。");
+  },
+  holesTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_holes.viz", "這是孔數範本。應有 4 個暗孔。少了就不合格。");
   },
   locateTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");

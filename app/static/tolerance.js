@@ -48,16 +48,42 @@
     return found;
   }
 
+  const OUTPUT_FIELDS = {
+    OutKind: { label: "方式", kind: "choice" },
+    OutHost: { label: "主機", kind: "text" },
+    OutPort: { label: "埠", kind: "number" },
+    OutCom: { label: "序列埠", kind: "text" },
+    OutAddr: { label: "位址", kind: "number" },
+  };
+
   function readOutputs(source) {
     const lines = String(source || "").split("\n");
     const found = [];
     lines.forEach((line, index) => {
-      const host = line.match(/^(\s*)OutHost\s*:=\s*'([^']*)'\s*$/);
-      if (host) found.push({ name: "OutHost", label: "主機", kind: "text", value: host[2], line: index });
-      const port = line.match(/^(\s*)OutPort\s*:=\s*(\d+)\s*$/);
-      if (port) found.push({ name: "OutPort", label: "埠", kind: "number", value: port[2], line: index });
+      const text = line.match(/^(\s*)(OutKind|OutHost|OutCom)\s*:=\s*'([^']*)'\s*$/);
+      if (text && OUTPUT_FIELDS[text[2]]) {
+        const spec = OUTPUT_FIELDS[text[2]];
+        found.push({ name: text[2], label: spec.label, kind: spec.kind, value: text[3], line: index });
+      }
+      const number = line.match(/^(\s*)(OutPort|OutAddr)\s*:=\s*(\d+)\s*$/);
+      if (number && OUTPUT_FIELDS[number[2]]) {
+        const spec = OUTPUT_FIELDS[number[2]];
+        found.push({ name: number[2], label: spec.label, kind: spec.kind, value: number[3], line: index });
+      }
     });
     return found;
+  }
+
+  function visibleOutputs(outputs, kind) {
+    const items = outputs || [];
+    const mode = kind || (items.find((item) => item.name === "OutKind") || {}).value || "";
+    if (!mode) return items.filter((item) => item.name !== "OutKind");
+    const show = {
+      tcp: ["OutHost", "OutPort"],
+      serial: ["OutCom"],
+      modbus: ["OutHost", "OutPort", "OutAddr"],
+    }[mode] || [];
+    return items.filter((item) => show.indexOf(item.name) >= 0);
   }
 
   function applyOutput(source, lineIndex, name, value) {
@@ -66,14 +92,19 @@
     const shown = String(value == null ? "" : value).trim();
     if (!Number.isInteger(index) || index < 0 || index >= lines.length) return String(source || "");
     const indent = (lines[index].match(/^\s*/) || [""])[0];
-    if (name === "OutHost") {
-      if (/['\r\n\\]/.test(shown) || !shown) return String(source || "");
-      lines[index] = indent + "OutHost := '" + shown + "'";
+    if (name === "OutKind") {
+      if (shown !== "tcp" && shown !== "serial" && shown !== "modbus") return String(source || "");
+      lines[index] = indent + "OutKind := '" + shown + "'";
       return lines.join("\n");
     }
-    if (name === "OutPort") {
+    if (name === "OutHost" || name === "OutCom") {
+      if (/['\r\n\\]/.test(shown) || !shown) return String(source || "");
+      lines[index] = indent + name + " := '" + shown + "'";
+      return lines.join("\n");
+    }
+    if (name === "OutPort" || name === "OutAddr") {
       if (!/^\d+$/.test(shown) || Number(shown) > 65535) return String(source || "");
-      lines[index] = indent + "OutPort := " + String(Number(shown));
+      lines[index] = indent + name + " := " + String(Number(shown));
       return lines.join("\n");
     }
     return String(source || "");
@@ -176,6 +207,7 @@
     readLimits: readLimits,
     readExpects: readExpects,
     readOutputs: readOutputs,
+    visibleOutputs: visibleOutputs,
     applyOutput: applyOutput,
     applyLimit: applyLimit,
     applyExpect: applyExpect,

@@ -1,0 +1,24 @@
+* 孔數範本。打開就能跑。samples/holes.png 有 4 個暗孔。
+* CountMin、CountMax 預設都是 4。圖形視窗可以改，再按執行。
+* 少孔或多孔時 Judge 是不合格。
+* 不開相機，也不改 Windows 開 COM 的方式。
+CountMin := 4
+CountMax := 4
+Vizion.read_image (Image, 'samples/holes.png')
+Vizion.threshold (Image, Region, 0, 60)
+Vizion.connection (Region, Parts, 1)
+Vizion.select_shape (Parts, Kept, 'area', 'and', 200, 2000)
+Vizion.count_obj (Kept, Count)
+if (Count >= 1)
+    Vizion.area_center (Kept, Area, Row, Column)
+    Spot := Area[1] + Row[1] + Column[1]
+else
+    Spot := 0
+endif
+if (Count >= CountMin and Count <= CountMax and Spot > 0)
+    Judge := '合格'
+else
+    Judge := '不合格'
+endif
+Vizion.dev_display (Image)
+Vizion.dev_display (Kept)

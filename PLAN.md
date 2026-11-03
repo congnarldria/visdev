@@ -1,18 +1,16 @@
 # 改進計畫
 
-從 VisDev 1.1 beta 接著做。這還不是正式版。公差的數字上下限先停在這裡，編輯器的局部更新也先停在這裡。產線的不合格圖瀏覽也先停在這裡。Modbus 先停在讀寫連續暫存器，不再加功能碼。Windows 仍用 `app/engine/visdev_match.pyd`。開相機仍先問 DirectShow，打不開再試 OpenCV。開 COM 仍用原來的 API。Linux 的 `visdev_match.so` 不進版控。
+從 VisDev 1.1 beta 接著做。這還不是正式版。公差的數字上下限先停在這裡，編輯器的局部更新也先停在這裡。產線的不合格圖瀏覽也先停在這裡。Modbus 先停在連續暫存器，不再加功能碼。Windows 仍用 `app/engine/visdev_match.pyd`。開相機仍先問 DirectShow，打不開再試 OpenCV。開 COM 仍用原來的 API。Linux 的 `visdev_match.so` 不進版控。
 
 ## 已完成
 
-Modbus TCP 一次可讀或寫最多 16 個連續暫存器。一次寫一個，以及合格寫 1、不合格寫 2，都還在。不開序列埠。
+產線輸出在圖形視窗先選 TCP、序列埠或 Modbus，再填該出現的欄位。預設是 TCP loopback，合格 3、不合格 2。序列埠用 loopback 時不開真的 COM。Modbus 把每一張的判定寫成 1 或 2 再讀回。
 
-產線輸出的主機和埠在圖形視窗改，再按執行。預設仍是 loopback，合格 3、不合格 2。
-
-缺件範本讀 `samples/parts.png`，應有 8 個。少了就不合格。圖形視窗可改個數上下限。色彩的面積 1200、色調 60 沒有改。
+孔數範本讀 `samples/holes.png`，4 個暗孔，每個面積 613。少了就不合格。缺件仍是 8 個。色彩的面積 1200、色調 60 沒有改。
 
 ## 接著做
 
-1. **圖形視窗選擇送到哪裡。** 現在產線輸出只能改主機和埠。再加一個選擇：TCP、序列埠或 Modbus。選了才出現要填的欄位。不改 Windows 開 COM 和開相機的順序。
+1. **孔的位置。** 現在只數有幾個孔。再標出每個孔的圓心，偏離預設位置就不合格。不改個數 4，也不改 Windows 開相機和開 COM 的順序。
 
 ## 以後
 
