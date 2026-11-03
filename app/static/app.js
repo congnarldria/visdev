@@ -2407,6 +2407,9 @@ window.VisDevCommands = {
   stripeTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_stripe.viz", "這是條紋寬度範本。執行後看 Width。");
   },
+  lineTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_line.viz", "這是產線範本。執行後看合格、不合格，NG 圖和 CSV 在 workspace。");
+  },
   locateTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");
   },

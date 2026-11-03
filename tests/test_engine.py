@@ -3532,6 +3532,31 @@ def test_stripe_outside_tolerance_turns_the_marks_red():
     assert "#ff2a2a" in colors
 
 
+def test_inspect_line_template_counts_saves_ng_and_writes_csv():
+    import shutil
+
+    folder = ROOT / "workspace" / "line_ng"
+    report = ROOT / "workspace" / "line_result.csv"
+    shutil.rmtree(folder, ignore_errors=True)
+    report.unlink(missing_ok=True)
+    try:
+        session = run_source((ROOT / "samples" / "inspect_line.viz").read_text(encoding="utf-8"))
+        assert session.error is None, session.error
+        assert int(session.vars["Total"]) == 5
+        assert int(session.vars["OkCount"]) == 3
+        assert int(session.vars["NgCount"]) == 2
+        assert session.vars["Judge"] == "不合格"
+        lines = report.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "index,file,judge,count"
+        assert "1,ng_01.png,NG,0" in lines
+        assert "3,ok_01.png,OK,1" in lines
+        assert sorted(path.name for path in folder.glob("*.png")) == ["ng_01.png", "ng_02.png"]
+        assert session.display.base is not None
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+        report.unlink(missing_ok=True)
+
+
 def test_inspect_locate_template_finds_four():
     session = run_source((ROOT / "samples" / "inspect_locate.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error

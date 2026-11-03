@@ -16,6 +16,9 @@
 
   const RESULT_FIELDS = [
     ["Judge", "判定"],
+    ["OkCount", "合格"],
+    ["NgCount", "不合格"],
+    ["Total", "總數"],
     ["Diameter", "直徑"],
     ["Width", "寬"],
     ["Height", "高"],
@@ -59,8 +62,11 @@
 
   function resultSummary(control) {
     const byName = new Map((control || []).map((item) => [item.name, item]));
+    const skip = new Set();
+    if (byName.has("OkCount") || byName.has("NgCount")) skip.add("Count");
     const parts = [];
     RESULT_FIELDS.forEach((field) => {
+      if (skip.has(field[0])) return;
       const item = byName.get(field[0]);
       if (!item) return;
       const shown = compactValue(item.text, field[0]);

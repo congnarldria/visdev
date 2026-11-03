@@ -356,3 +356,28 @@ def set_framegrabber_param(handle, param, value, *, ctx):
     else:
         raise ValueError("Param 只能是 image_dir、color_space 或 start_index")
     return Result([], [])
+
+
+@operator(
+    "相機",
+    [],
+    [],
+    [
+        P("AcqHandle", "採集"),
+        P("Param", "image_count 或 image_name", "'image_count'", ["'image_count'", "'image_name'"]),
+    ],
+    [P("Value", "張數或檔名")],
+    "讀取採集狀態",
+    "image_count 是 File 資料夾裡的影像張數，本機相機是 0。image_name 是剛剛抓到的檔名，相機沒有檔名。Windows 上開相機的順序沒有改。",
+    "Vizion.get_framegrabber_param (AcqHandle, 'image_count', Value)",
+)
+def get_framegrabber_param(handle, param, *, ctx):
+    handle = _alive(handle, "AcqHandle")
+    name = text(param, "Param").strip().strip("'\"").lower()
+    if name == "image_count":
+        return Result([], [len(handle.paths) if handle.kind == "file" else 0])
+    if name == "image_name":
+        if handle.kind != "file" or handle.cursor <= 0:
+            return Result([], [""])
+        return Result([], [handle.paths[handle.cursor - 1].name])
+    raise ValueError("Param 只能是 image_count 或 image_name")

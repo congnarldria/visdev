@@ -52,5 +52,13 @@ const locate = run.resultSummary([
 ]);
 assert(locate === "個數 4 · 最低分 0.91", "shape scores report the lowest one");
 assert(run.resultSummary([]) === "", "a program without those names adds nothing");
+const line = run.resultSummary([
+  { name: "Judge", text: "'不合格'" },
+  { name: "OkCount", text: "3" },
+  { name: "NgCount", text: "2" },
+  { name: "Total", text: "5" },
+  { name: "Count", text: "1" },
+]);
+assert(line === "判定 不合格 · 合格 3 · 不合格 2 · 總數 5", "a line run reports pass and fail counts");
 
 console.log("run source ok");
