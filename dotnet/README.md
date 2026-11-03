@@ -9,10 +9,13 @@
 3. 方案總管裡，對 `Vizion.Operators.Check` 按右鍵，設為起始專案。
 4. 上方目標選 `net8.0`，按 F5。主控台印出「算子自我檢查通過」就表示讀圖、二值化、連通、重心、找線、找圓都過了。
 
+要看一條完整的檢查，把起始專案改成 `Vizion.Inspect.Sample`，同樣按 F5。它會在輸出目錄寫 `model.png` 和 `part.png`，再讀回來：去掉亮點、形狀對上轉了 90 度的零件、轉正、量寬度 70 像素（平面上 140）、孔的圓度 0.95，最後印出「判定  合格」。
+
 命令列也可以：
 
 ```
 dotnet run --project dotnet/Vizion.Operators.Check/Vizion.Operators.Check.csproj -f net8.0
+dotnet run --project dotnet/Vizion.Inspect.Sample/Vizion.Inspect.Sample.csproj -f net8.0
 ```
 
 `Vizion.Operators` 同時標 `net8.0` 和 `net48`。這台 Linux 環境只保證 `net8.0` 能跑檢查程式。Windows 上若裝了目標套件，`net48` 也能建置。
@@ -97,7 +100,7 @@ var width = Operators.MeasureWidth(image, row: 16);
 var camera = PlanarCalib.Estimate(objectX, objectY, views);
 ```
 
-`GrayOpenRectangle` 和 `GrayCloseRectangle` 是灰階矩形開運算、閉運算。3×3 遮罩會去掉單獨的 200，留下 3×3 的 180；周圍都是 180 時，中間的 0 會補成 180。`GrayOpenCircle` 的半徑 1 是十字。3×3 方塊開完剩下十字，單獨的亮點消失。
+`GrayOpenRectangle` 和 `GrayCloseRectangle` 是灰階矩形開運算、閉運算。3×3 遮罩會去掉單獨的 200，留下 3×3 的 180；周圍都是 180 時，中間的 0 會補成 180。`GrayOpenCircle` 的半徑 1 是十字。3×3 方塊開完剩下十字，單獨的亮點消失。`GrayCloseCircle` 用同一個十字把單獨的暗點補成周圍的灰階。9×9 圖中間和角落的 0 會變成 180。
 
 `Undistort` 用 k1 把圖校成直線模型。行 36 的理想位置會到原圖的 34.72 取樣。`ImageToPlane` 把像素投到 Z=0 的平面。沒有畸變時 (列 20, 行 30) 是平面 x 50；k1 為 -0.5 時約 51.730。`RotateNearest` 正角度在畫面上順時針。橫條轉 90 度後，寬度仍是 8 像素，在焦距 40、距離 200 時是 40 個世界單位。`MeasurePlaneWidth` 先去掉 k1，再把左右邊緣投到平面上，同一條亮條約 40。
 

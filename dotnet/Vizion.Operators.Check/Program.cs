@@ -191,6 +191,14 @@ static void SelfTest()
         throw new InvalidOperationException("半徑 1 的圓形開運算應留下十字中心 180");
     if (circleOpened.Pixels[4 * 9 + 4] != 0 || circleOpened.Pixels[7 * 9 + 7] != 0 || circleOpened.Pixels[2 * 9 + 2] != 0)
         throw new InvalidOperationException("半徑 1 應去掉方塊四角和單獨的亮點");
+    var darkDot = new byte[9 * 9];
+    for (int i = 0; i < darkDot.Length; i++)
+        darkDot[i] = 180;
+    darkDot[4 * 9 + 4] = 0;
+    darkDot[0] = 0;
+    var circleClosed = Operators.GrayCloseCircle(ImageBuffer.Gray(9, 9, darkDot), 1);
+    if (circleClosed.Pixels[4 * 9 + 4] != 180 || circleClosed.Pixels[0] != 180 || circleClosed.Pixels[1 * 9 + 1] != 180)
+        throw new InvalidOperationException($"圓形閉運算應補上暗點，得到中心 {circleClosed.Pixels[4 * 9 + 4]}、角落 {circleClosed.Pixels[0]}");
 
     var distortedDot = new byte[41 * 41];
     distortedDot[20 * 41 + 35] = 255;
