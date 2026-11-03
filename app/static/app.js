@@ -275,8 +275,9 @@ function renderTolerances() {
   if (!bar || typeof VisdevTol === "undefined") return;
   const fields = VisdevTol.readLimits(code.value);
   const expects = VisdevTol.readExpects(code.value);
-  const signature = JSON.stringify({ fields, expects });
-  if (!fields.length && !expects.length) {
+  const outputs = VisdevTol.readOutputs(code.value);
+  const signature = JSON.stringify({ fields, expects, outputs });
+  if (!fields.length && !expects.length && !outputs.length) {
     bar.hidden = true;
     bar.innerHTML = "";
     bar.dataset.sig = "";
@@ -286,9 +287,11 @@ function renderTolerances() {
   if (bar.dataset.sig === signature) return;
   if (applyingTolerance && bar.contains(document.activeElement)) return;
   bar.dataset.sig = signature;
-  const note = expects.length && !fields.length
-    ? "預期字會記在這台電腦，改完按執行"
-    : "公差會記在這台電腦，改完按執行";
+  const note = outputs.length && !fields.length && !expects.length
+    ? "輸出會記在這台電腦，改完按執行"
+    : expects.length && !fields.length
+      ? "預期字會記在這台電腦，改完按執行"
+      : "公差會記在這台電腦，改完按執行";
   const numbers = fields.map((field) => `
     <label>${field.label}
       <input data-kind="number" data-line="${field.minLine}" data-name="${field.minName}" value="${field.min}" inputmode="decimal" aria-label="${field.label}下限" title="${field.label}下限">
@@ -299,19 +302,26 @@ function renderTolerances() {
     <label>${field.label}
       <input data-kind="text" data-line="${field.line}" data-name="${field.name}" value="${esc(field.value)}" aria-label="${field.label}" title="${field.label}">
     </label>`).join("");
-  bar.innerHTML = `<span>${note}</span>${numbers}${words}<button type="button" id="tolReset">預設</button>`;
+  const outs = outputs.map((field) => `
+    <label>${field.label}
+      <input data-kind="${field.kind}" data-line="${field.line}" data-name="${field.name}" value="${esc(field.value)}" aria-label="${field.label}" title="${field.label}">
+    </label>`).join("");
+  bar.innerHTML = `<span>${note}</span>${numbers}${words}${outs}<button type="button" id="tolReset">預設</button>`;
 }
 
 function toleranceSignature() {
   return JSON.stringify({
     fields: VisdevTol.readLimits(code.value),
     expects: VisdevTol.readExpects(code.value),
+    outputs: VisdevTol.readOutputs(code.value),
   });
 }
 
 function commitTolerance(input) {
-  if (input.dataset.kind === "text") {
-    const next = VisdevTol.applyExpect(code.value, input.dataset.line, input.dataset.name, input.value);
+  if (input.dataset.kind === "text" || input.dataset.name === "OutPort") {
+    const next = input.dataset.name === "Expect"
+      ? VisdevTol.applyExpect(code.value, input.dataset.line, input.dataset.name, input.value)
+      : VisdevTol.applyOutput(code.value, input.dataset.line, input.dataset.name, input.value);
     if (next === code.value) {
       applyingTolerance = false;
       const bar = document.getElementById("tolBar");
@@ -364,9 +374,14 @@ document.getElementById("tolBar").addEventListener("click", async (event) => {
   VisdevTol.clearStored(localStorage, fileName);
   if (saveTarget && saveTarget.name) {
     await openProgram(saveTarget.kind, saveTarget.name);
-    stLine.textContent = VisdevTol.readExpects(code.value).length && !VisdevTol.readLimits(code.value).length
-      ? "已恢復預設預期字"
-      : "已恢復預設上下限";
+    const expects = VisdevTol.readExpects(code.value);
+    const outputs = VisdevTol.readOutputs(code.value);
+    const limits = VisdevTol.readLimits(code.value);
+    stLine.textContent = outputs.length && !limits.length && !expects.length
+      ? "已恢復預設輸出"
+      : expects.length && !limits.length
+        ? "已恢復預設預期字"
+        : "已恢復預設上下限";
   }
 });
 
@@ -2594,7 +2609,10 @@ window.VisDevCommands = {
     return VisDevCommands.openNamedTemplate("inspect_line_camera.viz", "這是相機產線。編號 0。沒有相機時改跑檔案產線。執行中會看到合格和不合格。按停止就停。");
   },
   lineOutTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_line_out.viz", "這是產線輸出。每一張送一行 VISDEV。這支用 loopback，Wire 是讀回來的字。合格仍是 3、不合格仍是 2。");
+    return VisDevCommands.openNamedTemplate("inspect_line_out.viz", "這是產線輸出。圖形視窗可改主機和埠。這支用 loopback，合格仍是 3、不合格仍是 2。");
+  },
+  missingTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_missing.viz", "這是缺件範本。應有 8 個零件。少了就不合格。");
   },
   locateTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");

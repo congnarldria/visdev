@@ -65,6 +65,34 @@ def write_holding_register(host: str, port: int, address: int, value: int) -> No
         raise RuntimeError(f"Modbus {host}:{port} 回應的位址或數值不對")
 
 
+def _span(address: int, count: int) -> None:
+    if count < 1 or count > 16:
+        raise ValueError("一次要讀寫 1 到 16 個暫存器")
+    if address + count - 1 > 65535:
+        raise ValueError("位址超出範圍")
+
+
+def read_holding_registers(host: str, port: int, address: int, count: int) -> list[int]:
+    _span(address, count)
+    reply = _exchange(host, port, struct.pack(">BHH", 3, address, count))
+    if len(reply) < 9 or reply[7] in (0x83, 0x86):
+        raise RuntimeError(f"Modbus {host}:{port} 拒絕讀取位址 {address}")
+    if reply[7] != 3 or reply[8] != count * 2 or len(reply) < 9 + count * 2:
+        raise RuntimeError(f"Modbus {host}:{port} 回應的位址或數值不對")
+    return list(struct.unpack(">" + "H" * count, reply[9:9 + count * 2]))
+
+
+def write_holding_registers(host: str, port: int, address: int, values: list[int]) -> None:
+    count = len(values)
+    _span(address, count)
+    pdu = struct.pack(">BHHB" + "H" * count, 16, address, count, count * 2, *values)
+    reply = _exchange(host, port, pdu)
+    if len(reply) < 12 or reply[7] in (0x90, 0x86, 0x83):
+        raise RuntimeError(f"Modbus {host}:{port} 拒絕寫入位址 {address}")
+    if reply[6:12] != struct.pack(">BBHH", 1, 16, address, count):
+        raise RuntimeError(f"Modbus {host}:{port} 回應的位址或數值不對")
+
+
 def read_holding_register(host: str, port: int, address: int) -> int:
     reply = _exchange(host, port, struct.pack(">BHH", 3, address, 1))
     if len(reply) < 9 or reply[7] in (0x83, 0x86):
@@ -140,6 +168,69 @@ def read_modbus_register(host, port, address, *, ctx):
         raise ValueError("Port 必須在 1 到 65535")
     value = read_holding_register(name, number, _register(address, "Address"))
     return Result([], [value])
+
+
+def _host_port(host, port) -> tuple[str, int]:
+    name = text(host, "Host").strip().strip("'\"")
+    if not name:
+        raise ValueError("Host 不能是空的")
+    number = whole(port, "Port")
+    if number < 1 or number > 65535:
+        raise ValueError("Port 必須在 1 到 65535")
+    return name, number
+
+
+def _value_list(value) -> list[int]:
+    items = list(value) if isinstance(value, (list, tuple)) else [value]
+    if not items:
+        raise ValueError("一次要讀寫 1 到 16 個暫存器")
+    return [_register(item, "Values") for item in items]
+
+
+@operator(
+    "通訊",
+    [],
+    [],
+    [
+        P("Host", "Modbus TCP 主機", "'127.0.0.1'"),
+        P("Port", "埠號，通常是 502", "502"),
+        P("Address", "起始位址", "0"),
+        P("Count", "個數，1 到 16", "2"),
+    ],
+    [P("Values", "讀回的數")],
+    "讀連續的 Modbus 暫存器",
+    "用功能碼 3 從起始位址連著讀，最多 16 個。不開序列埠。",
+    "Vizion.read_modbus_registers ('127.0.0.1', 502, 16, 3, Values)",
+)
+def read_modbus_registers(host, port, address, count, *, ctx):
+    from ..objects import Result
+
+    name, number = _host_port(host, port)
+    values = read_holding_registers(name, number, _register(address, "Address"), whole(count, "Count"))
+    return Result([], [values])
+
+
+@operator(
+    "通訊",
+    [],
+    [],
+    [
+        P("Host", "Modbus TCP 主機", "'127.0.0.1'"),
+        P("Port", "埠號，通常是 502", "502"),
+        P("Address", "起始位址", "0"),
+        P("Values", "要寫的數", "[1, 3, 2]"),
+    ],
+    [],
+    "寫連續的 Modbus 暫存器",
+    "用功能碼 16 從起始位址連著寫，最多 16 個。不開序列埠，也不改一次寫一個的那支算子。",
+    "Vizion.write_modbus_registers ('127.0.0.1', 502, 16, [2, 3, 1])",
+)
+def write_modbus_registers(host, port, address, values, *, ctx):
+    from ..objects import Result
+
+    name, number = _host_port(host, port)
+    write_holding_registers(name, number, _register(address, "Address"), _value_list(values))
+    return Result([], [])
 
 
 @operator(

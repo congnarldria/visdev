@@ -56,4 +56,14 @@ assert(tol.restore(wordStore, "samples/inspect_chars.viz", chars).includes("Expe
 tol.clearStored(wordStore, "inspect_chars.viz");
 assert(tol.restore(wordStore, "inspect_chars.viz", chars) === chars, "clearing the saved word returns VISDEV 168");
 
+const output = "OutHost := 'loopback'\nOutPort := 0\n";
+const outs = tol.readOutputs(output);
+assert(outs.map((item) => item.label).join(",") === "主機,埠", "output settings name the host and port");
+assert(tol.applyOutput(output, outs[0].line, "OutHost", "plc.local").includes("OutHost := 'plc.local'"), "the host can be replaced");
+assert(tol.applyOutput(output, outs[1].line, "OutPort", "502").includes("OutPort := 502"), "the port can be replaced");
+assert(tol.applyOutput(output, outs[1].line, "OutPort", "70000") === output, "a port above 65535 stays unchanged");
+const outStore = memoryStore();
+tol.remember(outStore, "inspect_line_out.viz", "OutHost := 'plc.local'\nOutPort := 502\n");
+assert(tol.restore(outStore, "samples/inspect_line_out.viz", output).includes("OutPort := 502"), "reopening the line template fills the saved port");
+
 console.log("tolerance ok");

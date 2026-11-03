@@ -1,5 +1,5 @@
 (function () {
-  const LABELS = { Dia: "直徑", Width: "寬", Height: "高", Dark: "暗塊", Bright: "亮點", Hue: "色調", Area: "面積" };
+  const LABELS = { Dia: "直徑", Width: "寬", Height: "高", Dark: "暗塊", Bright: "亮點", Hue: "色調", Area: "面積", Count: "個數" };
 
   function readLimits(source) {
     const lines = String(source || "").split("\n");
@@ -46,6 +46,37 @@
       });
     });
     return found;
+  }
+
+  function readOutputs(source) {
+    const lines = String(source || "").split("\n");
+    const found = [];
+    lines.forEach((line, index) => {
+      const host = line.match(/^(\s*)OutHost\s*:=\s*'([^']*)'\s*$/);
+      if (host) found.push({ name: "OutHost", label: "主機", kind: "text", value: host[2], line: index });
+      const port = line.match(/^(\s*)OutPort\s*:=\s*(\d+)\s*$/);
+      if (port) found.push({ name: "OutPort", label: "埠", kind: "number", value: port[2], line: index });
+    });
+    return found;
+  }
+
+  function applyOutput(source, lineIndex, name, value) {
+    const lines = String(source || "").split("\n");
+    const index = Number(lineIndex);
+    const shown = String(value == null ? "" : value).trim();
+    if (!Number.isInteger(index) || index < 0 || index >= lines.length) return String(source || "");
+    const indent = (lines[index].match(/^\s*/) || [""])[0];
+    if (name === "OutHost") {
+      if (/['\r\n\\]/.test(shown) || !shown) return String(source || "");
+      lines[index] = indent + "OutHost := '" + shown + "'";
+      return lines.join("\n");
+    }
+    if (name === "OutPort") {
+      if (!/^\d+$/.test(shown) || Number(shown) > 65535) return String(source || "");
+      lines[index] = indent + "OutPort := " + String(Number(shown));
+      return lines.join("\n");
+    }
+    return String(source || "");
   }
 
   function applyExpect(source, lineIndex, name, value) {
@@ -98,6 +129,9 @@
     readExpects(source).forEach((field) => {
       values[field.name] = field.value;
     });
+    readOutputs(source).forEach((field) => {
+      values[field.name] = field.value;
+    });
     return values;
   }
 
@@ -124,6 +158,9 @@
     readExpects(next).forEach((field) => {
       if (saved[field.name] != null) next = applyExpect(next, field.line, field.name, saved[field.name]);
     });
+    readOutputs(next).forEach((field) => {
+      if (saved[field.name] != null) next = applyOutput(next, field.line, field.name, saved[field.name]);
+    });
     return next;
   }
 
@@ -138,6 +175,8 @@
   const api = {
     readLimits: readLimits,
     readExpects: readExpects,
+    readOutputs: readOutputs,
+    applyOutput: applyOutput,
     applyLimit: applyLimit,
     applyExpect: applyExpect,
     remember: remember,

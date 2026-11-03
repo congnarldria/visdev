@@ -3751,6 +3751,78 @@ def test_modbus_writes_one_register_and_leaves_com_alone():
         write_holding_register("127.0.0.1", 1, 0, 1)
 
 
+def test_modbus_reads_and_writes_several_registers():
+    import socket
+    import struct
+    import threading
+
+    from app.engine.chapters.serial_ops import _open_windows
+
+    assert "CreateFileW" in _open_windows.__code__.co_names
+    ready = threading.Event()
+    regs = {}
+    holder = {}
+
+    def serve():
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        server.settimeout(3)
+        holder["port"] = server.getsockname()[1]
+        ready.set()
+        for _ in range(4):
+            try:
+                conn, _addr = server.accept()
+            except socket.timeout:
+                break
+            conn.settimeout(2)
+            head = b""
+            while len(head) < 7:
+                chunk = conn.recv(7 - len(head))
+                if not chunk:
+                    break
+                head += chunk
+            length = struct.unpack(">H", head[4:6])[0]
+            rest = b""
+            while len(rest) < length - 1:
+                chunk = conn.recv(length - 1 - len(rest))
+                if not chunk:
+                    break
+                rest += chunk
+            data = head + rest
+            function = data[7]
+            address = struct.unpack(">H", data[8:10])[0]
+            if function == 16:
+                count = struct.unpack(">H", data[10:12])[0]
+                raw = data[13:13 + count * 2]
+                regs[address] = list(struct.unpack(">" + "H" * count, raw))
+                trans = struct.unpack(">H", data[:2])[0]
+                conn.sendall(struct.pack(">HHHBBHH", trans, 0, 6, 1, 16, address, count))
+            elif function == 3:
+                count = struct.unpack(">H", data[10:12])[0]
+                values = []
+                for offset in range(count):
+                    stored = regs.get(address)
+                    values.append(stored[offset] if stored and offset < len(stored) else 0)
+                trans = struct.unpack(">H", data[:2])[0]
+                body = struct.pack(">" + "H" * count, *values)
+                conn.sendall(struct.pack(">HHHBBB", trans, 0, 3 + len(body), 1, 3, len(body)) + body)
+            conn.close()
+        server.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    assert ready.wait(2)
+    port = holder["port"]
+    session = run_source(
+        f"Vizion.write_modbus_registers ('127.0.0.1', {port}, 16, [2, 3, 1])\n"
+        f"Vizion.read_modbus_registers ('127.0.0.1', {port}, 16, 3, Values)\n"
+    )
+    assert session.error is None, session.error
+    assert [int(item) for item in session.vars["Values"]] == [2, 3, 1]
+    too_many = run_source(f"Vizion.read_modbus_registers ('127.0.0.1', {port}, 16, 20, Values)\n")
+    assert too_many.error and "16" in too_many.error
+
+
 def test_modbus_reads_back_the_register_it_wrote():
     import socket
     import struct
@@ -4190,6 +4262,19 @@ def test_project_holds_two_programs_and_its_image():
         assert shared.vars["Image"].width > 8
     finally:
         shutil.rmtree(folder, ignore_errors=True)
+
+
+def test_inspect_missing_template_accepts_eight_parts():
+    session = run_source((ROOT / "samples" / "inspect_missing.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 8
+    assert session.vars["Judge"] == "合格"
+    assert session.display.base is not None
+    short = (ROOT / "samples" / "inspect_missing.viz").read_text(encoding="utf-8").replace("CountMin := 8", "CountMin := 9")
+    failed = run_source(short)
+    assert failed.error is None, failed.error
+    assert int(failed.vars["Count"]) == 8
+    assert failed.vars["Judge"] == "不合格"
 
 
 def test_inspect_parts_template_counts_eight_parts():
