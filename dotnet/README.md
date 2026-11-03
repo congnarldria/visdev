@@ -77,4 +77,20 @@ int corners = plate.CornerCount;
 var last = plate.Point(4, 6);
 ```
 
-既有的 `Threshold`、`Connection`、`AreaCenterOf` 仍在 `Operators`。讀圖目前讀 PNG。
+## 區域特徵和寬度
+
+`Operators.ShapeOf` 給圓度、矩形度、方向，還有等效橢圓的長短軸。橫條方向是 0，直條是 1.5708。圓度是 4π 乘面積除以周長平方。矩形度是面積除以輪廓最小外接矩形，實心橫條大約 1.32。
+
+`Operators.MeasureWidth` 量一列亮條的左右邊緣。左半 0、中間 255、右半 0 時，邊緣在 15.5 和 47.5，寬度是 32。
+
+## 相機內參
+
+`PlanarCalib.Estimate` 用至少三個視角的平面對應點估計 fx、fy、cx、cy。沒有畸變時，合成的 600、610、320、240 會回到原值。`EstimateDistorted` 再估計徑向 k1，模型是 x' = x (1 + k1 r²)。不從照片裡找角點，也不改 Python `calibrate_cameras` 已經算出的九個參數。
+
+```csharp
+var shape = Operators.ShapeOf(region);
+var width = Operators.MeasureWidth(image, row: 16);
+var camera = PlanarCalib.Estimate(objectX, objectY, views);
+```
+
+既有的 `Threshold`、`Connection`、`AreaCenterOf` 仍在 `Operators`。矩形和圓形的膨脹、侵蝕、開運算、閉運算也還在。讀圖目前讀 PNG。

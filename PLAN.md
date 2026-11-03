@@ -1,20 +1,22 @@
 # VisDev 1.1
 
-矩形圓點板的 C# 參考已經能讀描述文字。`CalibPlate.ParseDots` 讀 `samples/calplate_4x5.cpd`：4 列、5 行、20 個標記、間距 0.01 公尺、亮標記。第一點是 (0, 0.03, 0)，最後一點是 (0.04, 0, 0)，和 Python 一樣按 Y 由大到小、X 由小到大排。尋找標記那一行略過，不做對位。不估計相機的九個參數。棋盤 `'5,7,10'` 仍是 5 列、7 行、邊長 10、35 個角點，物點從 (0,0,0) 到 (60,40,0)。`Parse` 仍不把路徑當成棋盤。
+匹配的內插先停在這裡。形狀比對和正規相關的 C# 不再磨小數點。Windows 仍用 `visdev_match.pyd`，`inspect_locate.viz` 的分數仍高於 0.9。
 
-C# 正規相關先用 Keys 三次內插修列、行和角度。平坦的峰留在取樣點上。接著沿灰階梯度做 Lucas-Kanade，只修列和行。分數沒有變好就不留下。`shapes_scene.png` 的 4 個姿態仍和 Python 差在 1 像素、1.5 度以內。`ignoreGlobalPolarity` 為真時黑白對調仍算對上。不改 `find_ncc_model`，也不改 `.pyd`。
+這一輪做了三件實用的 C# 參考，Python 的行為沒有改：
 
-形狀比對的 C# 仍先在粗圖搜尋，再沿邊緣法線做最小二乘。那 4 個和 Python 差在 1.5 像素、1 度以內。`inspect_locate.viz` 的分數仍高於 0.9。次像素邊緣仍是行 15.5。找線、找圓的飛點仍拉不走。Visual Studio 開 `dotnet/Vizion.Display.sln`，起始專案 `Vizion.Operators.Check`，按 F5。說明在 `dotnet/README.md`。
+- `Operators.ShapeOf`：圓度、矩形度、方向。橫條方向是 0，直條是 1.5708，矩形度約 1.32。
+- `Operators.MeasureWidth`：亮條左右兩側的距離。階躍在 15.5 和 47.5，寬度是 32。
+- `PlanarCalib.Estimate` 從至少三個視角的平面對應點估回 fx、fy、cx、cy。`EstimateDistorted` 再估徑向 k1。不從照片裡找角點，也不改 `calibrate_cameras` 的九個數。
 
-最近開過的程式沒有做。孔距不做。
+形態學的矩形和圓形膨脹、侵蝕、開運算、閉運算原本就在 C# 裡，沒有重做。棋盤 `'5,7,10'` 和矩形圓點描述維持可用。
 
-Windows 仍用 `app/engine/visdev_match.pyd`。開相機仍先問 DirectShow，打不開再試 OpenCV。開 COM 仍用原來的 API。單台相機的九個參數不改。Linux 的 `visdev_match.so` 不進版控。
+最近開過的程式沒有做。孔距不做。開相機仍先問 DirectShow。開 COM 仍用原來的 API。單台相機已經標完的九個參數不改。
 
 ## 下一項
 
-C# 形狀比對的列、行、角度內插也改用同一套 Keys 三次。平坦的峰留在取樣點上。只在分數沒有變差時才取代現在的拋物線，沿邊緣法線的最小二乘仍接在後面。不改 `visdev_match.pyd`，`inspect_locate.viz` 的分數仍要高於 0.9。
+從一張合成棋盤圖取出內角點，再送進 `PlanarCalib`。點要和 `'5,7,10'` 的物點對得上。仍然不改 Python 的九個參數，也不做六角形尋找標記。
 
-先不要做這些：最近開過的程式、孔和孔的間距、六角形標定板的尋找標記對位、更多 Modbus 功能碼、不合格圖的上一張下一張、編輯器局部更新、公差列再改版。`'5,7,10'` 和矩形圓點板維持可用。
+先不要做這些：匹配小數點、最近開過的程式、孔和孔的間距、六角形尋找標記對位、更多 Modbus 功能碼、不合格圖的上一張下一張、編輯器局部更新、公差列再改版。
 
 ## 維持不變
 

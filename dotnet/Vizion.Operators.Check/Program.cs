@@ -101,6 +101,153 @@ static void SelfTest()
     if (dark.Polarity != "dark" || dark.Point(0) != (0, 1, 0) || Math.Abs(dark.Square - 1) > 1e-9)
         throw new InvalidOperationException($"暗標記應從 (0,1,0) 起、間距 1，得到 {dark.Polarity} {dark.Point(0)} {dark.Square}");
 
+    Region Bar(int row1, int column1, int row2, int column2)
+    {
+        int count = row2 - row1 + 1;
+        var rows = new int[count];
+        var columns = new int[count];
+        var lengths = new int[count];
+        for (int i = 0; i < count; i++)
+        {
+            rows[i] = row1 + i;
+            columns[i] = column1;
+            lengths[i] = column2 - column1 + 1;
+        }
+        return new Region(80, 60, rows, columns, lengths);
+    }
+    var wideShape = Operators.ShapeOf(Bar(10, 10, 14, 29));
+    var tallShape = Operators.ShapeOf(Bar(10, 10, 29, 14));
+    if (Math.Abs(wideShape.Orientation) > 1e-9 || Math.Abs(tallShape.Orientation - Math.PI / 2) > 1e-9)
+        throw new InvalidOperationException($"橫條方向應是 0、直條應是 1.5708，得到 {wideShape.Orientation} {tallShape.Orientation}");
+    if (Math.Abs(wideShape.Circularity - 0.5938738475595072) > 1e-6 || Math.Abs(wideShape.Rectangularity - 1.3157894736842106) > 1e-6)
+        throw new InvalidOperationException($"橫條圓度、矩形度不對，得到 {wideShape.Circularity} {wideShape.Rectangularity}");
+    if (Math.Abs(wideShape.Ra - 11.532562594670797) > 1e-6)
+        throw new InvalidOperationException($"橫條長軸應約 11.53，得到 {wideShape.Ra}");
+    var diskRows = new List<int>();
+    var diskColumns = new List<int>();
+    var diskLengths = new List<int>();
+    for (int row = 0; row < 80; row++)
+    {
+        int left = -1;
+        int right = -1;
+        for (int column = 0; column < 80; column++)
+        {
+            int dy = row - 40;
+            int dx = column - 40;
+            if (dy * dy + dx * dx <= 20 * 20)
+            {
+                if (left < 0)
+                    left = column;
+                right = column;
+            }
+        }
+        if (left >= 0)
+        {
+            diskRows.Add(row);
+            diskColumns.Add(left);
+            diskLengths.Add(right - left + 1);
+        }
+    }
+    var diskShape = Operators.ShapeOf(new Region(80, 80, diskRows.ToArray(), diskColumns.ToArray(), diskLengths.ToArray()));
+    if (Math.Abs(diskShape.Circularity - 0.9081810736527025) > 1e-4 || Math.Abs(diskShape.Rectangularity - 0.8115961921519181) > 1e-4)
+        throw new InvalidOperationException($"圓的圓度、矩形度不對，得到 {diskShape.Circularity} {diskShape.Rectangularity}");
+
+    var barImage = new byte[32 * 64];
+    for (int row = 0; row < 32; row++)
+        for (int column = 16; column < 48; column++)
+            barImage[row * 64 + column] = 255;
+    var barWidth = Operators.MeasureWidth(ImageBuffer.Gray(64, 32, barImage), 16);
+    if (Math.Abs(barWidth.Left - 15.5) > 1e-6 || Math.Abs(barWidth.Right - 47.5) > 1e-6 || Math.Abs(barWidth.Width - 32) > 1e-6)
+        throw new InvalidOperationException($"亮條寬度應是 32，左右在 15.5 和 47.5，得到 {barWidth.Left} {barWidth.Right} {barWidth.Width}");
+
+    var board = CalibPlate.Parse("5,7,10");
+    var objectX = new double[board.CornerCount];
+    var objectY = new double[board.CornerCount];
+    int markIndex = 0;
+    for (int row = 0; row < board.Rows; row++)
+    {
+        for (int column = 0; column < board.Columns; column++)
+        {
+            var mark = board.Point(row, column);
+            objectX[markIndex] = mark.X;
+            objectY[markIndex] = mark.Y;
+            markIndex++;
+        }
+    }
+    const double trueFx = 600;
+    const double trueFy = 610;
+    const double trueCx = 320;
+    const double trueCy = 240;
+    (double[] U, double[] V) Project(double[,] rotation, double tx, double ty, double tz)
+    {
+        var columns = new double[objectX.Length];
+        var rows = new double[objectX.Length];
+        for (int i = 0; i < objectX.Length; i++)
+        {
+            double x = rotation[0, 0] * objectX[i] + rotation[0, 1] * objectY[i] + tx;
+            double y = rotation[1, 0] * objectX[i] + rotation[1, 1] * objectY[i] + ty;
+            double z = rotation[2, 0] * objectX[i] + rotation[2, 1] * objectY[i] + tz;
+            columns[i] = trueFx * x / z + trueCx;
+            rows[i] = trueFy * y / z + trueCy;
+        }
+        return (columns, rows);
+    }
+    double yaw = 15 * Math.PI / 180;
+    double pitch = 12 * Math.PI / 180;
+    double cosYaw = Math.Cos(yaw);
+    double sinYaw = Math.Sin(yaw);
+    double cosPitch = Math.Cos(pitch);
+    double sinPitch = Math.Sin(pitch);
+    var identity = new double[,] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
+    var aroundY = new double[,] { { cosYaw, 0, sinYaw }, { 0, 1, 0 }, { -sinYaw, 0, cosYaw } };
+    var aroundX = new double[,] { { 1, 0, 0 }, { 0, cosPitch, -sinPitch }, { 0, sinPitch, cosPitch } };
+    var front = Project(identity, -30, -20, 400);
+    var turned = Project(aroundY, -30, -20, 420);
+    var tilted = Project(aroundX, -30, -20, 430);
+    var intrinsics = PlanarCalib.Estimate(objectX, objectY, new[]
+    {
+        new PlanarCalib.View(front.U, front.V),
+        new PlanarCalib.View(turned.U, turned.V),
+        new PlanarCalib.View(tilted.U, tilted.V),
+    });
+    if (Math.Abs(intrinsics.Fx - trueFx) > 1e-3 || Math.Abs(intrinsics.Fy - trueFy) > 1e-3
+        || Math.Abs(intrinsics.Cx - trueCx) > 1e-3 || Math.Abs(intrinsics.Cy - trueCy) > 1e-3)
+        throw new InvalidOperationException($"內參應接近 600、610、320、240，得到 {intrinsics.Fx:0.00} {intrinsics.Fy:0.00} {intrinsics.Cx:0.00} {intrinsics.Cy:0.00}");
+    if (intrinsics.K1 != 0 || intrinsics.K2 != 0 || intrinsics.K3 != 0)
+        throw new InvalidOperationException("沒有畸變的點不該估出 k1");
+    const double trueK1 = -0.3;
+    (double[] U, double[] V) ProjectDistorted(double[,] rotation, double tx, double ty, double tz)
+    {
+        var columns = new double[objectX.Length];
+        var rows = new double[objectX.Length];
+        for (int i = 0; i < objectX.Length; i++)
+        {
+            double x = rotation[0, 0] * objectX[i] + rotation[0, 1] * objectY[i] + tx;
+            double y = rotation[1, 0] * objectX[i] + rotation[1, 1] * objectY[i] + ty;
+            double z = rotation[2, 0] * objectX[i] + rotation[2, 1] * objectY[i] + tz;
+            double idealX = x / z;
+            double idealY = y / z;
+            double radius = idealX * idealX + idealY * idealY;
+            double factor = 1 + trueK1 * radius;
+            columns[i] = trueFx * idealX * factor + trueCx;
+            rows[i] = trueFy * idealY * factor + trueCy;
+        }
+        return (columns, rows);
+    }
+    var distortedFront = ProjectDistorted(identity, -30, -20, 80);
+    var distortedTurned = ProjectDistorted(aroundY, -25, -18, 95);
+    var distortedTilted = ProjectDistorted(aroundX, -28, -15, 105);
+    var distorted = PlanarCalib.EstimateDistorted(objectX, objectY, new[]
+    {
+        new PlanarCalib.View(distortedFront.U, distortedFront.V),
+        new PlanarCalib.View(distortedTurned.U, distortedTurned.V),
+        new PlanarCalib.View(distortedTilted.U, distortedTilted.V),
+    });
+    if (Math.Abs(distorted.K1 - trueK1) > 1e-4
+        || Math.Abs(distorted.Fx - trueFx) > 1e-2 || Math.Abs(distorted.Fy - trueFy) > 1e-2
+        || Math.Abs(distorted.Cx - trueCx) > 1e-2 || Math.Abs(distorted.Cy - trueCy) > 1e-2)
+        throw new InvalidOperationException($"帶畸變的內參應接近 k1 -0.3、焦距 600/610，得到 k1 {distorted.K1:0.000} {distorted.Fx:0.00} {distorted.Fy:0.00} {distorted.Cx:0.00} {distorted.Cy:0.00}");
+
     var block = new byte[64 * 64];
     for (int row = 16; row < 48; row++)
         for (int col = 16; col < 48; col++)
