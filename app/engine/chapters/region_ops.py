@@ -8,13 +8,14 @@ from collections import deque
 import cv2
 import numpy as np
 
-from ..objects import Image, Region, Result
+from ..objects import Image, Region, Result, XLD
 from ..operators import (
     P,
     as_list,
     difference,
     expect_image,
     expect_region,
+    expect_xld,
     halcon_components,
     REGION_FEATURE_CHOICES,
     object_feature,
@@ -138,6 +139,34 @@ def skeleton(region, *, ctx):
             break
         img = eroded
     return region_out(source.width, source.height, skel)
+
+
+@operator(
+    "形態學",
+    [P("Skeleton", "一條骨架")],
+    [P("Parts", "拆開後的骨架")],
+    [],
+    [],
+    "把骨架從交叉點拆開",
+    "先數每個前景像素的八鄰域，三個以上鄰居的點是交叉，拿掉之後剩下的 8 連通各自成一個物件。不改 skeleton 的結果。",
+    "Vizion.split_skeleton (Skeleton, Parts)",
+)
+def split_skeleton(region, *, ctx):
+    source = expect_region(region, "Skeleton")
+    foreground = (source.union_mask() > 0).astype(np.uint8)
+    kernel = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]], np.uint8)
+    neighbors = cv2.filter2D(foreground, cv2.CV_16S, kernel, borderType=cv2.BORDER_CONSTANT)
+    arms = foreground.copy()
+    arms[(foreground > 0) & (neighbors >= 3)] = 0
+    count, labels = cv2.connectedComponents(arms, connectivity=8)
+    objects = []
+    for label in range(1, int(count)):
+        part = np.where(labels == label, 255, 0).astype(np.uint8)
+        if int(cv2.countNonZero(part)):
+            objects.append(part)
+    return Result([
+        Region(source.width, source.height, objects, multi_color=len(objects) > 1),
+    ], [])
 
 
 def _shift_mask(mask: np.ndarray, drow: int, dcol: int) -> np.ndarray:
@@ -423,16 +452,6 @@ def regiongrowing(image, row, column, tolerance, min_size, *, ctx):
     return Result([Region(picture.width, picture.height, objects, multi_color=len(objects) > 1)], [])
 
 
-@operator(
-    "分割",
-    [P("Image", "輸入影像")],
-    [P("Basins", "集水區"), P("Watersheds", "分水嶺")],
-    [],
-    [],
-    "灰階影像的分水嶺",
-    "把灰階當成高度。每個局部最低點是一個集水區，物件用不同顏色。分水嶺是盆地交界，另外輸出成一個區域。平坦或雜訊多的圖會切得很碎。",
-    "watersheds (Image, Basins, Watersheds)",
-)
 def _watershed_markers(gray: np.ndarray, domain: np.ndarray):
     kernel = np.ones((3, 3), np.uint8)
     minima = cv2.compare(gray, cv2.erode(gray, kernel), cv2.CMP_EQ)
@@ -444,6 +463,16 @@ def _watershed_markers(gray: np.ndarray, domain: np.ndarray):
     return np.where(domain > 0, markers, 0), count
 
 
+@operator(
+    "分割",
+    [P("Image", "輸入影像")],
+    [P("Basins", "集水區"), P("Watersheds", "分水嶺")],
+    [],
+    [],
+    "灰階影像的分水嶺",
+    "把灰階當成高度。每個局部最低點是一個集水區，物件用不同顏色。分水嶺是盆地交界，另外輸出成一個區域。平坦或雜訊多的圖會切得很碎。",
+    "watersheds (Image, Basins, Watersheds)",
+)
 def watersheds(image, *, ctx):
     picture, gray, domain = _gray_domain(image)
     markers, count = _watershed_markers(gray, domain)
@@ -942,10 +971,10 @@ def select_gray(region, image, features, operation, min_value, max_value, *, ctx
     "形態學",
     [P("Regions", "要長大的物件"), P("ForbiddenRegion", "不能進入的區域")],
     [P("RegionExpanded", "長大後的物件")],
-    [P("Iterations", "長大幾次"), P("Mode", "這版只做 image", "'image'", ["'image'"])],
+    [P("Iterations", "長大幾次"), P("Mode", "image 往外長，region 只拆重疊", "'image'", ["'image'", "'region'"])],
     [],
     "把區域往外長",
-    "每次用 8 鄰域長一像素。不會進入 ForbiddenRegion，也不會讓物件互相覆蓋。Mode 這版只有 image。",
+    "image 每次用 8 鄰域長一像素，不進入 ForbiddenRegion，物件也不會互相覆蓋。region 不往外長，只把重疊像素分給距離自己獨占區較近的物件；距離一樣時留給編號較小的那個。Iterations 為 0 時，region 直接拿掉重疊。",
     "Vizion.expand_region (Regions, ForbiddenRegion, RegionExpanded, 2, 'image')",
 )
 def expand_region(region, forbidden, iterations, mode, *, ctx):
@@ -953,11 +982,16 @@ def expand_region(region, forbidden, iterations, mode, *, ctx):
     blocked = expect_region(forbidden, "ForbiddenRegion")
     if (source.width, source.height) != (blocked.width, blocked.height):
         raise ValueError("兩個區域的尺寸不同")
-    if text(mode, "Mode").lower() != "image":
-        raise ValueError("Mode 這版只接受 image")
+    mode_name = text(mode, "Mode").lower()
+    if mode_name not in ("image", "region"):
+        raise ValueError("Mode 只接受 image 或 region")
     steps = whole(iterations, "Iterations")
     if steps < 0:
         raise ValueError("Iterations 不能是負的")
+    if mode_name == "region":
+        objects = _split_region_overlap(source.objects, steps)
+        kept = [mask for mask in objects if int(cv2.countNonZero(mask))]
+        return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
     objects = [mask.copy() for mask in source.objects]
     wall = blocked.union_mask()
     kernel = np.ones((3, 3), np.uint8)
@@ -975,6 +1009,41 @@ def expand_region(region, forbidden, iterations, mode, *, ctx):
         objects = grown
     kept = [mask for mask in objects if int(cv2.countNonZero(mask))]
     return Result([Region(source.width, source.height, kept, multi_color=len(kept) > 1)], [])
+
+
+def _split_region_overlap(objects: list, steps: int) -> list:
+    """Give each overlapping pixel to one object. Nothing grows past the original masks."""
+    if not objects:
+        return []
+    masks = [np.asarray(mask) > 0 for mask in objects]
+    count = np.zeros(masks[0].shape, np.int16)
+    for mask in masks:
+        count += mask.astype(np.int16)
+    height, width = count.shape
+    owner = np.full((height, width), -1, np.int16)
+    for index, mask in enumerate(masks):
+        owner[mask & (count == 1)] = index
+    overlap = count > 1
+    if steps > 0 and np.any(overlap):
+        distances = []
+        for mask in masks:
+            exclusive = mask & (count == 1)
+            if not np.any(exclusive):
+                distances.append(np.full((height, width), np.inf, np.float32))
+                continue
+            field = np.where(exclusive, np.uint8(0), np.uint8(255))
+            distances.append(cv2.distanceTransform(field, cv2.DIST_L1, 3))
+        stacked = np.where(np.stack(masks, axis=0), np.stack(distances, axis=0), np.inf)
+        owner[overlap] = np.argmin(stacked, axis=0).astype(np.int16)[overlap]
+    split = []
+    for index, mask in enumerate(masks):
+        kept = np.zeros((height, width), np.uint8)
+        chosen = owner == index
+        if steps <= 0:
+            chosen = chosen & (count == 1)
+        kept[chosen] = 255
+        split.append(kept)
+    return split
 
 
 def _points_on_canvas(rows, columns, ctx):
@@ -1140,6 +1209,109 @@ def elliptic_axis(region, *, ctx):
 def orientation_region(region, *, ctx):
     source = expect_region(region, "Regions")
     return Result([], [[region_measures(mask)["orientation"] for mask in source.objects]])
+
+
+def _shape_values(region, feature: str):
+    source = expect_region(region, "Regions")
+    return Result([], [[object_feature(mask, feature) for mask in source.objects]])
+
+
+@operator(
+    "特徵",
+    [P("Regions", "物件集合")],
+    [],
+    [],
+    [P("Circularity", "圓度")],
+    "區域圓度",
+    "4π 乘面積除以周長平方，最大是 1。和 region_features 的 circularity 相同。每個物件一個數。",
+    "Vizion.circularity (Regions, Circularity)",
+)
+def circularity(region, *, ctx):
+    return _shape_values(region, "circularity")
+
+
+@operator(
+    "特徵",
+    [P("Regions", "物件集合")],
+    [],
+    [],
+    [P("Compactness", "緊實度")],
+    "區域緊實度",
+    "周長平方除以 4π 乘面積。圓最緊，接近 1。和 region_features 的 compactness 相同。",
+    "Vizion.compactness (Regions, Compactness)",
+)
+def compactness(region, *, ctx):
+    return _shape_values(region, "compactness")
+
+
+@operator(
+    "特徵",
+    [P("Regions", "物件集合")],
+    [],
+    [],
+    [P("Convexity", "凸度")],
+    "區域凸度",
+    "面積除以凸包面積。沒有凹角時是 1。和 region_features 的 convexity 相同。",
+    "Vizion.convexity (Regions, Convexity)",
+)
+def convexity(region, *, ctx):
+    return _shape_values(region, "convexity")
+
+
+@operator(
+    "特徵",
+    [P("Regions", "物件集合")],
+    [],
+    [],
+    [P("ContLength", "周長")],
+    "區域周長",
+    "外輪廓的長度。和 region_features 的 contlength 相同。",
+    "Vizion.contlength (Regions, ContLength)",
+)
+def contlength(region, *, ctx):
+    return _shape_values(region, "contlength")
+
+
+@operator(
+    "特徵",
+    [P("Regions", "物件集合")],
+    [],
+    [],
+    [P("Rectangularity", "矩形度")],
+    "區域矩形度",
+    "面積除以最小外接矩形的面積。和 region_features 的 rectangularity 相同。",
+    "Vizion.rectangularity (Regions, Rectangularity)",
+)
+def rectangularity(region, *, ctx):
+    return _shape_values(region, "rectangularity")
+
+
+@operator(
+    "特徵",
+    [P("Regions", "物件集合")],
+    [],
+    [],
+    [P("Roundness", "圓整度")],
+    "區域圓整度",
+    "邊界到重心的距離有多整齊。和 region_features 的 roundness 相同。",
+    "Vizion.roundness (Regions, Roundness)",
+)
+def roundness(region, *, ctx):
+    return _shape_values(region, "roundness")
+
+
+@operator(
+    "特徵",
+    [P("Regions", "物件集合")],
+    [],
+    [],
+    [P("Eccentricity", "偏心率")],
+    "區域偏心率",
+    "等效橢圓的長軸除以短軸。和 region_features 的 anisometry 相同。橫條大於 1。",
+    "Vizion.eccentricity (Regions, Eccentricity)",
+)
+def eccentricity(region, *, ctx):
+    return _shape_values(region, "anisometry")
 
 
 _STD_SHAPES = ["'max_area'", "'rectangle'", "'convex'"]
@@ -7344,3 +7516,562 @@ def select_long(region, min_ratio, *, ctx):
     source, facts = _axis_facts(region)
     indexes = [index for index, item in enumerate(facts) if item["ratio"] + 1e-9 >= limit]
     return _take_objects(source, indexes)
+
+
+@operator(
+    "區域",
+    [P("Region", "要測試的區域")],
+    [],
+    [P("Row", "列"), P("Column", "行")],
+    [P("IsInside", "在區域裡是 1")],
+    "點在不在區域裡",
+    "每個點各得到 0 或 1。點落在任一物件上就是 1。座標四捨五入。超出影像的點是 0。",
+    "Vizion.test_region_points (Region, 1, 1, IsInside)",
+    "新算子。矩形裡的點是 1，外面的點是 0。",
+)
+def test_region_points(region, row, column, *, ctx):
+    area = expect_region(region, "Region")
+    rows = [int(round(float(item))) for item in as_list(row)]
+    cols = [int(round(float(item))) for item in as_list(column)]
+    if len(rows) != len(cols) or not rows:
+        raise ValueError("Row 和 Column 的長度要相同，而且不能是空的")
+    mask = area.union_mask()
+    flags = []
+    for item_row, item_col in zip(rows, cols):
+        inside = 0 <= item_row < area.height and 0 <= item_col < area.width and mask[item_row, item_col] > 0
+        flags.append(1 if inside else 0)
+    if len(flags) == 1 and not isinstance(row, (list, tuple)):
+        return Result([], [flags[0]])
+    return Result([], [flags])
+
+
+@operator(
+    "區域",
+    [],
+    [P("Region", "填滿的多邊形")],
+    [P("Rows", "多邊形的列"), P("Columns", "多邊形的行")],
+    [],
+    "用多邊形填出一塊區域",
+    "至少三個點，而且列和行要一樣長。最後一點會自動連回起點。區域會大到裝得下這些點。",
+    "Vizion.gen_region_polygon_filled (Region, [1, 1, 4, 4], [1, 5, 5, 1])",
+    "新算子。四個角點圍出的矩形會被填滿。",
+)
+def gen_region_polygon_filled(rows, columns, *, ctx):
+    row_values = [float(item) for item in as_list(rows)]
+    col_values = [float(item) for item in as_list(columns)]
+    if len(row_values) != len(col_values) or len(row_values) < 3:
+        raise ValueError("至少要三個點，而且列和行要一樣長")
+    if any(item < 0 for item in row_values) or any(item < 0 for item in col_values):
+        raise ValueError("多邊形座標不能是負的")
+    canvas_h, canvas_w = ctx.canvas_size()
+    height = max(canvas_h, int(math.ceil(max(row_values))) + 1)
+    width = max(canvas_w, int(math.ceil(max(col_values))) + 1)
+    mask = np.zeros((height, width), np.uint8)
+    points = np.array([[int(round(col)), int(round(row))] for row, col in zip(row_values, col_values)], np.int32)
+    cv2.fillPoly(mask, [points], 255)
+    return region_out(width, height, mask)
+
+
+def _closed_points(contour) -> list[tuple[float, float]]:
+    points = [(float(point[0]), float(point[1])) for point in contour]
+    if len(points) >= 2 and abs(points[0][0] - points[-1][0]) < 1e-9 and abs(points[0][1] - points[-1][1]) < 1e-9:
+        points = points[:-1]
+    return points
+
+
+@operator(
+    "區域",
+    [P("Polygon", "多邊形輪廓")],
+    [P("Region", "填滿的區域")],
+    [],
+    [],
+    "把輪廓多邊形填成區域",
+    "每一條輪廓各自填滿。至少三個點。最後一點若和起點相同，不會重複計算。",
+    "Vizion.gen_region_polygon_xld (Polygon, Region)",
+    "新算子。四個角 (0,0)、(0,4)、(4,4)、(4,0) 填起來的面積是 25。",
+)
+def gen_region_polygon_xld(polygon, *, ctx):
+    xld = expect_xld(polygon, "Polygon")
+    if not xld.contours:
+        raise ValueError("輪廓是空的")
+    height, width = xld.height, xld.width
+    objects = []
+    for contour in xld.contours:
+        points = _closed_points(contour)
+        if len(points) < 3:
+            continue
+        mask = np.zeros((height, width), np.uint8)
+        poly = np.array([[int(round(col)), int(round(row))] for col, row in points], np.int32)
+        cv2.fillPoly(mask, [poly], 255)
+        if int(cv2.countNonZero(mask)):
+            objects.append(mask)
+    return Result([Region(width, height, objects, multi_color=len(objects) > 1)], [])
+
+
+@operator(
+    "輪廓",
+    [P("Region", "區域")],
+    [P("Convex", "凸包輪廓")],
+    [],
+    [],
+    "區域的凸包",
+    "每個物件各得到一條凸包。點是凸包的頂點，順序沿邊界走。",
+    "Vizion.get_region_convex (Region, Convex)",
+    "新算子。實心矩形的凸包有 4 個頂點。",
+)
+def get_region_convex(region, *, ctx):
+    area = expect_region(region, "Region")
+    contours = []
+    for mask in area.objects:
+        ys, xs = np.where(mask > 0)
+        if len(xs) < 3:
+            continue
+        cloud = np.stack([xs, ys], axis=1).astype(np.float32)
+        hull = cv2.convexHull(cloud).reshape(-1, 2)
+        contours.append([[float(point[0]), float(point[1])] for point in hull])
+    return Result([XLD(area.width, area.height, contours, multi_color=len(contours) > 1)], [])
+
+
+_NOISE = ["'n_4'", "'n_8'"]
+
+
+@operator(
+    "區域",
+    [P("Region", "輸入區域")],
+    [P("RegionClean", "去掉孤立點之後")],
+    [P("Type", "n_4 或 n_8", "'n_4'", _NOISE)],
+    [],
+    "去掉沒有鄰居的雜點",
+    "n_4 去掉上下左右都沒有同伴的像素。n_8 連斜角也算。兩兩相鄰的像素會留下。",
+    "Vizion.remove_noise_region (Region, RegionClean, 'n_4')",
+    "新算子。孤立的一點會被刪掉，2×2 的方塊還在，面積是 4。",
+)
+def remove_noise_region(region, kind, *, ctx):
+    area = expect_region(region, "Region")
+    mode = text(kind, "Type").strip().strip("'\"").lower()
+    if mode not in ("n_4", "n_8"):
+        raise ValueError("Type 只能是 n_4 或 n_8")
+    kernel = np.ones((3, 3), np.float32)
+    kernel[1, 1] = 0
+    if mode == "n_4":
+        kernel[0, 0] = kernel[0, 2] = kernel[2, 0] = kernel[2, 2] = 0
+    objects = []
+    for mask in area.objects:
+        present = (mask > 0).astype(np.float32)
+        neighbors = cv2.filter2D(present, -1, kernel, borderType=cv2.BORDER_CONSTANT)
+        kept = np.where((present > 0) & (neighbors >= 1), 255, 0).astype(np.uint8)
+        if int(cv2.countNonZero(kept)):
+            objects.append(kept)
+    return Result([Region(area.width, area.height, objects, multi_color=len(objects) > 1)], [])
+
+
+@operator(
+    "特徵",
+    [P("Region", "物件")],
+    [],
+    [],
+    [P("Mu20", "行方向的中央二階矩"), P("Mu02", "列方向的中央二階矩"), P("Mu11", "交叉中央矩")],
+    "區域的中央矩",
+    "先減掉這個物件的重心。Mu20 是行座標的平方和，Mu02 是列座標的平方和，Mu11 是兩者相乘的和。每個物件各一組。",
+    "Vizion.moments_region_central (Region, Mu20, Mu02, Mu11)",
+    "新算子。左上角 2×2 的方塊，Mu20 和 Mu02 都是 1，Mu11 是 0。",
+)
+def moments_region_central(region, *, ctx):
+    area = expect_region(region, "Region")
+    mu20, mu02, mu11 = [], [], []
+    for mask in area.objects:
+        ys, xs = np.where(mask > 0)
+        if len(xs) == 0:
+            continue
+        rows = ys.astype(np.float64)
+        cols = xs.astype(np.float64)
+        rows -= rows.mean()
+        cols -= cols.mean()
+        mu20.append(float((cols * cols).sum()))
+        mu02.append(float((rows * rows).sum()))
+        mu11.append(float((rows * cols).sum()))
+    return Result([], [mu20, mu02, mu11])
+
+
+@operator(
+    "區域",
+    [],
+    [P("RegionHline", "直線區域")],
+    [
+        P("Phi", "法線角度，弳度"),
+        P("Distance", "原點到線的距離"),
+        P("Width", "寬度"),
+        P("Height", "高度"),
+    ],
+    [],
+    "畫一條無限長直線",
+    "線的方程式是行×cos(Phi)＋列×sin(Phi)＝Distance。距離小於 0.5 的像素留下。Phi 為 0 是垂直線，Phi 為 π/2 是水平線。",
+    "Vizion.gen_region_hline (RegionHline, 1.5708, 2, 4, 5)",
+    "新算子。水平線距離 2，寬 4 時面積是 4。",
+)
+def gen_region_hline(phi, distance, width, height, *, ctx):
+    wide = whole(width, "Width")
+    high = whole(height, "Height")
+    if wide < 1 or high < 1:
+        raise ValueError("寬高至少要 1")
+    angle = scalar(phi, "Phi")
+    offset = scalar(distance, "Distance")
+    rows, cols = np.indices((high, wide))
+    signed = cols * math.cos(angle) + rows * math.sin(angle) - offset
+    mask = (np.abs(signed) <= 0.5).astype(np.uint8) * 255
+    return region_out(wide, high, mask)
+
+
+@operator(
+    "區域",
+    [],
+    [P("RegionRandom", "隨機區域")],
+    [P("Width", "寬度"), P("Height", "高度"), P("Percent", "前景百分比")],
+    [],
+    "依百分比做隨機區域",
+    "面積是寬×高×百分比，四捨五入。同一個寬高和百分比得到同一塊，方便重現。",
+    "Vizion.gen_random_region (RegionRandom, 10, 10, 25)",
+    "新算子。10×10 的 25% 面積正好是 25。",
+)
+def gen_random_region(width, height, percent, *, ctx):
+    wide = whole(width, "Width")
+    high = whole(height, "Height")
+    if wide < 1 or high < 1:
+        raise ValueError("寬高至少要 1")
+    share = scalar(percent, "Percent")
+    if share < 0 or share > 100:
+        raise ValueError("百分比要在 0 到 100")
+    count = int(round(wide * high * share / 100.0))
+    mask = np.zeros((high, wide), np.uint8)
+    if count:
+        seed = wide * 100000 + high * 100 + int(round(share * 1000))
+        chosen = np.random.default_rng(seed).permutation(wide * high)[:count]
+        mask.ravel()[chosen] = 255
+    return region_out(wide, high, mask)
+
+
+@operator(
+    "分割",
+    [P("Image", "輸入影像")],
+    [P("Regions", "長出來的區域")],
+    [
+        P("Row", "種子列。多個種子請直接寫 tuple"),
+        P("Column", "種子行"),
+        P("Tolerance", "跟區域平均值的最大差"),
+        P("MinSize", "小於此面積的物件丟棄", "1"),
+    ],
+    [],
+    "依區域平均灰階生長",
+    "八鄰域。候選像素跟目前區域的平均灰階差在 Tolerance 以內才加入，平均值會跟著更新。平坦影像回傳空區域。",
+    "Vizion.regiongrowing_mean (Image, Regions, 0, 0, 5, 1)",
+    "新算子。左邊 10、右邊 80，容差 5 只留下左邊 4 個像素。",
+)
+def regiongrowing_mean(image, rows, columns, tolerance, min_size, *, ctx):
+    picture, gray, domain = _gray_domain(image)
+    limit = scalar(tolerance, "Tolerance")
+    minimum = whole(min_size, "MinSize")
+    seeds = list(zip(as_list(rows), as_list(columns)))
+    if not seeds:
+        raise ValueError("至少要一個種子")
+    visited = np.zeros(gray.shape, np.uint8)
+    objects = []
+    neighbors = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+    for row, column in seeds:
+        r = whole(row, "Row")
+        c = whole(column, "Column")
+        if r < 0 or c < 0 or r >= picture.height or c >= picture.width or not domain[r, c] or visited[r, c]:
+            continue
+        visited[r, c] = 1
+        total = int(gray[r, c])
+        count = 1
+        points = [(r, c)]
+        index = 0
+        while index < len(points):
+            y, x = points[index]
+            index += 1
+            mean = total / count
+            for dy, dx in neighbors:
+                ny, nx = y + dy, x + dx
+                if ny < 0 or nx < 0 or ny >= picture.height or nx >= picture.width or visited[ny, nx] or not domain[ny, nx]:
+                    continue
+                value = int(gray[ny, nx])
+                if abs(value - mean) <= limit:
+                    visited[ny, nx] = 1
+                    points.append((ny, nx))
+                    total += value
+                    count += 1
+        if count >= minimum:
+            mask = np.zeros(gray.shape, np.uint8)
+            ys, xs = zip(*points)
+            mask[np.array(ys), np.array(xs)] = 255
+            objects.append(mask)
+    return Result([Region(picture.width, picture.height, objects, multi_color=len(objects) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Regions", "輸入區域")],
+    [],
+    [],
+    [P("Thickness", "沿長軸方向看到的厚度")],
+    "量區域的厚度",
+    "先看等效橢圓的長軸。長軸接近水平時，厚度是列方向的跨距加 1。接近垂直時改用行方向。空區域是 0。",
+    "Vizion.get_region_thickness (Regions, Thickness)",
+    "新算子。寬 5、高 3 的實心矩形厚度是 3。",
+)
+def get_region_thickness(region, *, ctx):
+    values = []
+    for mask in expect_region(region, "Regions").objects:
+        ys, xs = np.nonzero(mask)
+        if len(ys) == 0:
+            values.append(0)
+            continue
+        measures = region_measures(mask)
+        if abs(measures["phi"]) <= math.pi / 4 or abs(abs(measures["phi"]) - math.pi) <= math.pi / 4:
+            values.append(int(ys.max() - ys.min() + 1))
+        else:
+            values.append(int(xs.max() - xs.min() + 1))
+    return Result([], [values])
+
+
+@operator(
+    "特徵",
+    [P("Regions", "輸入區域")],
+    [],
+    [],
+    [P("I1", "二階不變矩"), P("I2", "另一個二階不變矩")],
+    "區域的二階不變矩",
+    "I1 是 μ20＋μ02。I2 是 (μ20−μ02) 的平方加 4×μ11 的平方。平移不改變這兩個數。",
+    "Vizion.moments_region_2nd_invar (Regions, I1, I2)",
+    "新算子。2×2 方塊的 I1 是 2，I2 是 0。",
+)
+def moments_region_2nd_invar(region, *, ctx):
+    first = []
+    second = []
+    for mask in expect_region(region, "Regions").objects:
+        weights = (mask > 0).astype(np.float64)
+        total = float(weights.sum())
+        if total <= 0:
+            first.append(0.0)
+            second.append(0.0)
+            continue
+        rows, cols = np.indices(weights.shape)
+        mean_row = float((weights * rows).sum() / total)
+        mean_col = float((weights * cols).sum() / total)
+        drow = rows - mean_row
+        dcol = cols - mean_col
+        mu20 = float((weights * dcol * dcol).sum())
+        mu02 = float((weights * drow * drow).sum())
+        mu11 = float((weights * drow * dcol).sum())
+        first.append(mu20 + mu02)
+        second.append((mu20 - mu02) ** 2 + 4.0 * mu11 * mu11)
+    return Result([], [first, second])
+
+
+_CHAIN = {
+    (1, 0): 0,
+    (1, 1): 1,
+    (0, 1): 2,
+    (-1, 1): 3,
+    (-1, 0): 4,
+    (-1, -1): 5,
+    (0, -1): 6,
+    (1, -1): 7,
+}
+
+
+def _chain_of_mask(mask: np.ndarray) -> tuple[int, int, list[int]]:
+    contours, _hier = cv2.findContours((mask > 0).astype(np.uint8).copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if not contours:
+        raise ValueError("區域是空的")
+    points = contours[0].reshape(-1, 2)
+    if len(points) < 2:
+        return int(points[0][1]), int(points[0][0]), []
+    closed = np.vstack([points, points[0]])
+    codes = []
+    for (col, row), (next_col, next_row) in zip(closed, closed[1:]):
+        step = (int(next_col) - int(col), int(next_row) - int(row))
+        code = _CHAIN.get(step)
+        if code is None:
+            raise ValueError("鏈碼只接受相鄰的邊界點")
+        codes.append(code)
+    return int(points[0][1]), int(points[0][0]), codes
+
+
+@operator(
+    "區域",
+    [],
+    [P("RegionHisto", "直方圖畫成的區域")],
+    [P("Histogram", "每一格的高度"), P("Row", "第一列"), P("Column", "第一行"), P("Scale", "高度倍率", "1")],
+    [],
+    "把直方圖畫成一根根的柱",
+    "第 1 格畫在 Column，往右一格一行。高度是次數乘 Scale，從 Row 往下長。0 不會畫。",
+    "Vizion.gen_region_histo (RegionHisto, [0, 0, 4], 0, 0, 1)",
+    "新算子。第三格是 4 時，面積是 4。",
+)
+def gen_region_histo(histogram, row, column, scale, *, ctx):
+    values = [int(round(float(item))) for item in as_list(histogram)]
+    if not values:
+        raise ValueError("直方圖不能是空的")
+    if any(item < 0 for item in values):
+        raise ValueError("直方圖不能是負的")
+    factor = scalar(scale, "Scale")
+    if factor <= 0:
+        raise ValueError("Scale 要大於 0")
+    origin_row = whole(row, "Row")
+    origin_col = whole(column, "Column")
+    if origin_row < 0 or origin_col < 0:
+        raise ValueError("Row 和 Column 不能是負的")
+    heights = [int(round(item * factor)) for item in values]
+    tall = origin_row + max(heights + [1])
+    wide = origin_col + len(values)
+    mask = np.zeros((tall, wide), np.uint8)
+    for index, height in enumerate(heights):
+        if height <= 0:
+            continue
+        mask[origin_row : origin_row + height, origin_col + index] = 255
+    return region_out(wide, tall, mask)
+
+
+@operator(
+    "區域",
+    [],
+    [P("Regions", "排好的矩形")],
+    [
+        P("Type", "rectangle", "'rectangle'", ["'rectangle'"]),
+        P("WidthMin", "寬度"),
+        P("WidthMax", "這版用 WidthMin"),
+        P("HeightMin", "高度"),
+        P("HeightMax", "這版用 HeightMin"),
+        P("Phi", "這版不旋轉", "0"),
+        P("Num", "要幾個"),
+    ],
+    [],
+    "排一列固定大小的矩形",
+    "這版只做水平矩形。大小用 WidthMin 和 HeightMin。從左上角往右排，彼此空一像素，所以面積可以重現。",
+    "Vizion.gen_random_regions (Regions, 'rectangle', 2, 2, 2, 2, 0, 2)",
+    "新算子。兩個 2×2 的矩形各自面積是 4。",
+)
+def gen_random_regions(kind, width_min, width_max, height_min, height_max, phi, num, *, ctx):
+    mode = text(kind, "Type").strip().strip("'\"").lower()
+    if mode != "rectangle":
+        raise ValueError("Type 這版只做 rectangle")
+    wide = whole(width_min, "WidthMin")
+    tall = whole(height_min, "HeightMin")
+    count = whole(num, "Num")
+    scalar(width_max, "WidthMax")
+    scalar(height_max, "HeightMax")
+    scalar(phi, "Phi")
+    if wide < 1 or tall < 1 or count < 1:
+        raise ValueError("寬、高和數量至少要 1")
+    total = count * wide + (count - 1)
+    objects = []
+    for index in range(count):
+        mask = np.zeros((tall, total), np.uint8)
+        start = index * (wide + 1)
+        mask[:, start : start + wide] = 255
+        objects.append(mask)
+    return Result([Region(total, tall, objects, multi_color=len(objects) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Region", "輸入區域")],
+    [P("RegionHamming", "改過像素的區域")],
+    [P("Distance", "要改掉幾個前景像素")],
+    [],
+    "拿掉指定數量的前景像素",
+    "從左到右、再由上到下，關掉前面 Distance 個前景像素。距離不能大於面積。",
+    "Vizion.hamming_change_region (Region, RegionHamming, 3)",
+    "新算子。4×4 的實心矩形面積 16，拿掉 3 個之後是 13。",
+)
+def hamming_change_region(region, distance, *, ctx):
+    area = expect_region(region, "Region")
+    flips = whole(distance, "Distance")
+    if flips < 0:
+        raise ValueError("Distance 不能是負的")
+    mask = area.union_mask().copy()
+    ys, xs = np.where(mask > 0)
+    if flips > len(ys):
+        raise ValueError("Distance 不能大於面積")
+    if flips:
+        mask[ys[:flips], xs[:flips]] = 0
+    return region_out(area.width, area.height, mask)
+
+
+@operator(
+    "區域",
+    [P("Region", "單一物件")],
+    [],
+    [],
+    [P("Row", "起點列"), P("Column", "起點行"), P("Chain", "鏈碼")],
+    "區域外框的鏈碼",
+    "0 朝右，之後每加 1 就順時針轉 45 度。2 是往下，4 是往左，6 是往上。起點是外框的第一個點。",
+    "Vizion.get_region_chain (Region, Row, Column, Chain)",
+    "新算子。左上角 2×2 的方塊，起點是 (0,0)，鏈碼是 2、0、6、4。",
+)
+def get_region_chain(region, *, ctx):
+    area = expect_region(region, "Region")
+    if len(area.objects) != 1:
+        raise ValueError("get_region_chain 一次只讀一個物件")
+    row, column, chain = _chain_of_mask(area.objects[0])
+    return Result([], [[row], [column], chain])
+
+
+@operator(
+    "分割",
+    [P("Image", "輸入影像")],
+    [P("Regions", "長出來的區域")],
+    [
+        P("Metric", "euclid", "'euclid'", ["'euclid'"]),
+        P("MinTolerance", "這版從 0 開始長"),
+        P("MaxTolerance", "相鄰像素的最大距離"),
+        P("MinSize", "小於此面積的物件丟棄", "1"),
+    ],
+    [],
+    "依相鄰像素的距離分割",
+    "從左上角還沒被收下的像素開始。四鄰域裡，距離不超過 MaxTolerance 的像素併進來。灰階用絕對差，彩色用三通道的歐氏距離。",
+    "Vizion.regiongrowing_n (Image, Regions, 'euclid', 0, 5, 1)",
+    "新算子。左邊 10、右邊 80、容差 5 時，分成兩塊，各 4 個像素。",
+)
+def regiongrowing_n(image, metric, min_tolerance, max_tolerance, min_size, *, ctx):
+    picture = expect_image(image, "Image")
+    kind = text(metric, "Metric").strip().strip("'\"").lower()
+    if kind != "euclid":
+        raise ValueError("Metric 這版只做 euclid")
+    low = scalar(min_tolerance, "MinTolerance")
+    high = scalar(max_tolerance, "MaxTolerance")
+    minimum = whole(min_size, "MinSize")
+    if low < 0 or high < low:
+        raise ValueError("容差要是 0 以上，而且 MaxTolerance 不能小於 MinTolerance")
+    data = picture.data.astype(np.float64)
+    if data.ndim == 2:
+        data = data[:, :, None]
+    height, width = data.shape[:2]
+    visited = np.zeros((height, width), np.uint8)
+    objects = []
+    neighbors = ((-1, 0), (1, 0), (0, -1), (0, 1))
+    for row in range(height):
+        for col in range(width):
+            if visited[row, col]:
+                continue
+            visited[row, col] = 1
+            points = [(row, col)]
+            index = 0
+            while index < len(points):
+                y, x = points[index]
+                index += 1
+                for dy, dx in neighbors:
+                    ny, nx = y + dy, x + dx
+                    if ny < 0 or nx < 0 or ny >= height or nx >= width or visited[ny, nx]:
+                        continue
+                    gap = float(np.linalg.norm(data[ny, nx] - data[y, x]))
+                    if low <= gap <= high:
+                        visited[ny, nx] = 1
+                        points.append((ny, nx))
+            if len(points) >= minimum:
+                mask = np.zeros((height, width), np.uint8)
+                ys, xs = zip(*points)
+                mask[np.array(ys), np.array(xs)] = 255
+                objects.append(mask)
+    return Result([Region(width, height, objects, multi_color=len(objects) > 1)], [])

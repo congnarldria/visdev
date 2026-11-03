@@ -1005,20 +1005,26 @@ def find_scaled_shape_model(
     mode = _token(subpixel, "SubPixel")
     if mode not in ("none", "interpolation", "least_squares"):
         raise ValueError("SubPixel 只能是 none、interpolation 或 least_squares")
-    rows, cols, angles, scales, scores = search_scaled_shape_model(
-        picture,
-        model,
-        scalar(angle_start, "AngleStart"),
-        scalar(angle_extent, "AngleExtent"),
-        scalar(scale_min, "ScaleMin"),
-        scalar(scale_max, "ScaleMax"),
-        scalar(min_score, "MinScore"),
-        whole(num_matches, "NumMatches"),
-        scalar(max_overlap, "MaxOverlap"),
-        mode,
-        whole(num_levels, "NumLevels"),
-        scalar(greediness, "Greediness"),
-    )
+    from ..shape_model import bind_search_cancel, release_search_cancel
+
+    token = bind_search_cancel(lambda: bool(getattr(ctx, "cancel", False)))
+    try:
+        rows, cols, angles, scales, scores = search_scaled_shape_model(
+            picture,
+            model,
+            scalar(angle_start, "AngleStart"),
+            scalar(angle_extent, "AngleExtent"),
+            scalar(scale_min, "ScaleMin"),
+            scalar(scale_max, "ScaleMax"),
+            scalar(min_score, "MinScore"),
+            whole(num_matches, "NumMatches"),
+            scalar(max_overlap, "MaxOverlap"),
+            mode,
+            whole(num_levels, "NumLevels"),
+            scalar(greediness, "Greediness"),
+        )
+    finally:
+        release_search_cancel(token)
     from ..operators import _with_origin
 
     rows, cols = _with_origin(rows, cols, model, scales)

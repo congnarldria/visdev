@@ -1,0 +1,10 @@
+* 直線法線不跟尖角歪
+* gen_parallel_contour_xld 的 regression_normal 先把整條輪廓擬合成直線，再沿那條直線的右側法線平移。contour_normal 仍沿每個點自己的法線。
+* 水平線在列 40，行從 10 到 90。正中間那個點被拉到列 52。往右側平移 4。
+* contour_normal 把尖角兩旁的點推到行 28.85061 和 71.14939。regression_normal 讓這兩點留在行 30 和 70，列都是 44。
+Vizion.gen_contour_polygon_xld (Edge, [40, 40, 52, 40, 40], [10, 30, 50, 70, 90])
+Vizion.gen_parallel_contour_xld (Edge, Local, 'contour_normal', 4)
+Vizion.get_contour_xld (Local, LRow, LCol)
+Vizion.gen_parallel_contour_xld (Edge, Fitted, 'regression_normal', 4)
+Vizion.get_contour_xld (Fitted, RRow, RCol)
+Vizion.dev_display (Fitted)

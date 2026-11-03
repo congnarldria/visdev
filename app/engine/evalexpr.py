@@ -62,7 +62,10 @@ def rewrite(expr: str) -> str:
             j = i + 1
             while j < n and expr[j] != ch:
                 j += 1
-            chars.append(expr[i : j + 1])
+            piece = expr[i : j + 1]
+            if j < n and len(piece) >= 2:
+                piece = piece[0] + piece[1:-1].replace("\\", "\\\\") + piece[-1]
+            chars.append(piece)
             i = j + 1
             continue
         if ch == "|":

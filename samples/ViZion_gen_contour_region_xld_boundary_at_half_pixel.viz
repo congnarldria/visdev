@@ -1,0 +1,33 @@
+* 邊界在半個像素
+* gen_contour_region_xld 的 center 走在區域和外面之間的邊上，座標是 .5。
+* border 仍停在最外圈的整數像素。方塊列 10 到 29、行 10 到 29 時，center 外框是 9.5 和 29.5，border 是 10 和 29。
+* 有孔的框用 center 只畫外圈，不畫孔。外框在 9.5 和 40.5。
+* 圓的像素中心在半徑裡面。center 再擬合圓會更靠近真正的半徑，border 會偏小。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Box, 10, 10, 29, 29)
+Vizion.gen_contour_region_xld (Box, Center, 'center')
+Vizion.gen_contour_region_xld (Box, Border, 'border')
+Vizion.count_obj (Center, CenterCount)
+Vizion.get_contour_xld (Center, Rows, Cols)
+Vizion.tuple_min (Rows, RowMin)
+Vizion.tuple_max (Rows, RowMax)
+Vizion.tuple_min (Cols, ColMin)
+Vizion.tuple_max (Cols, ColMax)
+Vizion.get_contour_xld (Border, BRows, BCols)
+Vizion.tuple_min (BCols, BorderMin)
+Vizion.tuple_max (BCols, BorderMax)
+Vizion.gen_rectangle1 (Outer, 10, 10, 40, 40)
+Vizion.gen_rectangle1 (Hole, 20, 20, 30, 30)
+Vizion.difference (Outer, Hole, Frame)
+Vizion.gen_contour_region_xld (Frame, FrameCenter, 'center')
+Vizion.count_obj (FrameCenter, FrameCount)
+Vizion.select_obj (FrameCenter, OuterLine, 1)
+Vizion.get_contour_xld (OuterLine, FRows, FCols)
+Vizion.tuple_min (FCols, FrameMin)
+Vizion.tuple_max (FCols, FrameMax)
+Vizion.gen_circle (Disk, 30, 40, 15)
+Vizion.gen_contour_region_xld (Disk, DiskCenter, 'center')
+Vizion.gen_contour_region_xld (Disk, DiskBorder, 'border')
+Vizion.fit_circle_contour_xld (DiskCenter, CCircle, CRow, CCol, CRad)
+Vizion.fit_circle_contour_xld (DiskBorder, BCircle, BRow, BCol, BRad)
+Vizion.dev_display (Center)

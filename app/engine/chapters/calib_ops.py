@@ -1,25 +1,39 @@
-"""Checkerboard camera calibration through OpenCV.
+"""Camera calibration through OpenCV.
 
-The calibration object is not an MVTec description file. Descr is three
-numbers: inner corner rows, inner corner columns, and the square size.
-Camera parameters are fx, fy, cx, cy, k1, k2, p1, p2, k3.
+A chessboard is three numbers: inner corner rows, columns, and the square size.
+A .cpd or .descr file is a HALCON plate description: rows, columns, and the
+mark coordinates. Circle plates are found with findCirclesGrid. Each camera
+keeps its own views and is calibrated on its own. Parameters are fx, fy, cx,
+cy, k1, k2, p1, p2, k3.
 """
 
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import cv2
 import numpy as np
 
 from ..chapters.pose_ops import _angles_gba, _pose_matrix, _pose_numbers
-from ..objects import Image, Result
+from ..objects import Image, Result, XLD
 from ..operators import P, as_list, expect_image, operator, scalar, text, whole
 
 _SETUPS = ["'calibration_object'"]
 _ITEMS = ["'camera'", "'calib_obj_pose'", "'model'"]
-_DATA = ["'params'", "'pose'", "'error'"]
+_DATA = ["'params'", "'pose'", "'error'", "'num_poses'", "'image_size'"]
+
+
+@dataclass
+class PlateDescr:
+    kind: str
+    rows: int
+    cols: int
+    square: float
+    marks: np.ndarray | None = None
+    polarity: str = "light"
 
 
 @dataclass
@@ -28,18 +42,35 @@ class CalibData:
     cols: int | None = None
     square: float = 1.0
     observations: list = field(default_factory=list)
+    observation_cameras: list = field(default_factory=list)
     width: int = 0
     height: int = 0
     camera: list | None = None
+    cameras: list | None = None
+    camera_poses: list | None = None
     poses: list = field(default_factory=list)
     error: float | None = None
+    observation_errors: list = field(default_factory=list)
+    observation_projected: list = field(default_factory=list)
+    observation_images: list = field(default_factory=list)
     closed: bool = False
+    num_cameras: int = 1
+    plate: str = "chessboard"
+    polarity: str = "light"
+    marks: np.ndarray | None = None
 
     def summary(self) -> str:
         if self.closed:
             return "標定  已關閉"
-        points = f"{self.rows}x{self.cols}" if self.rows else "尚未設定棋盤"
-        return f"標定  {points}  {len(self.observations)} 組"
+        points = f"{self.rows}x{self.cols}" if self.rows else "尚未設定標定板"
+        kind = "圓點" if self.plate == "circles" else "棋盤"
+        counted = f"標定  {kind} {points}  {self.num_cameras} 台相機  {len(self.observations)} 組"
+        if self.error is not None:
+            counted += f"  誤差 {self.error:.3f} 像素"
+        relative = self.camera_poses[1] if self.num_cameras > 1 and self.camera_poses and len(self.camera_poses) > 1 else None
+        if relative:
+            counted += f"  相機1相對 ({relative[0]:.3f}, {relative[1]:.3f}, {relative[2]:.3f})"
+        return counted
 
 
 def _alive(model, name: str) -> CalibData:
@@ -51,6 +82,8 @@ def _alive(model, name: str) -> CalibData:
 
 
 def _object_points(model: CalibData) -> np.ndarray:
+    if model.marks is not None:
+        return model.marks
     if not model.rows or not model.cols:
         raise RuntimeError("請先 set_calib_data_calib_object")
     grid = np.zeros((model.rows * model.cols, 3), np.float64)
@@ -61,17 +94,117 @@ def _object_points(model: CalibData) -> np.ndarray:
     return grid
 
 
-def _parse_descr(value) -> tuple[int, int, float]:
-    raw = text(value, "CalibObjDescr").replace("x", ",").replace("X", ",").replace("，", ",")
-    parts = [item.strip() for item in raw.split(",") if item.strip()]
-    if len(parts) != 3:
-        raise ValueError("標定物請寫內角點列數,行數,方格邊長，例如 '5,7,10'。這版不讀描述檔。")
-    rows = int(round(float(parts[0])))
-    cols = int(round(float(parts[1])))
-    square = float(parts[2])
-    if rows < 2 or cols < 2 or square <= 0:
-        raise ValueError("棋盤至少要 2x2 個內角點，邊長要大於 0")
-    return rows, cols, square
+def parse_plate_description(source: str) -> PlateDescr:
+    """Read a HALCON .cpd or .descr plate file. Mark coordinates stay in meters."""
+    rows = None
+    cols = None
+    zee = 0.0
+    polarity = "light"
+    marks: list[tuple[float, float, float]] = []
+    finder_count = 0
+    finders_read = 0
+    reading_finders = False
+    for line in source.splitlines():
+        raw = line.strip()
+        if not raw:
+            continue
+        if raw.startswith("#"):
+            if "calibration marks" in raw.lower():
+                reading_finders = False
+            continue
+        parts = raw.split()
+        key = parts[0].lower()
+        if key == "r" and len(parts) == 2:
+            rows = int(float(parts[1]))
+            reading_finders = False
+            continue
+        if key == "c" and len(parts) == 2:
+            cols = int(float(parts[1]))
+            reading_finders = False
+            continue
+        if key == "z" and len(parts) == 2:
+            zee = float(parts[1])
+            reading_finders = False
+            continue
+        if key == "p" and len(parts) >= 2:
+            word = parts[1].lower()
+            polarity = "dark" if word.startswith("dark") else "light"
+            reading_finders = False
+            continue
+        if key == "f" and len(parts) == 2:
+            finder_count = int(float(parts[1]))
+            reading_finders = finder_count > 0
+            finders_read = 0
+            continue
+        if key in ("o", "i", "t"):
+            reading_finders = False
+            continue
+        if reading_finders and len(parts) >= 2 and finders_read < finder_count:
+            finders_read += 1
+            if finders_read >= finder_count:
+                reading_finders = False
+            continue
+        if len(parts) >= 3:
+            marks.append((float(parts[0]), float(parts[1]), float(parts[2])))
+    if rows is None or cols is None:
+        raise ValueError("描述檔缺少列數或行數")
+    if rows < 2 or cols < 2:
+        raise ValueError("標定板至少要 2x2 個標記")
+    if marks and len(marks) != rows * cols:
+        raise ValueError(f"描述檔有 {len(marks)} 個標記，列數乘行數是 {rows * cols}")
+    points = None
+    square = 1.0
+    if marks:
+        ordered = sorted(marks, key=lambda item: (-item[1], item[0]))
+        points = np.zeros((len(ordered), 3), np.float64)
+        for index, (x_value, y_value, _radius) in enumerate(ordered):
+            points[index, 0] = x_value
+            points[index, 1] = y_value
+            points[index, 2] = zee
+        gaps = np.diff(points[:cols, 0]) if cols > 1 else np.array([1.0])
+        square = float(np.median(np.abs(gaps))) if gaps.size else 1.0
+    return PlateDescr("circles", rows, cols, square, points, polarity)
+
+
+def _looks_like_plate_file(raw: str) -> bool:
+    lowered = raw.lower()
+    return lowered.endswith(".cpd") or lowered.endswith(".descr") or "/" in raw or "\\" in raw
+
+
+def _load_plate_file(ctx, raw: str) -> PlateDescr:
+    path = Path(raw).expanduser()
+    roots = []
+    base = getattr(ctx, "root", None)
+    if path.is_absolute():
+        roots.append(path)
+    elif base is not None:
+        roots.extend([Path(base) / path, Path(base) / "samples" / path, Path(base) / "workspace" / path])
+    else:
+        roots.append(path)
+    chosen = next((item for item in roots if item.is_file()), None)
+    if chosen is None:
+        raise ValueError(f"讀不到描述檔 {raw}")
+    return parse_plate_description(chosen.read_text(encoding="utf-8", errors="replace"))
+
+
+def _parse_descr(value, ctx) -> PlateDescr:
+    raw = text(value, "CalibObjDescr").strip().strip("'\"")
+    if not _looks_like_plate_file(raw):
+        numeric = raw.replace("x", ",").replace("X", ",").replace("，", ",")
+        parts = [item.strip() for item in numeric.split(",") if item.strip()]
+        if len(parts) == 3:
+            try:
+                rows = int(round(float(parts[0])))
+                cols = int(round(float(parts[1])))
+                square = float(parts[2])
+            except ValueError:
+                rows = cols = 0
+                square = 0.0
+            else:
+                if rows < 2 or cols < 2 or square <= 0:
+                    raise ValueError("棋盤至少要 2x2 個內角點，邊長要大於 0")
+                return PlateDescr("chessboard", rows, cols, square, None, "light")
+    return _load_plate_file(ctx, raw)
 
 
 def _camera_matrix(params: list[float]):
@@ -93,22 +226,26 @@ def _pose_from_vectors(rvec, tvec) -> list:
     [],
     [],
     [
-        P("CalibSetup", "這版只做單一棋盤", "'calibration_object'", _SETUPS),
-        P("NumCameras", "相機數，這版必須是 1", "1"),
+        P("CalibSetup", "這版只做一塊標定板", "'calibration_object'", _SETUPS),
+        P("NumCameras", "相機數。一台填 1。兩台填 2，每張影像的 CameraIdx 再用 0 或 1", "1"),
         P("NumCalibObjects", "標定物數，這版必須是 1", "1"),
     ],
     [P("CalibDataID", "標定資料")],
     "建立標定資料",
-    "只支援一台相機和一塊棋盤。相機參數是 OpenCV 的 fx、fy、cx、cy、k1、k2、p1、p2、k3，不是 HALCON 的 area_scan_division。",
+    "可以有多台相機，標定物仍是一塊。每台相機用自己的影像各自估計九個參數。標完之後，camera/pose 是這台相機相對第 0 台的姿態。每一台的第 k 組要是同時看到的同一塊板。第 0 台的相對姿態是 0。",
     "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)",
 )
 def create_calib_data(setup, num_cameras, num_objects, *, ctx):
     kind = text(setup, "CalibSetup").strip().strip("'\"").lower()
     if kind != "calibration_object":
         raise ValueError("CalibSetup 這版只接受 calibration_object")
-    if whole(num_cameras, "NumCameras") != 1 or whole(num_objects, "NumCalibObjects") != 1:
-        raise ValueError("這版只能一台相機、一塊標定板")
-    return Result([], [CalibData()])
+    cameras = whole(num_cameras, "NumCameras")
+    objects = whole(num_objects, "NumCalibObjects")
+    if cameras < 1:
+        raise ValueError("相機數至少要 1")
+    if objects != 1:
+        raise ValueError("這版只能一塊標定板")
+    return Result([], [CalibData(num_cameras=cameras)])
 
 
 @operator(
@@ -118,36 +255,62 @@ def create_calib_data(setup, num_cameras, num_objects, *, ctx):
     [
         P("CalibDataID", "標定資料"),
         P("CalibObjIdx", "標定物編號，從 0 開始", "0"),
-        P("CalibObjDescr", "內角點列數,行數,邊長", "'5,7,10'"),
+        P("CalibObjDescr", "棋盤寫 '5,7,10'：內角點 5 列、7 行、方格邊長 10。描述檔寫路徑，例如 'samples/calplate_4x5.cpd'", "'5,7,10'", browse="plate"),
     ],
     [],
-    "設定棋盤格",
-    "三個數是內角點的列數、行數和方格邊長，例如 '5,7,10'。不是 MVTec 的 .cpd 或 .descr。列數是直向的角點數。",
+    "設定標定板",
+    "三個數是棋盤內角點的列數、行數和方格邊長，例如 '5,7,10'。副檔名是 .cpd 或 .descr 時讀 HALCON 描述檔：r、c 是標記的列數和行數，後面每行是標記的 x、y、半徑，單位是公尺。圓點板用 findCirclesGrid 來找。",
     "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,10')",
 )
 def set_calib_data_calib_object(model, index, descr, *, ctx):
     calib = _alive(model, "CalibDataID")
     if whole(index, "CalibObjIdx") != 0:
         raise ValueError("CalibObjIdx 這版只能是 0")
-    rows, cols, square = _parse_descr(descr)
-    calib.rows = rows
-    calib.cols = cols
-    calib.square = square
+    plate = _parse_descr(descr, ctx)
+    calib.rows = plate.rows
+    calib.cols = plate.cols
+    calib.square = plate.square
+    calib.plate = plate.kind
+    calib.polarity = plate.polarity
+    calib.marks = plate.marks
     calib.observations.clear()
+    calib.observation_cameras.clear()
+    calib.observation_errors.clear()
+    calib.observation_projected.clear()
+    calib.observation_images.clear()
     calib.poses.clear()
     calib.camera = None
+    calib.cameras = None
+    calib.camera_poses = None
     calib.error = None
+    calib.width = 0
+    calib.height = 0
     return Result([], [])
 
 
-def _store_observation(calib: CalibData, rows: np.ndarray, cols: np.ndarray, width: int, height: int):
+def _camera_index(calib: CalibData, camera_idx, object_idx) -> int:
+    camera = whole(camera_idx, "CameraIdx")
+    if camera < 0 or camera >= calib.num_cameras:
+        raise ValueError(f"相機編號要在 0 到 {calib.num_cameras - 1}")
+    if whole(object_idx, "CalibObjIdx") != 0:
+        raise ValueError("CalibObjIdx 這版只能是 0")
+    return camera
+
+
+def _store_observation(calib: CalibData, rows: np.ndarray, cols: np.ndarray, width: int, height: int, camera: int = 0, image: Image | None = None):
     expected = calib.rows * calib.cols
     if len(rows) != expected:
         raise ValueError(f"點數要是 {expected}")
     image_points = np.column_stack([cols, rows]).astype(np.float64)
-    calib.observations.append((_object_points(calib), image_points))
-    calib.width = max(calib.width, int(width))
-    calib.height = max(calib.height, int(height))
+    stored_width = int(width)
+    stored_height = int(height)
+    calib.observations.append((_object_points(calib), image_points, stored_width, stored_height))
+    calib.observation_cameras.append(int(camera))
+    calib.observation_errors.append(None)
+    calib.observation_projected.append(None)
+    calib.observation_images.append(image)
+    calib.width = max(calib.width, stored_width)
+    calib.height = max(calib.height, stored_height)
     return len(calib.observations) - 1
 
 
@@ -157,38 +320,28 @@ def _store_observation(calib: CalibData, rows: np.ndarray, cols: np.ndarray, wid
     [],
     [
         P("CalibDataID", "標定資料"),
-        P("CameraIdx", "相機編號", "0"),
+        P("CameraIdx", "第幾台相機，從 0 開始。只有一台就填 0", "0"),
         P("CalibObjIdx", "標定物編號", "0"),
         P("GenParamName", "這版不使用", "''"),
         P("GenParamValue", "這版不使用", "''"),
     ],
     [],
     "在影像裡找棋盤格",
-    "用 OpenCV 找內角點。找不到會失敗。同一塊板可以從不同角度多找幾次，calibrate_cameras 至少要三組。",
+    "棋盤用內角點，圓點板用 findCirclesGrid。找到的點會畫在這張圖上。找不到會失敗，已經放進去的影像還留著。CameraIdx 是第幾台相機。calibrate_cameras 每一台至少要三張，標完會把每張的點和誤差畫出來。",
     "Vizion.find_calib_object (Image, CalibDataID, 0, 0, '', '')",
 )
 def find_calib_object(image, model, camera_idx, object_idx, _name, _value, *, ctx):
     picture = expect_image(image, "Image")
     calib = _alive(model, "CalibDataID")
-    if whole(camera_idx, "CameraIdx") != 0 or whole(object_idx, "CalibObjIdx") != 0:
-        raise ValueError("這版的相機和標定物編號都只能是 0")
+    camera = _camera_index(calib, camera_idx, object_idx)
     _object_points(calib)
     gray = picture.gray()
-    pattern = (calib.cols, calib.rows)
-    found = False
-    corners = None
-    if hasattr(cv2, "findChessboardCornersSB"):
-        found, corners = cv2.findChessboardCornersSB(gray, pattern)
-    if not found:
-        flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE
-        found, corners = cv2.findChessboardCorners(gray, pattern, flags)
-    if not found or corners is None:
-        raise RuntimeError("找不到棋盤格")
-    corners = np.asarray(corners, np.float32).reshape(-1, 1, 2)
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
-    corners = cv2.cornerSubPix(gray, corners, (5, 5), (-1, -1), criteria)
-    points = corners.reshape(-1, 2)
-    _store_observation(calib, points[:, 1], points[:, 0], picture.width, picture.height)
+    if calib.plate == "circles":
+        points = _circle_grid(gray, calib.cols, calib.rows, calib.polarity)
+    else:
+        points = _grid_corners(gray, calib.rows, calib.cols).reshape(-1, 2)
+    index = _store_observation(calib, points[:, 1], points[:, 0], picture.width, picture.height, camera, picture)
+    _show_found_marks(ctx, calib, index)
     return Result([], [])
 
 
@@ -198,7 +351,7 @@ def find_calib_object(image, model, camera_idx, object_idx, _name, _value, *, ct
     [],
     [
         P("CalibDataID", "標定資料"),
-        P("CameraIdx", "相機編號", "0"),
+        P("CameraIdx", "第幾台相機，從 0 開始。只有一台就填 0", "0"),
         P("CalibObjIdx", "標定物編號", "0"),
         P("Row", "角點的列"),
         P("Column", "角點的行"),
@@ -210,16 +363,380 @@ def find_calib_object(image, model, camera_idx, object_idx, _name, _value, *, ct
 )
 def set_calib_data_observ_points(model, camera_idx, object_idx, row, column, *, ctx):
     calib = _alive(model, "CalibDataID")
-    if whole(camera_idx, "CameraIdx") != 0 or whole(object_idx, "CalibObjIdx") != 0:
-        raise ValueError("這版的相機和標定物編號都只能是 0")
+    camera = _camera_index(calib, camera_idx, object_idx)
     rows = np.asarray([float(item) for item in as_list(row)], np.float64)
     cols = np.asarray([float(item) for item in as_list(column)], np.float64)
     if len(rows) != len(cols):
         raise ValueError("Row 和 Column 的長度要相同")
     width = int(math.ceil(float(cols.max()) + 1)) if len(cols) else 1
     height = int(math.ceil(float(rows.max()) + 1)) if len(rows) else 1
-    index = _store_observation(calib, rows, cols, max(width, 1), max(height, 1))
+    index = _store_observation(calib, rows, cols, max(width, 1), max(height, 1), camera)
     return Result([], [index, [0, 0, 0, 0, 0, 0, 0]])
+
+
+def _fit_camera(observations, width: int, height: int):
+    object_points = [item[0].reshape(-1, 1, 3).astype(np.float32) for item in observations]
+    image_points = [item[1].reshape(-1, 1, 2).astype(np.float32) for item in observations]
+    size = (max(width, 2), max(height, 2))
+    error, matrix, dist, rvecs, tvecs = cv2.calibrateCamera(object_points, image_points, size, None, None)
+    dist = np.asarray(dist, np.float64).reshape(-1)
+    padded = list(dist[:5]) + [0.0] * (5 - len(dist[:5]))
+    params = [
+        float(matrix[0, 0]),
+        float(matrix[1, 1]),
+        float(matrix[0, 2]),
+        float(matrix[1, 2]),
+        *[float(item) for item in padded],
+    ]
+    poses = [_pose_from_vectors(rvec, tvec) for rvec, tvec in zip(rvecs, tvecs)]
+    views = []
+    for obj, img, rvec, tvec in zip(object_points, image_points, rvecs, tvecs):
+        projected, _ = cv2.projectPoints(obj, rvec, tvec, matrix, dist)
+        detected = np.asarray(img, np.float64).reshape(-1, 2)
+        pred = np.asarray(projected, np.float64).reshape(-1, 2)
+        delta = pred - detected
+        rms = float(np.sqrt(np.mean(np.sum(delta * delta, axis=1))))
+        views.append((rms, pred))
+    return float(error), params, poses, views
+
+
+def _log(ctx, message: str) -> None:
+    if ctx is None:
+        return
+    log = getattr(ctx, "log", None)
+    if isinstance(log, list):
+        log.append(message)
+
+
+def _view_label(camera: int, ordinal: int, count: int, error) -> str:
+    label = f"相機 {camera} · 第 {ordinal} 組 · {count} 點"
+    if error is None:
+        return label
+    return f"{label} · 誤差 {error:.3f} 像素"
+
+
+def _error_line(calib: CalibData, owners: list[int]) -> str:
+    ordinals: dict[int, int] = defaultdict(int)
+    parts = []
+    for index, camera in enumerate(owners):
+        ordinals[camera] += 1
+        error = calib.observation_errors[index] if index < len(calib.observation_errors) else None
+        if error is None:
+            continue
+        parts.append(f"相機 {camera} 第 {ordinals[camera]} 組 {error:.3f}")
+    mean = f"{calib.error:.3f}" if calib.error is not None else "?"
+    if not parts:
+        return f"標定誤差 {mean} 像素"
+    return f"標定誤差 {mean} 像素。" + "、".join(parts)
+
+
+def _cross_contours(points, half: float) -> list:
+    contours = []
+    for x_value, y_value in np.asarray(points, np.float64).reshape(-1, 2):
+        x_value = float(x_value)
+        y_value = float(y_value)
+        contours.append([[x_value - half, y_value], [x_value + half, y_value]])
+        contours.append([[x_value, y_value - half], [x_value, y_value + half]])
+    return contours
+
+
+def _segment_contours(detected, projected) -> list:
+    contours = []
+    found = np.asarray(detected, np.float64).reshape(-1, 2)
+    pred = np.asarray(projected, np.float64).reshape(-1, 2)
+    for (x0, y0), (x1, y1) in zip(found, pred):
+        contours.append([[float(x0), float(y0)], [float(x1), float(y1)]])
+    return contours
+
+
+def _outlier_mask(detected, projected):
+    """Points that sit far from the rest of this view. None when nothing stands out."""
+    if projected is None:
+        return None
+    found = np.asarray(detected, np.float64).reshape(-1, 2)
+    pred = np.asarray(projected, np.float64).reshape(-1, 2)
+    if len(found) != len(pred) or len(found) < 4:
+        return None
+    errors = np.hypot(pred[:, 0] - found[:, 0], pred[:, 1] - found[:, 1])
+    median = float(np.median(errors))
+    limit = max(median * 3.0, median + 1.0)
+    mask = errors >= limit - 1e-9
+    count = int(np.count_nonzero(mask))
+    if count <= 0 or count >= len(errors):
+        return None
+    return mask
+
+
+def _with_outlier_note(label: str, detected, projected) -> str:
+    mask = _outlier_mask(detected, projected)
+    if mask is None:
+        return label
+    return f"{label} · 紅色 {int(np.count_nonzero(mask))} 點"
+
+
+def _append_xld(ctx, width: int, height: int, contours: list, color: str) -> None:
+    if not contours:
+        return
+    ctx.display.overlays.append(
+        {
+            "kind": "xld",
+            "xld": XLD(width, height, contours),
+            "color": color,
+            "colors": None,
+            "width": 2,
+            "provisional": False,
+        }
+    )
+
+
+def _add_mark_overlays(ctx, width: int, height: int, detected, projected, texts: list[tuple[str, float]]) -> None:
+    half = max(4.0, round(min(width, height) * 0.012))
+    found = np.asarray(detected, np.float64).reshape(-1, 2)
+    mask = _outlier_mask(found, projected)
+    if mask is None:
+        _append_xld(ctx, width, height, _cross_contours(found, half), "#3dff7a")
+        if projected is not None:
+            _append_xld(ctx, width, height, _segment_contours(found, projected), "#ffb020")
+    else:
+        keep = np.flatnonzero(~mask)
+        bad = np.flatnonzero(mask)
+        pred = None if projected is None else np.asarray(projected, np.float64).reshape(-1, 2)
+        _append_xld(ctx, width, height, _cross_contours(found[keep], half), "#3dff7a")
+        _append_xld(ctx, width, height, _cross_contours(found[bad], half), "#ff3b30")
+        if pred is not None:
+            _append_xld(ctx, width, height, _segment_contours(found[keep], pred[keep]), "#ffb020")
+            _append_xld(ctx, width, height, _segment_contours(found[bad], pred[bad]), "#ff3b30")
+    for text_value, row in texts:
+        ctx.display.overlays.append(
+            {"kind": "text", "text": text_value, "row": row, "col": 8, "color": "#ffe14a"}
+        )
+
+
+def _show_found_marks(ctx, calib: CalibData, index: int) -> None:
+    if ctx is None or not callable(getattr(ctx, "display_obj", None)):
+        return
+    image = calib.observation_images[index] if index < len(calib.observation_images) else None
+    if image is None:
+        return
+    camera = calib.observation_cameras[index] if index < len(calib.observation_cameras) else 0
+    ordinal = sum(1 for item in calib.observation_cameras[: index + 1] if item == camera)
+    detected = np.asarray(calib.observations[index][1], np.float64).reshape(-1, 2)
+    ctx.display_obj(image)
+    _add_mark_overlays(
+        ctx,
+        image.width,
+        image.height,
+        detected,
+        None,
+        [(_view_label(int(camera), ordinal, len(detected), None), 18)],
+    )
+
+
+def _paste(canvas: np.ndarray, image: Image, row: int) -> None:
+    patch = image.data
+    if canvas.ndim == 3 and patch.ndim == 2:
+        patch = cv2.cvtColor(patch, cv2.COLOR_GRAY2BGR)
+    elif canvas.ndim == 2 and patch.ndim == 3:
+        patch = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY)
+    height, width = patch.shape[:2]
+    canvas[row : row + height, :width] = patch
+
+
+def _stack_panels(panels: list) -> tuple[Image, list, list]:
+    band = 28
+    gap = 8
+    width = max(image.width for _index, image, *_rest in panels)
+    height = sum(image.height + band for _index, image, *_rest in panels) + gap * (len(panels) - 1)
+    gray = all(image.channels == 1 for _index, image, *_rest in panels)
+    canvas = np.full((height, width), 16, np.uint8) if gray else np.full((height, width, 3), 16, np.uint8)
+    marks = []
+    row = 0
+    for index, image, label, detected, projected in panels:
+        top = row
+        text_row = row + 20
+        row += band
+        _paste(canvas, image, row)
+        bottom = row + image.height
+        marks.append((index, label, text_row, detected, projected, row, top, bottom))
+        row = bottom + gap
+    picture = Image(canvas)
+    scale = min(1.0, 1200 / picture.width, 1600 / picture.height)
+    if scale < 0.999:
+        resized = cv2.resize(
+            picture.data,
+            (max(1, int(round(picture.width * scale))), max(1, int(round(picture.height * scale)))),
+            interpolation=cv2.INTER_AREA,
+        )
+        picture = Image(resized)
+    placed = []
+    bounds = []
+    for index, label, text_row, detected, projected, origin, top, bottom in marks:
+        found = np.asarray(detected, np.float64).reshape(-1, 2).copy()
+        found[:, 0] *= scale
+        found[:, 1] = (found[:, 1] + origin) * scale
+        pred = None
+        if projected is not None:
+            pred = np.asarray(projected, np.float64).reshape(-1, 2).copy()
+            pred[:, 0] *= scale
+            pred[:, 1] = (pred[:, 1] + origin) * scale
+        placed.append((label, text_row * scale, found, pred))
+        bounds.append({"index": int(index), "top": float(top * scale), "bottom": float(bottom * scale)})
+    return picture, placed, bounds
+
+
+def _view_parts(calib: CalibData, owners: list[int]) -> list:
+    ordinals: dict[int, int] = defaultdict(int)
+    panels = []
+    for index, camera in enumerate(owners):
+        ordinals[int(camera)] += 1
+        image = calib.observation_images[index] if index < len(calib.observation_images) else None
+        if image is None:
+            continue
+        detected = np.asarray(calib.observations[index][1], np.float64).reshape(-1, 2)
+        projected = calib.observation_projected[index] if index < len(calib.observation_projected) else None
+        error = calib.observation_errors[index] if index < len(calib.observation_errors) else None
+        label = _with_outlier_note(
+            _view_label(int(camera), ordinals[int(camera)], len(detected), error),
+            detected,
+            projected,
+        )
+        panels.append((index, image, label, detected, projected))
+    return panels
+
+
+def _remember_board(ctx, calib: CalibData, owners: list[int]) -> None:
+    if ctx is None:
+        return
+    ctx.calib_board = calib
+    ctx.calib_owners = [int(item) for item in owners]
+
+
+def _present_calibration(ctx, calib: CalibData, owners: list[int], *, log: bool = True) -> None:
+    if log:
+        _log(ctx, _error_line(calib, owners))
+    _remember_board(ctx, calib, owners)
+    if ctx is None or not callable(getattr(ctx, "display_obj", None)):
+        return
+    panels = _view_parts(calib, owners)
+    if not panels:
+        return
+    if len(panels) == 1:
+        _index, image, label, detected, projected = panels[0]
+        texts = []
+        if calib.error is not None:
+            texts.append((f"平均誤差 {calib.error:.3f} 像素", 18))
+            texts.append((label, 38))
+        else:
+            texts.append((label, 18))
+        ctx.display_obj(image)
+        _add_mark_overlays(ctx, image.width, image.height, detected, projected, texts)
+        return
+    picture, placed, bounds = _stack_panels(panels)
+    ctx.display_obj(picture)
+    for label, row, detected, projected in placed:
+        _add_mark_overlays(ctx, picture.width, picture.height, detected, projected, [(label, row)])
+    if calib.error is not None and ctx.display.overlays:
+        for item in ctx.display.overlays:
+            if item.get("kind") == "text":
+                item["text"] = f"平均誤差 {calib.error:.3f} 像素 · {item['text']}"
+                break
+    ctx.display.calib_panels = bounds
+    ctx.display.calib_back = False
+    ctx.display.calib_note = "點某一張可看原圖、點和誤差。再點一下那張會回到全部。"
+
+
+def _show_calib_index(ctx, calib: CalibData, owners: list[int], index: int) -> None:
+    panels = _view_parts(calib, owners)
+    chosen = next((panel for panel in panels if panel[0] == int(index)), None)
+    if chosen is None or ctx is None or not callable(getattr(ctx, "display_obj", None)):
+        return
+    _index, image, label, detected, projected = chosen
+    texts = [(label, 18)]
+    if calib.error is not None:
+        texts = [(f"平均誤差 {calib.error:.3f} 像素", 18), (label, 38)]
+    texts.append(("再點一下回到全部", texts[-1][1] + 20))
+    ctx.display_obj(image)
+    _add_mark_overlays(ctx, image.width, image.height, detected, projected, texts)
+    ctx.display.calib_panels = None
+    ctx.display.calib_back = True
+    ctx.display.calib_note = f"{label}。再點一下回到全部。"
+
+
+def show_saved_calibration(ctx, index: int | None) -> None:
+    calib = getattr(ctx, "calib_board", None)
+    owners = getattr(ctx, "calib_owners", None)
+    if calib is None or not owners:
+        return
+    if index is None:
+        _present_calibration(ctx, calib, owners, log=False)
+        return
+    _show_calib_index(ctx, calib, owners, int(index))
+
+
+def _relative_motion(pose_ref: list, pose_cam: list) -> tuple[np.ndarray, np.ndarray]:
+    """Map a point in camera 0 into this camera: X_i = R @ X_0 + t."""
+    reference = _pose_matrix(_pose_numbers(pose_ref))
+    current = _pose_matrix(_pose_numbers(pose_cam))
+    rotation_ref = reference[:3, :3]
+    translation_ref = reference[:3, 3]
+    rotation_cam = current[:3, :3]
+    translation_cam = current[:3, 3]
+    rotation = rotation_cam @ rotation_ref.T
+    translation = translation_cam - rotation @ translation_ref
+    return rotation, translation
+
+
+def _mean_motion(motions: list[tuple[np.ndarray, np.ndarray]]) -> list:
+    rotation_sum = np.zeros((3, 3), np.float64)
+    translation_sum = np.zeros(3, np.float64)
+    for rotation, translation in motions:
+        rotation_sum += rotation
+        translation_sum += translation
+    left, _, right = np.linalg.svd(rotation_sum)
+    rotation = left @ right
+    if np.linalg.det(rotation) < 0:
+        left = left.copy()
+        left[:, -1] *= -1
+        rotation = left @ right
+    translation = translation_sum / len(motions)
+    rx, ry, rz = _angles_gba(rotation)
+    return [float(translation[0]), float(translation[1]), float(translation[2]), float(rx), float(ry), float(rz), 0]
+
+
+def _store_camera_poses(calib: CalibData) -> None:
+    poses: list = [None] * calib.num_cameras
+    if calib.num_cameras < 1:
+        calib.camera_poses = poses
+        return
+    poses[0] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0]
+    if calib.num_cameras == 1:
+        calib.camera_poses = poses
+        return
+    grouped: dict[int, list[int]] = defaultdict(list)
+    owners = calib.observation_cameras or [0] * len(calib.observations)
+    for index, camera in enumerate(owners):
+        grouped[int(camera)].append(index)
+    reference = grouped.get(0, [])
+    for camera in range(1, calib.num_cameras):
+        paired = []
+        for ref_index, cam_index in zip(reference, grouped.get(camera, [])):
+            if ref_index >= len(calib.poses) or cam_index >= len(calib.poses):
+                continue
+            paired.append(_relative_motion(calib.poses[ref_index], calib.poses[cam_index]))
+        if paired:
+            poses[camera] = _mean_motion(paired)
+    calib.camera_poses = poses
+
+
+def _record_fit(calib: CalibData, indexed: list, width: int, height: int):
+    error, params, poses, views = _fit_camera([item[1] for item in indexed], width, height)
+    if len(calib.poses) != len(calib.observations):
+        calib.poses = [[0, 0, 0, 0, 0, 0, 0] for _ in calib.observations]
+    for (index, _observation), pose, (rms, projected) in zip(indexed, poses, views):
+        calib.poses[index] = pose
+        calib.observation_errors[index] = rms
+        calib.observation_projected[index] = projected
+    return error, params
 
 
 @operator(
@@ -229,29 +746,47 @@ def set_calib_data_observ_points(model, camera_idx, object_idx, row, column, *, 
     [P("CalibDataID", "標定資料")],
     [P("Error", "平均重投影誤差，像素")],
     "標定相機",
-    "至少要三組角點。誤差是 OpenCV 的平均重投影誤差。姿態在相機座標：x 向右、y 向下、z 朝前。",
+    "每一台有影像的相機至少要三組點。誤差是各相機重投影誤差的平均。多台相機時，每一台的第 k 組要是同時看到的同一塊板，camera/pose 才是相對第 0 台的姿態。算完會把點和誤差畫在圖形視窗。姿態在該張影像所屬相機的座標：x 向右、y 向下、z 朝前。",
     "Vizion.calibrate_cameras (CalibDataID, Error)",
 )
 def calibrate_cameras(model, *, ctx):
     calib = _alive(model, "CalibDataID")
     if len(calib.observations) < 3:
         raise RuntimeError("至少要三組標定點")
-    object_points = [item[0].reshape(-1, 1, 3).astype(np.float32) for item in calib.observations]
-    image_points = [item[1].reshape(-1, 1, 2).astype(np.float32) for item in calib.observations]
-    size = (max(calib.width, 2), max(calib.height, 2))
-    error, matrix, dist, rvecs, tvecs = cv2.calibrateCamera(object_points, image_points, size, None, None)
-    dist = np.asarray(dist, np.float64).reshape(-1)
-    padded = list(dist[:5]) + [0.0] * (5 - len(dist[:5]))
-    calib.camera = [
-        float(matrix[0, 0]),
-        float(matrix[1, 1]),
-        float(matrix[0, 2]),
-        float(matrix[1, 2]),
-        *[float(item) for item in padded],
-    ]
-    calib.poses = [_pose_from_vectors(rvec, tvec) for rvec, tvec in zip(rvecs, tvecs)]
-    calib.error = float(error)
-    return Result([], [float(error)])
+    owners = calib.observation_cameras or [0] * len(calib.observations)
+    if len(owners) < len(calib.observations):
+        owners = owners + [0] * (len(calib.observations) - len(owners))
+    grouped: dict[int, list] = defaultdict(list)
+    for index, observation in enumerate(calib.observations):
+        grouped[int(owners[index])].append((index, observation))
+    calib.poses = [[0, 0, 0, 0, 0, 0, 0] for _ in calib.observations]
+    if calib.num_cameras == 1:
+        indexed = list(enumerate(calib.observations))
+        error, params = _record_fit(calib, indexed, calib.width, calib.height)
+        calib.camera = params
+        calib.cameras = [params]
+        calib.error = error
+        _store_camera_poses(calib)
+        _present_calibration(ctx, calib, [int(item) for item in owners])
+        return Result([], [error])
+    cameras: list = [None] * calib.num_cameras
+    errors = []
+    for camera, items in sorted(grouped.items()):
+        if camera < 0 or camera >= calib.num_cameras:
+            raise ValueError(f"相機編號要在 0 到 {calib.num_cameras - 1}")
+        if len(items) < 3:
+            raise RuntimeError(f"相機 {camera} 至少要三組標定點")
+        width = max(item[1][2] for item in items)
+        height = max(item[1][3] for item in items)
+        error, params = _record_fit(calib, items, width, height)
+        cameras[camera] = params
+        errors.append(error)
+    calib.cameras = cameras
+    calib.camera = cameras[0]
+    calib.error = float(sum(errors) / len(errors))
+    _store_camera_poses(calib)
+    _present_calibration(ctx, calib, [int(item) for item in owners])
+    return Result([], [calib.error])
 
 
 @operator(
@@ -261,12 +796,12 @@ def calibrate_cameras(model, *, ctx):
     [
         P("CalibDataID", "標定資料"),
         P("ItemType", "camera、calib_obj_pose 或 model", "'camera'", _ITEMS),
-        P("ItemIdx", "編號，從 0 開始", "0"),
-        P("DataName", "params、pose 或 error", "'params'", _DATA),
+        P("ItemIdx", "camera 時是第幾台相機，從 0 開始，一台就填 0。讀姿態或影像尺寸時是放進去的順序", "0"),
+        P("DataName", "params、pose、error、num_poses 或 image_size", "'params'", ["'params'", "'pose'", "'error'", "'num_poses'", "'image_size'"]),
     ],
     [P("DataValue", "結果")],
     "讀出標定結果",
-    "camera/params 是九個數：fx、fy、cx、cy、k1、k2、p1、p2、k3。calib_obj_pose/pose 是七個數的姿態。model/error 是重投影誤差。",
+    "camera/params 仍是九個數：fx、fy、cx、cy、k1、k2、p1、p2、k3，不含影像尺寸。camera/pose 是這台相機相對第 0 台的七個數，第 0 台是 0。每一台的第 k 組要是同時看到的同一塊板。calib_obj_pose/pose 是該張影像裡標定板的姿態。model/error 是重投影誤差。model/num_poses 是影像張數。model/image_size 是寬和高。",
     "Vizion.get_calib_data (CalibDataID, 'camera', 0, 'params', CamParam)",
 )
 def get_calib_data(model, item_type, item_idx, data_name, *, ctx):
@@ -275,9 +810,22 @@ def get_calib_data(model, item_type, item_idx, data_name, *, ctx):
     name = text(data_name, "DataName").strip().strip("'\"").lower()
     index = whole(item_idx, "ItemIdx")
     if kind == "camera" and name == "params":
-        if calib.camera is None:
+        if index < 0 or index >= calib.num_cameras:
+            raise ValueError(f"相機編號要在 0 到 {calib.num_cameras - 1}")
+        params = None
+        if calib.cameras is not None and index < len(calib.cameras):
+            params = calib.cameras[index]
+        elif index == 0:
+            params = calib.camera
+        if params is None:
             raise RuntimeError("還沒有 calibrate_cameras")
-        return Result([], [calib.camera])
+        return Result([], [params])
+    if kind == "camera" and name == "pose":
+        if not calib.camera_poses:
+            raise RuntimeError("還沒有 calibrate_cameras")
+        if index < 0 or index >= len(calib.camera_poses) or calib.camera_poses[index] is None:
+            raise RuntimeError("這台相機還沒有相對姿態。每一台的第 k 組要是同時看到的同一塊板。")
+        return Result([], [calib.camera_poses[index]])
     if kind == "calib_obj_pose" and name == "pose":
         if index < 0 or index >= len(calib.poses):
             raise ValueError("這個編號還沒有姿態")
@@ -286,6 +834,15 @@ def get_calib_data(model, item_type, item_idx, data_name, *, ctx):
         if calib.error is None:
             raise RuntimeError("還沒有 calibrate_cameras")
         return Result([], [calib.error])
+    if kind == "model" and name == "num_poses":
+        if index != 0:
+            raise ValueError("這版的編號只能是 0")
+        return Result([], [len(calib.observations)])
+    if kind == "model" and name == "image_size":
+        if index < 0 or index >= len(calib.observations):
+            raise ValueError("這個編號還沒有影像")
+        _points, _image, width, height = calib.observations[index]
+        return Result([], [[int(width), int(height)]])
     raise ValueError("這組 ItemType 和 DataName 沒有對應的結果")
 
 
@@ -413,7 +970,173 @@ def change_radial_distortion_image(image, cam_param_in, cam_param_out, *, ctx):
 def clear_calib_data(model, *, ctx):
     calib = _alive(model, "CalibDataID")
     calib.observations.clear()
+    calib.observation_cameras.clear()
+    calib.observation_errors.clear()
+    calib.observation_projected.clear()
+    calib.observation_images.clear()
     calib.poses.clear()
     calib.camera = None
+    calib.cameras = None
+    calib.camera_poses = None
+    calib.width = 0
+    calib.height = 0
     calib.closed = True
     return Result([], [])
+
+
+_GRID_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+
+
+def _project_path(ctx, value, label: str) -> Path:
+    raw = str(value).strip().strip("'\"")
+    if not raw:
+        raise ValueError(f"{label} 不能是空的")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = Path(ctx.root) / path
+    return path
+
+
+def _write_cam_par(path: Path, nums: list[float]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(" ".join(f"{item:.10g}" for item in nums), encoding="utf-8")
+
+
+def _read_cam_par(path: Path) -> list[float]:
+    if not path.is_file():
+        raise ValueError(f"讀不到校正檔 {path}")
+    nums = [float(item) for item in path.read_text(encoding="utf-8").split()]
+    if len(nums) != 9:
+        raise ValueError("校正檔要有 9 個數")
+    return nums
+
+
+def _circle_grid(gray: np.ndarray, cols: int, rows: int, polarity: str) -> np.ndarray:
+    pattern = (int(cols), int(rows))
+    view = gray if polarity == "dark" else 255 - gray
+    found, corners = cv2.findCirclesGrid(view, pattern, flags=cv2.CALIB_CB_SYMMETRIC_GRID)
+    if not found or corners is None:
+        found, corners = cv2.findCirclesGrid(view, pattern, flags=cv2.CALIB_CB_ASYMMETRIC_GRID)
+    if not found or corners is None:
+        raise RuntimeError("找不到標定標記")
+    return np.asarray(corners, np.float64).reshape(-1, 2)
+
+
+def _grid_corners(gray: np.ndarray, rows: int, cols: int) -> np.ndarray:
+    pattern = (cols, rows)
+    found, corners = False, None
+    if hasattr(cv2, "findChessboardCornersSB"):
+        found, corners = cv2.findChessboardCornersSB(gray, pattern)
+    if not found:
+        flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE
+        found, corners = cv2.findChessboardCorners(gray, pattern, flags)
+    if not found or corners is None:
+        raise RuntimeError("找不到棋盤格")
+    corners = np.asarray(corners, np.float32).reshape(-1, 1, 2)
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
+    corners = cv2.cornerSubPix(gray, corners, (5, 5), (-1, -1), criteria)
+    return corners
+
+
+@operator(
+    "標定",
+    [P("Image", "一張棋盤照片")],
+    [],
+    [
+        P("CornerRows", "內角點列數"),
+        P("CornerCols", "內角點行數"),
+        P("Square", "一格的邊長"),
+        P("CamParFile", "要寫出的校正檔"),
+    ],
+    [P("Error", "重投影誤差")],
+    "一張棋盤校正畸變",
+    "只拍一張。主點固定在影像中心，只估焦距和 k1。校正檔是一行九個數：fx、fy、cx、cy、k1、k2、p1、p2、k3。",
+    "Vizion.calibrate_grid (Image, 6, 8, 10, 'workspace/grid_cam.txt', Error)",
+    "新算子。一張棋盤照片就寫出校正檔。不是多張標定板。",
+)
+def calibrate_grid(image, rows, cols, square, cam_file, *, ctx):
+    picture = expect_image(image, "Image")
+    corner_rows = whole(rows, "CornerRows")
+    corner_cols = whole(cols, "CornerCols")
+    size = scalar(square, "Square")
+    if corner_rows < 2 or corner_cols < 2 or size <= 0:
+        raise ValueError("棋盤至少要 2×2 個內角點，格子邊長要大於 0")
+    gray = picture.gray()
+    corners = _grid_corners(gray, corner_rows, corner_cols)
+    height, width = gray.shape[:2]
+    focal = float(width)
+    camera = np.array(
+        [[focal, 0, (width - 1) / 2.0], [0, focal, (height - 1) / 2.0], [0, 0, 1]],
+        np.float64,
+    )
+    distortion = np.zeros((5, 1), np.float64)
+    objects = np.zeros((corner_rows * corner_cols, 3), np.float32)
+    for row in range(corner_rows):
+        for col in range(corner_cols):
+            objects[row * corner_cols + col, 0] = col * size
+            objects[row * corner_cols + col, 1] = row * size
+    flags = (
+        cv2.CALIB_FIX_PRINCIPAL_POINT
+        | cv2.CALIB_FIX_ASPECT_RATIO
+        | cv2.CALIB_ZERO_TANGENT_DIST
+        | cv2.CALIB_FIX_K2
+        | cv2.CALIB_FIX_K3
+    )
+    error, camera, distortion, _rvecs, _tvecs = cv2.calibrateCamera(
+        [objects],
+        [corners],
+        (width, height),
+        camera,
+        distortion,
+        flags=flags,
+    )
+    flat = distortion.reshape(-1)
+    nums = [
+        float(camera[0, 0]),
+        float(camera[1, 1]),
+        float(camera[0, 2]),
+        float(camera[1, 2]),
+        float(flat[0]),
+        float(flat[1]),
+        float(flat[2]),
+        float(flat[3]),
+        float(flat[4]),
+    ]
+    _write_cam_par(_project_path(ctx, cam_file, "CamParFile"), nums)
+    return Result([], [float(error)])
+
+
+@operator(
+    "標定",
+    [],
+    [],
+    [
+        P("SourceDir", "原始圖資料夾"),
+        P("CamParFile", "校正檔"),
+        P("DestDir", "校正後要放的資料夾"),
+    ],
+    [P("Count", "校正了幾張")],
+    "用校正檔拉直整個資料夾",
+    "只讀資料夾最上一層的 png、jpg、bmp、tif。每張都用同一份校正檔，畸變清成 0 後另存，檔名不變。",
+    "Vizion.correct_image_files ('samples/distorted_originals', 'workspace/grid_cam.txt', 'workspace/corrected_parts', Count)",
+    "新算子。讀完校正檔，把資料夾裡每張原圖拉直後另存。",
+)
+def correct_image_files(source_dir, cam_file, dest_dir, *, ctx):
+    source = _project_path(ctx, source_dir, "SourceDir")
+    if not source.is_dir():
+        raise ValueError(f"找不到目錄 {source}")
+    matrix, distortion = _matrices(_read_cam_par(_project_path(ctx, cam_file, "CamParFile")))
+    dest = _project_path(ctx, dest_dir, "DestDir")
+    dest.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for path in sorted(source.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in _GRID_SUFFIXES:
+            continue
+        image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+        if image is None:
+            continue
+        corrected = cv2.undistort(image, matrix, distortion)
+        if not cv2.imwrite(str(dest / path.name), corrected):
+            raise ValueError(f"寫不出 {dest / path.name}")
+        count += 1
+    return Result([], [count])

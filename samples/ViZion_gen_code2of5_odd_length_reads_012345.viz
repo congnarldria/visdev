@@ -1,0 +1,10 @@
+* 交錯二五碼奇數位讀回 012345
+* 12345 以前會被拒絕。現在最前面補 0，讀回來是 012345。偶數位 123456 仍是 123456。
+Vizion.gen_code2of5 (Odd, '12345')
+Vizion.create_bar_code_model (Handle)
+Vizion.find_bar_code (Odd, Symbol, Handle, '2/5 Interleaved', Decoded)
+OddText := Decoded[1]
+Vizion.gen_code2of5 (Even, '123456')
+Vizion.find_bar_code (Even, Symbol2, Handle, '2/5 Interleaved', Decoded2)
+EvenText := Decoded2[1]
+Vizion.dev_display (Odd)

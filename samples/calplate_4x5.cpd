@@ -1,0 +1,44 @@
+# Plate Description Version 3
+# 4 rows x 5 columns
+# Distance between mark centers [meter]: 0.01
+# Light circular marks. y increases upward, so the first sorted row is the top of a frontal view.
+
+# Number of marks in y-dimension (rows)
+r 4
+
+# Number of marks in x-dimension (columns)
+c 5
+
+# offset of coordinate system in z-dimension [meter] (optional):
+z 0
+
+# polarity of the marks (light or dark):
+p light
+
+# number of finder pattern marks:
+f 1
+
+# position of the finder patterns (central mark): x y [index]
+2 1
+
+# calibration marks: x y radius [meter]
+0.00 0.03 0.002
+0.01 0.03 0.002
+0.02 0.03 0.002
+0.03 0.03 0.002
+0.04 0.03 0.002
+0.00 0.02 0.002
+0.01 0.02 0.002
+0.02 0.02 0.002
+0.03 0.02 0.002
+0.04 0.02 0.002
+0.00 0.01 0.002
+0.01 0.01 0.002
+0.02 0.01 0.002
+0.03 0.01 0.002
+0.04 0.01 0.002
+0.00 0.00 0.002
+0.01 0.00 0.002
+0.02 0.00 0.002
+0.03 0.00 0.002
+0.04 0.00 0.002

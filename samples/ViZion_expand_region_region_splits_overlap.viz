@@ -1,0 +1,14 @@
+* region 模式把重疊拆開
+* 左邊矩形是列 0 到 3、行 0 到 2，右邊是列 0 到 3、行 2 到 4。中間一行 4 個像素重疊。
+* image 會往外長。region 不長大，距離一樣的重疊像素留給編號較小的物件。左邊仍是 12，右邊剩下 8。
+Vizion.gen_image_const (Image, 'byte', 5, 4)
+Vizion.gen_rectangle1 (Left, 0, 0, 3, 2)
+Vizion.gen_rectangle1 (Right, 0, 2, 3, 4)
+Vizion.concat_obj (Left, Right, Both)
+Vizion.gen_empty_region (Empty)
+Vizion.expand_region (Both, Empty, Split, 1, 'region')
+Vizion.area_center (Split, Area, Row, Column)
+LeftArea := Area[1]
+RightArea := Area[2]
+Vizion.count_obj (Split, Count)
+Vizion.dev_display (Split)

@@ -1,0 +1,13 @@
+* 尺寸、灰階和頂帽
+Vizion.gen_image_const (Base, 'byte', 80, 60)
+Vizion.get_image_size (Base, Width, Height)
+Vizion.gen_rectangle1 (Box, 10, 10, 40, 50)
+Vizion.paint_region (Box, Base, Marked, 180, 'fill')
+Vizion.min_max_gray (Box, Marked, 0, MinGray, MaxGray, Range)
+Vizion.get_grayval (Marked, 20, 20, Gray)
+Vizion.get_region_points (Box, Rows, Columns)
+Vizion.tuple_length (Rows, Count)
+Vizion.gen_circle (SE, 20, 20, 2)
+Vizion.gray_tophat (Marked, SE, Peaks)
+Vizion.get_grayval (Peaks, 25, 30, Peak)
+Vizion.dev_display (Marked)

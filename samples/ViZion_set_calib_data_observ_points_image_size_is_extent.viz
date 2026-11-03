@@ -1,0 +1,9 @@
+* 手動角點的影像尺寸是外框
+* 2×2 的角點，列最大是 10、行最大是 20。image_size 是寬 21、高 11，不放進相機參數。
+Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)
+Vizion.set_calib_data_calib_object (CalibDataID, 0, '2,2,10')
+Vizion.set_calib_data_observ_points (CalibDataID, 0, 0, [0, 0, 10, 10], [0, 20, 0, 20], Index, Pose)
+Vizion.get_calib_data (CalibDataID, 'model', 0, 'image_size', Size)
+Width := Size[1]
+Height := Size[2]
+Vizion.get_calib_data (CalibDataID, 'model', 0, 'num_poses', Count)

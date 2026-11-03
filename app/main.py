@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import os
 import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -34,7 +41,7 @@ from app.engine.operators import (
 from app.engine.parser import ParseError
 from app.engine.render import contours_of, fill_overlay, normalize_color, png_data_url, read_cv_image
 from app.engine.samples_gen import ensure_samples
-from app.engine.session import Session
+from app.engine.session import Session, _remember_thumb, encode_thumb_job, omit_known_state
 from app.engine.shape_model import MATCH_COLORS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,11 +66,29 @@ class ExecIn(BaseModel):
     trace: bool = False
     regionColor: str | None = None
     line: int | None = None
+    project: str | None = None
+
+
+class BreakpointsIn(BaseModel):
+    lines: list[int] = []
 
 
 class SaveIn(BaseModel):
     name: str
     source: str
+
+
+class ProjectIn(BaseModel):
+    name: str
+
+
+class RenameProjectIn(BaseModel):
+    name: str
+
+
+class ExportCsIn(BaseModel):
+    source: str = ""
+    name: str = "ExportedProgram"
 
 
 class FeatureIn(BaseModel):
@@ -103,26 +128,41 @@ class SubpixIn(BaseModel):
     color: str = "#ff3b30"
 
 
+class CalibViewIn(BaseModel):
+    index: int | None = None
+
+
 def trim_sessions():
     while len(SESSIONS) > 20:
-        SESSIONS.pop(next(iter(SESSIONS)))
+        _sid, old = next(iter(SESSIONS.items()))
+        SESSIONS.pop(_sid, None)
+        old._release_handles()
 
 
 def session_for(body: ExecIn) -> Session:
     current = SESSIONS.get(body.id) if body.id else None
     if current is None or current.source != body.source:
+        if current is not None and current.source != body.source:
+            current._release_handles()
         current = Session(body.source, ROOT)
         SESSIONS[current.id] = current
         trim_sessions()
     current.breakpoints = {int(line) for line in body.breakpoints}
     current.trace = bool(body.trace)
+    if body.project:
+        try:
+            current.project_name = clean_project_name(body.project)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    else:
+        current.project_name = None
     return current
 
 
 @app.middleware("http")
 async def no_cache(request, call_next):
     response = await call_next(request)
-    if request.url.path in ("/", "/bin", "/features", "/threshold") or request.url.path.startswith("/static"):
+    if request.url.path in ("/", "/bin", "/features", "/threshold", "/gfx") or request.url.path.startswith("/static"):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -145,6 +185,70 @@ def feature_tool():
 @app.get("/threshold")
 def threshold_tool():
     return FileResponse(STATIC / "threshold.html")
+
+
+@app.get("/gfx")
+def gfx_tool():
+    return FileResponse(STATIC / "gfx.html")
+
+
+def _session_or_404(sid: str) -> Session:
+    current = SESSIONS.get(sid)
+    if current is None:
+        raise HTTPException(404, "沒有這個執行階段，請先按重設")
+    return current
+
+
+def _snapshot(current: Session) -> dict:
+    with current.lock:
+        state = current.public_state(defer_display=True)
+        # 和這張畫面一起讀。執行緒只在鎖內改 running，避免預覽配上「已停止」。
+        state["running"] = bool(getattr(current, "running", False))
+        job = state.pop("_display_job", None)
+        thumb_jobs = state.pop("_thumb_jobs", None)
+    if thumb_jobs:
+        for item in thumb_jobs:
+            item["thumb"] = encode_thumb_job(item)
+            item["target"]["thumb"] = item["thumb"]
+    if job is not None:
+        payload = current.render_display_job(job)
+        state["display"] = payload
+    if job is not None or thumb_jobs:
+        with current.lock:
+            if job is not None:
+                current.store_display(job, state["display"])
+            if thumb_jobs:
+                for item in thumb_jobs:
+                    token = item["token"]
+                    if token in current._thumb_cache:
+                        continue
+                    thumb = item["thumb"]
+                    _remember_thumb(current._thumb_cache, token, lambda thumb=thumb: thumb)
+    return state
+
+
+@app.get("/api/session/{sid}/display")
+def session_display(sid: str, displayRev: int | None = None):
+    state = omit_known_state(_snapshot(_session_or_404(sid)), displayRev, None, None)
+    return {
+        "id": sid,
+        "display": state.get("display"),
+        "displayStamp": state.get("displayStamp"),
+        "displayRev": state.get("displayRev"),
+        "displayKept": bool(state.get("displayKept")),
+        "running": state["running"],
+    }
+
+
+@app.get("/api/session/{sid}/state")
+def session_state(
+    sid: str,
+    displayRev: int | None = None,
+    varRev: int | None = None,
+    logRev: int | None = None,
+    logAt: int | None = None,
+):
+    return omit_known_state(_snapshot(_session_or_404(sid)), displayRev, varRev, logRev, logAt)
 
 
 @app.get("/api/operators")
@@ -184,6 +288,39 @@ def _program_title(path: Path) -> str:
     return path.stem
 
 
+_DATA_SUFFIX = {
+    "image": (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"),
+    "plate": (".cpd", ".descr"),
+}
+
+
+@app.get("/api/data-files")
+def data_files(kind: str = "image", project: str | None = None):
+    suffixes = _DATA_SUFFIX.get(kind)
+    if suffixes is None:
+        raise HTTPException(400, "不認識的檔案種類")
+    found = []
+    if project:
+        try:
+            folder = project_dir(project)
+        except ValueError:
+            folder = None
+        if folder is not None and folder.is_dir():
+            for path in sorted(folder.iterdir()):
+                if path.is_file() and not path.name.startswith(".") and path.suffix.lower() in suffixes:
+                    found.append({"name": path.name, "path": path.name})
+    for folder, prefix in ((ROOT / "samples", "samples"), (ROOT / "workspace", "workspace")):
+        if not folder.is_dir():
+            continue
+        for path in sorted(folder.iterdir()):
+            if not path.is_file() or path.name.startswith("."):
+                continue
+            if path.suffix.lower() not in suffixes:
+                continue
+            found.append({"name": path.name, "path": f"{prefix}/{path.name}"})
+    return found
+
+
 @app.get("/api/files")
 def list_files():
     from app.engine.samples_gen import SAMPLE_ORDER
@@ -215,6 +352,18 @@ def read_program(kind: str, name: str):
     return {"name": name, "kind": kind, "source": path.read_text(encoding="utf-8")}
 
 
+@app.post("/api/export/csharp")
+def export_csharp_program(body: ExportCsIn):
+    from app.engine.export_cs import ExportError, csharp_class_name, export_csharp
+
+    class_name = csharp_class_name(body.name)
+    try:
+        code = export_csharp(body.source, class_name)
+    except (ExportError, ParseError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"name": f"{class_name}.cs", "source": code}
+
+
 @app.post("/api/programs")
 def save_program(body: SaveIn):
     name = Path(body.name).name.strip() or "program.viz"
@@ -227,20 +376,287 @@ def save_program(body: SaveIn):
     return {"name": name, "path": f"workspace/{name}"}
 
 
+def clean_project_name(name: str) -> str:
+    text = str(name or "").strip()
+    if not text or text in (".", "..") or any(ch in text for ch in '\\/:*?"<>|'):
+        raise ValueError("專案名稱不正確")
+    return text
+
+
+def clean_program_name(name: str) -> str:
+    text = Path(str(name or "")).name.strip() or "program.viz"
+    if text in (".", "..") or any(ch in text for ch in '\\/:*?"<>|'):
+        raise ValueError("程式名稱不正確")
+    if not text.lower().endswith((".hdv", ".viz")):
+        text += ".viz"
+    return text
+
+
+def projects_dir() -> Path:
+    folder = ROOT / "workspace" / "projects"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def project_dir(name: str) -> Path:
+    return projects_dir() / clean_project_name(name)
+
+
+def list_project_records() -> list[dict]:
+    folder = projects_dir()
+    names = []
+    for path in folder.iterdir():
+        if path.is_dir() and (path / "visdev.json").is_file():
+            names.append(path.name)
+    return [{"name": name} for name in sorted(names)]
+
+
+def create_project_record(name: str) -> dict:
+    folder = project_dir(name)
+    if folder.exists():
+        raise ValueError("已經有這個專案")
+    folder.mkdir(parents=True)
+    (folder / "visdev.json").write_text("{}\n", encoding="utf-8")
+    return {"name": folder.name, "programs": []}
+
+
+def project_programs(name: str) -> dict:
+    folder = project_dir(name)
+    if not folder.is_dir() or not (folder / "visdev.json").is_file():
+        raise ValueError("找不到專案")
+    files = sorted(path.name for path in folder.iterdir() if path.is_file() and path.suffix.lower() in (".viz", ".hdv"))
+    return {"name": folder.name, "programs": [{"name": item} for item in files]}
+
+
+_IMAGE_SUFFIX = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
+
+
+def _workspace_image(raw: str) -> Path | None:
+    text = str(raw).strip().replace("\\", "/")
+    if not text or text.startswith("samples/"):
+        return None
+    workspace = (ROOT / "workspace").resolve()
+    path = Path(text)
+    if path.is_absolute():
+        candidate = path
+    elif text.lower().startswith("workspace/"):
+        candidate = ROOT / text
+    else:
+        return None
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to(workspace)
+    except (OSError, ValueError):
+        return None
+    if not resolved.is_file() or resolved.suffix.lower() not in _IMAGE_SUFFIX:
+        return None
+    return resolved
+
+
+def _copy_image_into(folder: Path, source: Path) -> str:
+    try:
+        source.resolve().relative_to(folder.resolve())
+        return source.name
+    except ValueError:
+        pass
+    dest = folder / source.name
+    if dest.exists():
+        try:
+            if dest.is_file() and dest.read_bytes() == source.read_bytes():
+                return dest.name
+        except OSError:
+            pass
+        number = 2
+        while (folder / f"{source.stem}_{number}{source.suffix}").exists():
+            number += 1
+        dest = folder / f"{source.stem}_{number}{source.suffix}"
+    shutil.copy2(source, dest)
+    return dest.name
+
+
+def adopt_workspace_images(folder: Path, source: str) -> tuple[str, list[str]]:
+    """Copy workspace images into the project and point the program at the file name."""
+    copied: list[str] = []
+    assigned: dict[Path, str] = {}
+
+    def replace(match: re.Match) -> str:
+        quote, body = match.group(1), match.group(2)
+        image = _workspace_image(body)
+        if image is None:
+            return match.group(0)
+        if image not in assigned:
+            assigned[image] = _copy_image_into(folder, image)
+            if assigned[image] not in copied and not _already_in_folder(folder, image):
+                copied.append(assigned[image])
+        return f"{quote}{assigned[image]}{quote}"
+
+    rewritten = re.sub(r"""(['"])([^'"\r\n]*)\1""", replace, source)
+    return rewritten, copied
+
+
+def _already_in_folder(folder: Path, image: Path) -> bool:
+    try:
+        image.resolve().relative_to(folder.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def write_project_program(project: str, name: str, source: str) -> dict:
+    folder = project_dir(project)
+    if not folder.is_dir():
+        raise ValueError("找不到專案")
+    filename = clean_program_name(name)
+    text = str(source).replace("\r\n", "\n").replace("\r", "\n")
+    text, images = adopt_workspace_images(folder, text)
+    path = folder / filename
+    path.write_text(text, encoding="utf-8")
+    return {
+        "project": folder.name,
+        "name": filename,
+        "path": f"workspace/projects/{folder.name}/{filename}",
+        "source": text,
+        "images": images,
+    }
+
+
+def rename_project_record(old: str, new: str) -> dict:
+    folder = project_dir(old)
+    if not folder.is_dir() or not (folder / "visdev.json").is_file():
+        raise ValueError("找不到專案")
+    target_name = clean_project_name(new)
+    if target_name == folder.name:
+        return {"name": target_name, "previous": folder.name}
+    target = projects_dir() / target_name
+    if target.exists():
+        raise ValueError("已經有這個專案")
+    folder.rename(target)
+    return {"name": target.name, "previous": old}
+
+
+def reveal_project_folder(name: str) -> dict:
+    folder = project_dir(name)
+    if not folder.is_dir() or not (folder / "visdev.json").is_file():
+        raise ValueError("找不到專案")
+    target = folder.resolve()
+    opened = False
+    if sys.platform == "win32":
+        os.startfile(target)  # noqa: S606  Windows 檔案總管
+        opened = True
+    else:
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        try:
+            subprocess.Popen(
+                [opener, str(target)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            opened = True
+        except OSError:
+            opened = False
+    return {"name": folder.name, "path": str(target), "opened": opened}
+
+
+def read_project_program(project: str, name: str) -> dict:
+    folder = project_dir(project)
+    filename = clean_program_name(name)
+    path = folder / filename
+    if not path.is_file():
+        raise ValueError("找不到程式")
+    return {"project": folder.name, "name": filename, "source": path.read_text(encoding="utf-8")}
+
+
+@app.get("/api/projects")
+def api_list_projects():
+    return list_project_records()
+
+
+@app.post("/api/projects")
+def api_create_project(body: ProjectIn):
+    try:
+        return create_project_record(body.name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/projects/{name}")
+def api_project_programs(name: str):
+    try:
+        return project_programs(name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/projects/{name}/folder")
+def api_reveal_project_folder(name: str):
+    try:
+        return reveal_project_folder(name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/projects/{name}/rename")
+def api_rename_project(name: str, body: RenameProjectIn):
+    try:
+        return rename_project_record(name, body.name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/projects/{name}/programs")
+def api_write_project_program(name: str, body: SaveIn):
+    try:
+        return write_project_program(name, body.name, body.source)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/projects/{name}/programs/{filename}")
+def api_read_project_program(name: str, filename: str):
+    try:
+        return read_project_program(name, filename)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/import/hdevelop")
+async def import_hdevelop(file: UploadFile = File(...)):
+    from app.engine.hdevelop_file import convert_hdevelop
+
+    raw = await file.read()
+    source, skipped = convert_hdevelop(raw)
+    stem = Path(file.filename or "program").stem.strip() or "program"
+    stem = re.sub(r'[\\/:*?"<>|]', "_", stem)
+    return {"name": f"{stem}.viz", "source": source, "skipped": skipped}
+
+
 @app.post("/api/upload")
-async def upload(file: UploadFile = File(...)):
+async def upload(file: UploadFile = File(...), project: str | None = None):
     raw = Path(file.filename or "image.png").name
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", raw)
     if not safe.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")):
         safe += ".png"
-    dest = ROOT / "workspace" / safe
+    if project:
+        try:
+            dest_dir = project_dir(project)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if not dest_dir.is_dir():
+            raise HTTPException(400, "找不到專案")
+        stored = safe
+    else:
+        dest_dir = ROOT / "workspace"
+        stored = f"workspace/{safe}"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / safe
     if dest.exists():
-        dest = ROOT / "workspace" / f"{dest.stem}_{uuid.uuid4().hex[:6]}{dest.suffix}"
+        dest = dest_dir / f"{dest.stem}_{uuid.uuid4().hex[:6]}{dest.suffix}"
+        stored = dest.name if project else f"workspace/{dest.name}"
     dest.write_bytes(await file.read())
     if read_cv_image(dest) is None:
         dest.unlink(missing_ok=True)
         raise HTTPException(400, "這不是可讀的影像")
-    return {"path": f"workspace/{dest.name}"}
+    return {"path": stored}
 
 
 def _level_from_histogram(histogram: dict | None) -> float | None:
@@ -453,31 +869,85 @@ def set_region_color(body: RegionColorIn):
         return {"color": current.region_color, "display": state["display"]}
 
 
+def _prepare_action(current: Session, body: ExecIn, resume: bool) -> None:
+    if resume:
+        current.run(resume=True)
+        return
+    if body.regionColor:
+        try:
+            current.region_color = normalize_color(body.regionColor)
+        except ValueError:
+            current.region_color = "#ff3b30"
+    if body.action == "reset":
+        current.reset()
+    elif body.action == "step":
+        current.step()
+    elif body.action == "run":
+        current.defer_wait = True
+        current.run()
+    elif body.action == "goto":
+        if body.line is None:
+            raise HTTPException(400, "沒有指定要移到的行")
+        current.set_line(int(body.line))
+    else:
+        raise HTTPException(400, "未知動作")
+
+
+def _finish_wait(current: Session) -> None:
+    while current.paused == "wait" and not current.cancel:
+        left = float(getattr(current, "wait_until", 0.0)) - time.monotonic()
+        if left <= 0:
+            current.run(resume=True)
+            continue
+        time.sleep(min(0.05, max(0.0, left)))
+    if current.cancel and current.paused == "wait":
+        current.paused = "stopped"
+        current.log.append("已停止")
+
+
 @app.post("/api/exec")
-def exec_program(body: ExecIn):
+async def exec_program(body: ExecIn):
     try:
         current = session_for(body)
     except ParseError as exc:
         raise HTTPException(status_code=400, detail={"error": str(exc), "line": exc.line}) from exc
+    if body.action not in ("reset", "step", "run", "goto"):
+        raise HTTPException(400, "未知動作")
+    if body.action == "goto" and body.line is None:
+        raise HTTPException(400, "沒有指定要移到的行")
+    if body.action == "run" and getattr(current, "running", False):
+        raise HTTPException(409, "程式還在跑")
+
+    if body.action != "run":
+        def sync():
+            with current.lock:
+                _prepare_action(current, body, False)
+            return _snapshot(current)
+
+        return await asyncio.to_thread(sync)
+
+    def background():
+        try:
+            _prepare_action(current, body, False)
+            _finish_wait(current)
+        finally:
+            with current.lock:
+                current.running = False
+
     with current.lock:
-        if body.regionColor:
-            try:
-                current.region_color = normalize_color(body.regionColor)
-            except ValueError:
-                current.region_color = "#ff3b30"
-        if body.action == "reset":
-            current.reset()
-        elif body.action == "step":
-            current.step()
-        elif body.action == "run":
-            current.run()
-        elif body.action == "goto":
-            if body.line is None:
-                raise HTTPException(400, "沒有指定要移到的行")
-            current.set_line(int(body.line))
-        else:
-            raise HTTPException(400, "未知動作")
-        return current.public_state()
+        current.running = True
+    current.runner = threading.Thread(target=background, daemon=True, name="visdev-run")
+    current.runner.start()
+    return {"id": current.id, "running": True}
+
+
+@app.post("/api/session/{sid}/breakpoints")
+def set_breakpoints(sid: str, body: BreakpointsIn):
+    current = _session_or_404(sid)
+    with current.lock:
+        current.breakpoints = {int(line) for line in body.lines}
+        lines = sorted(current.breakpoints)
+    return {"ok": True, "lines": lines}
 
 
 @app.post("/api/stop/{sid}")
@@ -487,6 +957,16 @@ def stop(sid: str):
         return {"ok": False}
     current.cancel = True
     return {"ok": True}
+
+
+@app.post("/api/session/{sid}/calib-view")
+def set_calib_view(sid: str, body: CalibViewIn):
+    current = _session_or_404(sid)
+    with current.lock:
+        current.show_calib_view(body.index)
+        state = current.public_state()
+        state["running"] = bool(getattr(current, "running", False))
+    return state
 
 
 @app.get("/api/session/{sid}/object/{name}")

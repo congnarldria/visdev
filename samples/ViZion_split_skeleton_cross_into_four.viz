@@ -1,0 +1,8 @@
+* 十字骨架分成四段
+* 橫線和直線交在一點。交叉點拿掉之後，四段各自成一個物件。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (RowBar, 30, 10, 30, 50)
+Vizion.gen_rectangle1 (ColBar, 10, 30, 50, 30)
+Vizion.union2 (RowBar, ColBar, Cross)
+Vizion.split_skeleton (Cross, Parts)
+Vizion.count_obj (Parts, Count)

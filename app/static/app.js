@@ -1,4 +1,26 @@
 const code = document.getElementById("code");
+const codeHistory = window.VisdevEdit.createEditorHistory();
+let applyingHistory = false;
+
+function commitProgram(mode) {
+  if (applyingHistory) return;
+  codeHistory.commit(code.value, code.selectionStart, code.selectionEnd, mode || "checkpoint");
+}
+
+function resetProgramHistory() {
+  codeHistory.reset(code.value, code.selectionStart, code.selectionEnd);
+}
+
+function applyHistoryEntry(entry) {
+  applyingHistory = true;
+  code.value = entry.value;
+  code.selectionStart = entry.start;
+  code.selectionEnd = entry.end;
+  applyingHistory = false;
+  renderEditor();
+  closeSense();
+  refreshDirty();
+}
 const hl = document.getElementById("hl");
 const gutter = document.getElementById("gutter");
 const lineTimes = document.getElementById("lineTimes");
@@ -28,6 +50,23 @@ const PAD = 8;
 let operators = [];
 let operatorNames = new Set();
 let sessionId = null;
+let runningSource = null;
+let savedText = "";
+let saveTarget = { kind: "sample", name: "blob_inspect.hdv" };
+let currentProject = null;
+
+function refreshDirty() {
+  const dirty = code.value !== savedText;
+  const button = document.getElementById("btnSave");
+  if (button) button.textContent = dirty ? "儲存 *" : "儲存";
+  const name = document.getElementById("progName").value.trim() || "程式";
+  document.title = `${dirty ? "* " : ""}${name} — VisDev beta`;
+}
+
+function markSaved() {
+  savedText = code.value;
+  refreshDirty();
+}
 let server = { line: null, done: false, error: null, errorLine: null, iconic: [], control: [], display: null, log: [], paused: null, lineTimes: [] };
 let diagnostics = [];
 let logHidden = false;
@@ -73,15 +112,54 @@ function highlightLine(line) {
 function renderHighlight() {
   const src = code.value.endsWith("\n") ? code.value + " " : code.value;
   hl.innerHTML = src.split("\n").map(highlightLine).join("\n");
+  hl.dataset.paint = String(Number(hl.dataset.paint || 0) + 1);
+}
+
+async function pushBreakpoints() {
+  if (!sessionId || !server.running || runningSource == null) return;
+  if (!VisdevRun.sameProgram(runningSource, code.value)) return;
+  const lines = [...breakpoints];
+  try {
+    await fetch(`/api/session/${encodeURIComponent(sessionId)}/breakpoints`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lines }),
+    });
+  } catch (_err) {
+    /* 下一輪執行仍會帶上編輯器裡的中斷點 */
+  }
+}
+
+function programArrow() {
+  const line = server.errorLine || server.line;
+  if (!line) return null;
+  if (runningSource == null) return line;
+  return VisdevRun.arrowLine(runningSource, code.value, line);
+}
+
+function noteRunningProgram() {
+  if (server.error) return;
+  if (runningSource == null || server.arrowNote) return;
+  const note = VisdevRun.statusText(runningSource, code.value, server.line, !!server.running, server.paused);
+  if (!note) {
+    if (!server.running) {
+      runningSource = null;
+      setStatus();
+    }
+    return;
+  }
+  if (server.running) stState.textContent = "執行中";
+  stLine.textContent = note;
 }
 
 function renderGutter() {
   const count = Math.max(1, code.value.split("\n").length);
+  const arrow = programArrow();
   let html = "";
   for (let line = 1; line <= count; line += 1) {
     const cls = ["gl"];
     if (breakpoints.has(line)) cls.push("bp");
-    if (server.line === line) cls.push("cur");
+    if (arrow === line) cls.push("cur");
     if (server.errorLine === line || diagnostics.some((item) => item.line === line && item.sev === "error")) cls.push("err");
     else if (diagnostics.some((item) => item.line === line && item.sev === "warning")) cls.push("warn");
     html += `<div class="${cls.join(" ")}" data-line="${line}"><span class="pc"></span><span class="num">${line}</span></div>`;
@@ -91,9 +169,10 @@ function renderGutter() {
 
 function placeBars() {
   const topFor = (line) => PAD + (line - 1) * LINE - code.scrollTop;
-  if (server.line) {
+  const arrow = programArrow();
+  if (arrow) {
     currentBar.style.display = "block";
-    currentBar.style.top = `${topFor(server.line)}px`;
+    currentBar.style.top = `${topFor(arrow)}px`;
   } else {
     currentBar.style.display = "none";
   }
@@ -120,10 +199,11 @@ function formatLineTime(item) {
 function renderTimes() {
   const count = Math.max(1, code.value.split("\n").length);
   const times = new Map((server.lineTimes || []).map((item) => [item.line, item]));
+  const arrow = programArrow();
   let html = "";
   for (let line = 1; line <= count; line += 1) {
     const item = times.get(line);
-    html += `<div class="${server.line === line ? "on" : ""}">${item ? formatLineTime(item) : ""}</div>`;
+    html += `<div class="${arrow === line ? "on" : ""}">${item ? formatLineTime(item) : ""}</div>`;
   }
   lineTimes.innerHTML = html;
 }
@@ -143,25 +223,62 @@ function revealLine(line) {
   placeBars();
 }
 
+let gutterArrow = null;
+
+function paintLineTime(line) {
+  const node = lineTimes.children[line - 1];
+  if (!node) return;
+  const item = (server.lineTimes || []).find((entry) => entry.line === line);
+  node.textContent = item ? formatLineTime(item) : "";
+}
+
+function renderRunningFrame() {
+  const count = Math.max(1, code.value.split("\n").length);
+  if (gutter.childElementCount !== count || lineTimes.childElementCount !== count) {
+    renderEditor();
+    return;
+  }
+  const arrow = programArrow();
+  if (gutterArrow != null && gutterArrow !== arrow) {
+    const prev = gutter.querySelector(`.gl[data-line="${gutterArrow}"]`);
+    if (prev) prev.classList.remove("cur");
+    const prevTime = lineTimes.children[gutterArrow - 1];
+    if (prevTime) prevTime.classList.remove("on");
+    paintLineTime(gutterArrow);
+  }
+  gutterArrow = arrow;
+  if (arrow) {
+    const node = gutter.querySelector(`.gl[data-line="${arrow}"]`);
+    if (node) node.classList.add("cur");
+    const time = lineTimes.children[arrow - 1];
+    if (time) time.classList.add("on");
+    paintLineTime(arrow);
+  }
+  placeBars();
+}
+
 function renderEditor() {
   renderProblems();
   renderHighlight();
   renderGutter();
   renderTimes();
   placeBars();
+  gutterArrow = programArrow();
 }
 
 function renderVars() {
-  iconicCount.textContent = server.iconic.length ? String(server.iconic.length) : "";
-  iconicList.innerHTML = server.iconic.map((item) => `
+  const iconic = server.iconic || [];
+  const control = server.control || [];
+  iconicCount.textContent = iconic.length ? String(iconic.length) : "";
+  iconicList.innerHTML = iconic.map((item) => `
     <button class="var ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="iconic">
       <img alt="" src="${item.thumb || ""}">
       <span class="vn">${esc(item.name)}</span>
-      <span class="vm">${esc(item.role && item.role !== item.kind ? item.role + " · " + item.kind : item.kind)} · ${esc(item.info)}</span>
+      <span class="vm">${esc(item.scope ? item.scope + " · " : "")}${esc(item.role && item.role !== item.kind ? item.role + " · " + item.kind : item.kind)} · ${esc(item.info)}</span>
     </button>`).join("") || `<div class="hint">還沒有圖像變數</div>`;
-  controlList.innerHTML = server.control.map((item) => `
+  controlList.innerHTML = control.map((item) => `
     <button class="var ctrl ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="control" title="${esc(item.full || item.text)}">
-      <span class="vn">${esc(item.name)}<small>${esc(item.type)}</small></span>
+      <span class="vn">${esc(item.name)}<small>${esc(item.scope ? item.scope + " " : "")}${esc(item.type)}</small></span>
       <span class="vm">${esc(item.text)}</span>
     </button>`).join("") || `<div class="hint">還沒有控制變數</div>`;
 }
@@ -357,15 +474,20 @@ function setStatus() {
   } else {
     stState.textContent = "就緒";
   }
-  if (server.line && server.paused === "breakpoint") stLine.textContent = `中斷於第 ${server.line} 行`;
-  else if (server.line && server.done) stLine.textContent = `結束於第 ${server.line} 行`;
-  else if (server.line) stLine.textContent = `下一行 ${server.line}`;
-  else stLine.textContent = server.done ? "程式結束" : "";
+  const proc = server.procedure ? `程序 ${server.procedure} · ` : "";
+  const project = currentProject ? `專案 ${currentProject} · ` : "";
+  if (server.error) stLine.textContent = `${project}${proc}${server.error}`;
+  else if (server.arrowNote) stLine.textContent = `${project}${server.arrowNote}`;
+  else if (server.line && server.paused === "breakpoint") stLine.textContent = `${project}${proc}中斷於第 ${server.line} 行`;
+  else if (server.line && server.done) stLine.textContent = `${project}${proc}結束於第 ${server.line} 行`;
+  else if (server.line) stLine.textContent = `${project}${proc}下一行 ${server.line}`;
+  else stLine.textContent = currentProject ? `專案 ${currentProject}` : (server.done ? "程式結束" : "");
 }
 
 let imageStamp = null;
 
 function applyState(data) {
+  absorbKept(data);
   logHidden = false;
   const nextStamp = data.imageStamp;
   const imageChanged = imageStamp != null && nextStamp != null && nextStamp !== imageStamp;
@@ -377,12 +499,20 @@ function applyState(data) {
   server = data;
   gfxBanner.hidden = true;
   renderEditor();
-  revealLine(data.line);
+  const arrow = programArrow();
+  if (arrow) revealLine(arrow);
   renderVars();
   renderLog();
   setStatus();
-  if (data.display) loadDisplay(data.display);
-  else clearGraphics();
+  takeDisplay(data);
+  if (data.error && data.display) {
+    gfxBanner.hidden = false;
+    const where = data.errorLine ? `第 ${data.errorLine} 行出錯。` : "這一步出錯。";
+    gfxBanner.textContent = `${where}畫面留著前面已經算出的結果`;
+  } else if (data.display && data.display.calibNote) {
+    gfxBanner.hidden = false;
+    gfxBanner.textContent = data.display.calibNote;
+  }
   if (localStorage.getItem("visdev.contourWidth") == null && data.display) {
     const xld = (data.display.shapes || []).find((shape) => shape.kind === "xld" && shape.width);
     const box = document.getElementById("contourWidth");
@@ -392,9 +522,13 @@ function applyState(data) {
   if (imageChanged) clearPick();
   if (data.error) {
     showTab("problems");
-    showErrorDialog(data.error, data.errorLine);
+    const kept = Boolean(data.display || (data.iconic && data.iconic.length) || (data.control && data.control.length));
+    showErrorDialog(data.error, data.errorLine, kept);
+  } else {
+    closeErrorDialog();
   }
   publishCustomVars();
+  noteRunningProgram();
 }
 
 function publishCustomVars() {
@@ -419,10 +553,12 @@ function errorText(message) {
   return { text: message?.error || "請求失敗", line: message?.line || null };
 }
 
-function showErrorDialog(text, line) {
+function showErrorDialog(text, line, kept) {
   const box = document.getElementById("errDialog");
   document.getElementById("errText").textContent = text || "發生錯誤";
-  document.getElementById("errWhere").textContent = line ? `第 ${line} 行` : "";
+  const where = line ? `第 ${line} 行` : "";
+  const stay = kept ? "已經算出的圖和變數還留著" : "";
+  document.getElementById("errWhere").textContent = [where, stay].filter(Boolean).join("。");
   box.hidden = false;
   document.getElementById("errOk").focus();
 }
@@ -443,22 +579,92 @@ function showDetail(message) {
   showErrorDialog(parsed.text, parsed.line);
 }
 
+let liveDisplayStamp = null;
+let liveDisplayRev = null;
+let liveVarRev = null;
+let liveLogRev = null;
+let liveLogSize = null;
+let liveDisplaySession = null;
+
+function absorbKept(data) {
+  if (!server || !data || (data.id && server.id && data.id !== server.id)) return;
+  if (data.iconicKept) data.iconic = server.iconic;
+  if (data.controlKept) data.control = server.control;
+  if (data.logKept) data.log = server.log;
+  else if (
+    data.logFrom != null
+    && Array.isArray(data.log)
+    && liveLogSize === data.logFrom
+    && Array.isArray(server.log)
+  ) {
+    data.log = server.log.concat(data.log).slice(-300);
+  }
+  if (data.displayKept && server.display) data.display = server.display;
+}
+
+function takeDisplay(data) {
+  if (data.id && data.id !== liveDisplaySession) {
+    liveDisplaySession = data.id;
+    liveDisplayRev = null;
+    liveVarRev = null;
+    liveLogRev = null;
+    liveLogSize = null;
+  }
+  const rev = data.displayRev;
+  const same = rev != null && rev === liveDisplayRev;
+  if (rev != null) liveDisplayRev = rev;
+  if (data.varRev != null) liveVarRev = data.varRev;
+  if (data.logRev != null) liveLogRev = data.logRev;
+  if (data.logSize != null) liveLogSize = data.logSize;
+  if (data.displayStamp != null) liveDisplayStamp = data.displayStamp;
+  if (data.displayKept || same) return;
+  if (data.display) loadDisplay(data.display);
+  else clearGraphics();
+}
+
+function applyLiveState(data) {
+  absorbKept(data);
+  const nextStamp = data.imageStamp;
+  const imageChanged = imageStamp != null && nextStamp != null && nextStamp !== imageStamp;
+  if (nextStamp != null) imageStamp = nextStamp;
+  sessionId = data.id;
+  server = data;
+  renderRunningFrame();
+  const arrow = programArrow();
+  if (arrow) revealLine(arrow);
+  renderLog();
+  if (!data.iconicKept && Array.isArray(data.iconic) && Array.isArray(data.control)) renderVars();
+  setStatus();
+  if (data.running) {
+    stState.textContent = "執行中";
+    stState.className = "";
+  }
+  takeDisplay(data);
+  if (imageChanged) clearPick();
+  noteRunningProgram();
+}
+
 async function exec(action, line) {
-  if (inflight) return;
+  if (inflight) {
+    if (action === "goto") stLine.textContent = "程式還在跑，停下來才能移動箭頭";
+    return;
+  }
   inflight = true;
   document.getElementById("btnRun").disabled = action === "run";
+  const submitted = code.value;
   try {
     const res = await fetch("/api/exec", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: sessionId,
-        source: code.value,
+        source: submitted,
         breakpoints: [...breakpoints],
         action,
         trace: document.getElementById("trace").checked,
         regionColor: regionColorValue(),
         line: line ?? null,
+        project: currentProject,
       }),
     });
     const data = await res.json();
@@ -466,6 +672,38 @@ async function exec(action, line) {
       showDetail(data);
       return;
     }
+    if (data.running) {
+      runningSource = submitted;
+      if (data.id !== sessionId) {
+        liveDisplayRev = null;
+        liveVarRev = null;
+        liveLogRev = null;
+        liveLogSize = null;
+      }
+      sessionId = data.id;
+      while (true) {
+        const query = new URLSearchParams();
+        if (liveDisplayRev != null) query.set("displayRev", String(liveDisplayRev));
+        if (liveVarRev != null) query.set("varRev", String(liveVarRev));
+        if (liveLogRev != null) query.set("logRev", String(liveLogRev));
+        if (liveLogSize != null) query.set("logAt", String(liveLogSize));
+        const qs = query.toString();
+        const stateRes = await fetch(`/api/session/${encodeURIComponent(sessionId)}/state${qs ? `?${qs}` : ""}`);
+        const state = await stateRes.json();
+        if (!stateRes.ok) {
+          showDetail(state);
+          return;
+        }
+        if (!state.running) {
+          applyState(state);
+          break;
+        }
+        applyLiveState(state);
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
+      return;
+    }
+    runningSource = null;
     applyState(data);
   } catch (err) {
     showDetail({ error: "無法連上 VisDev：" + err.message });
@@ -482,7 +720,7 @@ function showTab(name) {
 
 function renderOps() {
   const query = opSearch.value.trim().toLowerCase();
-  const visible = operators.filter((op) => !query || (op.name + op.purpose + op.principle + op.setup).toLowerCase().includes(query));
+  const visible = operators.filter((op) => !query || (op.name + op.purpose + op.principle + op.setup + (op.note || "")).toLowerCase().includes(query));
   let html = "";
   let group = "";
   for (const op of visible) {
@@ -490,7 +728,8 @@ function renderOps() {
       group = op.group;
       html += `<div class="op-group">${esc(group)}</div>`;
     }
-    html += `<button class="op" data-name="${esc(op.name)}" type="button"><b>${esc(op.name)}</b><span>${esc(op.short)}</span></button>`;
+    const mark = op.note ? `<i class="op-new">新</i>` : "";
+    html += `<button class="op" data-name="${esc(op.name)}" type="button"><b>${esc(op.name)}${mark}</b><span>${esc(op.short)}</span></button>`;
   }
   opList.innerHTML = html || `<div class="hint" style="padding:10px">沒有符合的算子</div>`;
 }
@@ -502,6 +741,7 @@ function showOp(name) {
   const rows = op.params.map((param) => `<tr><td>${esc(param.name)}</td><td class="role">${esc(param.role)}</td><td>${esc(param.desc)}</td></tr>`).join("");
   opHelp.innerHTML = `
     <h2>${esc(op.name)}</h2>
+    ${noteBlock(op)}
     <h3>用途</h3>
     <p class="lead">${esc(op.purpose)}</p>
     <h3>原理</h3>
@@ -513,7 +753,18 @@ function showOp(name) {
     <div class="hint">${esc(op.prototype)}</div>
     <pre>${esc(op.example)}</pre>
     <button id="btnInsert" type="button">插入範本</button>`;
-  document.getElementById("btnInsert").onclick = () => insertAtCursor(op.example);
+  document.getElementById("btnInsert").onclick = () => insertAtCursor(commentedCall(op, op.example));
+}
+
+function noteBlock(op) {
+  if (!op.note) return "";
+  return `<h3>註解</h3><p class="prose">${esc(op.note)}</p>`;
+}
+
+function commentedCall(op, call) {
+  if (!op || !op.note) return call;
+  const comment = op.note.split("\n").map((line) => `* ${line}`).join("\n");
+  return `${comment}\n${call}`;
 }
 
 function insertAtCursor(text) {
@@ -522,52 +773,17 @@ function insertAtCursor(text) {
   code.value = code.value.slice(0, start) + text + "\n" + code.value.slice(start);
   const caret = start + text.length + 1;
   code.selectionStart = code.selectionEnd = caret;
+  commitProgram("checkpoint");
   renderEditor();
   code.focus();
 }
 
 function splitCall(text) {
-  const parts = [];
-  let buf = "";
-  let quote = "";
-  let depth = 0;
-  for (const ch of text) {
-    if (quote) {
-      buf += ch;
-      if (ch === quote) quote = "";
-      continue;
-    }
-    if (ch === "'" || ch === "\"") {
-      quote = ch;
-      buf += ch;
-      continue;
-    }
-    if (ch === "[" || ch === "(") {
-      depth += 1;
-      buf += ch;
-      continue;
-    }
-    if (ch === "]" || ch === ")") {
-      depth -= 1;
-      buf += ch;
-      continue;
-    }
-    if (ch === "," && depth === 0) {
-      parts.push(buf.trim());
-      buf = "";
-      continue;
-    }
-    buf += ch;
-  }
-  if (buf.trim()) parts.push(buf.trim());
-  return parts;
+  return VisdevCall.splitCall(text);
 }
 
 function exampleTokens(op) {
-  const open = op.example.indexOf("(");
-  const close = op.example.lastIndexOf(")");
-  if (open < 0 || close < open) return [];
-  return splitCall(op.example.slice(open + 1, close));
+  return VisdevCall.exampleTokens(op);
 }
 
 const OP_MEMORY = "visdev-op-memory";
@@ -582,24 +798,9 @@ function readJson(key, fallback) {
   }
 }
 
-function rememberedValues(op) {
-  const saved = readJson(OP_MEMORY, {})[op.name];
-  if (!saved) return null;
-  const values = callValues(op);
-  op.params.forEach((param, index) => {
-    if (param.role === "控制輸入" && saved[param.name]) values[index] = saved[param.name];
-  });
-  return values;
-}
-
-function rememberOperator(op, inputs) {
+function rememberOperator(op, values) {
   const memory = readJson(OP_MEMORY, {});
-  const fields = {};
-  inputs.forEach((node) => {
-    const param = op.params[Number(node.dataset.index)];
-    if (param && param.role === "控制輸入") fields[param.name] = node.value.trim();
-  });
-  memory[op.name] = fields;
+  memory[op.name] = VisdevCall.memoryRecord(op, values);
   const recent = readJson(OP_RECENT, []).filter((name) => name !== op.name);
   recent.unshift(op.name);
   try {
@@ -611,32 +812,7 @@ function rememberOperator(op, inputs) {
 }
 
 function callValues(op, tokens) {
-  const source = tokens === undefined ? exampleTokens(op) : tokens;
-  const controlIn = op.params.filter((param) => param.role === "控制輸入");
-  const controlOut = op.params.filter((param) => param.role === "控制輸出");
-  const leading = op.params.length - controlIn.length - controlOut.length;
-  const outTokens = controlOut.length ? source.slice(-controlOut.length) : [];
-  const head = controlOut.length ? source.slice(0, -controlOut.length) : source.slice();
-  const inTokens = head.slice(leading);
-  const headTokens = head.slice(0, leading);
-  let inIndex = 0;
-  let outIndex = 0;
-  let headIndex = 0;
-  return op.params.map((param) => {
-    if (param.role === "控制輸入") {
-      const value = inTokens[inIndex];
-      inIndex += 1;
-      return value ? value : (param.default || "");
-    }
-    if (param.role === "控制輸出") {
-      const value = outTokens[outIndex];
-      outIndex += 1;
-      return value || param.name;
-    }
-    const value = headTokens[headIndex];
-    headIndex += 1;
-    return value || param.name;
-  });
+  return VisdevCall.callValues(op, tokens);
 }
 
 let activeOperator = null;
@@ -687,43 +863,11 @@ function refreshOpPreview() {
   const preview = document.getElementById("opPreview");
   if (!preview || !activeOperator) return;
   const values = formFields().map((node) => node.value.trim());
-  preview.textContent = `${activeOperator.name} (${values.join(", ")})`;
+  preview.textContent = VisdevCall.formatCall(activeOperator.name, values);
 }
 
 function parseOperatorLine(text) {
-  const src = text.trim();
-  if (!src || src.startsWith("*")) return null;
-  const match = src.match(/^((?:Vizion\.)?[A-Za-z_][A-Za-z0-9_]*)\s*\(/i);
-  if (!match) return null;
-  let quote = "";
-  let depth = 1;
-  let body = "";
-  for (let i = match[0].length; i < src.length; i += 1) {
-    const ch = src[i];
-    if (quote) {
-      body += ch;
-      if (ch === quote) quote = "";
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      body += ch;
-      continue;
-    }
-    if (ch === "(") {
-      depth += 1;
-      body += ch;
-      continue;
-    }
-    if (ch === ")") {
-      depth -= 1;
-      if (depth === 0) return { name: match[1], args: splitCall(body) };
-      body += ch;
-      continue;
-    }
-    body += ch;
-  }
-  return null;
+  return VisdevCall.parseLine(text);
 }
 
 function openOperatorAtLine(lineIndex) {
@@ -739,12 +883,17 @@ function openOperatorForm(name, preset, lineIndex) {
   if (!op) return;
   activeOperator = op;
   editingLine = Number.isInteger(lineIndex) ? lineIndex : null;
+  const fileMenu = document.getElementById("opFileMenu");
+  if (fileMenu) fileMenu.hidden = true;
   showOp(name);
-  const values = preset || (editingLine == null ? rememberedValues(op) : null) || callValues(op);
+  const saved = readJson(OP_MEMORY, {})[op.name];
+  const plan = VisdevCall.dialogValues(op, { preset: preset || null, lineIndex: editingLine, memory: saved });
+  const values = plan.values;
   const ok = document.getElementById("opDialogOk");
-  if (ok) ok.textContent = editingLine == null ? "插入" : "更新";
+  if (ok) ok.textContent = plan.label;
   document.getElementById("opDialogTitle").textContent = op.name;
   document.getElementById("opDialogGuide").innerHTML = `
+    ${noteBlock(op)}
     <h3>用途</h3>
     <p class="guide-body">${esc(op.purpose)}</p>
     <h3>原理</h3>
@@ -761,6 +910,9 @@ function openOperatorForm(name, preset, lineIndex) {
     const choices = param.choices || [];
     const current = values[index];
     let control = `<input data-index="${index}" value="${esc(current)}" spellcheck="false">`;
+    if (param.browse) {
+      control = `<div class="op-path">${control}<button type="button" data-browse="${esc(param.browse)}" data-index="${index}">選檔</button></div>`;
+    }
     if (param.role === "控制輸入" && choices.length) {
       const known = choices.includes(current);
       const extras = !known && current !== undefined && current !== "" ? [current] : [];
@@ -775,18 +927,20 @@ function openOperatorForm(name, preset, lineIndex) {
   });
   document.getElementById("opForm").innerHTML = html || `<p class="hint">這個算子沒有參數。</p>`;
   document.getElementById("opDialog").hidden = false;
-  const hint = document.getElementById("opDrawHint");
-  if (hint) hint.hidden = geometryTools(geometryInputs()).length === 0;
+  refreshShapeTools();
   refreshOpPreview();
   document.querySelector("#opForm input, #opForm select")?.focus();
 }
 
 function closeOperatorDialog() {
+  const menu = document.getElementById("opFileMenu");
+  if (menu) menu.hidden = true;
   document.getElementById("opDialog").hidden = true;
   editingLine = null;
   const ok = document.getElementById("opDialogOk");
   if (ok) ok.textContent = "插入";
   cancelShapeDraw();
+  refreshShapeTools();
 }
 
 function insertOperatorCall() {
@@ -807,20 +961,18 @@ function insertOperatorCall() {
     }
   }
   const values = inputs.map((node) => node.value.trim());
-  const call = `${activeOperator.name} (${values.join(", ")})`;
+  const call = VisdevCall.formatCall(activeOperator.name, values);
+  rememberOperator(activeOperator, values);
   if (editingLine != null) {
-    const lines = code.value.split("\n");
-    const indent = (lines[editingLine].match(/^\s*/) || [""])[0];
-    lines[editingLine] = `${indent}${call}`;
-    code.value = lines.join("\n");
-    const caret = lines.slice(0, editingLine + 1).join("\n").length;
-    code.selectionStart = code.selectionEnd = caret;
+    const replaced = VisdevCall.replaceLine(code.value, editingLine, call);
+    code.value = replaced.text;
+    code.selectionStart = code.selectionEnd = replaced.caret;
+    commitProgram("checkpoint");
     renderEditor();
   } else {
-    rememberOperator(activeOperator, inputs);
-    insertAtCursor(call);
-    buildOperatorMenu();
+    insertAtCursor(commentedCall(activeOperator, call));
   }
+  buildOperatorMenu();
   closeOperatorDialog();
 }
 
@@ -943,36 +1095,7 @@ function commaCount(text) {
 }
 
 function splitCallArgs(example) {
-  const open = example.indexOf("(");
-  const close = example.lastIndexOf(")");
-  if (open < 0 || close <= open) return [];
-  const body = example.slice(open + 1, close);
-  const args = [];
-  let quote = "";
-  let depth = 0;
-  let current = "";
-  for (const ch of body) {
-    if (quote) {
-      current += ch;
-      if (ch === quote) quote = "";
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      current += ch;
-      continue;
-    }
-    if (ch === "(" || ch === "[") depth += 1;
-    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
-    if (ch === "," && depth === 0 && !quote) {
-      args.push(current.trim());
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-  if (current.trim()) args.push(current.trim());
-  return args;
+  return VisdevCall.exampleTokens({ example: example });
 }
 
 function logicalChunk() {
@@ -1214,6 +1337,7 @@ function acceptSense() {
   const caret = start + (item.caret == null ? item.insert.length : item.caret);
   code.selectionStart = code.selectionEnd = caret;
   senseLabel = "";
+  commitProgram("checkpoint");
   renderEditor();
   code.focus();
   updateSense();
@@ -1244,6 +1368,7 @@ function clearGraphics() {
   gfxTitle.textContent = "";
   stZoom.textContent = "";
   draw();
+  publishDisplay(null);
 }
 
 async function loadDisplay(display) {
@@ -1267,12 +1392,15 @@ async function loadDisplay(display) {
     probe.height = baseImage.naturalHeight;
     probeCtx.drawImage(baseImage, 0, 0);
   }
+  publishDisplay(display);
   gfxEmpty.hidden = true;
-  gfxTitle.textContent = `${display.width} × ${display.height}`;
-  const sizeChanged = cam.fitW !== display.width || cam.fitH !== display.height;
+  gfxTitle.textContent = display.preview
+    ? `${display.width} × ${display.height}　預覽`
+    : `${display.width} × ${display.height}`;
+  const refit = VisdevGeom.shouldRefit(cam.user, cam.fitW, cam.fitH, display.width, display.height);
   cam.fitW = display.width;
   cam.fitH = display.height;
-  if (!cam.user || sizeChanged) {
+  if (refit) {
     cam.user = false;
     fit(false);
   } else {
@@ -1283,10 +1411,10 @@ async function loadDisplay(display) {
 function fit(markUser = false) {
   const rect = canvas.getBoundingClientRect();
   if (!disp || !disp.width || rect.width < 2) return;
-  const pad = 18;
-  cam.scale = Math.max(0.02, Math.min((rect.width - pad * 2) / disp.width, (rect.height - pad * 2) / disp.height));
-  cam.x = (rect.width - disp.width * cam.scale) / 2;
-  cam.y = (rect.height - disp.height * cam.scale) / 2;
+  const placed = VisdevGeom.fitView(rect.width, rect.height, disp.width, disp.height, 18);
+  cam.scale = placed.scale;
+  cam.x = placed.x;
+  cam.y = placed.y;
   cam.user = markUser;
   draw();
 }
@@ -1294,13 +1422,10 @@ function fit(markUser = false) {
 function zoomBy(factor) {
   if (!disp) return;
   const rect = canvas.getBoundingClientRect();
-  const mx = rect.width / 2;
-  const my = rect.height / 2;
-  const next = Math.min(48, Math.max(0.05, cam.scale * factor));
-  const k = next / cam.scale;
-  cam.x = mx - (mx - cam.x) * k;
-  cam.y = my - (my - cam.y) * k;
-  cam.scale = next;
+  const placed = VisdevGeom.zoomAt(cam, rect.width / 2, rect.height / 2, factor);
+  cam.scale = placed.scale;
+  cam.x = placed.x;
+  cam.y = placed.y;
   cam.user = true;
   draw();
 }
@@ -1449,12 +1574,8 @@ function imagePoint(event) {
   const rect = canvas.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  return {
-    x,
-    y,
-    col: (x - cam.x) / cam.scale,
-    row: (y - cam.y) / cam.scale,
-  };
+  const image = VisdevGeom.imagePoint(x, y, cam);
+  return { x, y, col: image.col, row: image.row };
 }
 
 const probeBox = document.getElementById("probe");
@@ -1508,6 +1629,7 @@ function useNewImage(path) {
     const name = match ? match[2] : "Image";
     lines[index] = `${indent}read_image (${name}, '${path}')`;
     code.value = lines.join("\n");
+    commitProgram("checkpoint");
     renderEditor();
     return;
   }
@@ -1517,7 +1639,8 @@ function useNewImage(path) {
 async function uploadFile(file) {
   const body = new FormData();
   body.append("file", file);
-  const res = await fetch("/api/upload", { method: "POST", body });
+  const query = currentProject ? `?project=${encodeURIComponent(currentProject)}` : "";
+  const res = await fetch(`/api/upload${query}`, { method: "POST", body });
   const data = await res.json();
   if (!res.ok) {
     showDetail(data);
@@ -1530,8 +1653,11 @@ async function uploadFile(file) {
 window.addEventListener("visdev-layout", () => resizeCanvas());
 
 code.addEventListener("input", () => {
+  if (!composing) commitProgram("type");
+  refreshDirty();
   renderEditor();
   updateSense();
+  noteRunningProgram();
 });
 document.getElementById("btnClearLog").addEventListener("click", () => {
   logHidden = true;
@@ -1562,6 +1688,14 @@ code.addEventListener("scroll", () => {
   placeSense();
 });
 code.addEventListener("keydown", (event) => {
+  if (!composing && !event.isComposing && (event.ctrlKey || event.metaKey) && !event.altKey) {
+    const key = event.key.toLowerCase();
+    if (key === "z" || key === "y") {
+      event.preventDefault();
+      applyHistoryEntry((key === "y" || event.shiftKey) ? codeHistory.redo() : codeHistory.undo());
+      return;
+    }
+  }
   if (event.key === " " && (event.ctrlKey || event.metaKey) && !event.altKey) {
     event.preventDefault();
     senseForce = true;
@@ -1592,7 +1726,19 @@ code.addEventListener("keyup", (event) => {
     updateSense();
   }
 });
-code.addEventListener("click", () => updateSense());
+code.addEventListener("click", () => {
+  updateSense();
+  if (code.selectionStart !== code.selectionEnd) return;
+  const pos = code.selectionStart;
+  const lineIndex = code.value.slice(0, pos).split("\n").length - 1;
+  const line = code.value.split("\n")[lineIndex] || "";
+  const parsed = parseOperatorLine(line);
+  if (!parsed) return;
+  const nameAt = line.indexOf(parsed.name);
+  if (nameAt < 0) return;
+  const col = pos - (code.value.lastIndexOf("\n", Math.max(0, pos - 1)) + 1);
+  if (col >= nameAt && col <= nameAt + parsed.name.length) openOperatorAtLine(lineIndex);
+});
 code.addEventListener("dblclick", (event) => {
   const lines = code.value.split("\n");
   const style = getComputedStyle(code);
@@ -1609,10 +1755,12 @@ code.addEventListener("dblclick", (event) => {
 });
 code.addEventListener("compositionstart", () => {
   composing = true;
+  codeHistory.beginComposition();
   closeSense();
 });
 code.addEventListener("compositionend", () => {
   composing = false;
+  codeHistory.endComposition(code.value, code.selectionStart, code.selectionEnd);
   updateSense();
 });
 code.addEventListener("blur", () => {
@@ -1672,6 +1820,7 @@ gutter.addEventListener("click", (event) => {
   if (breakpoints.has(line)) breakpoints.delete(line);
   else breakpoints.add(line);
   renderGutter();
+  pushBreakpoints();
 });
 document.getElementById("errOk").onclick = () => closeErrorDialog();
 document.getElementById("errDialog").addEventListener("mousedown", (event) => {
@@ -1708,9 +1857,10 @@ document.getElementById("btnFit").onclick = () => { cam.user = false; fit(false)
 document.getElementById("btnOne").onclick = () => {
   if (!disp) return;
   const rect = canvas.getBoundingClientRect();
-  cam.scale = 1;
-  cam.x = (rect.width - disp.width) / 2;
-  cam.y = (rect.height - disp.height) / 2;
+  const placed = VisdevGeom.oneToOne(rect.width, rect.height, disp.width, disp.height);
+  cam.scale = placed.scale;
+  cam.x = placed.x;
+  cam.y = placed.y;
   cam.user = true;
   draw();
 };
@@ -1737,17 +1887,111 @@ document.getElementById("fileImage").onchange = () => {
 };
 document.getElementById("btnOpen").onclick = () => document.getElementById("fileOpen").click();
 document.getElementById("fileOpen").onchange = async () => {
-  const file = document.getElementById("fileOpen").files[0];
-  if (!file) return;
-  code.value = (await file.text()).replace(/\r\n/g, "\n");
-  document.getElementById("progName").value = file.name;
+  const input = document.getElementById("fileOpen");
+  const file = input.files[0];
+  input.value = "";
+  if (file) await openLocalFile(file);
+};
+
+function isHalconProgram(name) {
+  const lower = String(name || "").toLowerCase();
+  return [".hdev", ".hdvp", ".hdpl", ".dev", ".dvp"].some((suffix) => lower.endsWith(suffix));
+}
+
+async function openLocalFile(file) {
+  let source = "";
+  let name = file.name;
+  let note = `已開啟 ${name}`;
+  if (isHalconProgram(file.name)) {
+    const body = new FormData();
+    body.append("file", file);
+    const res = await fetch("/api/import/hdevelop", { method: "POST", body });
+    const data = await res.json();
+    if (!res.ok) {
+      showDetail(data);
+      return;
+    }
+    source = data.source || "";
+    name = data.name || name;
+    if (data.skipped && data.skipped.length) {
+      const names = data.skipped;
+      note = names.length > 4
+        ? `已開啟 ${name}。${names.length} 個有密碼的程序沒有打開`
+        : `已開啟。有密碼的程序沒有打開：${names.join("、")}`;
+    } else {
+      note = `已開啟 ${name}`;
+    }
+  } else {
+    source = await file.text();
+  }
+  code.value = source.replace(/\r\n/g, "\n");
+  document.getElementById("progName").value = name;
+  saveTarget = { kind: "import", name };
   sessionId = null;
   breakpoints = new Set();
+  resetProgramHistory();
+  markSaved();
   renderEditor();
   await exec("reset");
-};
-document.getElementById("btnSave").onclick = async () => {
-  const name = document.getElementById("progName").value.trim() || "program.viz";
+  stState.textContent = note;
+  stState.className = "ok";
+}
+function programFileName(name) {
+  const trimmed = String(name || "").trim() || "program.viz";
+  const lower = trimmed.toLowerCase();
+  return lower.endsWith(".hdv") || lower.endsWith(".viz") ? trimmed : `${trimmed}.viz`;
+}
+
+function desktopApi() {
+  return window.pywebview && window.pywebview.api;
+}
+
+function quoteProgramPath(path) {
+  const text = String(path || "").replaceAll("\\", "/");
+  if (!text || text.includes("'") || text.includes("\n") || text.includes("\r")) return "";
+  return `'${text}'`;
+}
+
+function fillOperatorPath(index, path) {
+  const quoted = quoteProgramPath(path);
+  const field = document.querySelector(`#opForm [data-index="${index}"]`);
+  if (!quoted || !field) {
+    stLine.textContent = "這個路徑沒辦法放進程式";
+    return;
+  }
+  field.value = quoted;
+  refreshOpPreview();
+}
+
+async function browseOperatorFile(button) {
+  const kind = button.dataset.browse;
+  const index = button.dataset.index;
+  const menu = document.getElementById("opFileMenu");
+  if (menu) menu.hidden = true;
+  const api = desktopApi();
+  if (api && api.pick_data_file) {
+    const picked = await api.pick_data_file(kind);
+    if (picked && !picked.cancelled && picked.path) fillOperatorPath(index, picked.path);
+    return;
+  }
+  const query = new URLSearchParams({ kind });
+  if (currentProject) query.set("project", currentProject);
+  const res = await fetch(`/api/data-files?${query.toString()}`);
+  const files = await res.json();
+  if (!res.ok) {
+    showDetail(files);
+    return;
+  }
+  menu.innerHTML = (files || []).map((file) => `<button type="button" data-path="${esc(file.path)}">${esc(file.path)}</button>`).join("")
+    || `<div class="hint">samples 和 workspace 裡沒有這種檔。路徑仍可以直接打。</div>`;
+  menu.dataset.index = index;
+  const rect = button.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, rect.left)}px`;
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.hidden = false;
+}
+
+async function saveToWorkspace(name, copy) {
   const res = await fetch("/api/programs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1756,13 +2000,270 @@ document.getElementById("btnSave").onclick = async () => {
   const data = await res.json();
   if (!res.ok) {
     showDetail(data);
-    return;
+    return false;
   }
   document.getElementById("progName").value = data.name;
-  stState.textContent = `已儲存 ${data.path}`;
+  saveTarget = { kind: "workspace", name: data.name };
+  leaveProject();
+  markSaved();
+  stState.textContent = copy ? `範例已另存 ${data.path}` : `已儲存 ${data.path}`;
   stState.className = "ok";
   loadFiles();
-};
+  return true;
+}
+
+function leaveProject() {
+  currentProject = null;
+  try { localStorage.removeItem("visdev.project"); } catch (_err) { /* 視窗還沒準備 */ }
+}
+
+function rememberOpenProject() {
+  if (!currentProject || !saveTarget || saveTarget.kind !== "project") return;
+  try {
+    localStorage.setItem("visdev.project", JSON.stringify({ project: currentProject, program: saveTarget.name }));
+  } catch (_err) { /* 視窗還沒準備 */ }
+}
+
+async function renameCurrentProject() {
+  if (!currentProject) {
+    stLine.textContent = "先選一個專案";
+    return;
+  }
+  const next = window.prompt("新的專案名稱", currentProject);
+  if (!next || !next.trim() || next.trim() === currentProject) return;
+  const previous = currentProject;
+  const res = await fetch(`/api/projects/${encodeURIComponent(previous)}/rename`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: next.trim() }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  currentProject = data.name;
+  if (saveTarget && saveTarget.kind === "project" && saveTarget.project === previous) {
+    saveTarget = { kind: "project", project: data.name, name: saveTarget.name };
+    rememberOpenProject();
+  }
+  await refreshProjectDialog();
+  stLine.textContent = `專案 ${data.name}`;
+}
+
+async function revealProjectFolder() {
+  if (!currentProject) {
+    stLine.textContent = "先選一個專案";
+    return;
+  }
+  const api = desktopApi();
+  let data = null;
+  if (api && api.open_project_folder) {
+    try {
+      data = await api.open_project_folder(currentProject);
+    } catch (err) {
+      showDetail({ error: "打不開資料夾：" + err.message });
+      return;
+    }
+  } else {
+    const res = await fetch(`/api/projects/${encodeURIComponent(currentProject)}/folder`, { method: "POST" });
+    data = await res.json();
+    if (!res.ok) {
+      showDetail(data);
+      return;
+    }
+  }
+  if (data && data.error) {
+    showDetail({ error: data.error });
+    return;
+  }
+  const path = data && data.path ? data.path : currentProject;
+  stLine.textContent = data && data.opened ? `已打開資料夾 ${path}` : `專案資料夾：${path}`;
+}
+
+function openProjectDialog() {
+  document.getElementById("projectDialog").hidden = false;
+  refreshProjectDialog();
+  document.getElementById("projectName").focus();
+}
+
+async function refreshProjectDialog() {
+  const list = document.getElementById("projectList");
+  const programs = document.getElementById("projectPrograms");
+  if (!list || !programs) return;
+  const res = await fetch("/api/projects");
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  list.innerHTML = (data || []).map((item) => `<button type="button" data-project="${esc(item.name)}" class="${item.name === currentProject ? "on" : ""}">${esc(item.name)}</button>`).join("")
+    || `<div class="hint">還沒有專案。</div>`;
+  if (!currentProject) {
+    programs.innerHTML = `<div class="hint">選一個專案，或先建立。</div>`;
+    return;
+  }
+  const detail = await fetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+  const body = await detail.json();
+  if (!detail.ok) {
+    showDetail(body);
+    return;
+  }
+  programs.innerHTML = `<div class="hint">專案 ${esc(body.name)}</div>` + ((body.programs || []).map((item) => `<button type="button" data-program="${esc(item.name)}">${esc(item.name)}</button>`).join("")
+    || `<div class="hint">這個專案還沒有程式。</div>`);
+}
+
+async function createProjectFromDialog() {
+  const name = document.getElementById("projectName").value.trim();
+  const res = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  currentProject = data.name;
+  document.getElementById("projectName").value = "";
+  await refreshProjectDialog();
+  stLine.textContent = `專案 ${data.name}`;
+}
+
+async function saveCurrentIntoProject() {
+  if (!currentProject) {
+    stLine.textContent = "先建立或選一個專案";
+    return;
+  }
+  await saveToProject(currentProject, programFileName(document.getElementById("progName").value));
+}
+
+async function openProjectProgram(project, name) {
+  if (code.value !== savedText && !window.confirm("這支程式還沒存。仍要打開另一支？")) return;
+  const res = await fetch(`/api/projects/${encodeURIComponent(project)}/programs/${encodeURIComponent(name)}`);
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  currentProject = data.project;
+  code.value = String(data.source || "").replace(/\r\n/g, "\n");
+  document.getElementById("progName").value = data.name;
+  saveTarget = { kind: "project", project: data.project, name: data.name };
+  sessionId = null;
+  breakpoints = new Set();
+  resetProgramHistory();
+  markSaved();
+  renderEditor();
+  await exec("reset");
+  stLine.textContent = `專案 ${data.project} · ${data.name}`;
+  rememberOpenProject();
+  document.getElementById("projectDialog").hidden = true;
+}
+
+async function addProjectProgram() {
+  if (!currentProject) {
+    stLine.textContent = "先建立或選一個專案";
+    return;
+  }
+  if (code.value !== savedText && !window.confirm("這支程式還沒存。仍要新增另一支？")) return;
+  const detail = await fetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+  const body = await detail.json();
+  if (!detail.ok) {
+    showDetail(body);
+    return;
+  }
+  const used = new Set((body.programs || []).map((item) => item.name));
+  let filename = "program.viz";
+  let number = 2;
+  while (used.has(filename)) {
+    filename = `program${number}.viz`;
+    number += 1;
+  }
+  code.value = "* 新程式\n";
+  document.getElementById("progName").value = filename;
+  renderEditor();
+  await saveToProject(currentProject, filename);
+}
+
+async function saveToProject(project, name) {
+  const res = await fetch(`/api/projects/${encodeURIComponent(project)}/programs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, source: code.value }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return false;
+  }
+  if (typeof data.source === "string" && data.source !== code.value) {
+    code.value = data.source;
+    renderEditor();
+  }
+  document.getElementById("progName").value = data.name;
+  saveTarget = { kind: "project", project: data.project, name: data.name };
+  currentProject = data.project;
+  markSaved();
+  rememberOpenProject();
+  stState.textContent = `已存進專案 ${data.project}`;
+  stState.className = "ok";
+  const images = Array.isArray(data.images) && data.images.length ? ` · 已放入 ${data.images.join("、")}` : "";
+  stLine.textContent = `專案 ${data.project} · ${data.name}${images}`;
+  refreshProjectDialog();
+  return true;
+}
+
+async function rememberFileSave(data) {
+  document.getElementById("progName").value = data.name;
+  saveTarget = { kind: "file", name: data.name, path: data.path };
+  leaveProject();
+  markSaved();
+  stState.textContent = `已儲存 ${data.path}`;
+  stState.className = "ok";
+}
+
+async function saveCurrent(saveAs) {
+  const plan = window.VisdevProgram.savePlan(saveTarget, !!saveAs);
+  const api = desktopApi();
+  if (plan.mode === "file" && api && api.write_program_path) {
+    try {
+      await rememberFileSave(await api.write_program_path(plan.path, code.value));
+    } catch (err) {
+      showDetail({ error: "存檔失敗：" + err.message });
+    }
+    return;
+  }
+  if (plan.mode === "project") {
+    await saveToProject(plan.project, programFileName(plan.name));
+    return;
+  }
+  if (plan.mode === "ask") {
+    if (api && api.save_program_dialog) {
+      try {
+        const data = await api.save_program_dialog(programFileName(plan.name), code.value);
+        if (!data || data.cancelled) return;
+        if (data.error) {
+          showDetail({ error: data.error });
+          return;
+        }
+        await rememberFileSave(data);
+      } catch (err) {
+        showDetail({ error: "存檔失敗：" + err.message });
+      }
+      return;
+    }
+    const name = window.prompt("另存新檔的檔名", programFileName(plan.name));
+    if (!name || !name.trim()) return;
+    await saveToWorkspace(programFileName(name), false);
+    return;
+  }
+  await saveToWorkspace(programFileName(plan.name), !!plan.copy);
+}
+
+document.getElementById("btnSave").onclick = () => saveCurrent(false);
+document.getElementById("progName").addEventListener("input", refreshDirty);
 function placeSampleMenu(anchor) {
   sampleMenu.hidden = false;
   if (!anchor) {
@@ -1800,8 +2301,19 @@ document.addEventListener("click", (event) => {
 });
 
 function editCode(command) {
+  if (command === "undo") {
+    applyHistoryEntry(codeHistory.undo());
+    code.focus();
+    return;
+  }
+  if (command === "redo") {
+    applyHistoryEntry(codeHistory.redo());
+    code.focus();
+    return;
+  }
   code.focus();
   document.execCommand(command);
+  commitProgram("checkpoint");
   renderEditor();
 }
 
@@ -1815,24 +2327,94 @@ function syncViewMenu() {
 }
 
 window.VisDevCommands = {
+  async openNamedTemplate(name, note) {
+    await openProgram("samples", name);
+    stLine.textContent = note;
+  },
+  inspectTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_parts.viz", "這是零件檢測範本。改 MinGray 和面積下限，再按執行。");
+  },
+  gaugeTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_gauge.viz", "這是邊緣量測範本。改量測線的列和行，再按執行。");
+  },
+  locateTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");
+  },
+  stereoTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_stereo.viz", "這是相對姿態範本。第 k 組是同一次擺放。執行後看 Pose1。");
+  },
+  codeTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_code.viz", "這是條碼範本。執行後看 Text 和 QrText。");
+  },
   new() {
     code.value = "* 新程式\n";
     document.getElementById("progName").value = "untitled.viz";
+    saveTarget = { kind: "workspace", name: "untitled.viz" };
+    leaveProject();
+    savedText = "";
     sessionId = null;
     breakpoints = new Set();
+    resetProgramHistory();
+    refreshDirty();
     renderEditor();
     exec("reset");
   },
-  open() { document.getElementById("fileOpen").click(); },
-  save() { document.getElementById("btnSave").click(); },
-  saveAs() {
-    const current = document.getElementById("progName").value.trim() || "program.viz";
-    const name = window.prompt("另存新檔的檔名", current);
-    if (!name || !name.trim()) return;
-    const lower = name.trim().toLowerCase();
-    const file = lower.endsWith(".hdv") || lower.endsWith(".viz") ? name.trim() : `${name.trim()}.viz`;
-    document.getElementById("progName").value = file;
-    document.getElementById("btnSave").click();
+  async open() {
+    const api = desktopApi();
+    if (api && api.open_program_dialog) {
+      try {
+        const picked = await api.open_program_dialog();
+        if (!picked || picked.cancelled) return;
+        if (picked.error) {
+          showDetail({ error: picked.error });
+          return;
+        }
+        let note = `已開啟 ${picked.name}`;
+        if (picked.skipped && picked.skipped.length) {
+          note = `已開啟 ${picked.name}。${picked.skipped.length} 個有密碼的程序沒有打開`;
+        }
+        code.value = String(picked.source || "").replace(/\r\n/g, "\n");
+        document.getElementById("progName").value = picked.name;
+        saveTarget = picked.path
+          ? { kind: "file", name: picked.name, path: picked.path }
+          : { kind: "import", name: picked.name };
+        sessionId = null;
+        breakpoints = new Set();
+        resetProgramHistory();
+        markSaved();
+        renderEditor();
+        await exec("reset");
+        stState.textContent = note;
+        stState.className = "ok";
+        return;
+      } catch (_err) {
+        /* 沒有桌面對話框時改用檔案選擇 */
+      }
+    }
+    document.getElementById("fileOpen").click();
+  },
+  save() { saveCurrent(false); },
+  saveAs() { saveCurrent(true); },
+  async exportCsharp() {
+    const res = await fetch("/api/export/csharp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: code.value, name: document.getElementById("progName").value }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showDetail(data);
+      return;
+    }
+    const blob = new Blob([data.source], { type: "text/plain;charset=utf-8" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = data.name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    stState.textContent = `已匯出 ${data.name}`;
+    stState.className = "ok";
   },
   loadImage() { document.getElementById("fileImage").click(); },
   samples(anchor) { placeSampleMenu(anchor); },
@@ -1867,6 +2449,9 @@ window.VisDevCommands = {
     applyConnection(document.getElementById("connMin").value, document.getElementById("connDist").value);
   },
   layout() { if (window.VisDevDock) VisDevDock.reset(); },
+  floatGfx() { openGfxWindow(); },
+  project() { openProjectDialog(); },
+  help() { document.getElementById("helpDialog").hidden = false; },
   about() { document.getElementById("aboutDialog").hidden = false; },
   openOperator(name) { openOperatorForm(name); },
 };
@@ -1874,6 +2459,24 @@ window.VisDevCommands = {
 window.addEventListener("visdev-layout", syncViewMenu);
 syncViewMenu();
 document.getElementById("aboutOk").onclick = () => { document.getElementById("aboutDialog").hidden = true; };
+document.getElementById("helpOk").onclick = () => { document.getElementById("helpDialog").hidden = true; };
+document.getElementById("projectClose").onclick = () => { document.getElementById("projectDialog").hidden = true; };
+document.getElementById("projectCreate").onclick = () => createProjectFromDialog();
+document.getElementById("projectRename").onclick = () => renameCurrentProject();
+document.getElementById("projectFolder").onclick = () => revealProjectFolder();
+document.getElementById("projectSave").onclick = () => saveCurrentIntoProject();
+document.getElementById("projectNewProgram").onclick = () => addProjectProgram();
+document.getElementById("projectList").onclick = (event) => {
+  const button = event.target.closest("[data-project]");
+  if (!button) return;
+  currentProject = button.dataset.project;
+  refreshProjectDialog();
+};
+document.getElementById("projectPrograms").onclick = (event) => {
+  const button = event.target.closest("[data-program]");
+  if (!button || !currentProject) return;
+  openProjectProgram(currentProject, button.dataset.program);
+};
 document.getElementById("opDialogCancel").onclick = () => closeOperatorDialog();
 document.getElementById("opDialogOk").onclick = () => insertOperatorCall();
 document.getElementById("opDialog").addEventListener("keydown", (event) => {
@@ -1883,6 +2486,23 @@ document.getElementById("opDialog").addEventListener("keydown", (event) => {
 });
 document.getElementById("opForm").addEventListener("input", refreshOpPreview);
 document.getElementById("opForm").addEventListener("change", refreshOpPreview);
+document.getElementById("opForm").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-browse]");
+  if (!button) return;
+  event.stopPropagation();
+  browseOperatorFile(button).catch((err) => showDetail({ error: String(err.message || err) }));
+});
+document.getElementById("opFileMenu").addEventListener("click", (event) => {
+  const node = event.target.closest("[data-path]");
+  if (!node) return;
+  event.stopPropagation();
+  fillOperatorPath(document.getElementById("opFileMenu").dataset.index, node.dataset.path);
+  document.getElementById("opFileMenu").hidden = true;
+});
+document.addEventListener("click", () => {
+  const menu = document.getElementById("opFileMenu");
+  if (menu) menu.hidden = true;
+});
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "F5") { event.preventDefault(); exec("run"); }
@@ -1907,7 +2527,7 @@ opList.addEventListener("dblclick", (event) => {
   const node = event.target.closest(".op");
   if (!node) return;
   const op = operators.find((item) => item.name === node.dataset.name);
-  if (op) insertAtCursor(op.example);
+  if (op) insertAtCursor(commentedCall(op, op.example));
 });
 
 iconicList.addEventListener("click", async (event) => {
@@ -1921,6 +2541,7 @@ iconicList.addEventListener("click", async (event) => {
     showDetail(data);
     return;
   }
+  clearPick();
   gfxBanner.hidden = false;
   gfxBanner.textContent = `預覽 ${selectedVar} · 再執行會回到程式畫面`;
   await loadDisplay(data.display);
@@ -1938,11 +2559,10 @@ canvas.addEventListener("wheel", (event) => {
   if (!disp) return;
   event.preventDefault();
   const point = imagePoint(event);
-  const next = Math.min(48, Math.max(0.05, cam.scale * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
-  const k = next / cam.scale;
-  cam.x = point.x - (point.x - cam.x) * k;
-  cam.y = point.y - (point.y - cam.y) * k;
-  cam.scale = next;
+  const placed = VisdevGeom.zoomAt(cam, point.x, point.y, event.deltaY < 0 ? 1.12 : 1 / 1.12);
+  cam.x = placed.x;
+  cam.y = placed.y;
+  cam.scale = placed.scale;
   cam.user = true;
   draw();
 }, { passive: false });
@@ -1953,35 +2573,40 @@ let dragging = null;
 let zoomBox = null;
 
 function applyMouseMode(mode) {
-  if (!mouseModes.includes(mode)) mode = "pan";
+  if (!mouseModes.includes(mode)) mode = "select";
   mouseMode = mode;
   canvas.classList.remove("mode-select", "mode-pan", "mode-zoom", "dragging");
   canvas.classList.add(`mode-${mode}`);
+  document.querySelectorAll("#gfxMouse button").forEach((button) => {
+    const on = button.dataset.mode === mode;
+    button.classList.toggle("on", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+  try { localStorage.setItem("visdev.gfxMouse", mode); } catch (_err) { /* 視窗還沒準備 */ }
 }
 
 function zoomAtScreen(sx, sy, factor) {
-  const next = Math.min(48, Math.max(0.05, cam.scale * factor));
-  const k = next / cam.scale;
-  cam.x = sx - (sx - cam.x) * k;
-  cam.y = sy - (sy - cam.y) * k;
-  cam.scale = next;
+  const placed = VisdevGeom.zoomAt(cam, sx, sy, factor);
+  cam.scale = placed.scale;
+  cam.x = placed.x;
+  cam.y = placed.y;
   cam.user = true;
 }
 
 function zoomToRect(col0, row0, col1, row1) {
-  const left = Math.min(col0, col1);
-  const top = Math.min(row0, row1);
-  const width = Math.max(1, Math.abs(col1 - col0));
-  const height = Math.max(1, Math.abs(row1 - row0));
   const rect = canvas.getBoundingClientRect();
-  const pad = 8;
-  cam.scale = Math.min(48, Math.max(0.05, Math.min((rect.width - pad * 2) / width, (rect.height - pad * 2) / height)));
-  cam.x = (rect.width - width * cam.scale) / 2 - left * cam.scale;
-  cam.y = (rect.height - height * cam.scale) / 2 - top * cam.scale;
+  const placed = VisdevGeom.zoomRect(rect.width, rect.height, col0, row0, col1, row1, 8);
+  cam.scale = placed.scale;
+  cam.x = placed.x;
+  cam.y = placed.y;
   cam.user = true;
 }
 
-applyMouseMode("pan");
+applyMouseMode(mouseModes.includes(localStorage.getItem("visdev.gfxMouse")) ? localStorage.getItem("visdev.gfxMouse") : "select");
+document.getElementById("gfxMouse").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-mode]");
+  if (button) applyMouseMode(button.dataset.mode);
+});
 
 const drawMenu = document.getElementById("drawMenu");
 const shapeConfirm = document.getElementById("shapeConfirm");
@@ -2005,13 +2630,22 @@ function geometryInputs() {
   return map;
 }
 
+function refreshShapeTools() {
+  const box = document.getElementById("shapeTools");
+  const hint = document.getElementById("opDrawHint");
+  const tools = geometryTools(geometryInputs());
+  if (hint) hint.hidden = tools.length === 0;
+  if (!box) return;
+  box.hidden = tools.length === 0;
+  box.querySelectorAll("button[data-draw]").forEach((button) => {
+    const on = tools.includes(button.dataset.draw);
+    button.hidden = !on;
+    button.classList.toggle("on", on && shapeDraw && shapeDraw.tool === button.dataset.draw);
+  });
+}
+
 function geometryTools(map) {
-  const tools = [];
-  if (map.Row1 && map.Column1 && map.Row2 && map.Column2) tools.push("rect");
-  if (map.Row && map.Column && map.Length1 && map.Length2 && !tools.includes("rect")) tools.push("rect");
-  if (map.Row && map.Column && map.Radius) tools.push("circle");
-  if (map.Row && map.Column && map.Radius1 && map.Radius2) tools.push("ellipse");
-  return tools;
+  return VisdevGeom.geometryTools(Object.keys(map));
 }
 
 function hideDrawMenu() {
@@ -2023,14 +2657,11 @@ function cancelShapeDraw() {
   hideDrawMenu();
   if (shapeConfirm) shapeConfirm.hidden = true;
   draw();
+  refreshShapeTools();
 }
 
 function draftBox(draw) {
-  const col1 = Math.min(draw.a.col, draw.b.col);
-  const col2 = Math.max(draw.a.col, draw.b.col);
-  const row1 = Math.min(draw.a.row, draw.b.row);
-  const row2 = Math.max(draw.a.row, draw.b.row);
-  return { col1, col2, row1, row2, width: col2 - col1, height: row2 - row1 };
+  return VisdevGeom.draftBox(draw.a, draw.b);
 }
 
 function strokeDraft(pen) {
@@ -2091,37 +2722,11 @@ function clearUnusedGeom(map, keep) {
 function applyShapeDraw() {
   if (!shapeDraw || !shapeDraw.a || !shapeDraw.b) return;
   const map = geometryInputs();
-  const box = draftBox(shapeDraw);
-  let keep;
-  if (shapeDraw.tool === "rect" && map.Row1) {
-    writeGeom(map, "Row1", box.row1);
-    writeGeom(map, "Column1", box.col1);
-    writeGeom(map, "Row2", box.row2);
-    writeGeom(map, "Column2", box.col2);
-    keep = new Set(["Row1", "Column1", "Row2", "Column2"]);
-  } else if (shapeDraw.tool === "rect") {
-    writeGeom(map, "Row", (box.row1 + box.row2) / 2);
-    writeGeom(map, "Column", (box.col1 + box.col2) / 2);
-    writeGeom(map, "Phi", 0);
-    writeGeom(map, "Length1", box.width / 2);
-    writeGeom(map, "Length2", box.height / 2);
-    keep = new Set(["Row", "Column", "Phi", "Length1", "Length2"]);
-  } else if (shapeDraw.tool === "circle") {
-    writeGeom(map, "Row", shapeDraw.a.row);
-    writeGeom(map, "Column", shapeDraw.a.col);
-    writeGeom(map, "Radius", Math.hypot(shapeDraw.b.col - shapeDraw.a.col, shapeDraw.b.row - shapeDraw.a.row));
-    keep = new Set(["Row", "Column", "Radius"]);
-  } else {
-    const along = box.width / 2;
-    const across = box.height / 2;
-    const inner = map.Radius1 && (activeOperator.params.find((param) => param.name === "Radius1")?.desc || "").includes("內");
-    writeGeom(map, "Row", (box.row1 + box.row2) / 2);
-    writeGeom(map, "Column", (box.col1 + box.col2) / 2);
-    writeGeom(map, "Phi", 0);
-    writeGeom(map, "Radius1", inner ? Math.min(along, across) : along);
-    writeGeom(map, "Radius2", inner ? Math.max(along, across) : across);
-    keep = new Set(["Row", "Column", "Phi", "Radius1", "Radius2"]);
-  }
+  const inner = map.Radius1 && (activeOperator.params.find((param) => param.name === "Radius1")?.desc || "").includes("內");
+  const mode = shapeDraw.tool === "rect" && map.Row1 ? "corners" : (inner ? "inner" : "axis");
+  const numbers = VisdevGeom.shapeNumbers(shapeDraw.tool, shapeDraw.a, shapeDraw.b, mode);
+  Object.keys(numbers).forEach((name) => writeGeom(map, name, numbers[name]));
+  const keep = new Set(Object.keys(numbers));
   clearUnusedGeom(map, keep);
   refreshOpPreview();
   cancelShapeDraw();
@@ -2143,14 +2748,24 @@ function showDrawMenu(x, y) {
   drawMenu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - height - 8))}px`;
 }
 
+function beginShapeDraw(tool) {
+  shapeDraw = { tool, a: null, b: null, pending: false };
+  shapeConfirm.hidden = true;
+  hideDrawMenu();
+  refreshShapeTools();
+  draw();
+}
+
 drawMenu.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-draw]");
   if (!button) return;
-  shapeDraw = { tool: button.dataset.draw, a: null, b: null, pending: false };
-  shapeConfirm.hidden = true;
-  hideDrawMenu();
-  draw();
+  beginShapeDraw(button.dataset.draw);
 });
+document.getElementById("shapeTools").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-draw]");
+  if (button) beginShapeDraw(button.dataset.draw);
+});
+document.getElementById("btnFloatGfx").onclick = () => openGfxWindow();
 document.getElementById("shapeOk").onclick = () => applyShapeDraw();
 document.getElementById("shapeCancel").onclick = () => cancelShapeDraw();
 document.addEventListener("mousedown", (event) => {
@@ -2201,6 +2816,11 @@ window.addEventListener("mouseup", (event) => {
   const point = imagePoint(event);
   const moved = Math.hypot(point.x - start.x, point.y - start.y) > 4;
   if (start.mode !== "zoom" && !moved) {
+    const calib = calibTarget(start.col, start.row);
+    if (calib) {
+      focusCalibPanel(calib);
+      return;
+    }
     if (!pickObject(start.col, start.row)) clearPick();
   }
   if (start.mode === "select") return;
@@ -2218,8 +2838,9 @@ canvas.addEventListener("mousemove", (event) => {
   }
   if (dragging && dragging.mode === "pan") {
     const point = imagePoint(event);
-    cam.x = dragging.camX + point.x - dragging.x;
-    cam.y = dragging.camY + point.y - dragging.y;
+    const shifted = VisdevGeom.panBy(dragging.camX, dragging.camY, point.x - dragging.x, point.y - dragging.y);
+    cam.x = shifted.x;
+    cam.y = shifted.y;
     cam.user = true;
   } else if (dragging && dragging.mode === "zoom") {
     const point = imagePoint(event);
@@ -2282,10 +2903,14 @@ function splitArgs(inner) {
   return parts;
 }
 
+function vizionCall(name, args) {
+  return `Vizion.${name} (${args})`;
+}
+
 function guessImageName(lines) {
   let name = "Image";
   for (const line of lines) {
-    const match = line.match(/^\s*(read_image|rgb1_to_gray|gauss_image|median_image|mean_image|emphasize|scale_image|invert_image)\s*\((.*)\)\s*$/i);
+    const match = line.match(/^\s*(?:Vizion\.)?(read_image|rgb1_to_gray|gauss_image|median_image|mean_image|emphasize|scale_image|invert_image)\s*\((.*)\)\s*$/i);
     if (!match) continue;
     const args = splitArgs(match[2]);
     const picked = match[1].toLowerCase() === "read_image" ? args[0] : args[1];
@@ -2296,7 +2921,7 @@ function guessImageName(lines) {
 
 function applyBinaryTool(tool) {
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
-  const index = lines.findIndex((line) => /^\s*(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
+  const index = lines.findIndex((line) => /^\s*(?:Vizion\.)?(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
   let image = guessImageName(lines);
   let region = "Region";
   let level = histo && Number.isFinite(histo.threshold) ? histo.threshold : (histo && Number.isFinite(histo.min) ? histo.min : 128);
@@ -2304,7 +2929,7 @@ function applyBinaryTool(tool) {
   let used = "UsedThreshold";
   let indent = "";
   if (index >= 0) {
-    const match = lines[index].match(/^(\s*)(?:threshold|opencv_threshold|binary_threshold)\s*\((.*)\)\s*$/i);
+    const match = lines[index].match(/^(\s*)(?:Vizion\.)?(?:threshold|opencv_threshold|binary_threshold)\s*\((.*)\)\s*$/i);
     if (match) {
       indent = match[1];
       const args = splitArgs(match[2]).map((item) => item.trim());
@@ -2321,15 +2946,15 @@ function applyBinaryTool(tool) {
       }
     }
   }
-  let call = `binary_threshold (${image}, ${region}, 'max_separability', 'light', ${used})`;
-  if (tool === "halcon") call = `threshold (${image}, ${region}, ${level}, ${maxGray})`;
-  else if (tool === "opencv") call = `opencv_threshold (${image}, ${region}, ${level}, 'binary')`;
-  else if (tool === "inv") call = `opencv_threshold (${image}, ${region}, ${level}, 'binary_inv')`;
-  else if (tool === "dark") call = `binary_threshold (${image}, ${region}, 'max_separability', 'dark', ${used})`;
-  else if (tool === "smooth") call = `binary_threshold (${image}, ${region}, 'smooth_histo', 'light', ${used})`;
-  else if (tool === "triangle") call = `binary_threshold (${image}, ${region}, 'triangle', 'light', ${used})`;
-  else if (tool === "local") call = `binary_threshold (${image}, ${region}, 'local_mean', 'light', ${used})`;
-  else if (tool === "lgauss") call = `binary_threshold (${image}, ${region}, 'local_gauss', 'light', ${used})`;
+  let call = vizionCall("binary_threshold", `${image}, ${region}, 'max_separability', 'light', ${used}`);
+  if (tool === "halcon") call = vizionCall("threshold", `${image}, ${region}, ${level}, ${maxGray}`);
+  else if (tool === "opencv") call = vizionCall("opencv_threshold", `${image}, ${region}, ${level}, 'binary'`);
+  else if (tool === "inv") call = vizionCall("opencv_threshold", `${image}, ${region}, ${level}, 'binary_inv'`);
+  else if (tool === "dark") call = vizionCall("binary_threshold", `${image}, ${region}, 'max_separability', 'dark', ${used}`);
+  else if (tool === "smooth") call = vizionCall("binary_threshold", `${image}, ${region}, 'smooth_histo', 'light', ${used}`);
+  else if (tool === "triangle") call = vizionCall("binary_threshold", `${image}, ${region}, 'triangle', 'light', ${used}`);
+  else if (tool === "local") call = vizionCall("binary_threshold", `${image}, ${region}, 'local_mean', 'light', ${used}`);
+  else if (tool === "lgauss") call = vizionCall("binary_threshold", `${image}, ${region}, 'local_gauss', 'light', ${used}`);
   if (index >= 0) lines[index] = indent + call;
   else {
     const displayAt = lines.findIndex((line) => /^\s*dev_display\s*\(/i.test(line));
@@ -2339,20 +2964,21 @@ function applyBinaryTool(tool) {
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
     if (opencv) {
-      const linked = line.match(/^(\s*)connection\s*\(\s*([^,]+)\s*,\s*([^,)]+)\s*(?:,\s*([^)]+))?\s*\)\s*$/i);
+      const linked = line.match(/^(\s*)(?:Vizion\.)?connection\s*\(\s*([^,]+)\s*,\s*([^,)]+)\s*(?:,\s*([^)]+))?\s*\)\s*$/i);
       if (linked && linked[2].trim() === region) {
         const dist = linked[4] ? linked[4].trim() : "1";
-        lines[lineIndex] = `${linked[1]}opencv_connection (${linked[2].trim()}, ${linked[3].trim()}, 8, ${dist})`;
+        lines[lineIndex] = `${linked[1]}${vizionCall("opencv_connection", `${linked[2].trim()}, ${linked[3].trim()}, 8, ${dist}`)}`;
       }
     } else {
-      const linked = line.match(/^(\s*)opencv_connection\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,)]+)\s*(?:,\s*([^)]+))?\s*\)\s*$/i);
+      const linked = line.match(/^(\s*)(?:Vizion\.)?opencv_connection\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,)]+)\s*(?:,\s*([^)]+))?\s*\)\s*$/i);
       if (linked && linked[2].trim() === region) {
         const dist = linked[5] ? linked[5].trim() : "1";
-        lines[lineIndex] = `${linked[1]}connection (${linked[2].trim()}, ${linked[3].trim()}, ${dist})`;
+        lines[lineIndex] = `${linked[1]}${vizionCall("connection", `${linked[2].trim()}, ${linked[3].trim()}, ${dist}`)}`;
       }
     }
   }
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   exec("run");
 }
@@ -2363,64 +2989,65 @@ function applyConnection(minArea, dist) {
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
   let region = "Region";
   let opencv = false;
-  const bin = lines.findIndex((line) => /^\s*(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
+  const bin = lines.findIndex((line) => /^\s*(?:Vizion\.)?(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
   if (bin >= 0) {
     const inner = lines[bin].match(/\((.*)\)/);
     const args = inner ? splitArgs(inner[1]).map((item) => item.trim()) : [];
     if (args[1]) region = args[1];
-    opencv = /^\s*opencv_threshold/i.test(lines[bin]);
+    opencv = /(?:Vizion\.)?opencv_threshold/i.test(lines[bin]);
   }
   const regionPattern = region.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const connPattern = new RegExp(`^\\s*(connection|opencv_connection)\\s*\\(\\s*${regionPattern}\\s*,`, "i");
+  const connPattern = new RegExp(`^\\s*(?:Vizion\\.)?(connection|opencv_connection)\\s*\\(\\s*${regionPattern}\\s*,`, "i");
   let connIndex = lines.findIndex((line) => connPattern.test(line));
   let output = "Connected";
   if (connIndex >= 0) {
-    const match = lines[connIndex].match(/^(\s*)(connection|opencv_connection)\s*\((.*)\)\s*$/i);
+    const match = lines[connIndex].match(/^(\s*)(?:Vizion\.)?(connection|opencv_connection)\s*\((.*)\)\s*$/i);
     const args = splitArgs(match[3]).map((item) => item.trim());
     output = args[1] || output;
     if (match[2].toLowerCase() === "opencv_connection") {
       const linked = args[2] || "8";
-      lines[connIndex] = `${match[1]}opencv_connection (${args[0]}, ${output}, ${linked}, ${distance})`;
+      lines[connIndex] = `${match[1]}${vizionCall("opencv_connection", `${args[0]}, ${output}, ${linked}, ${distance}`)}`;
     } else {
-      lines[connIndex] = `${match[1]}connection (${args[0]}, ${output}, ${distance})`;
+      lines[connIndex] = `${match[1]}${vizionCall("connection", `${args[0]}, ${output}, ${distance}`)}`;
     }
   } else {
     const insertAt = bin >= 0 ? bin + 1 : lines.length;
     const call = opencv
-      ? `opencv_connection (${region}, ${output}, 8, ${distance})`
-      : `connection (${region}, ${output}, ${distance})`;
+      ? vizionCall("opencv_connection", `${region}, ${output}, 8, ${distance}`)
+      : vizionCall("connection", `${region}, ${output}, ${distance}`);
     lines.splice(insertAt, 0, call);
     connIndex = insertAt;
   }
   const outputPattern = output.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const shapePattern = new RegExp(`^\\s*select_shape\\s*\\(\\s*${outputPattern}\\s*,`, "i");
+  const shapePattern = new RegExp(`^\\s*(?:Vizion\\.)?select_shape\\s*\\(\\s*${outputPattern}\\s*,`, "i");
   const shapeIndex = lines.findIndex((line, index) => index > connIndex && shapePattern.test(line) && /area/i.test(line));
   let shown = output;
   if (shapeIndex >= 0) {
-    const match = lines[shapeIndex].match(/^(\s*)select_shape\s*\((.*)\)\s*$/i);
+    const match = lines[shapeIndex].match(/^(\s*)(?:Vizion\.)?select_shape\s*\((.*)\)\s*$/i);
     const args = splitArgs(match[2]);
     if (args.length >= 6) {
       args[4] = ` ${area}`;
-      lines[shapeIndex] = `${match[1]}select_shape (${args.map((item) => item.trim()).join(", ")})`;
+      lines[shapeIndex] = `${match[1]}${vizionCall("select_shape", args.map((item) => item.trim()).join(", "))}`;
     }
     if (args[1]) shown = args[1].trim();
   } else {
     shown = "Selected";
-    lines.splice(connIndex + 1, 0, `select_shape (${output}, Selected, 'area', 'and', ${area}, 99999999)`);
+    lines.splice(connIndex + 1, 0, vizionCall("select_shape", `${output}, Selected, 'area', 'and', ${area}, 99999999`));
   }
   const shownPattern = shown.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const alreadyShown = lines.some((line) => new RegExp(`^\\s*dev_display\\s*\\(\\s*${shownPattern}\\s*\\)`, "i").test(line));
+  const alreadyShown = lines.some((line) => new RegExp(`^\\s*(?:Vizion\\.)?dev_display\\s*\\(\\s*${shownPattern}\\s*\\)`, "i").test(line));
   if (!alreadyShown) {
-    const regionDisplay = new RegExp(`^(\\s*)dev_display\\s*\\(\\s*${regionPattern}\\s*\\)\\s*$`, "i");
+    const regionDisplay = new RegExp(`^(\\s*)(?:Vizion\\.)?dev_display\\s*\\(\\s*${regionPattern}\\s*\\)\\s*$`, "i");
     const displayIndex = lines.findIndex((line) => regionDisplay.test(line));
     if (displayIndex >= 0) {
-      lines[displayIndex] = `${lines[displayIndex].match(/^\s*/)[0]}dev_display (${shown})`;
+      lines[displayIndex] = `${lines[displayIndex].match(/^\s*/)[0]}${vizionCall("dev_display", shown)}`;
     } else {
-      lines.push("dev_set_draw ('fill')");
-      lines.push(`dev_display (${shown})`);
+      lines.push(vizionCall("dev_set_draw", "'fill'"));
+      lines.push(vizionCall("dev_display", shown));
     }
   }
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   exec("run");
 }
@@ -2433,13 +3060,14 @@ function rewriteSubpix(level) {
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
   const original = lines[histo.line - 1];
   if (!original) return false;
-  const match = original.match(/^(\s*)threshold_sub_pix\s*\((.*)\)\s*$/i);
+  const match = original.match(/^(\s*)(?:Vizion\.)?threshold_sub_pix\s*\((.*)\)\s*$/i);
   if (!match) return false;
   const args = splitArgs(match[2]);
   if (args.length < 3 || !/^-?\d+(\.\d+)?$/.test(args[2].trim())) return false;
   args[2] = ` ${level}`;
-  lines[histo.line - 1] = `${match[1]}threshold_sub_pix (${args.join(",")})`;
+  lines[histo.line - 1] = `${match[1]}${vizionCall("threshold_sub_pix", args.join(","))}`;
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   return true;
 }
@@ -2449,30 +3077,31 @@ function applySubpix(level) {
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
   const image = guessImageName(lines);
   let regionName = "Region";
-  const bin = lines.findIndex((line) => /^\s*(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
+  const bin = lines.findIndex((line) => /^\s*(?:Vizion\.)?(threshold|opencv_threshold|binary_threshold)\s*\(/i.test(line));
   if (bin >= 0) {
     const inner = lines[bin].match(/\((.*)\)/);
     const args = inner ? splitArgs(inner[1]).map((item) => item.trim()) : [];
     if (args[1]) regionName = args[1];
   } else {
-    const at = lines.findIndex((line) => /^\s*dev_display\s*\(/i.test(line));
-    lines.splice(at >= 0 ? at : lines.length, 0, `threshold (${image}, ${regionName}, ${value}, 255)`);
+    const at = lines.findIndex((line) => /^\s*(?:Vizion\.)?dev_display\s*\(/i.test(line));
+    lines.splice(at >= 0 ? at : lines.length, 0, vizionCall("threshold", `${image}, ${regionName}, ${value}, 255`));
   }
   let output = "Border";
-  const index = lines.findIndex((line) => /^\s*threshold_sub_pix\s*\(/i.test(line));
+  const index = lines.findIndex((line) => /^\s*(?:Vizion\.)?threshold_sub_pix\s*\(/i.test(line));
   if (index >= 0) {
-    const match = lines[index].match(/^(\s*)threshold_sub_pix\s*\((.*)\)\s*$/i);
+    const match = lines[index].match(/^(\s*)(?:Vizion\.)?threshold_sub_pix\s*\((.*)\)\s*$/i);
     const args = splitArgs(match[2]).map((item) => item.trim());
     output = args[1] || output;
-    lines[index] = `${match[1]}threshold_sub_pix (${args[0] || image}, ${output}, ${value})`;
+    lines[index] = `${match[1]}${vizionCall("threshold_sub_pix", `${args[0] || image}, ${output}, ${value}`)}`;
   } else {
-    const at = lines.findIndex((line) => /^\s*dev_display\s*\(/i.test(line));
-    lines.splice(at >= 0 ? at : lines.length, 0, `threshold_sub_pix (${image}, ${output}, ${value})`);
+    const at = lines.findIndex((line) => /^\s*(?:Vizion\.)?dev_display\s*\(/i.test(line));
+    lines.splice(at >= 0 ? at : lines.length, 0, vizionCall("threshold_sub_pix", `${image}, ${output}, ${value}`));
   }
-  const shown = (name) => lines.some((line) => new RegExp(`^\\s*dev_display\\s*\\(\\s*${name}\\s*\\)`, "i").test(line));
-  if (!shown(regionName)) lines.push(`dev_display (${regionName})`);
-  if (!shown(output)) lines.push(`dev_display (${output})`);
+  const shown = (name) => lines.some((line) => new RegExp(`^\\s*(?:Vizion\\.)?dev_display\\s*\\(\\s*${name}\\s*\\)`, "i").test(line));
+  if (!shown(regionName)) lines.push(vizionCall("dev_display", regionName));
+  if (!shown(output)) lines.push(vizionCall("dev_display", output));
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   exec("run");
 }
@@ -2482,9 +3111,9 @@ function subpixNames() {
   let region = "Region";
   let contour = "Border";
   for (const line of lines) {
-    const binary = line.match(/^\s*(?:threshold|opencv_threshold|binary_threshold)\s*\(\s*[^,]+,\s*([^,)]+)/i);
+    const binary = line.match(/^\s*(?:Vizion\.)?(?:threshold|opencv_threshold|binary_threshold)\s*\(\s*[^,]+,\s*([^,)]+)/i);
     if (binary) region = binary[1].trim();
-    const sub = line.match(/^\s*threshold_sub_pix\s*\(\s*[^,]+,\s*([^,)]+)/i);
+    const sub = line.match(/^\s*(?:Vizion\.)?threshold_sub_pix\s*\(\s*[^,]+,\s*([^,)]+)/i);
     if (sub) contour = sub[1].trim();
   }
   return { region, contour };
@@ -2518,13 +3147,14 @@ function rewriteOpenCV(level) {
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
   const original = lines[histo.line - 1];
   if (!original) return false;
-  const match = original.match(/^(\s*)opencv_threshold\s*\((.*)\)\s*$/i);
+  const match = original.match(/^(\s*)(?:Vizion\.)?opencv_threshold\s*\((.*)\)\s*$/i);
   if (!match) return false;
   const args = splitArgs(match[2]);
   if (args.length < 3 || !/^-?\d+(\.\d+)?$/.test(args[2].trim())) return false;
   args[2] = ` ${level}`;
-  lines[histo.line - 1] = `${match[1]}opencv_threshold (${args.join(",")})`;
+  lines[histo.line - 1] = `${match[1]}${vizionCall("opencv_threshold", args.join(","))}`;
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   return true;
 }
@@ -2535,15 +3165,16 @@ function rewriteThreshold(minGray, maxGray) {
   const index = histo.line - 1;
   const original = lines[index];
   if (!original) return false;
-  const match = original.match(/^(\s*)threshold\s*\((.*)\)\s*$/i);
+  const match = original.match(/^(\s*)(?:Vizion\.)?threshold\s*\((.*)\)\s*$/i);
   if (!match) return false;
   const args = splitArgs(match[2]);
   if (args.length < 2) return false;
   if (!/^-?\d+(\.\d+)?$/.test(args.at(-1).trim()) || !/^-?\d+(\.\d+)?$/.test(args.at(-2).trim())) return false;
   args[args.length - 2] = ` ${minGray}`;
   args[args.length - 1] = ` ${maxGray}`;
-  lines[index] = `${match[1]}threshold (${args.join(",")})`;
+  lines[index] = `${match[1]}${vizionCall("threshold", args.join(","))}`;
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   return true;
 }
@@ -2650,11 +3281,12 @@ function applyOcr() {
   const method = document.getElementById("ocrMethod").value || "auto";
   const lines = code.value.replace(/\r\n/g, "\n").split("\n");
   const image = guessImageName(lines);
-  const call = `ocr_find (${image}, Words, '${method}', Text, Row, Column, Score)`;
-  const index = lines.findIndex((line) => /^\s*ocr_find\s*\(/i.test(line));
+  const call = vizionCall("ocr_find", `${image}, Words, '${method}', Text, Row, Column, Score`);
+  const index = lines.findIndex((line) => /^\s*(?:Vizion\.)?ocr_find\s*\(/i.test(line));
   if (index >= 0) lines[index] = call;
   else lines.push(call);
   code.value = lines.join("\n");
+  commitProgram("checkpoint");
   renderEditor();
   exec("run");
 }
@@ -2679,6 +3311,7 @@ function sampleButtons(items) {
 }
 
 async function openProgram(kind, name) {
+  leaveProject();
   const res = await fetch(`/api/files/${kind}/${encodeURIComponent(name)}`);
   const data = await res.json();
   if (!res.ok) {
@@ -2687,9 +3320,12 @@ async function openProgram(kind, name) {
   }
   code.value = data.source.replace(/\r\n/g, "\n");
   document.getElementById("progName").value = data.name;
+  saveTarget = { kind, name: data.name };
   sessionId = null;
   breakpoints = new Set();
   sampleMenu.hidden = true;
+  resetProgramHistory();
+  markSaved();
   renderEditor();
   await exec("reset");
 }
@@ -2748,6 +3384,47 @@ function selectedFeatures() {
   return { region, xld, gray, subpixel };
 }
 
+let displayChannel = null;
+
+function currentFrame() {
+  if (!cam.user || !disp || !disp.width) return null;
+  const rect = canvas.getBoundingClientRect();
+  const center = VisdevGeom.imagePoint(rect.width / 2, rect.height / 2, cam);
+  return { scale: cam.scale, col: center.col, row: center.row };
+}
+
+function publishDisplay(display) {
+  const copy = display ? {
+    width: display.width,
+    height: display.height,
+    image: display.image || null,
+    shapes: (display.shapes || []).map((shape) => {
+      const next = { ...shape };
+      delete next._img;
+      return next;
+    }),
+  } : null;
+  const payload = { type: "display", id: sessionId, display: copy, displayRev: liveDisplayRev, frame: currentFrame(), at: Date.now() };
+  try {
+    if (!displayChannel) displayChannel = new BroadcastChannel("visdev-display");
+    displayChannel.postMessage(payload);
+  } catch (_err) { /* 拉出的視窗會自己讀目前畫面 */ }
+}
+
+async function openGfxWindow() {
+  while (inflight) await new Promise((resolve) => setTimeout(resolve, 100));
+  if (!sessionId) await exec("run");
+  while (inflight) await new Promise((resolve) => setTimeout(resolve, 100));
+  const url = `${location.origin}/gfx?id=${encodeURIComponent(sessionId || "")}`;
+  try {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.open_gfx_window) {
+      await window.pywebview.api.open_gfx_window(url);
+      return;
+    }
+  } catch (_err) { /* 沒有桌面視窗介面時改開瀏覽器視窗 */ }
+  window.open(url, "visdev-gfx", "popup=yes,width=960,height=720,left=120,top=60");
+}
+
 async function openFeatureWindow() {
   while (inflight) await new Promise((resolve) => setTimeout(resolve, 100));
   if (!sessionId) await exec("run");
@@ -2764,16 +3441,59 @@ async function openFeatureWindow() {
   window.open(url, "visdev-features", "popup=yes,width=880,height=720,left=420,top=60");
 }
 
+function showPickedVariable(name) {
+  if (!name || name === "__preview__" || selectedVar === name) return;
+  selectedVar = name;
+  renderVars();
+  const node = [...document.querySelectorAll("#iconicList .var")].find((item) => item.dataset.name === name);
+  if (node) node.scrollIntoView({ block: "nearest" });
+}
+
+function pickBanner(pick) {
+  const label = pick.kind === "xld" ? "輪廓" : "區域";
+  const shown = pick.name === "__preview__" ? "次像素" : (pick.name || "");
+  const body = `已點選${label} ${shown} #${pick.index + 1}。白色虛線是這一個，特徵只顯示它。`;
+  return pick.summary ? `${body} ${pick.summary}` : body;
+}
+
+let pickTicket = 0;
+
+async function describePick() {
+  const pick = pickedObject;
+  if (!pick || !sessionId || pick.name === "__preview__") return;
+  const ticket = ++pickTicket;
+  let res;
+  try {
+    res = await fetch("/api/features", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: sessionId,
+        name: pick.name,
+        index: pick.index,
+        kind: pick.kind || "region",
+        region: ["area", "row", "column"],
+        xld: ["area", "row", "column"],
+        gray: [],
+        subpixel: false,
+      }),
+    });
+  } catch (_err) {
+    return;
+  }
+  const data = await res.json().catch(() => null);
+  if (ticket !== pickTicket || pickedObject !== pick || !res.ok || !data) return;
+  const values = (pick.kind === "xld" ? data.xld : data.region) || {};
+  const text = VisdevPick.summary(values);
+  if (!text) return;
+  pick.summary = text;
+  gfxBanner.textContent = pickBanner(pick);
+  publishFeaturePick();
+}
+
 function publishFeaturePick() {
   if (!pickedObject) return;
-  const payload = {
-    type: "pick",
-    id: sessionId,
-    name: pickedObject.name,
-    index: pickedObject.index,
-    kind: pickedObject.kind,
-    at: Date.now(),
-  };
+  const payload = VisdevPick.pack("main", pickedObject, sessionId);
   localStorage.setItem("visdev.featurePick", JSON.stringify(payload));
   featureChannel.postMessage(payload);
 }
@@ -2782,92 +3502,47 @@ function clearPick() {
   pickedObject = null;
   featureLines = [];
   gfxBanner.hidden = true;
-  const payload = { type: "pick", clear: true, at: Date.now() };
+  const payload = VisdevPick.pack("main", null, sessionId);
   localStorage.setItem("visdev.featurePick", JSON.stringify(payload));
   featureChannel.postMessage(payload);
   draw();
 }
 
-function pointInPoly(x, y, points) {
-  let inside = false;
-  for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
-    const xi = points[i][0];
-    const yi = points[i][1];
-    const xj = points[j][0];
-    const yj = points[j][1];
-    const cross = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-9) + xi);
-    if (cross) inside = !inside;
-  }
-  return inside;
+function calibTarget(col, row) {
+  if (!disp) return null;
+  if (disp.calibBack) return { index: null };
+  const panels = disp.calibPanels || [];
+  const hit = panels.find((panel) => row >= panel.top && row < panel.bottom);
+  return hit ? { index: hit.index } : null;
 }
 
-function lineDistance(x, y, points) {
-  let best = Infinity;
-  for (let i = 1; i < points.length; i += 1) {
-    const ax = points[i - 1][0];
-    const ay = points[i - 1][1];
-    const bx = points[i][0];
-    const by = points[i][1];
-    const dx = bx - ax;
-    const dy = by - ay;
-    const len2 = dx * dx + dy * dy || 1;
-    let t = ((x - ax) * dx + (y - ay) * dy) / len2;
-    t = Math.max(0, Math.min(1, t));
-    best = Math.min(best, Math.hypot(x - (ax + t * dx), y - (ay + t * dy)));
-  }
-  return best;
+function focusCalibPanel(target) {
+  if (!sessionId) return;
+  fetch(`/api/session/${encodeURIComponent(sessionId)}/calib-view`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ index: target.index }),
+  }).then(async (res) => {
+    const data = await res.json();
+    if (!res.ok) {
+      showDetail(data);
+      return;
+    }
+    applyState(data);
+  }).catch((err) => showDetail({ error: "無法連上 VisDev：" + err.message }));
 }
 
 function pickObject(col, row) {
-  const shapes = disp?.shapes || [];
-  let regionHit = null;
-  let xldHit = null;
-  let xldDist = Infinity;
-  const limit = 12 / cam.scale;
-  let xldInside = null;
-  let xldInsideArea = Infinity;
-  for (let i = shapes.length - 1; i >= 0; i -= 1) {
-    const shape = shapes[i];
-    if (shape.type !== "polyline" || shape.object == null || !shape.source) continue;
-    if (shape.kind === "xld") {
-      const dist = lineDistance(col, row, shape.points);
-      if (dist <= limit && dist < xldDist) {
-        xldDist = dist;
-        xldHit = shape;
-      }
-      const points = shape.points;
-      const ends = points.length >= 3 ? Math.hypot(points[0][0] - points.at(-1)[0], points[0][1] - points.at(-1)[1]) : Infinity;
-      if (ends < 1.5 && pointInPoly(col, row, points)) {
-        let area = 0;
-        for (let p = 0, q = points.length - 1; p < points.length; q = p, p += 1) {
-          area += points[q][0] * points[p][1] - points[p][0] * points[q][1];
-        }
-        area = Math.abs(area);
-        if (area < xldInsideArea) {
-          xldInsideArea = area;
-          xldInside = shape;
-        }
-      }
-    } else if (!regionHit && pointInPoly(col, row, shape.points)) {
-      regionHit = shape;
-    }
-  }
-  const shape = xldHit || xldInside || regionHit;
-  if (!shape) return false;
-  const grouped = shape.kind === "xld" && shape.group != null;
-  pickedObject = {
-    name: shape.source,
-    index: grouped ? shape.group : shape.object,
-    kind: shape.kind || "region",
-    group: grouped ? shape.group : null,
-  };
-  const label = pickedObject.kind === "xld" ? "輪廓" : "區域";
-  const shown = pickedObject.name === "__preview__" ? "次像素" : (pickedObject.name || "");
+  const hit = VisdevGeom.pickShape(disp?.shapes || [], col, row, cam.scale);
+  if (!hit) return false;
+  pickedObject = hit;
+  showPickedVariable(pickedObject.name);
   gfxBanner.hidden = false;
-  gfxBanner.textContent = `已點選${label} ${shown} #${pickedObject.index + 1}。白色虛線是這一個，特徵只顯示它。`;
+  gfxBanner.textContent = pickBanner(pickedObject);
   draw();
   publishFeaturePick();
   loadFeatures();
+  describePick();
   return true;
 }
 
@@ -2898,20 +3573,47 @@ async function loadFeatures() {
 }
 
 const featureChannel = new BroadcastChannel("visdev-features");
-featureChannel.onmessage = (event) => {
-  const data = event.data;
-  if (!data) return;
-  if (data.type === "features" && pickedObject) loadFeatures();
-  if (data.type === "pick" && (data.clear || data.name === "__preview__")) {
+const pickWatch = VisdevPick.createWatch("main");
+function applyExternalPick(data) {
+  const next = pickWatch.accept(data);
+  if (!next || VisdevPick.sameSelection(pickedObject, next.selection)) return;
+  if (!next.selection) {
     pickedObject = null;
     featureLines = [];
     gfxBanner.hidden = true;
     draw();
+    return;
   }
+  pickedObject = next.selection;
+  showPickedVariable(pickedObject.name);
+  gfxBanner.hidden = false;
+  gfxBanner.textContent = pickBanner(pickedObject);
+  draw();
+  loadFeatures();
+  if (!pickedObject.summary) describePick();
+}
+
+function readStoredPick() {
+  try {
+    return JSON.parse(localStorage.getItem("visdev.featurePick") || "null");
+  } catch (_err) {
+    return null;
+  }
+}
+
+featureChannel.onmessage = (event) => {
+  const data = event.data;
+  if (!data) return;
+  if (data.type === "features" && pickedObject) loadFeatures();
+  applyExternalPick(data);
 };
 window.addEventListener("storage", (event) => {
   if (event.key === "visdev.features" && pickedObject) loadFeatures();
+  if (event.key === "visdev.featurePick" && event.newValue) {
+    try { applyExternalPick(JSON.parse(event.newValue)); } catch (_err) { /* 忽略壞掉的點選 */ }
+  }
 });
+setInterval(() => applyExternalPick(readStoredPick()), 300);
 
 function fillOcrMethods(engines) {
   const select = document.getElementById("ocrMethod");
@@ -2931,6 +3633,37 @@ function fillOcrMethods(engines) {
   if ([...select.options].some((option) => option.value === current)) select.value = current;
 }
 
+async function restoreProject() {
+  let stored = null;
+  try {
+    stored = JSON.parse(localStorage.getItem("visdev.project") || "null");
+  } catch (_err) {
+    return false;
+  }
+  if (!stored || !stored.project || !stored.program) return false;
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(stored.project)}/programs/${encodeURIComponent(stored.program)}`);
+    if (!res.ok) {
+      leaveProject();
+      return false;
+    }
+    const data = await res.json();
+    currentProject = data.project;
+    code.value = String(data.source || "").replace(/\r\n/g, "\n");
+    document.getElementById("progName").value = data.name;
+    saveTarget = { kind: "project", project: data.project, name: data.name };
+    resetProgramHistory();
+    markSaved();
+    renderEditor();
+    resizeCanvas();
+    await exec("reset");
+    stLine.textContent = `專案 ${data.project} · ${data.name}`;
+    return true;
+  } catch (_err) {
+    return false;
+  }
+}
+
 async function boot() {
   operators = await fetch("/api/operators").then((res) => res.json());
   try {
@@ -2943,9 +3676,13 @@ async function boot() {
   renderOps();
   if (operators[0]) showOp(operators[0].name);
   await loadFiles();
+  if (await restoreProject()) return;
   const sample = await fetch("/api/files/samples/blob_inspect.hdv").then((res) => res.json());
   code.value = sample.source;
   document.getElementById("progName").value = sample.name;
+  saveTarget = { kind: "sample", name: sample.name };
+  resetProgramHistory();
+  markSaved();
   renderEditor();
   resizeCanvas();
   await exec("reset");

@@ -1,0 +1,73 @@
+* 物件裡有多少夠亮
+* 用法：數物件裡面落在 Low 到 High 的像素。兩個門檻都含在內，寫反了會自動對調。
+* 比例 1 是整個物件都合格，0 是完全沒有。分母是物件自己的像素。
+* 最亮或最暗有很多點時，留列最小、再來行最小的那一點。peak_region 則把同樣亮的點全部留下。
+* select_band 的比例可省略，預設 0.5。select_uniform 的 0 表示整個物件同一個灰階。
+Vizion.gen_image_const (Blank, 'byte', 80, 60)
+Vizion.gen_rectangle1 (ALeft, 10, 10, 19, 19)
+Vizion.paint_region (ALeft, Blank, Step1, 40, 'fill')
+Vizion.gen_rectangle1 (ARight, 10, 20, 19, 29)
+Vizion.paint_region (ARight, Step1, Step2, 180, 'fill')
+Vizion.union2 (ALeft, ARight, BlockA)
+Vizion.gen_rectangle1 (BlockB, 30, 10, 39, 19)
+Vizion.paint_region (BlockB, Step2, Step3, 200, 'fill')
+Vizion.gen_rectangle1 (BlockC, 30, 40, 39, 59)
+Vizion.paint_region (BlockC, Step3, Step4, 20, 'fill')
+Vizion.gen_rectangle1 (Hot, 30, 40, 31, 41)
+Vizion.paint_region (Hot, Step4, Picture, 255, 'fill')
+Vizion.concat_obj (BlockA, BlockB, Pair)
+Vizion.concat_obj (Pair, BlockC, Parts)
+* 100 到 255：半邊較亮的有 100 個，整塊亮的有 100 個，小亮點只有 4 個
+Vizion.band_count (Parts, Picture, 100, 255, Count)
+N1 := Count[1]
+N2 := Count[2]
+N3 := Count[3]
+Vizion.band_count (Parts, Picture, 255, 100, Swapped)
+S1 := Swapped[1]
+Vizion.band_ratio (Parts, Picture, 100, 255, Ratio)
+R1 := Ratio[1]
+R2 := Ratio[2]
+R3 := Ratio[3]
+Vizion.band_region (Parts, Picture, Band, 100, 255)
+Vizion.area_center (Band, BandArea, BandRow, BandCol)
+BA1 := BandArea[1]
+BandC := BandCol[1]
+BA3 := BandArea[3]
+* 至少 80% 才留下。半邊亮的是 50%，不會留下
+Vizion.select_band (Parts, Picture, Kept, 100, 255, 0.8)
+Vizion.count_obj (Kept, KeepN)
+Vizion.area_center (Kept, KeepArea, KeepRow, KeepCol)
+KeepA := KeepArea[1]
+KeepR := KeepRow[1]
+KeepC := KeepCol[1]
+Vizion.bright_point (Parts, Picture, BrightRow, BrightCol, BrightGray)
+BR1 := BrightRow[1]
+BC1 := BrightCol[1]
+BG1 := BrightGray[1]
+BR3 := BrightRow[3]
+BC3 := BrightCol[3]
+BG3 := BrightGray[3]
+Vizion.dark_point (Parts, Picture, DarkRow, DarkCol, DarkGray)
+DR1 := DarkRow[1]
+DC1 := DarkCol[1]
+DG1 := DarkGray[1]
+DR2 := DarkRow[2]
+DG2 := DarkGray[2]
+DR3 := DarkRow[3]
+DC3 := DarkCol[3]
+DG3 := DarkGray[3]
+* 最亮的像素。第三個物件只有 2×2 的 255
+Vizion.peak_region (Parts, Picture, Peak)
+Vizion.select_obj (Peak, HotPeak, 3)
+Vizion.area_center (HotPeak, PeakArea, PeakRow, PeakCol)
+PA := PeakArea[1]
+PR := PeakRow[1]
+PC := PeakCol[1]
+Vizion.select_uniform (Parts, Picture, Flat, 0)
+Vizion.count_obj (Flat, FlatN)
+Vizion.area_center (Flat, FlatArea, FlatRow, FlatCol)
+FlatA := FlatArea[1]
+Vizion.get_grayval (Picture, 14, 14, DimGray)
+Vizion.get_grayval (Picture, 14, 24, LitGray)
+Vizion.get_grayval (Picture, 30, 40, HotGray)
+Vizion.dev_display (Picture)

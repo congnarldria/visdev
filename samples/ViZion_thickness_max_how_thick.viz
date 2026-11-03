@@ -1,0 +1,60 @@
+* 區域有多厚
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Fat, 10, 10, 14, 14)
+Vizion.gen_rectangle1 (Bar, 40, 10, 42, 30)
+Vizion.gen_rectangle1 (Left, 10, 50, 18, 58)
+Vizion.gen_rectangle1 (Bridge, 13, 59, 15, 69)
+Vizion.gen_rectangle1 (Right, 10, 70, 18, 78)
+Vizion.union2 (Left, Bridge, Joined)
+Vizion.union2 (Joined, Right, Bell)
+Vizion.concat_obj (Fat, Bar, Pair)
+Vizion.concat_obj (Pair, Bell, Parts)
+Vizion.thickness_max (Parts, 'chessboard', MaxRow, MaxCol, MaxDist)
+MaxR1 := MaxRow[1]
+MaxC1 := MaxCol[1]
+MaxD1 := MaxDist[1]
+MaxR2 := MaxRow[2]
+MaxC2 := MaxCol[2]
+MaxD2 := MaxDist[2]
+MaxR3 := MaxRow[3]
+MaxC3 := MaxCol[3]
+MaxD3 := MaxDist[3]
+Vizion.thickness_neck (Parts, 'chessboard', NeckRow, NeckCol, NeckDist)
+NeckR1 := NeckRow[1]
+NeckC1 := NeckCol[1]
+NeckD1 := NeckDist[1]
+NeckR2 := NeckRow[2]
+NeckC2 := NeckCol[2]
+NeckD2 := NeckDist[2]
+NeckR3 := NeckRow[3]
+NeckC3 := NeckCol[3]
+NeckD3 := NeckDist[3]
+Vizion.thickness_mean (Parts, 'chessboard', MeanDist)
+Mean1 := MeanDist[1]
+Mean2 := MeanDist[2]
+Vizion.neck_ratio (Parts, 'chessboard', Ratio)
+Ratio1 := Ratio[1]
+Ratio2 := Ratio[2]
+Ratio3 := Ratio[3]
+Vizion.thickness_sum (Parts, 'chessboard', SumDist)
+Sum1 := SumDist[1]
+Sum2 := SumDist[2]
+Vizion.select_neck (Parts, Thick, 3, 3, 'chessboard')
+Vizion.count_obj (Thick, ThickCount)
+Vizion.select_neck (Parts, ThickSwap, 6, 3, 'chessboard')
+Vizion.count_obj (ThickSwap, SwapCount)
+Vizion.select_neck (Parts, Thin, 2, 2, 'chessboard')
+Vizion.count_obj (Thin, ThinCount)
+Vizion.band_thickness (Fat, Core, 3, 3, 'chessboard')
+Vizion.area_center (Core, CoreArea, CoreRow, CoreCol)
+CoreN := CoreArea[1]
+CoreR := CoreRow[1]
+CoreC := CoreCol[1]
+Vizion.thickness_image (Bell, Dist, 'chessboard')
+Vizion.get_grayval (Dist, 14, 54, RawCore)
+Vizion.get_grayval (Dist, 14, 64, RawNeck)
+Vizion.get_grayval (Dist, 0, 0, RawOut)
+Vizion.scale_image (Dist, View, 40, 0)
+Vizion.get_grayval (View, 14, 54, ViewCore)
+Vizion.get_grayval (View, 14, 64, ViewNeck)
+Vizion.dev_display (View)

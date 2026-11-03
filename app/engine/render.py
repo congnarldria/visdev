@@ -83,6 +83,47 @@ def png_data_url(array: np.ndarray) -> str:
     return "data:image/png;base64," + payload
 
 
+def _preview_scale(width: int | None, height: int | None, preview: bool, limit: int = 640) -> float:
+    if not preview or not width or not height:
+        return 1.0
+    long_side = max(int(width), int(height))
+    if long_side <= limit:
+        return 1.0
+    return limit / long_side
+
+
+def _scaled_array(array: np.ndarray, scale: float) -> np.ndarray:
+    if scale >= 0.999:
+        return array
+    height, width = array.shape[:2]
+    return cv2.resize(
+        array,
+        (max(1, int(round(width * scale))), max(1, int(round(height * scale)))),
+        interpolation=cv2.INTER_AREA,
+    )
+
+
+def _jpeg_data_url(array: np.ndarray) -> str:
+    ok, buf = cv2.imencode(".jpg", array, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+    if not ok:
+        raise RuntimeError("影像編碼失敗")
+    payload = base64.b64encode(buf.tobytes()).decode("ascii")
+    return "data:image/jpeg;base64," + payload
+
+
+def _encode_view(array: np.ndarray, scale: float, *, jpeg: bool) -> str:
+    view = _scaled_array(array, scale)
+    if jpeg and (view.ndim == 2 or (view.ndim == 3 and view.shape[2] != 4)):
+        return _jpeg_data_url(view)
+    return png_data_url(view)
+
+
+def _scale_points(points, scale: float):
+    if scale >= 0.999:
+        return points
+    return [[round(float(point[0]) * scale, 2), round(float(point[1]) * scale, 2)] for point in points]
+
+
 def jpeg_thumb(array: np.ndarray, max_edge: int = 112) -> str:
     height, width = array.shape[:2]
     scale = max_edge / max(height, width, 1)
@@ -101,10 +142,11 @@ def jpeg_thumb(array: np.ndarray, max_edge: int = 112) -> str:
 
 
 def apply_domain_dim(image: Image) -> np.ndarray:
+    data = image.data if image.data.dtype == np.uint8 else to_uint8(image.data)
     if image.domain is None:
-        return image.data
-    faded = (image.data.astype(np.uint16) // 3).astype(np.uint8)
-    out = image.data.copy()
+        return data
+    faded = (data.astype(np.uint16) // 3).astype(np.uint8)
+    out = data.copy()
     outside = image.domain == 0
     out[outside] = faded[outside]
     return out
@@ -155,12 +197,49 @@ def fill_overlay(region: Region, color: str, alpha: int = 110, colors: list[str]
     return overlay
 
 
-def compose_display(base: Image | None, overlays: list) -> dict | None:
+def copy_display_scene(base: Image | None, overlays: list) -> tuple[Image | None, list]:
+    """鎖裡只抄下這一步的圖和疊圖。縮小和編碼在鎖外面做。"""
+    base_copy = None if base is None else base.copy()
+    copied = []
+    for item in overlays:
+        kind = item.get("kind")
+        if kind == "region":
+            region: Region = item["region"]
+            masks = [np.array(mask, copy=True) for mask in region.objects]
+            links = None
+            if region.links:
+                links = []
+                for link in region.links:
+                    if not isinstance(link, dict):
+                        links.append(link)
+                        continue
+                    dup = dict(link)
+                    points = dup.get("points")
+                    if points:
+                        dup["points"] = [[float(point[0]), float(point[1])] for point in points]
+                    links.append(dup)
+            fresh = dict(item)
+            fresh["region"] = Region(region.width, region.height, masks, bool(region.multi_color), links)
+            copied.append(fresh)
+        elif kind == "xld":
+            xld: XLD = item["xld"]
+            contours = [[[float(point[0]), float(point[1])] for point in line] for line in xld.contours]
+            groups = list(xld.groups) if getattr(xld, "groups", None) else None
+            fresh = dict(item)
+            fresh["xld"] = XLD(xld.width, xld.height, contours, bool(xld.multi_color), groups)
+            copied.append(fresh)
+        else:
+            copied.append(dict(item))
+    return base_copy, copied
+
+
+def compose_display(base: Image | None, overlays: list, *, preview: bool = False) -> dict | None:
     if base is None and not overlays:
         return None
     width = base.width if base is not None else None
     height = base.height if base is not None else None
-    image = png_data_url(apply_domain_dim(base)) if base is not None else None
+    scale = _preview_scale(width, height, preview)
+    image = _encode_view(apply_domain_dim(base), scale, jpeg=scale < 0.999) if base is not None else None
     shapes = []
     drawn = 0
     truncated = False
@@ -175,8 +254,10 @@ def compose_display(base: Image | None, overlays: list) -> dict | None:
                 shapes.append(
                     {
                         "type": "fill",
-                        "image": png_data_url(
-                            fill_overlay(region, item["color"], alpha=int(item.get("alpha", 110)), colors=colors)
+                        "image": _encode_view(
+                            fill_overlay(region, item["color"], alpha=int(item.get("alpha", 110)), colors=colors),
+                            scale,
+                            jpeg=False,
                         ),
                     }
                 )
@@ -194,7 +275,7 @@ def compose_display(base: Image | None, overlays: list) -> dict | None:
                                 "color": color,
                                 "width": item["width"],
                                 "closed": True,
-                                "points": points,
+                                "points": _scale_points(points, scale),
                                 "object": index,
                                 "source": item.get("source"),
                                 "kind": "region",
@@ -218,7 +299,7 @@ def compose_display(base: Image | None, overlays: list) -> dict | None:
                             "color": color,
                             "width": item["width"],
                             "closed": True,
-                            "points": points,
+                            "points": _scale_points(points, scale),
                             "object": index,
                             "source": item.get("source"),
                             "kind": "region",
@@ -246,7 +327,7 @@ def compose_display(base: Image | None, overlays: list) -> dict | None:
                         "color": color,
                         "width": item["width"],
                         "closed": False,
-                        "points": [[round(float(p[0]), 2), round(float(p[1]), 2)] for p in points],
+                        "points": _scale_points([[float(p[0]), float(p[1])] for p in points], scale),
                         "object": index,
                         "group": object_index if grouped else None,
                         "source": item.get("source"),
@@ -259,8 +340,8 @@ def compose_display(base: Image | None, overlays: list) -> dict | None:
                 {
                     "type": "text",
                     "text": item["text"],
-                    "row": item["row"],
-                    "col": item["col"],
+                    "row": item["row"] if scale >= 0.999 else float(item["row"]) * scale,
+                    "col": item["col"] if scale >= 0.999 else float(item["col"]) * scale,
                     "color": item["color"],
                 }
             )
@@ -276,4 +357,10 @@ def compose_display(base: Image | None, overlays: list) -> dict | None:
         )
     if width is None:
         width, height = 640, 480
-    return {"width": width, "height": height, "image": image, "shapes": shapes}
+    if scale < 0.999:
+        width = max(1, int(round(width * scale)))
+        height = max(1, int(round(height * scale)))
+    payload = {"width": width, "height": height, "image": image, "shapes": shapes}
+    if scale < 0.999:
+        payload["preview"] = True
+    return payload

@@ -1,5 +1,8 @@
+import os
 import sys
 from pathlib import Path
+
+os.environ.setdefault("OS", "Windows_NT")
 
 import cv2
 import numpy as np
@@ -69,7 +72,7 @@ Vizion.tuple_gen_const (3, 7, Const)
     assert session.vars["Const"] == [7, 7, 7]
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch1.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_rgb1_to_gray_tuple_add_shift_local_threshold.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["First"] == 11
     gray = sample.vars["Gray"].gray()
@@ -107,7 +110,7 @@ Vizion.tuple_gen_const (3, 7, Const)
     contour = XLD(20, 20, [[[0, 0], [10, 0], [10, 30], [0, 30]]])
     clipped = REGISTRY["clip_contours_xld"].fn(contour, 0, 0, 20, 20, ctx=None).iconic[0]
     assert clipped.contours and all(point[1] <= 20 for line in clipped.contours for point in line)
-    rounded = run_source("Vizion.tuple_round ([-1.5, 1.5], Round)\ntuple_split ('a,b', ',', Parts)\n")
+    rounded = run_source("Vizion.tuple_round ([-1.5, 1.5], Round)\nVizion.tuple_split ('a,b', ',', Parts)\n")
     assert rounded.error is None, rounded.error
     assert rounded.vars["Round"] == [-2, 2]
     assert rounded.vars["Parts"] == ["a", "b"]
@@ -135,7 +138,7 @@ def test_hdevelop_batch2():
     assert "'none'" in REGISTRY["create_scaled_shape_model"].control_in[7].choices
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch2.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_rgb1_to_gray_measure_metrology_scaled_shape.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     columns = [float(item) for item in sample.vars["ColEdge"]]
     assert any(abs(item - 40) < 4 for item in columns), columns
@@ -210,7 +213,7 @@ def test_hdevelop_batch3():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch3.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_create_matrix_rigid_barcode_text.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(_first(sample.vars["Eye00"])) - 1) < 1e-6
     assert abs(float(_first(sample.vars["Row"])) - 0) < 1e-6
@@ -250,7 +253,7 @@ def test_hdevelop_batch4():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch4.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_open_framegrabber_file_camera_Code39_quaternion_cloud.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     text = sample.vars["Text39"]
     text = text[0] if isinstance(text, list) else text
@@ -263,7 +266,7 @@ def test_hdevelop_batch4():
     assert float(sample.vars["ClassId"]) == 1
     assert float(sample.vars["Score"]) > 0.5
 
-    exhausted = run_source("Vizion.open_framegrabber ('File', 'samples/code39.png', Acq)\ngrab_image (Image, Acq)\ngrab_image (Image2, Acq)\n")
+    exhausted = run_source("Vizion.open_framegrabber ('File', 'samples/code39.png', Acq)\nVizion.grab_image (Image, Acq)\nVizion.grab_image (Image2, Acq)\n")
     assert exhausted.error and "沒有下一張" in exhausted.error
 
     folder = ROOT / "workspace" / "batch4_frames"
@@ -272,7 +275,7 @@ def test_hdevelop_batch4():
     cv2.imwrite(str(folder / "b.png"), np.full((20, 20), 200, np.uint8))
     frames = run_source(
         "Vizion.open_framegrabber ('File', 'workspace/batch4_frames', 'gray', 0, 0, Acq)\n"
-        "Vizion.grab_image (A, Acq)\ngrab_image (B, Acq)\nclose_framegrabber (Acq)\n"
+        "Vizion.grab_image (A, Acq)\nVizion.grab_image (B, Acq)\nVizion.close_framegrabber (Acq)\n"
     )
     assert frames.error is None, frames.error
     assert int(frames.vars["A"].gray().mean()) == 10
@@ -352,7 +355,7 @@ def test_hdevelop_batch5():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch5.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gray_erosion_rect_ellipse_contrast.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     eroded = sample.vars["Eroded"].gray()
     assert int(eroded[60, 80]) == 200
@@ -373,7 +376,7 @@ def test_hdevelop_batch5():
 
     plain = np.zeros((40, 40), np.uint8)
     plain[10:30, 10:30] = 180
-    opened = REGISTRY["gray_opening_rect"].fn(Image(plain), 5, 5, ctx=None).iconic[0]
+    opened = REGISTRY["gray_opening_rect"].fn(Image(plain), 5, ctx=None).iconic[0]
     assert int(opened.data[20, 20]) == 180
     assert int(opened.data[10, 10]) == 180
     assert int(opened.data[9, 9]) == 0
@@ -417,7 +420,7 @@ def test_hdevelop_batch6():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch6.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_get_image_size_gray_tophat.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Width"] == 80 and sample.vars["Height"] == 60
     assert float(sample.vars["Gray"]) == 180
@@ -496,7 +499,7 @@ def test_hdevelop_batch7():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch7.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_get_grayval_ramp_diameter_shape.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Gray"] == 20 and sample.vars["CopiedGray"] == 20
     assert sample.vars["BothCount"] == 2 and sample.vars["FirstCount"] == 1
@@ -527,7 +530,7 @@ def test_hdevelop_batch8():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch8.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_scale_image_range_project_arrow.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert int(sample.vars["Top"]) == 255
     assert 128 < int(sample.vars["Deriv"]) < 160
@@ -570,7 +573,7 @@ def test_hdevelop_batch9():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch9.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_distance_rr_align_corner_region_distance.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert 10 <= float(sample.vars["DistMin"]) <= 14
     assert float(sample.vars["DistMax"]) > 30
@@ -609,7 +612,7 @@ def test_hdevelop_batch10():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch10.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_region_points_power_ridge_intersection.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert float(sample.vars["Longest"]) > 20
     assert sample.vars["DarkInside"] == 1
@@ -641,7 +644,7 @@ def test_hdevelop_batch11():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch11.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_get_region_runs_filter_skeleton_circle.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["RunCount"] == 3
     assert sample.vars["RunTop"] == 10 and sample.vars["RunBot"] == 12
@@ -680,7 +683,7 @@ def test_hdevelop_batch12():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch12.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_inner_rectangle1_holes_rounded.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert int(_first(sample.vars["InR1"])) == 10 and int(_first(sample.vars["InC1"])) == 10
     assert int(_first(sample.vars["InR2"])) == 40 and int(_first(sample.vars["InC2"])) == 50
@@ -717,7 +720,7 @@ def test_hdevelop_batch13():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch13.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_check_difference_chars_corners.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["DiffIn"] == 1 and sample.vars["DiffOut"] == 0 and sample.vars["DarkIn"] == 0
     assert sample.vars["DotIn"] == 1 and sample.vars["DotOut"] == 0
@@ -745,7 +748,7 @@ def test_hdevelop_batch14():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch14.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_empty_region_edge_plateau_flow.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["EmptyCount"] == 0
     assert sample.vars["PickedCount"] == 1
@@ -770,7 +773,7 @@ def test_hdevelop_batch15():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch15.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_distance_transform_highpass_corner.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["NearIn"] == 0
     assert sample.vars["NearOut"] == 10
@@ -802,7 +805,7 @@ def test_hdevelop_batch16():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch16.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_eliminate_runs_plane_entropy.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["GoneCount"] == 0
     assert int(_first(sample.vars["WideArea"])) == 231
@@ -836,7 +839,7 @@ def test_hdevelop_batch17():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch17.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_sqrt_image_log_saddle_trim.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["RootGray"] == 9 and sample.vars["RootZero"] == 0
     assert sample.vars["LogMid"] == 128 and sample.vars["LogHigh"] == 255 and sample.vars["LogZero"] == 0
@@ -867,7 +870,7 @@ def test_hdevelop_batch18():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch18.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gray_features_distance_auto_threshold.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     gray = [float(item) for item in sample.vars["GrayVals"]]
     assert gray == [10, 19, 14.5]
@@ -889,7 +892,7 @@ def test_hdevelop_batch19():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch19.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gamma_image_zero_cross_sector.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["GammaGray"] == 64
     assert sample.vars["BinFlatGray"] == 100
@@ -916,7 +919,7 @@ def test_hdevelop_batch20():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch20.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_exp_image_polar_tophat.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["ExpAtZero"] == 0
     assert sample.vars["ExpAtMid"] == 15
@@ -946,7 +949,7 @@ def test_hdevelop_batch21():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch21.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_reduce_domain_paint_corner_intersection.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["InDomain"] == 200 and sample.vars["OutDomain"] == 10
     assert sample.vars["FlatResp"] == 128 and sample.vars["InsideResp"] == 128
@@ -973,7 +976,7 @@ def test_hdevelop_batch22():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch22.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_abs_image_direction_crossing.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["AbsAtZero"] == 128 and sample.vars["AbsAtMid"] == 0 and sample.vars["AbsAtLow"] == 28
     assert sample.vars["RightDir"] == 128 and sample.vars["DownDir"] == 191
@@ -997,7 +1000,7 @@ def test_hdevelop_batch23():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch23.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_prewitt_amp_polar_split.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["PrewittEdge"] == 40 and sample.vars["PrewittFlat"] == 0
     assert sample.vars["KirschEdge"] == 40 and sample.vars["KirschFlat"] == 0
@@ -1020,7 +1023,7 @@ def test_hdevelop_batch24():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch24.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_frei_amp_robinson_azimuth_circle.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["FreiEdge"] == 49 and sample.vars["FreiFlat"] == 0
     assert sample.vars["RobinsonEdge"] == 160 and sample.vars["RobinsonFlat"] == 0
@@ -1048,7 +1051,7 @@ def test_hdevelop_batch25():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch25.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_bit_not_lut_bits_pyramid.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["NotGray"] == 245
     assert sample.vars["AndGray"] == 0 and sample.vars["OrGray"] == 255 and sample.vars["XorGray"] == 255
@@ -1066,7 +1069,7 @@ def test_hdevelop_batch26():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch26.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_measure_rectangle2_profile_funct1d.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["ProfileCount"] == 41
     assert abs(float(sample.vars["ProfileFirst"]) - 30) < 1e-6
@@ -1098,7 +1101,7 @@ def test_hdevelop_batch27():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch27.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_create_funct_1d_pairs_integral_derivative_inverse.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Area"]) - 40) < 1e-6
     assert abs(float(sample.vars["Flat2"])) < 1e-6
@@ -1124,7 +1127,7 @@ def test_hdevelop_batch28():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch28.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_fft_image_shift_phase_correlation.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["DcReal"]) - 48000) < 1e-4
     assert abs(float(sample.vars["DcImag"])) < 1e-4
@@ -1149,7 +1152,7 @@ def test_hdevelop_batch29():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch29.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_fft_image_spectrum_mask_convolve_energy.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["ConjReal"]) - 48000) < 1e-4
     assert abs(float(sample.vars["ConjImag"])) < 1e-4
@@ -1174,7 +1177,7 @@ def test_hdevelop_batch30():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch30.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_fft_image_correlation_shift_pad.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["LowGray"] == 40 and sample.vars["LowEdge"] == 40
     assert sample.vars["HighDark"] == 0 and sample.vars["HighBright"] == 40
@@ -1201,7 +1204,7 @@ def test_hdevelop_batch31():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch31.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_object_model_3d_from_points_plane_box.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Nx"])) < 1e-6
     assert abs(float(sample.vars["Ny"])) < 1e-6
@@ -1233,7 +1236,7 @@ def test_hdevelop_batch32():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch32.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_object_model_3d_from_points_scale_project_axis.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["ScaleX"]) - 6) < 1e-6
     assert abs(float(sample.vars["HeldX"]) - 2) < 1e-6
@@ -1261,7 +1264,7 @@ def test_hdevelop_batch33():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch33.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_object_model_3d_from_points_intersect_grid_axis.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["CommonX"]) - 1) < 1e-6
     assert abs(float(sample.vars["CommonY"])) < 1e-6
@@ -1290,7 +1293,7 @@ def test_hdevelop_batch34():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch34.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_object_model_3d_from_region_cloud_aligned_to_image.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["RegionCount"] == 9
     assert abs(float(sample.vars["Rx0"]) - 20) < 1e-6
@@ -1321,7 +1324,7 @@ def test_hdevelop_batch35():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch35.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_fit_image_plane_height_normal_shade.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Alpha"])) < 1e-6
     assert abs(float(sample.vars["Beta"]) - 1) < 1e-6
@@ -1355,7 +1358,7 @@ def test_hdevelop_batch36():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch36.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_sub_plane_image_reference_tilt_volume.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["LevelCorner"] == 128 and sample.vars["LevelMid"] == 128
     assert sample.vars["Shift0"] == 118 and sample.vars["Shift40"] == 158
@@ -1389,7 +1392,7 @@ def test_hdevelop_batch37():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch37.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_fit_plane_region_plane_inside_region.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Alpha"])) < 1e-6
     assert abs(float(sample.vars["Beta"]) - 1) < 1e-6
@@ -1438,7 +1441,7 @@ def test_hdevelop_batch38():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch38.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_fit_plane_objects_plane_per_object.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Beta1"]) - 1) < 1e-6
     assert abs(float(sample.vars["Beta3"])) < 1e-6
@@ -1478,7 +1481,7 @@ def test_hdevelop_batch39():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch39.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_fit_quad_region_parabola_quadric.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["A"])) < 1e-6
     assert abs(float(sample.vars["B"]) - 1) < 1e-6
@@ -1518,7 +1521,7 @@ def test_hdevelop_batch40():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch40.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_add_plane_image_height_map_difference.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["UnionMean"]) - (90 / 27)) < 1e-6
     assert abs(float(sample.vars["UnionDev"]) - (1300 / 27) ** 0.5) < 1e-6
@@ -1556,7 +1559,7 @@ def test_hdevelop_batch41():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch41.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_sub_local_mean_local_mean_roughness.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["CenterGray"] == 155
     assert sample.vars["SideGray"] == 125
@@ -1589,7 +1592,7 @@ def test_hdevelop_batch42():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch42.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_sub_local_median_median_local_bump.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["CenterGray"] == 158
     assert sample.vars["SideGray"] == 128
@@ -1624,7 +1627,7 @@ def test_hdevelop_batch43():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch43.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gray_spot_white_spots_smaller_than_kernel.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["WhitePeak"] == 30
     assert sample.vars["WhiteSide"] == 0
@@ -1664,7 +1667,7 @@ def test_hdevelop_batch44():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch44.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gray_opening_rect_opening_reconstruct.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["OpenSq"] == 200
     assert sample.vars["OpenArm"] == 0
@@ -1696,7 +1699,7 @@ def test_hdevelop_batch45():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch45.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_thickness_max_how_thick.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["MaxR1"] == 12 and sample.vars["MaxC1"] == 12 and sample.vars["MaxD1"] == 3
     assert sample.vars["MaxR2"] == 41 and sample.vars["MaxC2"] == 11 and sample.vars["MaxD2"] == 2
@@ -1717,13 +1720,13 @@ def test_hdevelop_batch45():
     assert sample.vars["ViewCore"] == 200 and sample.vars["ViewNeck"] == 80
     modes = next(param for param in REGISTRY["thickness_image"].control_in if param.name == "Metric").choices
     assert "'chessboard'" in modes and "'euclidean'" in modes
-    empty = run_source("Vizion.gen_rectangle1 (Box, 0, 0, 1, 1)\ndifference (Box, Box, Empty)\nthickness_max (Empty, Row, Column, Distance)\n")
+    empty = run_source("Vizion.gen_rectangle1 (Box, 0, 0, 1, 1)\nVizion.difference (Box, Box, Empty)\nVizion.thickness_max (Empty, Row, Column, Distance)\n")
     assert empty.error and "區域是空的" in empty.error
 
 
 def test_hdevelop_batch46():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch46.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_area_intersection_overlap_area.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Inter1"] == 50 and sample.vars["Inter2"] == 25
     assert sample.vars["Union1"] == 150 and sample.vars["Union2"] == 121
@@ -1767,7 +1770,7 @@ def test_hdevelop_batch47():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch47.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_distance_objects_how_far_apart.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Min1"] == 11 and sample.vars["Min2"] == 1 and sample.vars["Min3"] == 0
     assert sample.vars["Far1"] == 20 and sample.vars["Far2"] == 5 and sample.vars["Far3"] == 5
@@ -1812,7 +1815,7 @@ def test_hdevelop_batch48():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch48.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_region_angle_which_side.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Ang1"] == 0 and sample.vars["Ang2"] == 180
     assert sample.vars["Ang3"] == 90 and sample.vars["Ang4"] == 270
@@ -1844,7 +1847,7 @@ def test_hdevelop_batch49():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch49.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_partition_nearest_gap_to_nearest.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["GrownN"] == 2 and sample.vars["BorderN"] == 2
     assert sample.vars["InsideN"] == 2 and sample.vars["TieCount"] == 1
@@ -1900,7 +1903,7 @@ def test_hdevelop_batch50():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch50.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_sort_feature_pick_by_feature.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["D1"] == 100 and sample.vars["D2"] == 48 and sample.vars["D3"] == 16
     assert abs(float(sample.vars["DR"]) - 14.5) < 1e-6
@@ -1955,7 +1958,7 @@ def test_hdevelop_batch51():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch51.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_region_defects_fill_notches.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["BiteN"] == 2 and sample.vars["ChipN"] == 2 and sample.vars["DeepN"] == 1
     assert sample.vars["BA1"] == 100 and sample.vars["BA2"] == 10
@@ -1990,7 +1993,7 @@ def test_hdevelop_batch52():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch52.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_select_inner_who_contains_whom.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["InnerN"] == 2 and sample.vars["In1"] == 196 and sample.vars["In2"] == 16
     assert sample.vars["OuterN"] == 2 and sample.vars["Out1"] == 1200 and sample.vars["Out2"] == 25
@@ -2034,7 +2037,7 @@ def test_hdevelop_batch53():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch53.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_select_border_touches_border.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["TouchN"] == 2 and sample.vars["Touch1"] == 100 and sample.vars["Touch2"] == 50
     assert sample.vars["InnerN"] == 2 and sample.vars["Inner1"] == 100 and sample.vars["Inner2"] == 80
@@ -2086,7 +2089,7 @@ def test_hdevelop_batch54():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch54.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_neighbor_distance_objects_touch.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["D1"] == 1 and sample.vars["D2"] == 1
     assert sample.vars["D3"] == 1 and sample.vars["D4"] == 16
@@ -2134,7 +2137,7 @@ def test_hdevelop_batch55():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch55.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_shape_score_most_like_template.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["S1"] == 0
     assert abs(float(sample.vars["S2"])) < 1e-12
@@ -2178,7 +2181,7 @@ def test_hdevelop_batch56():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch56.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_align_delta_move_onto_template.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["DR1"] == 0 and sample.vars["DC1"] == -30
     assert sample.vars["DR2"] == -28 and sample.vars["DC2"] == -28
@@ -2218,7 +2221,7 @@ def test_hdevelop_batch57():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch57.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_grid_size_rows_and_columns.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["GridRows"] == 2 and sample.vars["GridCols"] == 3
     assert sample.vars["RowPitch"] == 20 and sample.vars["ColPitch"] == 20
@@ -2259,7 +2262,7 @@ def test_hdevelop_batch58():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch58.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gray_offset_brightness_side.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["DR1"] == 0 and sample.vars["DC1"] == 3
     assert sample.vars["DR2"] == 0 and sample.vars["DC2"] == 0
@@ -2293,7 +2296,7 @@ def test_hdevelop_batch59():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch59.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_edge_contrast_edge_clarity.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["C1"] == 200 and sample.vars["C2"] == 0 and sample.vars["C3"] == -160
     assert sample.vars["A1"] == 200 and sample.vars["A2"] == 0 and sample.vars["A3"] == 160
@@ -2324,7 +2327,7 @@ def test_hdevelop_batch60():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch60.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_edge_min_weakest_edge.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["M1"] == -10 and sample.vars["M2"] == 200 and sample.vars["M3"] == 0
     assert sample.vars["F1"] == 10 and sample.vars["F2"] == 200 and sample.vars["F3"] == 0
@@ -2355,7 +2358,7 @@ def test_hdevelop_batch61():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch61.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_band_count_bright_enough.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert [sample.vars[name] for name in ("N1", "N2", "N3", "S1")] == [100, 100, 4, 100]
     assert abs(float(sample.vars["R1"]) - 0.5) < 1e-9
@@ -2388,7 +2391,7 @@ def test_hdevelop_batch62():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch62.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gray_mode_main_gray.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert [sample.vars[name] for name in ("G1", "G2", "G3")] == [40, 200, 20]
     assert [sample.vars[name] for name in ("C1", "C2", "C3")] == [100, 100, 196]
@@ -2416,7 +2419,7 @@ def test_hdevelop_batch63():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch63.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_row_runs_horizontal_and_vertical.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert [sample.vars[name] for name in ("RN1", "RN2", "RN3")] == [3, 1, 1]
     assert [sample.vars[name] for name in ("CN1", "CN2", "CN3")] == [1, 3, 1]
@@ -2443,7 +2446,7 @@ def test_hdevelop_batch64():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch64.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_symmetry_score_left_right_symmetry.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["HC1"]) - (368 / 384)) < 1e-9
     assert sample.vars["HC2"] == 1 and sample.vars["HR1"] == 1 and sample.vars["HR2"] == 1
@@ -2466,7 +2469,7 @@ def test_hdevelop_batch64():
 
 def test_hdevelop_batch65():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch65.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_top_point_four_endpoints.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["TR1"] == 10 and sample.vars["TC1"] == 10
     assert sample.vars["TR2"] == 30 and sample.vars["TC2"] == 41
@@ -2486,7 +2489,7 @@ def test_hdevelop_batch65():
 
 def test_hdevelop_batch66():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch66.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hole_count_hole_count_and_size.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["C1"] == 1 and sample.vars["C2"] == 0 and sample.vars["C3"] == 2
     assert sample.vars["OC"] == 0
@@ -2515,7 +2518,7 @@ def test_hdevelop_batch67():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch67.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_window_inside_stays_inside_window.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["IA1"] == 100 and sample.vars["IA2"] == 100 and sample.vars["IA3"] == 0
     assert sample.vars["OA1"] == 0 and sample.vars["OA2"] == 100 and sample.vars["OA3"] == 100
@@ -2542,7 +2545,7 @@ def test_hdevelop_batch68():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch68.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_major_phi_major_axis_direction.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["P1"] == 0 and abs(float(sample.vars["P2"]) - math.pi / 2) < 1e-9
     assert sample.vars["P3"] == 0
@@ -2580,7 +2583,7 @@ def test_hdevelop_batch69():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch69.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_edge_enhance_sharpen_edges_keep_flat.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Flat"] == 100 and sample.vars["DarkSharp"] == 73 and sample.vars["BrightSharp"] == 207
     assert sample.vars["SpikeGate"] == 106 and sample.vars["SpikeOpen"] == 111 and sample.vars["SpikeBox"] == 112
@@ -2653,7 +2656,7 @@ def test_csharp_xld_tuple():
     from app.engine.objects import XLD
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch104.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_contour_polygon_xld_contour_tuple_stays_hobject.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert isinstance(sample.vars["ho_XLDs"], XLD)
     assert len(sample.vars["ho_XLDs"].contours) == 2
@@ -2675,9 +2678,82 @@ def test_csharp_xld_tuple():
     assert len({shape.get("color") for shape in preview_shapes}) >= 2
 
 
+def test_open_hdevelop_skips_password():
+    from app.engine.hdevelop_file import convert_hdevelop
+
+    raw = """<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.2" halcon_version="21.05.0.0">
+<procedure name="main">
+<interface/>
+<body>
+<c>* 開啟 HALCON 程式</c>
+<l>gen_image_const (Image, 'byte', 8, 8)</l>
+<l>cut (Image, Region)//二值化</l>
+<l>area_center (Region, Area, Row, Column)</l>
+</body>
+</procedure>
+<procedure name="cut">
+<interface>
+<io><par name="Image" base_type="iconic" dimension="0"/></io>
+<oo><par name="Region" base_type="iconic" dimension="0"/></oo>
+</interface>
+<body>
+<l>threshold (Image, Region, 0, 10)</l>
+</body>
+</procedure>
+<procedure name="secret">
+<protection version="2">QUJDREVG</protection>
+<body>
+<l>threshold (Image, Hidden, 0, 1)</l>
+</body>
+</procedure>
+</hdevelop>
+""".encode("utf-8")
+    source, skipped = convert_hdevelop(raw)
+    assert skipped == ["secret"]
+    assert "程序 secret 有密碼，沒有打開" in source
+    assert "Hidden" not in source and "QUJDREVG" not in source
+    assert "Vizion.gen_image_const" in source and "Vizion.threshold" in source
+    assert "procedure cut (Image : Region :  : )" in source
+    assert "* 二值化" in source
+    sample = run_source(source)
+    assert sample.error is None, sample.error
+    assert sample.vars["Area"] == [64]
+    locked, names = convert_hdevelop(b"\x00\x01secret-bytes")
+    assert names == ["整份程式"]
+    assert "沒有打開" in locked
+    assert "secret-bytes" not in locked
+    library = """<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.0" halcon_version="11.0.3.4">
+<library/>
+<procedure name="locked_lib">
+<interface>
+<io><par name="Image"/></io>
+</interface>
+<xb>CIPHERTEXT</xb>
+</procedure>
+<procedure name="plain_lib">
+<interface>
+<oo><par name="Region"/></oo>
+</interface>
+<body>
+<l>gen_image_const (Image, 'byte', 4, 4)</l>
+<l>threshold (Image, Region, 0, 10)</l>
+</body>
+</procedure>
+</hdevelop>
+""".encode("utf-8")
+    lib_source, lib_skipped = convert_hdevelop(library)
+    assert lib_skipped == ["locked_lib"]
+    assert "程序 locked_lib 有密碼，沒有打開" in lib_source
+    assert "CIPHERTEXT" not in lib_source
+    assert "procedure plain_lib ( : Region :  : )" in lib_source
+    assert "Vizion.threshold" in lib_source
+
+
 def test_hdevelop_batch70():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch70.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_area_center_catch_error_after_procedure.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Area"] == [400]
     assert abs(float(sample.vars["Row"][0]) - 19.5) < 1e-6
@@ -2699,7 +2775,7 @@ def test_hdevelop_batch70():
 
 def test_hdevelop_batch71():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch71.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_diff_region_difference_from_golden.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Area"] == [100]
     assert abs(float(sample.vars["Row"][0]) - 14.5) < 1e-6
@@ -2707,7 +2783,7 @@ def test_hdevelop_batch71():
     assert sample.vars["Maximum"] == 80
     assert abs(float(sample.vars["Mean"]) - (8010 / 4800)) < 1e-9
     negative = run_source(
-        "Vizion.gen_image_const (A, 'byte', 8, 8)\ngen_image_proto (A, B, 1)\ndiff_region (A, B, D, -1)\n"
+        "Vizion.gen_image_const (A, 'byte', 8, 8)\nVizion.gen_image_proto (A, B, 1)\nVizion.diff_region (A, B, D, -1)\n"
     )
     assert "不能是負的" in (negative.error or "")
 
@@ -2718,7 +2794,7 @@ def test_hdevelop_batch72():
     from app.engine.chapters.code_ops import _decode_qr
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch72.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_qrcode_print_qr_read_back.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Text"] == "VISDEV"
     assert len(sample.vars["Symbol"].contours) == 1
@@ -2749,7 +2825,7 @@ def test_hdevelop_batch73():
     import math
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch73.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_ridge_region_dark_scratch_direction.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Area"] == [40]
     assert abs(float(sample.vars["Row"][0]) - 29.5) < 1e-6
@@ -2766,7 +2842,7 @@ def test_hdevelop_batch73():
     assert abs(float(sample.vars["LightCol"][0]) - 40) < 1e-6
     assert 60 < float(sample.vars["Longest"]) < 70
     assert sample.vars["BlockCount"] == 0
-    negative = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nridge_region (A, R, 1, -1, 'dark')\n")
+    negative = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nVizion.ridge_region (A, R, 1, -1, 'dark')\n")
     assert "不能是負的" in (negative.error or "")
 
 
@@ -2774,7 +2850,7 @@ def test_hdevelop_batch74():
     import math
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch74.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_edge_region_edge_between_pixels.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Area"] == [60]
     assert abs(float(sample.vars["Row"][0]) - 29.5) < 1e-6
@@ -2792,13 +2868,13 @@ def test_hdevelop_batch74():
     assert abs(float(sample.vars["AcrossRow"]) - 29.5) < 1e-6
     assert abs(float(sample.vars["AcrossCol"]) - 39.5) < 1e-4
     assert sample.vars["SoftCount"] == 0 and sample.vars["FlatCount"] == 0
-    negative = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nedge_region (A, R, 1, -1)\n")
+    negative = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nVizion.edge_region (A, R, 1, -1)\n")
     assert "不能是負的" in (negative.error or "")
 
 
 def test_hdevelop_batch75():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch75.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_phase_correlation_shift_under_one_pixel.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Row"]) - 1.5) < 0.02
     assert sample.vars["Column"] == 0
@@ -2818,7 +2894,7 @@ def test_hdevelop_batch75():
 
 def test_hdevelop_batch76():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch76.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_contour_polygon_xld_line_outlier_stays_straight.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Row1"][0]) - 10) < 1e-6
     assert abs(float(sample.vars["Row2"][0]) - 10) < 1e-6
@@ -2834,7 +2910,7 @@ def test_hdevelop_batch76():
 
 def test_hdevelop_batch77():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch77.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_contour_polygon_xld_arc_outlier.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Row"][0]) - 80) < 1e-4
     assert abs(float(sample.vars["Column"][0]) - 90) < 1e-4
@@ -2848,7 +2924,7 @@ def test_hdevelop_batch77():
 
 def test_hdevelop_batch78():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch78.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_contour_region_xld_boundary_at_half_pixel.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["CenterCount"] == 1
     assert sample.vars["RowMin"] == 9.5 and sample.vars["ColMin"] == 9.5
@@ -2865,7 +2941,7 @@ def test_hdevelop_batch78():
 
 def test_hdevelop_batch79():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch79.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_contour_polygon_xld_gauss_weight_ignores_outlier.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["RowMin"] == 10 and sample.vars["RowMax"] == 10
     assert sample.vars["ColMin"] == 0 and sample.vars["ColMax"] == 30
@@ -2875,7 +2951,7 @@ def test_hdevelop_batch79():
 
 def test_hdevelop_batch80():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch80.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_derivate_gauss_slope1_derivative_is_129.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert int(sample.vars["Deriv"]) == 129 and int(sample.vars["ZeroY"]) == 128
     assert int(sample.vars["Deriv2"]) == 128 and int(sample.vars["Amp"]) == 1
@@ -2891,7 +2967,7 @@ def test_hdevelop_batch81():
     from app.engine.gauge import sample_bicubic
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch81.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_get_grayval_interpolated_half_pixel_is_not_the_average.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["OnPixel"] == 200
     assert sample.vars["Cubic"] == 112.5
@@ -2907,13 +2983,13 @@ def test_hdevelop_batch81():
     color[3, 3] = (10, 20, 30)
     got = sample_bicubic(color, np.array([3.0]), np.array([3.0]))
     assert list(got[0]) == [10, 20, 30]
-    bad = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nget_grayval_interpolated (A, 1, 1, 'cubic', G)\n")
+    bad = run_source("Vizion.gen_image_const (A, 'byte', 16, 16)\nVizion.get_grayval_interpolated (A, 1, 1, 'cubic', G)\n")
     assert "只能是" in (bad.error or "")
 
 
 def test_hdevelop_batch82():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch82.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_teach_shape_model_least_squares_aligns_shape.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     truth = 59.9
     interpolated = float(sample.vars["ICol"][0])
@@ -2926,7 +3002,7 @@ def test_hdevelop_batch82():
 
 def test_hdevelop_batch83():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch83.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gauss_image_least_squares_row_near_39.25.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     truth_row = 39.25
     truth_col = 47.85
@@ -2942,7 +3018,7 @@ def test_hdevelop_batch83():
 
 def test_hdevelop_batch84():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch84.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_create_metrology_model_caliper_averages_spike.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert float(sample.vars["ThinBegin"][0]) == 45.5
     assert float(sample.vars["ThinEnd"][0]) == 45.5
@@ -2952,7 +3028,7 @@ def test_hdevelop_batch84():
 
 def test_hdevelop_batch85():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch85.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_points_foerstner_corner_inside_pixel.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
 
     def one(value):
@@ -2976,7 +3052,7 @@ def test_hdevelop_batch85():
 
 def test_hdevelop_batch86():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch86.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_vector_to_hom_mat2d_affine_ignores_outlier.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Affine"] == [1, 0, 2, 0, 1, 5]
     assert sample.vars["Row0"] == 2 and sample.vars["Col0"] == 5
@@ -2985,7 +3061,7 @@ def test_hdevelop_batch86():
 
 def test_hdevelop_batch87():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch87.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hom_vector_to_proj_hom_mat2d_projective_ignores_outlier.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Row0"] == 3 and sample.vars["Col0"] == 4
     assert sample.vars["Row1"] == 13 and sample.vars["Col1"] == 14
@@ -2995,7 +3071,7 @@ def test_hdevelop_batch88():
     import math
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch88.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_ellipse_contour_xld_ellipse_arc_outlier.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["BRow"][0]) - 80) < 0.02
     assert abs(float(sample.vars["BCol"][0]) - 90) < 0.02
@@ -3007,7 +3083,7 @@ def test_hdevelop_batch88():
 
 def test_hdevelop_batch89():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch89.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_tuple_concat_rectangle_edge_outlier.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["FRow"][0] == 50 and sample.vars["FCol"][0] == 80
     assert sample.vars["FPhi"][0] == 0
@@ -3017,7 +3093,7 @@ def test_hdevelop_batch89():
 
 def test_hdevelop_batch90():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch90.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_fit_plane_region_spike_does_not_tilt_plane.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Alpha"])) < 1e-9
     assert abs(float(sample.vars["Beta"])) < 1e-9
@@ -3029,7 +3105,7 @@ def test_hdevelop_batch90():
 
 def test_hdevelop_batch91():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch91.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_object_model_3d_from_points_cloud_plane_ignores_outlier.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Nx"])) < 1e-9
     assert abs(float(sample.vars["Ny"])) < 1e-9
@@ -3039,7 +3115,7 @@ def test_hdevelop_batch91():
 
 def test_hdevelop_batch92():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch92.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_object_model_3d_from_points_axis_ignores_side_point.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["Ax"]) - 1) < 1e-9
     assert abs(float(sample.vars["Ay"])) < 1e-9
@@ -3048,7 +3124,7 @@ def test_hdevelop_batch92():
 
 def test_hdevelop_batch93():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch93.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_contour_polygon_xld_line_normal_ignores_corner.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["LCol"][1]) - 28.85060845773462) < 1e-6
     assert abs(float(sample.vars["LCol"][3]) - 71.14939154226538) < 1e-6
@@ -3058,7 +3134,7 @@ def test_hdevelop_batch93():
 
 def test_hdevelop_batch94():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch94.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_points_harris_harris_corner_inside_pixel.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["StillIRow"] == 25 and sample.vars["StillICol"] == 37
     assert sample.vars["MoveIRow"] == 25 and sample.vars["MoveICol"] == 37
@@ -3078,7 +3154,7 @@ def test_hdevelop_batch94():
 
 def test_hdevelop_batch95():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch95.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_contour_polygon_xld_smooth_keeps_endpoints.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert all(abs(float(item) - 10) < 1e-6 for item in sample.vars["Row"])
     assert [abs(float(item) - expected) < 1e-6 for item, expected in zip(sample.vars["Col"], [0, 10, 20, 30, 40])] == [True] * 5
@@ -3086,7 +3162,7 @@ def test_hdevelop_batch95():
 
 def test_hdevelop_batch96():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch96.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_zoom_image_size_zoomed_half_pixel_is_112.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Mid"] == 112
     assert sample.vars["Average"] == 100
@@ -3097,7 +3173,7 @@ def test_hdevelop_batch97():
     import math
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch97.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_elliptic_axis_wide_bar_0_tall_bar_90.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["WideP"] == 0 and sample.vars["WideA"] == 0
     assert abs(float(sample.vars["TallP"]) - math.pi / 2) < 1e-12
@@ -3108,7 +3184,7 @@ def test_hdevelop_batch97():
 
 def test_hdevelop_batch98():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch98.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_hom_mat2d_identity_pulled_back_half_pixel_is_112.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Mid"] == 112
     assert sample.vars["Average"] == 100
@@ -3119,7 +3195,7 @@ def test_hdevelop_batch98():
 
 def test_hdevelop_batch99():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch99.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_local_max_sub_pix_gauss_peak_at_30.33298.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     center = 30 + 1 / 3
     assert sample.vars["FRow"] == 20 and sample.vars["GRow"] == 20
@@ -3130,7 +3206,7 @@ def test_hdevelop_batch99():
 
 def test_hdevelop_batch100():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch100.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_points_lepetit_square_corner_inside_pixel.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert abs(float(sample.vars["BRow"]) - 24.094262617339446) < 1e-9
     assert abs(float(sample.vars["BCol"]) - 36.094262648985456) < 1e-9
@@ -3138,13 +3214,828 @@ def test_hdevelop_batch100():
 
 def test_hdevelop_batch101():
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch101.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_create_scaled_shape_model_scale_refined_to_1.08895.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     refined = float(sample.vars["S"])
     still = float(sample.vars["Still"])
     assert still == 1.0
-    assert abs(refined - 1.07505) < 1e-5
+    assert abs(refined - 1.088948198788332) < 1e-9
     assert abs(refined - 1.1) < abs(still - 1.1)
+
+
+def test_expand_region_splits_overlap():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_expand_region_region_splits_overlap.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Count"] == 2
+    assert int(sample.vars["LeftArea"]) == 12
+    assert int(sample.vars["RightArea"]) == 8
+
+
+def test_gen_image_const_real_is_zero():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_image_const_real_zero.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Type"] == "real"
+    assert sample.vars["Gray"] == 0
+    assert sample.vars["Width"] == 4 and sample.vars["Height"] == 3
+    assert sample.vars["ByteType"] == "byte"
+    assert sample.vars["ByteGray"] == 0
+
+
+def test_convert_image_type_real_and_byte():
+    import numpy as np
+
+    from app.engine.objects import Image
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_convert_image_type_real_byte_roundtrip.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["RealType"] == "real"
+    assert sample.vars["ByteType"] == "byte"
+    assert int(sample.vars["Original"]) == 200
+    assert int(sample.vars["RealGray"]) == 200
+    assert int(sample.vars["ByteGray"]) == 200
+    assert int(sample.vars["Outside"]) == 0
+
+    convert = REGISTRY["convert_image_type"].fn
+    source = Image(np.array([[0, 200]], np.uint8))
+    copied = convert(source, "byte", ctx=None).iconic[0]
+    assert copied.data.dtype == np.uint8
+    assert int(copied.data[0, 1]) == 200
+    assert copied.data is not source.data
+    source.data[0, 1] = 7
+    assert int(copied.data[0, 1]) == 200
+
+    real = convert(Image(np.array([[10, 200]], np.uint8)), "real", ctx=None).iconic[0]
+    assert real.data.dtype == np.float32
+    assert float(real.data[0, 0]) == 10 and float(real.data[0, 1]) == 200
+
+    rounded = convert(
+        Image(np.array([[-1.2, 1.4, 10.0, 254.6, 300.0]], np.float32)),
+        "byte",
+        ctx=None,
+    ).iconic[0]
+    assert rounded.data.dtype == np.uint8
+    assert list(int(item) for item in rounded.data[0]) == [0, 1, 10, 255, 255]
+
+    domain = np.zeros((1, 2), np.uint8)
+    domain[0, 1] = 255
+    kept = convert(Image(np.array([[3, 4]], np.uint8), domain), "real", ctx=None).iconic[0]
+    assert kept.domain is not None and int(kept.domain[0, 1]) == 255
+    color = np.zeros((1, 1, 3), np.uint8)
+    color[0, 0] = (30, 20, 10)
+    channels = convert(Image(color), "real", ctx=None).iconic[0]
+    assert channels.data.shape == (1, 1, 3)
+    assert [float(item) for item in channels.data[0, 0]] == [30.0, 20.0, 10.0]
+
+
+def test_gen_image_surface_real_keeps_values_past_255():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_image_surface_real_keeps_310.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert int(sample.vars["ByteGray"]) == 255
+    assert sample.vars["RealType"] == "real"
+    assert int(sample.vars["RealGray"]) == 310
+    assert int(sample.vars["ByteBowlGray"]) == 255
+    assert int(sample.vars["RealBowlGray"]) == 404
+
+
+def test_three_checkerboard_views_share_one_calib():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_find_calib_object_three_views_one_board.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert int(sample.vars["AfterOne"]) == 1
+    assert int(sample.vars["Count"]) == 3
+    assert float(sample.vars["Error"]) < 5
+    assert len(sample.vars["Pose0"]) == 7
+    assert len(sample.vars["Pose2"]) == 7
+    assert len(sample.vars["CamParam"]) == 9
+    assert float(sample.vars["CamParam"][0]) > 200
+    assert int(sample.vars["ImageWidth"]) == 428 and int(sample.vars["ImageHeight"]) == 356
+    assert int(sample.vars["LastWidth"]) == 428 and int(sample.vars["LastHeight"]) == 356
+    again = run_source(
+        "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.get_calib_data (CalibDataID, 'model', 0, 'num_poses', Count)\n"
+    )
+    assert again.error is None, again.error
+    assert int(again.vars["Count"]) == 0
+    missing = run_source(
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.get_calib_data (CalibDataID, 'model', 0, 'image_size', Size)\n"
+    )
+    assert missing.error is not None and "還沒有影像" in missing.error
+    extent = run_source((ROOT / "samples" / "ViZion_set_calib_data_observ_points_image_size_is_extent.viz").read_text(encoding="utf-8"))
+    assert extent.error is None, extent.error
+    assert int(extent.vars["Width"]) == 21 and int(extent.vars["Height"]) == 11
+    assert int(extent.vars["Count"]) == 1
+    kept = run_source(
+        "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"
+        "Vizion.gen_image_const (Blank, 'byte', 80, 40)\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.find_calib_object (Blank, CalibDataID, 0, 0, '', '')\n"
+    )
+    assert kept.error is not None and "找不到棋盤格" in kept.error
+    assert len(kept.vars["CalibDataID"].observations) == 1
+    assert kept.vars["CalibDataID"].observations[0][2:] == (428, 356)
+    descr = run_source(
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, 'board.cpd')\n"
+    )
+    assert descr.error is not None and "讀不到描述檔" in descr.error
+    still = run_source(
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,10')\n"
+        "Vizion.get_calib_data (CalibDataID, 'model', 0, 'num_poses', Count)\n"
+    )
+    assert still.error is None, still.error
+    assert int(still.vars["Count"]) == 0
+
+
+def test_outlier_marks_are_the_points_that_stand_away():
+    import numpy as np
+
+    from app.engine.chapters.calib_ops import _outlier_mask
+
+    detected = np.array([[0, 0], [10, 0], [20, 0], [30, 0], [40, 0]], np.float64)
+    close = detected.copy()
+    assert _outlier_mask(detected, close) is None
+    far = detected.copy()
+    far[4, 1] = 8
+    mask = _outlier_mask(detected, far)
+    assert mask is not None and mask.tolist() == [False, False, False, False, True]
+
+
+def test_clicking_a_calib_panel_shows_that_image():
+    session = run_source(
+        "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"
+        "Vizion.read_image (Left, 'samples/calib_board_left.png')\n"
+        "Vizion.read_image (Right, 'samples/calib_board_right.png')\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.find_calib_object (Left, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.find_calib_object (Right, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.calibrate_cameras (CalibDataID, Error)\n"
+    )
+    assert session.error is None, session.error
+    stacked = session.public_state()["display"]
+    panels = stacked["calibPanels"]
+    assert [panel["index"] for panel in panels] == [0, 1, 2]
+    assert stacked["calibNote"]
+    mean_error = float(session.vars["Error"])
+    session.show_calib_view(1)
+    one = session.public_state()["display"]
+    assert one["width"] == 428 and one["height"] == 356
+    assert one["calibBack"] is True
+    labels = [shape["text"] for shape in one["shapes"] if shape["type"] == "text"]
+    assert any("第 2 組" in text for text in labels)
+    assert any("回到全部" in text for text in labels)
+    assert float(session.vars["Error"]) == mean_error
+    session.show_calib_view(None)
+    again = session.public_state()["display"]
+    assert again["height"] > 356
+    assert [panel["index"] for panel in again["calibPanels"]] == [0, 1, 2]
+
+    calib = session.vars["CalibDataID"]
+    shifted = calib.observation_projected[0].copy()
+    shifted[0] = shifted[0] + [40.0, 0.0]
+    calib.observation_projected[0] = shifted
+    session.show_calib_view(None)
+    marked = session.public_state()["display"]
+    colors = {shape["color"] for shape in marked["shapes"] if shape["type"] == "polyline"}
+    assert "#ff3b30" in colors
+    assert any("紅色" in shape["text"] for shape in marked["shapes"] if shape["type"] == "text")
+    assert float(session.vars["Error"]) == mean_error
+
+
+def test_long_trace_and_thumb_cache_stay_bounded():
+    from app.engine.session import _remember_thumb
+
+    session = Session("for Index := 1 to 2500 by 1\nValue := Index\nendfor\n", ROOT)
+    session.trace = True
+    session.run()
+    assert session.error is None, session.error
+    assert session.vars["Value"] == 2500
+    assert 1500 <= len(session.log) <= 2000
+    assert any("Value := 2500" in line for line in session.log[-5:])
+    assert session.log[-1].startswith("執行完成")
+
+    thumbs = {}
+    for index in range(80):
+        _remember_thumb(thumbs, ("image", index), lambda index=index: f"t{index}")
+    assert len(thumbs) <= 48
+    assert thumbs[("image", 79)] == "t79"
+    assert ("image", 0) not in thumbs
+    oldest = next(iter(thumbs))
+    kept = thumbs[oldest]
+    _remember_thumb(thumbs, oldest, lambda: "unused")
+    for index in range(80, 90):
+        _remember_thumb(thumbs, ("image", index), lambda index=index: f"t{index}")
+    assert thumbs[oldest] == kept
+    assert len(thumbs) <= 48
+
+
+def test_inspect_gauge_template_measures_the_edge():
+    session = run_source((ROOT / "samples" / "inspect_gauge.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert session.vars["PCol"] == [107.5]
+    assert session.vars["LRow1"] == 199.5
+    assert session.vars["LCol1"] == 380.0
+    assert session.vars["LCol2"] == 480.0
+    assert abs(float(session.vars["Gap"]) - 286.8213729832559) < 1e-6
+    assert session.display.base is not None
+
+
+def test_inspect_locate_template_finds_four():
+    session = run_source((ROOT / "samples" / "inspect_locate.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 4
+    scores = session.vars["Score"]
+    assert len(scores) == 4
+    assert min(float(item) for item in scores) > 0.9
+    assert session.display.base is not None
+
+
+def test_project_rename_keeps_programs_and_copies_workspace_images():
+    import shutil
+
+    import cv2
+    import numpy as np
+
+    from app.main import (
+        create_project_record,
+        project_programs,
+        read_project_program,
+        rename_project_record,
+        write_project_program,
+    )
+
+    name = "beta_case_rename"
+    renamed = "beta_case_renamed"
+    folder = ROOT / "workspace" / "projects" / name
+    target = ROOT / "workspace" / "projects" / renamed
+    image = ROOT / "workspace" / "beta_mark.png"
+    shutil.rmtree(folder, ignore_errors=True)
+    shutil.rmtree(target, ignore_errors=True)
+    image.unlink(missing_ok=True)
+    try:
+        cv2.imwrite(str(image), np.full((5, 9), 40, np.uint8))
+        create_project_record(name)
+        saved = write_project_program(
+            name,
+            "read_mark.viz",
+            "Vizion.read_image (Image, 'workspace/beta_mark.png')\n"
+            "Vizion.read_image (Sample, 'samples/parts.png')\n",
+        )
+        assert saved["images"] == ["beta_mark.png"]
+        assert "read_image (Image, 'beta_mark.png')" in saved["source"]
+        assert "samples/parts.png" in saved["source"]
+        assert (folder / "beta_mark.png").is_file()
+        assert not (folder / "parts.png").exists()
+        moved = rename_project_record(name, renamed)
+        assert moved["name"] == renamed
+        assert not folder.exists()
+        assert [item["name"] for item in project_programs(renamed)["programs"]] == ["read_mark.viz"]
+        text = read_project_program(renamed, "read_mark.viz")["source"]
+        session = Session(text, ROOT)
+        session.project_name = renamed
+        session.run()
+        assert session.error is None, session.error
+        assert session.vars["Image"].width == 9
+        assert session.vars["Sample"].width > 9
+        try:
+            rename_project_record(renamed, renamed)
+        except ValueError:
+            raise AssertionError("同名應該留下")
+        assert project_programs(renamed)["name"] == renamed
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+        shutil.rmtree(target, ignore_errors=True)
+        image.unlink(missing_ok=True)
+
+
+def test_backslash_path_reads_the_workspace_image():
+    import cv2
+    import numpy as np
+
+    from app.main import create_project_record, reveal_project_folder
+
+    image = ROOT / "workspace" / "beta_slash.png"
+    folder_name = "beta_slash_case"
+    folder = ROOT / "workspace" / "projects" / folder_name
+    image.unlink(missing_ok=True)
+    import shutil
+    shutil.rmtree(folder, ignore_errors=True)
+    try:
+        cv2.imwrite(str(image), np.full((4, 11), 70, np.uint8))
+        program = "Vizion.read_image (Image, 'workspace" + "\\" + "beta_slash.png')\n"
+        session = Session(program, ROOT)
+        session.run()
+        assert session.error is None, session.error
+        assert session.vars["Image"].width == 11
+        create_project_record(folder_name)
+        nested = folder / "shot.png"
+        cv2.imwrite(str(nested), np.full((3, 5), 20, np.uint8))
+        local = Session("Vizion.read_image (Image, 'shot.png')\n", ROOT)
+        local.project_name = folder_name
+        local.run()
+        assert local.error is None, local.error
+        assert local.vars["Image"].width == 5
+        info = reveal_project_folder(folder_name)
+        assert info["name"] == folder_name
+        assert Path(info["path"]).is_dir()
+        assert isinstance(info["opened"], bool)
+    finally:
+        image.unlink(missing_ok=True)
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def test_project_holds_two_programs_and_its_image():
+    import shutil
+
+    import cv2
+    import numpy as np
+
+    from app.main import (
+        create_project_record,
+        list_project_records,
+        project_programs,
+        read_project_program,
+        write_project_program,
+    )
+
+    name = "beta_case_hold"
+    folder = ROOT / "workspace" / "projects" / name
+    shutil.rmtree(folder, ignore_errors=True)
+    try:
+        created = create_project_record(name)
+        assert created["name"] == name
+        assert any(item["name"] == name for item in list_project_records())
+        write_project_program(name, "first", "Count := 1\n")
+        write_project_program(name, "second.hdv", "Count := 2\n")
+        listed = [item["name"] for item in project_programs(name)["programs"]]
+        assert listed == ["first.viz", "second.hdv"]
+        assert "Count := 2" in read_project_program(name, "second.hdv")["source"]
+        try:
+            create_project_record("../outside")
+        except ValueError as exc:
+            assert "不正確" in str(exc)
+        else:
+            raise AssertionError("專案名稱應該拒絕路徑")
+        cv2.imwrite(str(folder / "mark.png"), np.full((8, 6), 180, np.uint8))
+        local = Session("Vizion.read_image (Image, 'mark.png')\n", ROOT)
+        local.project_name = name
+        local.run()
+        assert local.error is None, local.error
+        assert local.vars["Image"].height == 8
+        assert local.vars["Image"].width == 6
+        shared = Session("Vizion.read_image (Image, 'samples/parts.png')\n", ROOT)
+        shared.project_name = name
+        shared.run()
+        assert shared.error is None, shared.error
+        assert shared.vars["Image"].width > 8
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def test_inspect_parts_template_counts_eight_parts():
+    session = run_source((ROOT / "samples" / "inspect_parts.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 8
+    areas = session.vars["Area"]
+    assert areas[0] == 2988
+    assert len(areas) == 8
+    assert session.display.base is not None
+
+
+def test_running_large_image_is_a_preview_until_the_run_finishes():
+    session = run_source("Vizion.gen_image_const (Image, 'byte', 1200, 800)\n")
+    assert session.error is None, session.error
+    full = session.public_state()["display"]
+    assert full["width"] == 1200 and full["height"] == 800
+    assert full["image"].startswith("data:image/png")
+    assert not full.get("preview")
+    session.running = True
+    preview = session.public_state()["display"]
+    assert preview["width"] <= 640 and preview["height"] <= 640
+    assert preview["width"] == 640
+    assert preview["image"].startswith("data:image/jpeg")
+    assert preview.get("preview") is True
+    assert session.vars["Image"].width == 1200
+    session.running = False
+    again = session.public_state()["display"]
+    assert again["width"] == 1200 and again["height"] == 800
+    assert again["image"].startswith("data:image/png")
+    assert not again.get("preview")
+    small = run_source("Vizion.gen_image_const (Image, 'byte', 320, 200)\n")
+    small.running = True
+    shown = small.public_state()["display"]
+    assert shown["width"] == 320 and shown["image"].startswith("data:image/png")
+
+
+def test_stop_during_wait_replaces_the_preview_with_the_full_image():
+    import asyncio
+    import time
+
+    from app.main import SESSIONS, ExecIn, exec_program, session_state, stop
+
+    source = "Vizion.gen_image_const (Image, 'byte', 1200, 800)\nVizion.wait_seconds (3)\n"
+    started = asyncio.run(exec_program(ExecIn(source=source, action="run")))
+    sid = started["id"]
+    session = SESSIONS[sid]
+    seen_preview = False
+    final = None
+    try:
+        for _ in range(80):
+            state = session_state(sid)
+            display = state.get("display") or {}
+            if state.get("running") and display.get("preview"):
+                seen_preview = True
+                stop(sid)
+            if not state.get("running"):
+                final = state
+                break
+            time.sleep(0.05)
+        assert seen_preview
+        assert final is not None and final.get("running") is False
+        assert final["display"]["width"] == 1200 and final["display"]["height"] == 800
+        assert final["display"]["image"].startswith("data:image/png")
+        assert not final["display"].get("preview")
+        assert session.vars["Image"].width == 1200
+    finally:
+        stop(sid)
+        runner = getattr(session, "runner", None)
+        if runner is not None:
+            runner.join(timeout=2)
+        SESSIONS.pop(sid, None)
+
+
+def test_polling_encodes_the_preview_outside_the_session_lock():
+    import base64
+
+    import app.engine.render as render
+    from app.main import _snapshot
+
+    session = run_source("Vizion.gen_image_const (Image, 'byte', 1200, 800)\n")
+    assert session.error is None, session.error
+    session.running = True
+    held = []
+    calls = []
+    real_jpeg = render._jpeg_data_url
+
+    def spy(array):
+        calls.append(array.shape[:2])
+        session.vars["Image"].data[:] = 255
+        acquired = session.lock.acquire(blocking=False)
+        held.append(acquired)
+        if acquired:
+            session.lock.release()
+        return real_jpeg(array)
+
+    render._jpeg_data_url = spy
+    try:
+        state = _snapshot(session)
+        again = _snapshot(session)
+    finally:
+        render._jpeg_data_url = real_jpeg
+    assert held == [True]
+    assert calls == [(427, 640)]
+    assert state["running"] is True
+    assert state["display"]["preview"] is True
+    assert state["display"]["width"] == 640
+    assert again["displayRev"] == state["displayRev"]
+    assert again["display"]["image"] == state["display"]["image"]
+    raw = base64.b64decode(state["display"]["image"].split(",", 1)[1])
+    view = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_GRAYSCALE)
+    assert int(view.max()) < 8
+    assert session.vars["Image"].width == 1200
+
+
+def test_variable_thumbs_are_encoded_outside_the_session_lock():
+    import app.engine.session as engine_session
+    from app.main import _snapshot
+
+    session = run_source("Vizion.gen_image_const (Image, 'byte', 900, 700)\n")
+    assert session.error is None, session.error
+    session._thumb_cache.clear()
+    held = []
+    arrays = []
+    real = engine_session.jpeg_thumb
+
+    def spy(array, max_edge=112):
+        arrays.append(int(array.max()))
+        session.vars["Image"].data[:] = 255
+        acquired = session.lock.acquire(blocking=False)
+        held.append(acquired)
+        if acquired:
+            session.lock.release()
+        return real(array, max_edge)
+
+    engine_session.jpeg_thumb = spy
+    try:
+        state = _snapshot(session)
+        again = _snapshot(session)
+    finally:
+        engine_session.jpeg_thumb = real
+    image = next(item for item in state["iconic"] if item["name"] == "Image")
+    assert held == [True]
+    assert arrays == [0]
+    assert image["thumb"].startswith("data:image/jpeg")
+    assert again["iconic"][0]["thumb"] == image["thumb"]
+    assert session.vars["Image"].width == 900
+
+
+def test_inspect_code_template_reads_the_ean():
+    session = run_source((ROOT / "samples" / "inspect_code.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 1
+    assert session.vars["Text"] == "4006381333931"
+    assert session.vars["QrText"] == "VISDEV-3"
+    assert session.display.base is not None
+
+
+def test_inspect_stereo_template_shows_the_baseline():
+    session = run_source((ROOT / "samples" / "inspect_stereo.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    pose0 = [float(item) for item in session.vars["Pose0"]]
+    pose1 = [float(item) for item in session.vars["Pose1"]]
+    assert pose0 == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    assert abs(float(session.vars["BaselineX"]) - 0.04) < 0.008
+    assert abs(pose1[1] + 0.01) < 0.008
+    assert abs(pose1[2] - 0.005) < 0.008
+    assert "相機1相對" in session.vars["CalibDataID"].summary()
+
+
+def test_second_camera_pose_is_the_baseline():
+    import cv2
+    import numpy as np
+
+    from app.engine.chapters.calib_ops import (
+        calibrate_cameras,
+        create_calib_data,
+        get_calib_data,
+        set_calib_data_calib_object,
+        set_calib_data_observ_points,
+    )
+
+    class Ctx:
+        pass
+
+    ctx = Ctx()
+    rows, cols, square = 4, 5, 0.01
+    obj = np.zeros((rows * cols, 3), np.float64)
+    obj[:, 0] = np.tile(np.arange(cols), rows) * square
+    obj[:, 1] = np.repeat(np.arange(rows), cols) * square
+    matrix = np.array([[900.0, 0, 320.0], [0, 900.0, 240.0], [0, 0, 1]])
+    views = [
+        (np.array([[0.15], [-0.08], [0.05]]), np.array([[-0.02], [0.01], [0.45]])),
+        (np.array([[-0.20], [0.12], [-0.04]]), np.array([[0.015], [-0.02], [0.55]])),
+        (np.array([[0.05], [0.18], [0.10]]), np.array([[0.0], [0.02], [0.62]])),
+    ]
+    baseline = np.array([0.04, -0.01, 0.005])
+    relative_rotation = cv2.Rodrigues(np.array([[0.02], [-0.03], [0.04]]))[0]
+    model = create_calib_data("calibration_object", 2, 1, ctx=ctx).control[0]
+    set_calib_data_calib_object(model, 0, "4,5,0.01", ctx=ctx)
+
+    def project(rvec, tvec):
+        points, _ = cv2.projectPoints(obj, rvec, tvec, matrix, np.zeros(5))
+        return points.reshape(-1, 2)
+
+    for rvec, tvec in views:
+        image = project(rvec, tvec)
+        set_calib_data_observ_points(model, 0, 0, image[:, 1].tolist(), image[:, 0].tolist(), ctx=ctx)
+    for rvec, tvec in views:
+        rotation, _ = cv2.Rodrigues(rvec)
+        moved = relative_rotation @ rotation
+        shifted = relative_rotation @ tvec.reshape(3) + baseline
+        rvec_cam, _ = cv2.Rodrigues(moved)
+        image = project(rvec_cam, shifted.reshape(3, 1))
+        set_calib_data_observ_points(model, 1, 0, image[:, 1].tolist(), image[:, 0].tolist(), ctx=ctx)
+    error = float(calibrate_cameras(model, ctx=ctx).control[0])
+    assert error < 1.0, error
+    pose0 = get_calib_data(model, "camera", 0, "pose", ctx=ctx).control[0]
+    pose1 = get_calib_data(model, "camera", 1, "pose", ctx=ctx).control[0]
+    assert [float(item) for item in pose0] == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    assert abs(float(pose1[0]) - baseline[0]) < 0.008
+    assert abs(float(pose1[1]) - baseline[1]) < 0.008
+    assert abs(float(pose1[2]) - baseline[2]) < 0.008
+    assert max(abs(float(item)) for item in pose1[3:6]) < 0.08
+    assert "相機1相對" in model.summary()
+    params0 = get_calib_data(model, "camera", 0, "params", ctx=ctx).control[0]
+    params1 = get_calib_data(model, "camera", 1, "params", ctx=ctx).control[0]
+    assert len(params0) == 9 and len(params1) == 9
+
+    alone = create_calib_data("calibration_object", 1, 1, ctx=ctx).control[0]
+    set_calib_data_calib_object(alone, 0, "4,5,0.01", ctx=ctx)
+    for rvec, tvec in views:
+        image = project(rvec, tvec)
+        set_calib_data_observ_points(alone, 0, 0, image[:, 1].tolist(), image[:, 0].tolist(), ctx=ctx)
+    alone_error = float(calibrate_cameras(alone, ctx=ctx).control[0])
+    alone_pose = get_calib_data(alone, "camera", 0, "pose", ctx=ctx).control[0]
+    assert alone_error < 0.05
+    assert [float(item) for item in alone_pose] == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+
+def test_calibration_draws_points_and_errors():
+    found = run_source(
+        "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')\n"
+    )
+    assert found.error is None, found.error
+    first = found.public_state()["display"]
+    assert first and first["width"] == 428 and first["height"] == 356
+    texts = [shape["text"] for shape in first["shapes"] if shape["type"] == "text"]
+    assert any("35 點" in text for text in texts)
+    assert sum(1 for shape in first["shapes"] if shape["type"] == "polyline") == 70
+
+    calibrated = run_source(
+        "Vizion.read_image (Front, 'samples/calib_board_front.png')\n"
+        "Vizion.read_image (Left, 'samples/calib_board_left.png')\n"
+        "Vizion.read_image (Right, 'samples/calib_board_right.png')\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')\n"
+        "Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.find_calib_object (Left, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.find_calib_object (Right, CalibDataID, 0, 0, '', '')\n"
+        "Vizion.calibrate_cameras (CalibDataID, Error)\n"
+    )
+    assert calibrated.error is None, calibrated.error
+    calib = calibrated.vars["CalibDataID"]
+    assert float(calibrated.vars["Error"]) < 5
+    assert len(calib.observation_errors) == 3
+    assert all(item is not None and item < 5 for item in calib.observation_errors)
+    assert "誤差" in calib.summary()
+    assert calib.observations[0][2:] == (428, 356)
+    assert any(line.startswith("標定誤差") for line in calibrated.log)
+    drawn = calibrated.public_state()["display"]
+    assert drawn["height"] > 356
+    labels = [shape["text"] for shape in drawn["shapes"] if shape["type"] == "text"]
+    assert any(text.startswith("平均誤差") for text in labels)
+    assert sum("誤差" in text for text in labels) >= 3
+    assert sum(1 for shape in drawn["shapes"] if shape["type"] == "polyline") > 200
+
+
+def test_plate_file_and_two_cameras():
+    import cv2
+    import numpy as np
+
+    from app.engine.chapters.calib_ops import (
+        calibrate_cameras,
+        create_calib_data,
+        find_calib_object,
+        get_calib_data,
+        parse_plate_description,
+        set_calib_data_calib_object,
+        set_calib_data_observ_points,
+    )
+    from app.engine.objects import Image
+
+    ensure_samples(ROOT)
+    plate = parse_plate_description((ROOT / "samples" / "calplate_4x5.cpd").read_text(encoding="utf-8"))
+    assert plate.kind == "circles"
+    assert plate.rows == 4 and plate.cols == 5
+    assert plate.polarity == "light"
+    assert plate.marks is not None and len(plate.marks) == 20
+    assert abs(float(plate.marks[0, 1]) - 0.03) < 1e-9
+    assert abs(float(plate.square) - 0.01) < 1e-9
+
+    class Ctx:
+        root = ROOT
+
+    def plate_image() -> np.ndarray:
+        image = np.zeros((240, 300), np.uint8)
+        for x_value, y_value, _zee in plate.marks:
+            cx = int(round(50 + float(x_value) * 5000))
+            cy = int(round(40 + (0.03 - float(y_value)) * 5000))
+            cv2.circle(image, (cx, cy), 10, 255, -1)
+        return image
+
+    model = create_calib_data("calibration_object", 1, 1, ctx=Ctx()).control[0]
+    set_calib_data_calib_object(model, 0, "samples/calplate_4x5.cpd", ctx=Ctx())
+    find_calib_object(Image(plate_image()), model, 0, 0, "", "", ctx=Ctx())
+    found = model.observations[0][1]
+    expected = np.array([[50 + float(x_value) * 5000, 40 + (0.03 - float(y_value)) * 5000] for x_value, y_value, _zee in plate.marks])
+    assert np.linalg.norm(found - expected, axis=1).max() < 1.0
+    set_calib_data_calib_object(model, 0, "samples/calplate_4x5.cpd", ctx=Ctx())
+    focal = 900.0
+    principal = (160.0, 120.0)
+    for distance, slide in ((0.35, -0.01), (0.5, 0.0), (0.7, 0.015)):
+        rows = []
+        cols = []
+        for x_value, y_value, _zee in plate.marks:
+            cols.append(focal * (float(x_value) + slide) / distance + principal[0])
+            rows.append(focal * (float(y_value) - 0.015) / distance + principal[1])
+        set_calib_data_observ_points(model, 0, 0, rows, cols, ctx=Ctx())
+    error = float(calibrate_cameras(model, ctx=Ctx()).control[0])
+    assert error < 0.05, error
+    params = get_calib_data(model, "camera", 0, "params", ctx=Ctx()).control[0]
+    assert len(params) == 9 and float(params[0]) > 0
+
+    both = create_calib_data("calibration_object", 2, 1, ctx=Ctx()).control[0]
+    set_calib_data_calib_object(both, 0, "samples/calplate_4x5.cpd", ctx=Ctx())
+    for camera in (0, 1):
+        for distance, slide in ((0.35, -0.01), (0.5, 0.0), (0.7, 0.015)):
+            rows = []
+            cols = []
+            for x_value, y_value, _zee in plate.marks:
+                cols.append(focal * (float(x_value) + slide + camera * 0.004) / distance + principal[0])
+                rows.append(focal * (float(y_value) - 0.015) / distance + principal[1])
+            set_calib_data_observ_points(both, camera, 0, rows, cols, ctx=Ctx())
+    both_error = float(calibrate_cameras(both, ctx=Ctx()).control[0])
+    assert both_error < 1.0, both_error
+    first = get_calib_data(both, "camera", 0, "params", ctx=Ctx()).control[0]
+    second = get_calib_data(both, "camera", 1, "params", ctx=Ctx()).control[0]
+    assert len(first) == 9 and len(second) == 9
+    assert len(both.observations) == 6
+    refused = run_source(
+        "Vizion.gen_image_const (Image, 'byte', 80, 60)\n"
+        "Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)\n"
+        "Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,10')\n"
+        "Vizion.find_calib_object (Image, CalibDataID, 1, 0, '', '')\n"
+    )
+    assert refused.error is not None and "相機編號" in refused.error
+
+
+def test_code93_lowercase_reads_as_uppercase():
+    import numpy as np
+
+    from app.engine.barcode1d import render_code93
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_code93_lowercase_reads_VISDEV.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Text"] == "VISDEV"
+    assert sample.vars["Still"] == "VISDEV"
+    assert np.array_equal(render_code93("VISDEV"), render_code93("visdev"))
+    rejected = run_source("Vizion.gen_code93 (Code, 'visdev!')\n")
+    assert rejected.error is not None and "Code 93" in rejected.error
+
+
+def test_code2of5_odd_length_pads_a_zero():
+    import numpy as np
+
+    from app.engine.barcode1d import render_code2of5
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_code2of5_odd_length_reads_012345.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["OddText"] == "012345"
+    assert sample.vars["EvenText"] == "123456"
+    assert np.array_equal(render_code2of5("12345"), render_code2of5("012345"))
+    rejected = run_source("Vizion.gen_code2of5 (Code, '12a')\n")
+    assert rejected.error is not None and "只能是數字" in rejected.error
+
+
+def test_code128_digits_use_code_set_c():
+    from app.engine.chapters.code_ops import _code128_values, render_code128
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_code128_digits_use_code_set_c.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["DigitsText"] == "123456"
+    assert sample.vars["PaddedText"] == "0123"
+    assert sample.vars["WordText"] == "Hi"
+    assert sample.vars["OddText"] == "12345"
+    assert sample.vars["MixedText"] == "A12"
+    assert _code128_values("Hi")[0] == 104
+    assert _code128_values("A12") == [104, ord("A") - 32, ord("1") - 32, ord("2") - 32]
+    assert _code128_values("123456")[0] == 105
+    assert _code128_values("123456")[1:] == [12, 34, 56]
+    assert render_code128("ABCDEF").shape[1] - render_code128("123456").shape[1] == 66
+    assert render_code128("Hi").shape[1] == render_code128("AB").shape[1]
+    try:
+        render_code128("Hi\n")
+    except ValueError as exc:
+        assert "Code 128" in str(exc)
+    else:
+        raise AssertionError("控制字元應該被拒絕")
+
+
+def test_get_text_result_num_counts_words():
+    from app.engine.chapters.code_ops import TextResult
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_get_text_result_blank_image_num_is_0.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert int(sample.vars["Count"]) == 0
+    assert sample.vars["Words"] == []
+    read = REGISTRY["get_text_result"].fn
+    one = TextResult(10, 10, [{"text": "A", "score": 0.5, "row": 1.0, "column": 2.0}])
+    assert read(one, "num", ctx=None).control[0] == 1
+    assert read(one, "class", ctx=None).control[0] == ["A"]
+    assert read(TextResult(10, 10, []), "num", ctx=None).control[0] == 0
 
 
 def test_hdevelop_batch102():
@@ -3153,7 +4044,7 @@ def test_hdevelop_batch102():
     from app.engine.ncc_model import _keys_peak
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch102.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gauss_image_smoothed_shift_row_is_39.23.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert float(sample.vars["Still"]) == 40
     assert abs(float(sample.vars["SRow"]) - 39.23) < 1e-9
@@ -3168,13 +4059,545 @@ def test_hdevelop_batch103():
     from app.engine.operators import REGISTRY
 
     ensure_samples(ROOT)
-    sample = run_source((ROOT / "samples" / "ViZion_hdevelop_batch103.viz").read_text(encoding="utf-8"))
+    sample = run_source((ROOT / "samples" / "ViZion_gen_datamatrix_print_datamatrix_read_VISDEV.viz").read_text(encoding="utf-8"))
     assert sample.error is None, sample.error
     assert sample.vars["Text"] == "VISDEV"
     assert len(sample.vars["Symbol"].contours) == 1
     assert "'Data Matrix'" in REGISTRY["create_data_code_2d_model"].control_in[0].choices
     modules = encode_modules("12AB")
     assert decode_image(modules)[0][0] == "12AB"
+
+
+def test_hdevelop_batch105():
+    from app.engine.operators import REGISTRY
+    from app.engine.pdf417 import decode_image, encode_modules
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_pdf417_print_pdf417_read_VISDEV.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Text"] == "VISDEV"
+    assert len(sample.vars["Symbol"].contours) == 1
+    assert "'PDF417'" in REGISTRY["create_data_code_2d_model"].control_in[0].choices
+    assert decode_image(encode_modules("A"))[0][0] == "A"
+    assert decode_image(encode_modules("Hi-9"))[0][0] == "Hi-9"
+
+
+def test_hdevelop_batch106():
+    from app.engine.aztec import decode_image, encode_modules
+    from app.engine.operators import REGISTRY
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_aztec_print_aztec_read_VISDEV.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Text"] == "VISDEV"
+    assert len(sample.vars["Symbol"].contours) == 1
+    assert "'Aztec'" in REGISTRY["create_data_code_2d_model"].control_in[0].choices
+    assert decode_image(encode_modules("A"))[0][0] == "A"
+    assert encode_modules("1234567890123456").shape[0] > 15
+    assert decode_image(encode_modules("1234567890123456"))[0][0] == "1234567890123456"
+
+
+def test_hdevelop_batch107():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_open_serial_serial_write_read_VISDEV.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Text"] == "VISDEV"
+    missing = run_source("Vizion.open_serial ('COM199', Handle)\n")
+    assert missing.error is not None and "打不開 COM199" in missing.error
+
+
+def test_hdevelop_batch108():
+    import socket
+    import threading
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_open_socket_connect_tcp_send_read_VISDEV.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Text"] == "VISDEV"
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+
+    def serve():
+        conn, _addr = server.accept()
+        conn.settimeout(2)
+        data = b""
+        while len(data) < 6:
+            part = conn.recv(6 - len(data))
+            if not part:
+                break
+            data += part
+        conn.sendall(data)
+        conn.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    live = run_source(
+        f"Vizion.open_socket_connect ('127.0.0.1', {port}, Socket)\n"
+        "Vizion.send_data (Socket, 'VISDEV')\n"
+        "Vizion.receive_data (Socket, 6, Text)\n"
+        "Vizion.close_socket (Socket)\n"
+    )
+    server.close()
+    assert live.error is None, live.error
+    assert live.vars["Text"] == "VISDEV"
+    closed = socket.socket()
+    closed.bind(("127.0.0.1", 0))
+    missing_port = closed.getsockname()[1]
+    closed.close()
+    missing = run_source(f"Vizion.open_socket_connect ('127.0.0.1', {missing_port}, Socket)\n")
+    assert missing.error is not None and f"連不上 127.0.0.1:{missing_port}" in missing.error
+
+
+def test_hdevelop_batch109():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_split_skeleton_cross_into_four.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Count"] == 4
+    assert sample.vars["Parts"].count() == 4
+
+
+def test_live_camera_reads_a_new_frame_each_grab():
+    from app.engine.chapters import camera_ops
+
+    values = [10, 80, 160, 200]
+
+    def grab(_index):
+        return np.full((3, 4, 3), values.pop(0), np.uint8)
+
+    handle = camera_ops.AcqHandle("opencv", "0", "gray", 0, 0, cap=camera_ops._LiveCamera(grab, 0, grab(0)))
+    first = camera_ops._load_camera(handle, False)
+    second = camera_ops._load_camera(handle, False)
+    latest = camera_ops._load_camera(handle, True)
+    assert int(first.mean()) == 10
+    assert int(second.mean()) == 80
+    assert int(latest.mean()) == 200
+    handle.release()
+    try:
+        camera_ops._load_camera(handle, False)
+    except RuntimeError as exc:
+        assert "相機沒有打開" in str(exc)
+    else:
+        raise AssertionError("a closed camera should fail")
+
+
+def test_camera_failures_say_what_to_do_next():
+    missing = run_source("Vizion.open_framegrabber ('File', 'samples/no-such-camera.png', Acq)\n")
+    assert missing.error and "找不到" in missing.error and "選檔" in missing.error
+    folder = ROOT / "workspace" / "empty_camera_dir"
+    folder.mkdir(parents=True, exist_ok=True)
+    for child in folder.iterdir():
+        if child.is_file():
+            child.unlink()
+    empty = run_source("Vizion.open_framegrabber ('File', 'workspace/empty_camera_dir', Acq)\n")
+    assert empty.error and "沒有影像" in empty.error and "png" in empty.error
+    done = run_source(
+        "Vizion.open_framegrabber ('File', 'samples/code39.png', Acq)\n"
+        "Vizion.grab_image (Image, Acq)\n"
+        "Vizion.grab_image (Image2, Acq)\n"
+    )
+    assert done.error and "重新 open_framegrabber" in done.error
+
+
+def test_unopened_camera_error_stays_the_same():
+    from app.engine.chapters import camera_ops
+    import app.engine.dshow as dshow
+
+    original_grab = dshow.grab_bgr
+    original_capture = camera_ops.cv2.VideoCapture
+
+    def boom(_index):
+        raise RuntimeError("sample grabber failed")
+
+    class Dead:
+        def isOpened(self):
+            return False
+
+        def release(self):
+            return None
+
+    dshow.grab_bgr = boom
+    camera_ops.cv2.VideoCapture = lambda *_args, **_kwargs: Dead()
+    try:
+        try:
+            camera_ops._open_camera(0, 0, 0)
+        except RuntimeError as exc:
+            assert str(exc) == "打不開相機 0。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。"
+        else:
+            raise AssertionError("camera should not open")
+    finally:
+        dshow.grab_bgr = original_grab
+        camera_ops.cv2.VideoCapture = original_capture
+
+
+def test_open_framegrabber_directshow():
+    session = run_source(
+        "Vizion.open_framegrabber ('OpenCV', '0', 'gray', 320, 240, Handle)\n"
+        "Vizion.grab_image (Image, Handle)\n"
+        "Vizion.close_framegrabber (Handle)\n"
+    )
+    if session.error:
+        assert "打不開相機" in session.error or "讀不到畫面" in session.error
+        return
+    image = session.vars["Image"]
+    assert image.height == 240 and image.width == 320
+
+
+def test_hdevelop_batch110():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_set_serial_param_serial_baud_19200.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Baud"] == 19200
+    assert sample.vars["Bits"] == 8
+    assert sample.vars["Flow"] == "none"
+    assert sample.vars["Total"] == 500
+    assert sample.vars["Gap"] == 20
+    bad = run_source(
+        "Vizion.open_serial ('loopback', Handle)\n"
+        "Vizion.set_serial_param (Handle, 9600, 8, 'none', 'mark', 1, 200, 50)\n"
+    )
+    assert bad.error is not None and "Parity" in bad.error
+
+
+def test_hdevelop_batch111():
+    import socket
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_open_socket_accept_listen_read_VISDEV.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Text"] == "VISDEV"
+    assert sample.vars["Wait"] == 1
+    assert int(sample.vars["Port"]) > 0
+    held = socket.socket()
+    held.bind(("127.0.0.1", 0))
+    busy = held.getsockname()[1]
+    blocked = run_source(f"Vizion.open_socket_accept ({busy}, Listen, Port)\n")
+    held.close()
+    assert blocked.error is not None and f"聽不了 127.0.0.1:{busy}" in blocked.error
+
+
+def test_hdevelop_batch112():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_ean8_print_ean8_read_55123453.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Text"] == "55123453"
+    cases = [
+        ("Vizion.gen_upce (Code, '123456')\n", "UPC-E", "123456"),
+        ("Vizion.gen_codabar (Code, 'A1234B')\n", "Codabar", "A1234B"),
+        ("Vizion.gen_code2of5 (Code, '123456')\n", "2/5 Interleaved", "123456"),
+        ("Vizion.gen_industrial2of5 (Code, '12345')\n", "2/5 Industrial", "12345"),
+        ("Vizion.gen_code93 (Code, 'VISDEV')\n", "Code 93", "VISDEV"),
+        ("Vizion.gen_msi (Code, '123456')\n", "MSI", "123456"),
+    ]
+    for head, kind, expected in cases:
+        session = run_source(
+            head
+            + "Vizion.create_bar_code_model (Handle)\n"
+            + f"Vizion.find_bar_code (Code, Symbol, Handle, '{kind}', Decoded)\n"
+            + "Text := Decoded[1]\n"
+        )
+        assert session.error is None, (kind, session.error)
+        assert session.vars["Text"] == expected
+
+
+def test_hdevelop_batch113():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_rectangularity_bar_rectangularity_and_direction.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(sample.vars["Angle"] - 0) < 1e-6
+    assert abs(sample.vars["LinePhi"] - 0) < 1e-9
+    assert abs(sample.vars["Axis"] - 0) < 1e-9
+    assert sample.vars["Rect1"] == sample.vars["FeatRect"][0]
+    assert sample.vars["Circ"][0] == sample.vars["FeatCirc"][0]
+    assert sample.vars["Ecc"][0] == sample.vars["FeatEcc"][0]
+    assert sample.vars["Rect1"] > 0.9
+    folded = run_source(
+        "Vizion.line_orientation (0, 10, 0, 0, Phi)\n"
+        "Vizion.angle_lx (0, 10, 0, 0, Raw)\n"
+    )
+    assert folded.error is None, folded.error
+    assert abs(folded.vars["Phi"]) < 1e-9
+    assert abs(abs(folded.vars["Raw"]) - 3.14159265) < 1e-5
+
+
+def test_hdevelop_batch114():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_circularity_xld_square_length_is_120.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Len"] == 120
+    assert sample.vars["FeatLen"][0] == 120
+    assert sample.vars["FirstRow"] == 10
+    assert sample.vars["FirstCol"] == 10
+    assert sample.vars["StartGray"] == 180
+    assert sample.vars["Pixel"] == 180
+    assert sample.vars["Circ"][0] == sample.vars["FeatCirc"][0]
+    assert sample.vars["Comp"][0] == sample.vars["FeatComp"][0]
+    assert sample.vars["Conv"][0] == sample.vars["FeatConv"][0]
+    assert sample.vars["Ecc"][0] == sample.vars["FeatEcc"][0]
+
+
+def test_hdevelop_batch115():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_remove_obj_two_blocks_drop_second.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Count"] == 2
+    assert sample.vars["Left"] == 1
+    assert sample.vars["Added"] == 3
+    assert sample.vars["Same"] == 2
+    assert sample.vars["DilateArea"] == sample.vars["RankArea"]
+    eroded = run_source(
+        "Vizion.gen_image_const (Image, 'byte', 80, 60)\n"
+        "Vizion.gen_rectangle1 (Top, 10, 10, 20, 25)\n"
+        "Vizion.erosion_rectangle1 (Top, Eroded, 3, 3)\n"
+        "Vizion.rank_region (Top, Ranked, 3, 3, 9)\n"
+        "Vizion.area_center (Eroded, AreaE, RowE, ColE)\n"
+        "Vizion.area_center (Ranked, AreaR, RowR, ColR)\n"
+        "ErodeArea := AreaE[1]\n"
+        "RankArea := AreaR[1]\n"
+    )
+    assert eroded.error is None, eroded.error
+    assert eroded.vars["ErodeArea"] == eroded.vars["RankArea"]
+
+
+def test_hdevelop_batch116():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_bit_mask_40_and_240_is_32.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["MaskGray"] == 32
+    assert sample.vars["AndGray"] == 32
+    assert sample.vars["SliceGray"] == 255
+    assert sample.vars["DevGray"] == sample.vars["SigmaGray"]
+
+
+def test_hdevelop_batch117():
+    import math
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gen_sphere_object_model_3d_center_123_radius_4.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Cx"] == 1
+    assert sample.vars["Cy"] == 2
+    assert sample.vars["Cz"] == 3
+    assert sample.vars["Radius"] == 4
+    assert sample.vars["MinX"] == -3
+    assert sample.vars["MaxX"] == 5
+    assert sample.vars["Diameter"] == 8
+    assert sample.vars["Center"][0] == 1
+    box = run_source(
+        "Vizion.gen_box_object_model_3d (0, 0, 0, 2, 2, 2, Box)\n"
+        "Vizion.smallest_sphere_object_model_3d (Box, Cx, Cy, Cz, Radius)\n"
+        "Vizion.get_object_model_3d_params (Box, 'diameter', Diameter)\n"
+        "Vizion.get_object_model_3d_params (Box, 'center', Center)\n"
+    )
+    assert box.error is None, box.error
+    assert abs(box.vars["Cx"] - 1) < 1e-6
+    assert abs(box.vars["Radius"] - math.sqrt(3)) < 1e-6
+    assert abs(box.vars["Diameter"] - 2 * math.sqrt(3)) < 1e-6
+    assert abs(box.vars["Center"][0] - box.vars["Cx"]) < 1e-6
+    triangle = run_source(
+        "Vizion.gen_object_model_3d_from_points ([0, 2, 1], [0, 0, 1.73205080757], [0, 0, 0], Tri)\n"
+        "Vizion.smallest_sphere_object_model_3d (Tri, Cx, Cy, Cz, Radius)\n"
+    )
+    assert triangle.error is None, triangle.error
+    assert abs(triangle.vars["Cx"] - 1) < 1e-5
+    assert abs(triangle.vars["Cy"] - 0.57735026919) < 1e-5
+    assert abs(triangle.vars["Radius"] - 1.15470053838) < 1e-5
+
+
+def test_hdevelop_batch118():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_frangi_dark_line_brighter_than_block.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["LineGray"] > sample.vars["BlockGray"]
+    assert sample.vars["LineGray"] > 80
+    assert sample.vars["BlockGray"] < 20
+    assert sample.vars["FlatGray"] < 20
+    assert sample.vars["Caught"] > 100
+
+
+def test_hdevelop_batch119():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_sauvola_bright_side_scratch_stays.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["ScratchGray"] == 78
+    assert sample.vars["Scratch"] == 1
+    assert sample.vars["Block"] == 0
+    assert sample.vars["LeftFlat"] == 0
+    assert sample.vars["RightFlat"] == 0
+    assert sample.vars["GlobalScratch"] == 0
+    assert sample.vars["GlobalBlock"] == 1
+    even = run_source("Vizion.read_image (Scene, 'samples/hard_scene.png')\nVizion.sauvola (Scene, Ink, 14, 0.5)\n")
+    assert "奇數" in even.error
+    low = run_source("Vizion.read_image (Scene, 'samples/hard_scene.png')\nVizion.sauvola (Scene, Ink, 15, 0)\n")
+    assert "K" in low.error
+
+
+def test_hdevelop_batch120():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_guided_filter_step_sides_stay.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Left"] < 55
+    assert sample.vars["Right"] > 180
+    assert sample.vars["BlurLeft"] > sample.vars["Left"] + 10
+    assert sample.vars["BlurRight"] < sample.vars["Right"] - 5
+    assert sample.vars["NoiseAfter"] < sample.vars["NoiseBefore"] * 0.7
+    bad = run_source("Vizion.read_image (Scene, 'samples/hard_edge.png')\nVizion.guided_filter (Scene, Kept, 0, 800)\n")
+    assert "Radius" in bad.error
+    low = run_source("Vizion.read_image (Scene, 'samples/hard_edge.png')\nVizion.guided_filter (Scene, Kept, 8, 0)\n")
+    assert "Eps" in low.error
+
+
+def test_hdevelop_batch121():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_emphasize_clahe_dark_corner_and_bright_field.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["ClaheDark"] > sample.vars["RawDark"] + 15
+    assert sample.vars["ClaheBright"] > sample.vars["RawBright"] + 15
+    assert sample.vars["HistDark"] < sample.vars["RawDark"]
+    assert sample.vars["HistBright"] > sample.vars["ClaheBright"]
+    bad = run_source("Vizion.read_image (Scene, 'samples/hard_contrast.png')\nVizion.emphasize_clahe (Scene, Local, 0, 8)\n")
+    assert "ClipLimit" in bad.error
+    tiles = run_source("Vizion.read_image (Scene, 'samples/hard_contrast.png')\nVizion.emphasize_clahe (Scene, Local, 8, 1)\n")
+    assert "Tiles" in tiles.error
+
+
+def test_hdevelop_batch122():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_edges_zernike_edge_matches_measure.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert abs(sample.vars["ZCol"] - sample.vars["Edge"]) < 0.05
+    assert abs(sample.vars["ZCol"] - 40.37) < 0.15
+    assert abs(sample.vars["Edge"] - 40.37) < 0.15
+    assert len(sample.vars["Cols"]) > 80
+    bad = run_source("Vizion.read_image (Scene, 'samples/hard_zernike.png')\nVizion.edges_zernike (Scene, Edges, 6, 80, Rows, Cols)\n")
+    assert "奇數" in bad.error
+    low = run_source("Vizion.read_image (Scene, 'samples/hard_zernike.png')\nVizion.edges_zernike (Scene, Edges, 7, 0, Rows, Cols)\n")
+    assert "MinAmp" in low.error
+
+
+def test_hdevelop_batch123():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_tuple_is_handle_matrix_stays_after_clear.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Head"] == "H" and sample.vars["Third"] == "C"
+    assert sample.vars["OsName"] == "Windows_NT"
+    assert [sample.vars[name] for name in ("C1", "C2", "C3", "C4")] == [19, 22, 43, 50]
+    assert sample.vars["IsHandle"] == 1 and sample.vars["StillHandle"] == 1
+    assert sample.vars["Valid"] == 1 and sample.vars["ValidAfter"] == 0
+    assert sample.vars["Serial"] == 0 and sample.vars["NumberHandle"] == 0
+    assert sample.vars["Sem"] == "matrix"
+    assert sample.vars["IntOne"] == 1 and sample.vars["RealOne"] == 0
+    missing = run_source("Vizion.tuple_environment ('VISDEV_NO_SUCH_ENV', Value)\n")
+    assert "環境變數" in missing.error
+    over = run_source("Vizion.tuple_str_bit_select ('HALCON', 9, Selected)\n")
+    assert "超出" in over.error
+
+
+def test_hdevelop_batch124():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_sum_matrix_copy_cholesky_and_file.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Total"] == 10
+    assert sample.vars["D1"] == 2 and sample.vars["O1"] == 1
+    assert sample.vars["Low"] == -1 and sample.vars["High"] == 1
+    assert sample.vars["R1"] == 0 and sample.vars["R2"] == 0
+    assert [sample.vars[name] for name in ("L1", "L2", "L3", "L4")] == [5, 0, 3, 3]
+    assert [sample.vars[name] for name in ("U1", "U2", "U3", "U4")] == [5, 3, 0, 3]
+    assert sample.vars["B1"] == 5
+    factored = run_source("""
+Vizion.create_matrix (2, 2, [4, 3, 6, 3], M)
+Vizion.decompose_matrix (M, 'general', Lower, Upper)
+Vizion.get_full_matrix (Lower, L)
+Vizion.get_full_matrix (Upper, U)
+""")
+    assert factored.error is None, factored.error
+    assert factored.vars["L"][0] == 1
+    assert abs(factored.vars["L"][2] - 2 / 3) < 1e-9
+    assert factored.vars["U"][0] == 6 and factored.vars["U"][3] == 1
+    missing = run_source("Vizion.read_matrix ('workspace/no_such_matrix.mtx', M)\n")
+    assert "讀不到" in missing.error
+
+
+def test_hdevelop_batch131():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_equ_histo_image_rect_lower_right_is_255.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Eq00"] == 0 and sample.vars["Eq12"] == 85 and sample.vars["Eq21"] == 170 and sample.vars["Eq22"] == 255
+    assert sample.vars["CropW"] == 4 and sample.vars["CropH"] == 3 and sample.vars["CropGray"] == 9
+    assert sample.vars["PartW"] == 5 and sample.vars["PartH"] == 4 and sample.vars["PartGray"] == 4
+    assert sample.vars["ExpW"] == 6 and sample.vars["ExpH"] == 6 and sample.vars["Edge9"] == 9 and sample.vars["Inner5"] == 5
+    assert sample.vars["InsideCenter"] == 40 and sample.vars["InsideEdge"] == 0
+    assert sample.vars["SkelMid"] == 9 and sample.vars["SkelSide"] == 0
+    assert sample.vars["PickedRed"] == 10 and sample.vars["MovedGray"] == 7
+    assert sample.vars["GrowCount"] == 2 and sample.vars["Grow1"] == 4 and sample.vars["Grow2"] == 4
+    assert sample.vars["Bar1"] == 4 and sample.vars["RandCount"] == 2 and sample.vars["Rand1"] == 4 and sample.vars["Rand2"] == 4
+    assert sample.vars["Ham1"] == 13
+    assert sample.vars["StartRow"] == 0 and sample.vars["StartCol"] == 0
+    assert sample.vars["Code0"] == 2 and sample.vars["Code1"] == 0 and sample.vars["Code2"] == 6 and sample.vars["Code3"] == 4
+    assert sample.vars["Len1"] == 10 and sample.vars["PhiLine"] == 0 and sample.vars["ColEnd"] == 10
+    assert sample.vars["LenReg"] == 10 and sample.vars["PhiReg"] == 0 and sample.vars["RowReg"] == 0 and sample.vars["ColReg"] == 5
+    assert abs(sample.vars["DevReg"]) < 1e-6
+    assert sample.vars["Ell0"] == 4 and sample.vars["Ell1"] == 0 and sample.vars["Rect0"] == 2 and sample.vars["Rect1"] == 0
+    assert sample.vars["M20a"] == 8 and sample.vars["M02a"] == 8 and sample.vars["M11a"] == 4 and sample.vars["Any20"] == 8
+    assert sample.vars["KeptCount"] == 1
+
+
+def test_hdevelop_batch130():
+    import math
+
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_polar_trans_image_radius3_is_200.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["PolarGray"] == 200
+    assert sample.vars["Red1"] == 10 and sample.vars["Green1"] == 20 and sample.vars["Blue1"] == 30
+    assert abs(sample.vars["Ra1"] - math.sqrt(8)) < 1e-6 and sample.vars["Rb1"] == 0 and sample.vars["Phi1"] == 0
+    assert sample.vars["Grow1"] == 4 and sample.vars["KeptCount"] == 1
+    assert sample.vars["Clip0"] == 2 and sample.vars["Clip1"] == 8 and sample.vars["Dist1"] == 3
+    assert sample.vars["Ori1"] == 0 and sample.vars["Era1"] == 6 and sample.vars["Erb1"] == 2
+    assert sample.vars["Ephi1"] == 0 and sample.vars["Ecc1"] == 3
+    assert sample.vars["Abs11"] == 16 and sample.vars["MeanCenter"] == 1
+    assert sample.vars["TileGray"] == 7 and sample.vars["TileZero"] == 0
+    assert sample.vars["Line1"] == 4 and sample.vars["Rand1"] == 25
+    assert sample.vars["Thick1"] == 3 and sample.vars["I1a"] == 2 and sample.vars["I2a"] == 0
+    assert sample.vars["Len1"] == 10 and sample.vars["PhiLine"] == 0
+    assert sample.vars["RowA"] == 1 and sample.vars["ColA"] == 2
+    assert sample.vars["RowE0"] == 10 and sample.vars["ColE0"] == 24
+    assert abs(sample.vars["RowE90"] - 12) < 1e-6 and abs(sample.vars["ColE90"] - 20) < 1e-6
+
+
+def test_hdevelop_batch129():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_gray_dilation_shape_neighbor_is_9.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["DilateNear"] == 9 and sample.vars["ShapeNear"] == 9
+    assert sample.vars["OpenCenter"] == 0 and sample.vars["OpenShape"] == 0
+    assert sample.vars["ErodeNear"] == 0 and sample.vars["ErodeCorner"] == 9 and sample.vars["ErodeShape"] == 0
+    assert sample.vars["CloseCenter"] == 9 and sample.vars["CloseShape"] == 9
+    assert sample.vars["M20a"] == 8 and sample.vars["M02a"] == 8 and sample.vars["M11a"] == 4
+    assert sample.vars["Area1"] == 4 and sample.vars["Row1"] == 1 and sample.vars["Col1"] == 1 and sample.vars["Rect1"] == 1
+    assert sample.vars["Clip0"] == 2 and sample.vars["Clip1"] == 8
+    assert sample.vars["In1"] == 1 and sample.vars["In2"] == 0 and sample.vars["Fill1"] == 25
+    assert sample.vars["HullCount"] == 4 and sample.vars["Clean1"] == 4
+    assert sample.vars["Mu20a"] == 1 and sample.vars["Mu02a"] == 1 and sample.vars["Mu11a"] == 0
+    assert sample.vars["Bin3"] == 16 and sample.vars["BinSize"] == 5 and sample.vars["Dark1"] == 1
+    assert sample.vars["MovedGray"] == 7
+
+
+def test_hdevelop_batch128():
+    ensure_samples(ROOT)
+    sample = run_source((ROOT / "samples" / "ViZion_sin_image_gray0_sine_is_128.viz").read_text(encoding="utf-8"))
+    assert sample.error is None, sample.error
+    assert sample.vars["Sin0"] == 128 and sample.vars["Sin1"] == 235
+    assert sample.vars["Cos0"] == 255 and sample.vars["Cos1"] == 196
+    assert sample.vars["Tan0"] == 128 and sample.vars["Tan1"] == 140
+    assert sample.vars["Asin0"] == 128 and sample.vars["Acos0"] == 128 and sample.vars["Acos255"] == 0
+    assert sample.vars["Atan0"] == 128 and sample.vars["Atan160"] == 191
+    assert sample.vars["Plane11"] == 15 and sample.vars["Bowl20"] == 8 and sample.vars["RedGray"] == 30
+    assert sample.vars["Ent"] == 29 and sample.vars["Mid22"] == 45
+    assert sample.vars["FrameW"] == 6 and sample.vars["FrameH"] == 5 and sample.vars["Edge"] == 9
+    assert sample.vars["Fast1"] == 3 and sample.vars["Bin1"] == 8 and sample.vars["Soft11"] == 1
+    assert sample.vars["Kind"] == "byte"
+    assert sample.vars["Poly1"] == 20 and sample.vars["In1"] == 1 and sample.vars["In2"] == 0
+    assert sample.vars["Dist1"] == 5 and abs(sample.vars["Ratio1"] - 4 / 3) < 1e-9
 
 
 def np_degrees_diag():
@@ -3678,6 +5101,210 @@ Vizion.count_obj (OpenCVParts, OpenCVCount)
     assert set(colors) <= {item.lower() for item in MATCH_COLORS}
 
 
+def test_arrow_into_procedure_stops_at_the_header():
+    source = "\n".join([
+        "procedure add (: : Value : Result)",
+        "    Result := Value + 1",
+        "endprocedure",
+        "Value := 4",
+        "add (Value, Out)",
+    ])
+    session = Session(source, ROOT)
+    session.set_line(2)
+    assert session.current_line() == 1
+    assert session.log[-1] == "程序還沒呼叫，箭頭停在程序標題"
+    session.step()
+    assert session.current_line() == 4
+    assert "Result" not in session.vars
+    session.step()
+    assert session.vars["Value"] == 4
+    session.step()
+    assert session.current_line() == 2
+    assert session.public_state()["procedure"] == "add"
+    session.set_line(2)
+    assert session.current_line() == 2
+    assert session.vars["Value"] == 4
+    session.set_line(5)
+    assert session.current_line() == 5
+    assert session.public_state()["procedure"] is None
+    assert session.vars["Value"] == 4
+    assert "Out" not in session.vars
+    session.step()
+    assert session.current_line() == 2
+    session.step()
+    assert session.vars["Out"] == 5
+
+    stopped = Session(source, ROOT)
+    stopped.breakpoints = {2}
+    stopped.run()
+    assert stopped.paused == "breakpoint"
+    assert stopped.current_line() == 2
+    stopped.set_line(4)
+    assert stopped.current_line() == 4
+    assert stopped.paused is None
+    stopped.run()
+    assert stopped.paused == "breakpoint"
+    assert stopped.current_line() == 2
+    assert "Result" not in stopped.vars
+    assert stopped.vars["Value"] == 4
+
+
+def test_failed_run_keeps_results_and_names_the_line():
+    source = "\n".join([
+        "Vizion.gen_image_const (Image, 'byte', 32, 24)",
+        "Vizion.threshold (Image, Region, 0, 255)",
+        "Count := 7",
+        "Count := Missing + 1",
+    ])
+    session = run_source(source)
+    assert session.error_line == 4
+    assert session.current_line() == 4
+    assert "第 4 行" in session.error
+    assert "Missing" in session.error
+    assert sum(1 for line in session.log if str(line).startswith("錯誤")) == 1
+    assert "第 4 行" in session.log[-1]
+    assert session.vars["Count"] == 7
+    assert session.display.base is not None
+    assert session.display.base.width == 32
+    state = session.public_state()
+    assert state["line"] == 4
+    assert state["errorLine"] == 4
+    assert state["display"] and state["display"].get("image")
+    iconic = {item["name"] for item in state["iconic"]}
+    assert iconic == {"Image", "Region"}
+    assert any(item["name"] == "Count" and "7" in item["text"] for item in state["control"])
+
+
+def test_failed_procedure_keeps_local_results():
+    source = "\n".join([
+        "Ready := 3",
+        "procedure work (: : : )",
+        "    Vizion.gen_image_const (Image, 'byte', 16, 16)",
+        "    Vizion.threshold (Image, Region, 0, 255)",
+        "    Area := 12",
+        "    Area := Missing",
+        "endprocedure",
+        "work ()",
+        "After := 1",
+    ])
+    session = run_source(source)
+    assert session.error_line == 6
+    assert session.current_line() == 6
+    assert "第 6 行" in session.error
+    assert "Missing" in session.error
+    assert sum(1 for line in session.log if str(line).startswith("錯誤")) == 1
+    assert "Image" not in session.vars
+    assert "After" not in session.vars
+    assert session.vars["Ready"] == 3
+    assert session.display.base is not None
+    assert session.display.base.width == 16
+    state = session.public_state()
+    assert state["procedure"] == "work"
+    assert state["line"] == 6
+    iconic = {item["name"]: item["scope"] for item in state["iconic"]}
+    assert iconic["Image"] == "程序"
+    assert iconic["Region"] == "程序"
+    control = {item["name"]: item for item in state["control"]}
+    assert control["Area"]["scope"] == "程序"
+    assert "12" in control["Area"]["text"]
+    assert control["Ready"]["scope"] == "呼叫端"
+    assert "After" not in control
+
+
+def test_path_fields_list_project_files():
+    from fastapi import HTTPException
+
+    from app.desktop import DesktopApi
+    from app.engine.operators import REGISTRY
+    from app.main import data_files
+
+    read = next(param for param in REGISTRY["read_image"].control_in if param.name == "FileName")
+    plate = next(param for param in REGISTRY["set_calib_data_calib_object"].control_in if param.name == "CalibObjDescr")
+    assert read.browse == "image"
+    assert plate.browse == "plate"
+    written = next(param for param in REGISTRY["write_image"].control_in if param.name == "FileName")
+    device = next(param for param in REGISTRY["open_framegrabber"].control_in if param.name == "Device")
+    assert written.browse == "image"
+    assert device.browse == "image"
+    listed = data_files("plate")
+    assert any(item["path"] == "samples/calplate_4x5.cpd" for item in listed)
+    images = data_files("image")
+    assert any(item["path"] == "samples/parts.png" for item in images)
+    assert all(not item["name"].startswith(".") for item in images + listed)
+    try:
+        data_files("nope")
+    except HTTPException as exc:
+        assert exc.status_code == 400
+    else:
+        raise AssertionError("不認識的種類應該拒絕")
+    api = DesktopApi()
+    assert api._portable_path(str(ROOT / "samples" / "calplate_4x5.cpd")) == "samples/calplate_4x5.cpd"
+    assert api._portable_path("/tmp/board.cpd") == "/tmp/board.cpd"
+
+
+def test_calib_fields_say_how_to_fill_them():
+    from app.engine.operators import REGISTRY
+
+    plate = REGISTRY["set_calib_data_calib_object"].setup_text()
+    assert "'5,7,10'" in plate
+    assert "calplate_4x5.cpd" in plate
+    camera = REGISTRY["find_calib_object"].setup_text()
+    assert "只有一台就填 0" in camera
+    created = REGISTRY["create_calib_data"].setup_text()
+    assert "兩台填 2" in created
+    readout = REGISTRY["get_calib_data"].setup_text()
+    assert "第幾台相機" in readout
+
+
+def test_procedure_error_marks_the_inner_line():
+    source = "\n".join([
+        "procedure add (: : Value : Result)",
+        "    Result := Value + Missing",
+        "endprocedure",
+        "add (4, Out)",
+    ])
+    session = run_source(source)
+    assert session.error_line == 2
+    assert "Missing" in session.error
+    assert "Out" not in session.vars
+    stepped = Session(source, ROOT)
+    stepped.step()
+    stepped.step()
+    assert stepped.current_line() == 2
+    stepped.step()
+    assert stepped.error_line == 2
+    assert "Missing" in stepped.error
+
+
+def test_procedure_step_keeps_caller_variables_visible():
+    source = "\n".join([
+        "Ready := 1",
+        "procedure add (: : Value : Result)",
+        "    Result := Value + 1",
+        "endprocedure",
+        "add (4, Out)",
+    ])
+    session = Session(source, ROOT)
+    session.step()
+    session.step()
+    session.step()
+    assert session.current_line() == 3
+    assert session.public_state()["procedure"] == "add"
+    names = [item["name"] for item in session.public_state()["control"]]
+    assert names.index("Value") < names.index("Ready")
+    assert "Out" not in names
+    scopes = {item["name"]: item["scope"] for item in session.public_state()["control"]}
+    assert scopes["Value"] == "程序"
+    assert scopes["Ready"] == "呼叫端"
+    session.step()
+    assert session.vars["Out"] == 5
+    assert session.public_state()["procedure"] is None
+    after = [item["name"] for item in session.public_state()["control"]]
+    assert "Ready" in after and "Out" in after
+    assert "Value" not in after
+    assert all(item.get("scope") in (None,) for item in session.public_state()["control"])
+
+
 def test_move_program_arrow():
     session = Session("a := 1\nb := a + 1\nc := b + 1\n", ROOT)
     session.step()
@@ -3780,12 +5407,12 @@ def test_ocr_page():
     path = ROOT / "workspace" / "_ocr_page.png"
     path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(path), image)
-    session = run_source("Vizion.read_image (Image, 'workspace/_ocr_page.png')\nocr_find (Image, Words, 'auto', Text, Row, Column, Score)\n")
+    session = run_source("Vizion.read_image (Image, 'workspace/_ocr_page.png')\nVizion.ocr_find (Image, Words, 'auto', Text, Row, Column, Score)\n")
     assert session.error is None, session.error
     found = " ".join(str(item) for item in session.vars["Text"])
     assert "VISDEV" in found and "168" in found, found
     assert len(session.vars["Words"].contours) == len(session.vars["Text"])
-    outside = run_source("Vizion.read_image (Image, 'workspace/_ocr_page.png')\nocr_find (Image, Words, 'auto', 0, 0, 20, 20, Text, Row, Column, Score)\n")
+    outside = run_source("Vizion.read_image (Image, 'workspace/_ocr_page.png')\nVizion.ocr_find (Image, Words, 'auto', 0, 0, 20, 20, Text, Row, Column, Score)\n")
     path.unlink(missing_ok=True)
     assert outside.error is None, outside.error
     missed = " ".join(str(item) for item in outside.vars["Text"])
@@ -3875,6 +5502,26 @@ def test_gauge():
     assert parallel.error and "平行" in parallel.error
 
 
+def test_breakpoint_added_during_run_stops_later():
+    import threading
+    import time
+
+    session = Session("for Index := 1 to 100000 by 1\nK := Index\nendfor\n", ROOT)
+
+    def add_break():
+        while session.step_count < 3 and not session.done and session.paused != "breakpoint":
+            time.sleep(0.002)
+        with session.lock:
+            session.breakpoints.add(2)
+
+    threading.Thread(target=add_break, daemon=True).start()
+    session.run()
+    assert session.paused == "breakpoint"
+    assert session.current_line() == 2
+    assert session.vars["K"] >= 1
+    assert session.step_count < 100000
+
+
 def test_breakpoint_stops_and_times_lines():
     source = "a := 1\n* note\nb := 2\nc := a + b\n"
     session = Session(source, ROOT)
@@ -3916,6 +5563,360 @@ def test_breakpoint_stops_and_times_lines():
     assert plain.current_line() == 1
 
 
+def test_file_roundtrip_and_reset_closes_handle():
+    import shutil
+
+    folder = ROOT / "workspace" / "_file_ops"
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir(parents=True)
+    held = None
+    try:
+        session = run_source(
+            "Vizion.make_dir ('workspace/_file_ops/nested')\n"
+            "Vizion.open_file ('workspace/_file_ops/note.txt', 'output', Handle)\n"
+            "Vizion.fwrite_string (Handle, 'VISDEV line')\n"
+            "Vizion.fnew_line (Handle)\n"
+            "Vizion.fwrite_string (Handle, 'second')\n"
+            "Vizion.close_file (Handle)\n"
+            "Vizion.open_file ('workspace/_file_ops/note.txt', 'input', Handle)\n"
+            "Vizion.fread_line (Handle, Line, Eof1)\n"
+            "Vizion.fread_string (Handle, Word, Eof2)\n"
+            "Vizion.close_file (Handle)\n"
+            "Vizion.copy_file ('workspace/_file_ops/note.txt', 'workspace/_file_ops/nested/copy.txt')\n"
+            "Vizion.file_exists ('workspace/_file_ops/nested/copy.txt', Exists)\n"
+            "Vizion.list_files ('workspace/_file_ops', ['files', 'directories', 'recursive'], Listed)\n"
+            "Vizion.delete_file ('workspace/_file_ops/nested/copy.txt')\n"
+            "Vizion.remove_dir ('workspace/_file_ops/nested')\n"
+        )
+        assert session.error is None, session.error
+        assert session.vars["Line"] == "VISDEV line"
+        assert session.vars["Eof1"] == 0
+        assert session.vars["Word"] == "second"
+        assert session.vars["Exists"] == 1
+        listed = session.vars["Listed"]
+        assert any(str(item).endswith("note.txt") for item in listed)
+        assert any(str(item).endswith("nested") for item in listed)
+        assert not (folder / "nested").exists()
+
+        held = run_source("Vizion.open_file ('workspace/_file_ops/note.txt', 'input', Handle)\n")
+        assert held.error is None, held.error
+        handle = held.vars["Handle"]
+        assert handle.closed is False
+        held.reset()
+        assert handle.closed is True
+        (folder / "note.txt").unlink()
+    finally:
+        if held is not None:
+            held.reset()
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def test_socket_available_bytes():
+    import socket
+
+    from app.engine.chapters.socket_ops import SocketLink, get_socket_param
+
+    left, right = socket.socketpair()
+    link = SocketLink(right, "pair")
+    try:
+        left.sendall(b"VISDEV")
+        pending = get_socket_param(link, "available", ctx=None)
+        assert pending.control[0] == 6
+        assert right.recv(6) == b"VISDEV"
+        assert get_socket_param(link, "available", ctx=None).control[0] == 0
+    finally:
+        link.release()
+        left.close()
+
+
+def test_relative_path_stays_inside_and_wait_does_not_block():
+    import threading
+    import time
+
+    from app.engine.chapters.file_ops import wait_seconds
+
+    ensure_samples(ROOT)
+    escaped = run_source("Vizion.file_exists ('../outside.txt', Exists)\n")
+    assert escaped.error and "離開" in escaped.error
+    nested = run_source("Vizion.file_exists ('samples/../samples/parts.png', Exists)\n")
+    assert nested.error is None, nested.error
+    assert nested.vars["Exists"] == 1
+    outside = run_source(f"Vizion.file_exists ('{ROOT}', Exists)\n")
+    assert outside.error is None, outside.error
+    assert outside.vars["Exists"] == 1
+
+    session = Session("Vizion.wait_seconds (2)\nA := 1\n", ROOT)
+    session.defer_wait = True
+    started = time.perf_counter()
+    session.run()
+    assert time.perf_counter() - started < 0.3
+    assert session.paused == "wait"
+    assert "A" not in session.vars
+    session.wait_until = time.monotonic()
+    session.run(resume=True)
+    assert session.error is None, session.error
+    assert session.vars["A"] == 1
+    assert session.done
+
+    class Ctx:
+        cancel = False
+        proc_depth = 0
+        defer_wait = False
+
+    ctx = Ctx()
+
+    def flip():
+        time.sleep(0.12)
+        ctx.cancel = True
+
+    threading.Thread(target=flip, daemon=True).start()
+    started = time.perf_counter()
+    wait_seconds(5, ctx=ctx)
+    assert time.perf_counter() - started < 1.0
+
+
+def test_step_lands_inside_the_procedure():
+    source = "\n".join([
+        "procedure add (: : Value : Result)",
+        "    Result := Value + 1",
+        "    Result := Result + 1",
+        "endprocedure",
+        "add (4, Out)",
+        "After := Out",
+    ])
+    session = Session(source, ROOT)
+    session.step()
+    assert session.current_line() == 5
+    session.step()
+    assert session.current_line() == 2
+    assert session.public_state()["procedure"] == "add"
+    assert session.vars["Value"] == 4
+    assert "Out" not in session.vars
+    session.step()
+    assert session.current_line() == 3
+    assert session.vars["Result"] == 5
+    session.step()
+    assert session.current_line() == 6
+    assert session.public_state()["procedure"] is None
+    assert session.vars["Out"] == 6
+    assert "Value" not in session.vars
+    session.step()
+    assert session.done
+    assert session.vars["After"] == 6
+
+    nested = "\n".join([
+        "procedure outer (: : Value : Result)",
+        "    inner (Value, Mid)",
+        "    Result := Mid + 3",
+        "endprocedure",
+        "procedure inner (: : Value : Result)",
+        "    Result := Value + 2",
+        "endprocedure",
+        "outer (4, Out)",
+    ])
+    entered = Session(nested, ROOT)
+    entered.step()
+    entered.step()
+    assert entered.current_line() == 8
+    entered.step()
+    assert entered.current_line() == 2
+    assert entered.public_state()["procedure"] == "outer"
+    entered.step()
+    assert entered.current_line() == 6
+    assert entered.public_state()["procedure"] == "inner"
+    assert "Out" not in entered.vars
+    entered.run()
+    assert entered.error is None, entered.error
+    assert entered.vars["Out"] == 9
+    assert entered.done
+
+    whole = run_source(nested)
+    assert whole.error is None, whole.error
+    assert whole.vars["Out"] == 9
+
+
+def test_run_stops_inside_a_procedure_breakpoint():
+    source = "\n".join([
+        "procedure add (: : Value : Result)",
+        "    Result := Value + 1",
+        "    Result := Result + 1",
+        "endprocedure",
+        "add (4, Out)",
+        "After := Out",
+    ])
+    session = Session(source, ROOT)
+    session.breakpoints = {3}
+    session.run()
+    assert session.paused == "breakpoint"
+    assert session.current_line() == 3
+    assert session.public_state()["procedure"] == "add"
+    assert session.vars["Result"] == 5
+    assert "Out" not in session.vars
+    session.run()
+    assert session.error is None, session.error
+    assert session.vars["Out"] == 6
+    assert session.vars["After"] == 6
+    assert session.done
+
+
+def test_trace_names_each_line_inside_a_procedure():
+    source = "\n".join([
+        "procedure add (: : Value : Result)",
+        "    Result := Value + 1",
+        "    Result := Result + 1",
+        "endprocedure",
+        "Ready := 3",
+        "add (4, Out)",
+    ])
+    session = Session(source, ROOT)
+    session.trace = True
+    session.run()
+    assert session.error is None, session.error
+    assert session.vars["Out"] == 6
+    body = [line for line in session.log if "add:" in line]
+    assert any(line.endswith("add: Result := 5") for line in body)
+    assert any(line.endswith("add: Result := 6") for line in body)
+    assert any(line.endswith("add → Out := 6") for line in session.log)
+    assert any(line.endswith("Ready := 3") and "add:" not in line for line in session.log)
+    nested = "\n".join([
+        "procedure inner (: : Value : Result)",
+        "    Result := Value + 2",
+        "endprocedure",
+        "procedure outer (: : Value : Result)",
+        "    inner (Value, Mid)",
+        "    Result := Mid + 3",
+        "endprocedure",
+        "outer (4, Out)",
+    ])
+    deep = Session(nested, ROOT)
+    deep.trace = True
+    deep.run()
+    assert deep.vars["Out"] == 9
+    assert any(line.endswith("inner: Result := 6") for line in deep.log)
+    assert any(line.endswith("outer: inner → Mid := 6") for line in deep.log)
+    assert any(line.endswith("outer: Result := 9") for line in deep.log)
+    stepped = Session(source, ROOT)
+    stepped.trace = True
+    stepped.step()
+    stepped.step()
+    stepped.step()
+    assert stepped.public_state()["procedure"] == "add"
+    stepped.step()
+    assert any(line.endswith("add: Result := 5") for line in stepped.log)
+
+
+def test_trace_shows_recursive_procedure_depth():
+    source = "\n".join([
+        "procedure down (: : N : Last)",
+        "    if (N > 0)",
+        "        down (N - 1, Last)",
+        "    else",
+        "        Last := 7",
+        "    endif",
+        "endprocedure",
+        "down (2, Out)",
+    ])
+    session = Session(source, ROOT)
+    session.trace = True
+    session.run()
+    assert session.error is None, session.error
+    assert session.vars["Out"] == 7
+    assert any(line.endswith("down×3: Last := 7") for line in session.log)
+    assert any(line.endswith("down×2: down → Last := 7") for line in session.log)
+    assert not any(line.endswith("down: Last := 7") for line in session.log)
+
+
+def test_trace_log_sends_only_new_lines():
+    from app.engine.session import omit_known_state
+
+    session = Session("Ready := 1\nAfter := Ready + 1\n", ROOT)
+    session.trace = True
+    session.step()
+    first = session.public_state()
+    session.step()
+    second = session.public_state()
+    assert second["logRev"] != first["logRev"]
+    assert second["logSize"] == first["logSize"] + 1
+    tail = omit_known_state(second, None, None, first["logRev"], first["logSize"])
+    assert tail["logFrom"] == first["logSize"]
+    assert tail["log"] == [second["log"][-1]]
+    same = omit_known_state(second, None, None, second["logRev"], second["logSize"])
+    assert same["log"] is None and same["logKept"] is True
+
+
+def test_wait_inside_procedure_resumes():
+    import time
+
+    source = """
+procedure pause (: : : Result)
+    Seen := 3
+    Vizion.wait_seconds (2)
+    Result := Seen + 1
+endprocedure
+pause (Out)
+Outer := 2
+"""
+    session = Session(source, ROOT)
+    session.defer_wait = True
+    started = time.perf_counter()
+    session.run()
+    assert time.perf_counter() - started < 0.3
+    assert session.paused == "wait"
+    assert "Out" not in session.vars
+    session.wait_until = time.monotonic()
+    session.run(resume=True)
+    assert session.error is None, session.error
+    assert session.vars["Out"] == 4
+    assert session.vars["Outer"] == 2
+    assert session.done
+
+
+def test_wait_inside_nested_procedure_resumes():
+    import time
+
+    source = """
+procedure inner (: : : Result)
+    Seen := 3
+    Vizion.wait_seconds (2)
+    Result := Seen + 1
+endprocedure
+procedure outer (: : : Out)
+    inner (Mid)
+    Out := Mid + 5
+endprocedure
+outer (Value)
+After := 7
+"""
+    session = Session(source, ROOT)
+    session.defer_wait = True
+    started = time.perf_counter()
+    session.run()
+    assert time.perf_counter() - started < 0.3
+    assert session.paused == "wait"
+    assert "Value" not in session.vars
+    session.wait_until = time.monotonic()
+    session.run(resume=True)
+    assert session.error is None, session.error
+    assert session.vars["Value"] == 9
+    assert session.vars["After"] == 7
+    assert session.done
+
+
+def test_directshow_import_does_not_require_windows():
+    import sys
+
+    from app.engine.dshow import grab_bgr
+
+    if sys.platform == "win32":
+        return
+    try:
+        grab_bgr(0)
+    except RuntimeError as exc:
+        assert "打不開相機" in str(exc)
+    else:
+        raise AssertionError("沒有 DirectShow 時應該失敗")
+
+
 def test_parse_error():
     try:
         parse_program("not_an_operator (A, B)\n")
@@ -3930,6 +5931,773 @@ def test_parse_error():
     else:
         raise AssertionError("沒有前綴的算子應該被拒絕")
     parse_program("Vizion.gen_rectangle1 (A, 0, 0, 1, 1)\n")
+
+
+def test_score_shift_matches_and_cancel_stops():
+    import threading
+    import time
+
+    import numpy as np
+
+    from app.engine.shape_model import _add_shifted, _shift_to_origin
+
+    source = np.arange(12, dtype=np.float32).reshape(3, 4)
+    for row_offset, col_offset in ((0, 0), (1, -1), (-2, 2), (5, 0)):
+        folded = np.zeros_like(source)
+        _add_shifted(folded, source, row_offset, col_offset)
+        assert np.array_equal(folded, _shift_to_origin(source, row_offset, col_offset))
+
+    session = Session(
+        "for Index := 1 to 2000000 by 1\nendfor\n",
+        ROOT,
+    )
+
+    def stop_soon():
+        while session.step_count < 30:
+            time.sleep(0.002)
+        session.cancel = True
+
+    threading.Thread(target=stop_soon, daemon=True).start()
+    session.run()
+    assert session.paused == "stopped"
+    assert session.step_count < 2000000
+
+
+def test_pick_area_and_center_use_existing_measures():
+    import numpy as np
+
+    from app.engine.operators import region_measures
+
+    mask = np.zeros((10, 20), np.uint8)
+    mask[2:6, 4:10] = 255
+    values = region_measures(mask)
+    assert values["area"] == 24
+    assert abs(values["row"] - 3.5) < 1e-6
+    assert abs(values["column"] - 6.5) < 1e-6
+
+
+def test_unchanged_display_is_not_reencoded():
+    from app.engine import render
+    from app.engine.session import omit_known_state
+
+    session = run_source(
+        "Vizion.gen_image_const (Image, 'byte', 64, 48)\n"
+        "Vizion.threshold (Image, Region, 0, 255)\n"
+    )
+    assert session.error is None, session.error
+    seen = {"n": 0}
+    original = render.png_data_url
+
+    def counting(array):
+        seen["n"] += 1
+        return original(array)
+
+    render.png_data_url = counting
+    try:
+        first = session.public_state()
+        encoded = seen["n"]
+        assert encoded >= 2
+        assert first["display"]["image"]
+        second = session.public_state()
+        assert seen["n"] == encoded
+        assert second["display"] is first["display"]
+        assert second["displayRev"] == first["displayRev"]
+        kept = omit_known_state(second, second["displayRev"], second["varRev"], second["logRev"])
+        assert kept["display"] is None and kept["displayKept"] is True
+        assert kept["iconic"] is None and kept["iconicKept"] is True
+        assert kept["control"] is None and kept["controlKept"] is True
+        assert kept["log"] is None and kept["logKept"] is True
+        assert second["display"]["image"] == first["display"]["image"]
+        assert second["iconic"][0]["name"]
+        assert omit_known_state(second, None, None, None)["display"] is first["display"]
+        session.vars["Mark"] = 7
+        marked = session.public_state()
+        assert marked["varRev"] != second["varRev"]
+        sent = omit_known_state(marked, marked["displayRev"], second["varRev"], marked["logRev"])
+        assert sent.get("controlKept") is not True
+        assert any(item["name"] == "Mark" for item in sent["control"])
+        session.display.overlays.append(
+            {"kind": "text", "text": "ok", "row": 4, "col": 4, "color": "#ffffff"}
+        )
+        third = session.public_state()
+        assert seen["n"] > encoded
+        assert third["displayRev"] != first["displayRev"]
+        assert third["display"]["image"] == first["display"]["image"]
+        assert any(shape.get("text") == "ok" for shape in third["display"]["shapes"])
+        session.region_color = "#3d8bff"
+        colored = session.public_state()
+        assert colored["displayRev"] != third["displayRev"]
+        assert colored["display"] is not third["display"]
+    finally:
+        render.png_data_url = original
+
+
+def test_unchanged_variable_thumbs_are_not_reencoded():
+    from app.engine import session as session_mod
+
+    session = run_source("Vizion.gen_image_const (Image, 'byte', 80, 60)\n")
+    assert session.error is None, session.error
+    seen = {"n": 0}
+    original = session_mod.jpeg_thumb
+
+    def counting(array, max_edge=112):
+        seen["n"] += 1
+        return original(array, max_edge)
+
+    session_mod.jpeg_thumb = counting
+    try:
+        first = session.public_state()
+        assert seen["n"] >= 1
+        encoded = seen["n"]
+        thumb = first["iconic"][0]["thumb"]
+        assert thumb.startswith("data:image/jpeg")
+        second = session.public_state()
+        assert seen["n"] == encoded
+        assert second["iconic"][0]["thumb"] == thumb
+        assert second["iconic"][0]["info"] == first["iconic"][0]["info"]
+    finally:
+        session_mod.jpeg_thumb = original
+
+
+def test_display_updates_before_the_program_finishes():
+    import threading
+    import time
+
+    session = Session(
+        "Vizion.gen_image_const (Image, 'byte', 8, 6)\nVizion.dev_display (Image)\nfor Index := 1 to 100000 by 1\nendfor\n",
+        ROOT,
+    )
+
+    def watch():
+        while session.display_stamp == 0 and session.paused != "stopped" and not session.done:
+            time.sleep(0.002)
+        if session.display_stamp:
+            session.cancel = True
+
+    threading.Thread(target=watch, daemon=True).start()
+    session.run()
+    assert session.display_stamp >= 1
+    assert session.paused == "stopped"
+
+
+def test_csharp_export_matches_python_threshold_and_connection():
+    import base64
+    import hashlib
+    import json
+    import subprocess
+
+    from app.engine.export_cs import ExportError, export_csharp
+    from app.engine.objects import Image
+    from app.engine.operators import _foreground_runs, area_center, connection, halcon_components, threshold
+    from app.engine.render import read_cv_image, to_uint8
+
+    ensure_samples(ROOT)
+    sample = (ROOT / "samples" / "export_parts.viz").read_bytes()
+    assert sample.count(b"\r\n") >= 5
+    assert sample.count(b"\n") == sample.count(b"\r\n")
+    source = sample.decode("utf-8")
+    session = run_source(source)
+    assert session.error is None, session.error
+    assert session.vars["Parts"].count() >= 3
+    code = export_csharp(source)
+    assert 'Operators.ReadImage("samples/parts.png")' in code
+    assert "Operators.Threshold(Image, 60, 255)" in code
+    assert "Operators.Connection(Region)" in code
+    assert "Operators.Overlays(Parts)" in code
+    assert "view(Image.Width, Image.Height, Image.ForDisplay(), Image.Layout," in code
+    assert "ExportedProgram.Run(window.Show)" in code
+    counted = export_csharp(
+        "Vizion.read_image (Image, 'samples/parts.png')\n"
+        "Vizion.threshold (Image, Region, 60, 255)\n"
+        "Vizion.connection (Region, Parts)\n"
+        "Vizion.count_obj (Parts, Number)\n"
+        "Vizion.area_center (Parts, Area, Row, Column)\n"
+    )
+    assert "Operators.Count(Parts)" in counted
+    assert "Operators.AreaCenterOf(Parts)" in counted
+    assert "Area[exportIndex] = exportMeasured1[exportIndex].Area" in counted
+    from fastapi import HTTPException
+
+    from app.main import ExportCsIn, export_csharp_program
+
+    payload = export_csharp_program(ExportCsIn(source=source, name="export_parts.viz"))
+    assert payload["name"] == "export_parts.cs"
+    assert "export_parts.Run(window.Show)" in payload["source"]
+    try:
+        export_csharp_program(
+            ExportCsIn(
+                source="Vizion.read_image (Image, 'samples/parts.png')\nVizion.write_image (Image, 'workspace/out.png')\n",
+                name="out",
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "write_image" in str(exc.detail)
+    else:
+        raise AssertionError("寫檔不該匯出")
+    page = (ROOT / "app" / "static" / "index.html").read_text(encoding="utf-8")
+    script = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    assert 'data-cmd="exportCsharp"' in page
+    assert "/api/export/csharp" in script
+    try:
+        export_csharp("Vizion.read_image (Image, 'samples/parts.png')\nVizion.write_image (Image, 'workspace/out.png')\n")
+    except ExportError as exc:
+        assert "write_image" in str(exc)
+    else:
+        raise AssertionError("不該匯出寫檔")
+    far = export_csharp(
+        "Vizion.read_image (Image, 'samples/parts.png')\n"
+        "Vizion.threshold (Image, Region, 60, 255)\n"
+        "Vizion.connection (Region, Parts, 5)\n"
+        "Vizion.select_shape (Parts, Big, 'area', 'and', 80, 99999)\n"
+        "Vizion.dilation_rectangle1 (Big, Grown, 3, 3)\n"
+        "Vizion.get_image_size (Image, Width, Height)\n"
+        "Vizion.get_grayval (Image, 10, 20, Grayval)\n"
+    )
+    assert "Operators.Connection(Region, 5)" in far
+    assert 'SelectShape(Parts, new[] { "area" }, "and"' in far
+    assert "Operators.DilateRectangle(Big, 3, 3)" in far
+    assert "Image.Width" in far and "Image.Height" in far
+    assert "Operators.GrayAt(Image, 10, 20)" in far
+    distance_bytes = (ROOT / "samples" / "export_distance.viz").read_bytes()
+    assert distance_bytes.count(b"\r\n") >= 8
+    assert distance_bytes.count(b"\n") == distance_bytes.count(b"\r\n")
+    distance_program = distance_bytes.decode("utf-8")
+    distance_session = run_source(distance_program)
+    assert distance_session.error is None, distance_session.error
+    assert distance_session.vars["Number"] >= 1
+    assert "Operators.DilateRectangle(Big, 3, 3)" in export_csharp(distance_program)
+    circle_program = """
+Vizion.read_image (Image, 'samples/parts.png')
+Vizion.threshold (Image, Region, 60, 255)
+Vizion.opening_circle (Region, Opened, 2.5)
+Vizion.dilation_circle (Opened, Grown, 1)
+Vizion.boundary (Grown, Edge, 'outer')
+Vizion.connection (Opened, Parts)
+"""
+    circle_code = export_csharp(circle_program)
+    assert "Operators.OpenCircle(Region, 2.5)" in circle_code
+    assert "Operators.DilateCircle(Opened, 1.0)" in circle_code
+    assert 'Operators.Boundary(Grown, "outer")' in circle_code
+    domain_program = """
+Vizion.read_image (Image, 'samples/parts.png')
+Vizion.gen_rectangle1 (Window, 40, 80, 200, 300)
+Vizion.reduce_domain (Image, Window, Limited)
+Vizion.threshold (Limited, Region, 60, 255)
+Vizion.get_domain (Limited, Domain)
+Vizion.change_domain (Image, Window, Replaced)
+Vizion.crop_rectangle1 (Limited, Part, 40, 80, 80, 120)
+"""
+    domain_code = export_csharp(domain_program)
+    assert "Operators.ReduceDomain(Image, Window)" in domain_code
+    assert "Operators.Threshold(Limited, 60, 255)" in domain_code
+    assert "Operators.DomainOf(Limited)" in domain_code
+    assert "Operators.ChangeDomain(Image, Window)" in domain_code
+    assert "Operators.Crop(Limited, 40, 80, 80, 120)" in domain_code
+    assert "ForDisplay()" in domain_code
+
+    def digest(masks):
+        hasher = hashlib.sha256()
+        hasher.update(str(len(masks)).encode())
+        for mask in masks:
+            hasher.update(np.ascontiguousarray(mask).tobytes())
+        return hasher.hexdigest()
+
+    rng = np.random.default_rng(0)
+    masks = []
+    for shape in ((3, 3), (7, 12), (64, 80), (1, 20), (20, 1), (30, 30)):
+        masks.append((rng.random(shape) > 0.7).astype(np.uint8) * 255)
+    diagonal = np.zeros((3, 3), np.uint8)
+    diagonal[0, 1] = 255
+    diagonal[1, 0] = 255
+    masks.append(diagonal)
+    dots = np.zeros((7, 12), np.uint8)
+    dots[3, 1] = dots[3, 4] = dots[3, 10] = 255
+    masks.append(dots)
+    class Ctx:
+        histogram = None
+
+    picture = read_cv_image(ROOT / "samples" / "parts.png")
+    masks.append(threshold(Image(picture), 60, 255, ctx=Ctx()).iconic[0].union_mask())
+    expected = [
+        "a4cbd7c11acafefff07566b6fbb6d83aac6d0c586a93440747b7f38344856115",
+        "ba865d9ea48e10a4150efc567f294e3b24770c0c949862874f61f3325ce7ce41",
+        "e50d3bfef884d992e2e157b74d382d8ec495e7a143a9b23dbc3862dabb76c268",
+        "b9b9267090f80c2d8bcd8c0465b4b6260f7a9c6f5034b778f707409db1cf0e94",
+        "8a1bd6423831d4121cb23bd291988e9aba22133147dbf0134b389458dc9a2eab",
+        "9a33e84004d5374109ea1d5d02f63909f51210f00f57d678e0b7e0525c681611",
+        "bb0434c93d431b1b3848ebc75e2377f3ffe5eb62ca8a8616dd6fa6e75a9b9806",
+        "21c98421d5e9a66451bece8647cb2cb56283aca3ea3cfd32ab463321c65f7ad8",
+        "30de60404ae5783c63cf752f0da867e5bfc49c0b5f5871a55624d5ab80905369",
+    ]
+    for mask, digest_hex in zip(masks, expected):
+        assert digest(halcon_components(mask)) == digest_hex
+
+    folder = ROOT / "workspace" / "csharp-check"
+    folder.mkdir(parents=True, exist_ok=True)
+    color = np.zeros((2, 3, 3), np.uint8)
+    color[0, 0] = (10, 20, 30)
+    color[1, 2] = (0, 0, 255)
+    wide = np.array([[0, 257, 514, 65535]], np.uint16)
+    gray = np.zeros((8, 8), np.uint8)
+    gray[1:4, 2:6] = 200
+    gray[6, 6] = 180
+    paths = {
+        "color": folder / "color.png",
+        "wide": folder / "wide.png",
+        "gray": folder / "gray.png",
+        "parts": ROOT / "samples" / "parts.png",
+    }
+    cv2.imwrite(str(paths["color"]), color)
+    cv2.imwrite(str(paths["wide"]), wide)
+    cv2.imwrite(str(paths["gray"]), gray)
+
+    def decoded(path):
+        data = to_uint8(read_cv_image(path))
+        if data.ndim == 3 and data.shape[2] == 4:
+            data = cv2.cvtColor(data, cv2.COLOR_BGRA2BGR)
+        return data
+
+    def run_list(mask):
+        found, _rows = _foreground_runs(mask)
+        return [[row, start, end - start + 1] for row, start, end in found]
+
+    cases = []
+    for name, path, low, high in (
+        ("color", paths["color"], 22, 22),
+        ("wide", paths["wide"], 2, 255),
+        ("gray", paths["gray"], 100, 255),
+        ("parts", paths["parts"], 60, 255),
+    ):
+        image = decoded(path)
+        region = threshold(Image(image), low, high, ctx=Ctx()).iconic[0]
+        parts = connection(region, 1, ctx=Ctx()).iconic[0]
+        areas, rows, cols = area_center(parts, ctx=Ctx()).control
+        cases.append(
+            {
+                "path": str(path),
+                "width": int(image.shape[1]),
+                "height": int(image.shape[0]),
+                "channels": 1 if image.ndim == 2 else int(image.shape[2]),
+                "pixels": base64.b64encode(np.ascontiguousarray(image).tobytes()).decode("ascii"),
+                "min": low,
+                "max": high,
+                "threshold": run_list(region.union_mask()),
+                "components": [run_list(mask) for mask in parts.objects],
+                "count": parts.count(),
+                "centers": [[int(area), float(row), float(col)] for area, row, col in zip(areas, rows, cols)],
+            }
+        )
+    from app.engine.objects import Region
+    from app.engine.operators import (
+        closing_rectangle1,
+        dilation_rectangle1,
+        erosion_rectangle1,
+        intensity,
+        opening_rectangle1,
+        select_shape,
+        union2,
+        difference,
+        gen_rectangle1,
+        fill_up,
+        complement,
+        reduce_domain,
+        crop_rectangle1,
+        get_domain,
+        dilation_circle,
+        erosion_circle,
+        opening_circle,
+        closing_circle,
+        boundary,
+    )
+    from app.engine.chapters.image_ops import change_domain, overpaint_region, paint_region
+    from app.engine.render import apply_domain_dim
+
+    class RectCtx(Ctx):
+        ref_shape = (8, 10)
+
+        def canvas_size(self):
+            return self.ref_shape
+
+    def objects_of(region):
+        return [run_list(mask) for mask in region.objects]
+
+    def one_runs(result):
+        region = result.iconic[0]
+        if region.count() == 0:
+            return []
+        return run_list(region.union_mask())
+
+    ops = []
+    dots = np.zeros((7, 12), np.uint8)
+    dots[3, 1] = dots[3, 4] = dots[3, 10] = 255
+    dot_region = Region(12, 7, [dots])
+    for distance in (2.5, 3, 6):
+        parts = connection(dot_region, distance, ctx=Ctx()).iconic[0]
+        ops.append(
+            {
+                "op": "connection",
+                "name": f"dots-{distance}",
+                "width": 12,
+                "height": 7,
+                "distance": distance,
+                "runs": run_list(dots),
+                "components": objects_of(parts),
+            }
+        )
+    rng = np.random.default_rng(7)
+    blob = (rng.random((24, 28)) > 0.82).astype(np.uint8) * 255
+    blob_region = Region(28, 24, [blob])
+    parts = connection(blob_region, 4.5, ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "connection",
+            "name": "random-4.5",
+            "width": 28,
+            "height": 24,
+            "distance": 4.5,
+            "runs": run_list(blob),
+            "components": objects_of(parts),
+        }
+    )
+    block = np.zeros((12, 16), np.uint8)
+    block[4:7, 5:9] = 255
+    block_region = Region(16, 12, [block])
+    for mode, fn in (
+        ("dilate", dilation_rectangle1),
+        ("erode", erosion_rectangle1),
+        ("open", opening_rectangle1),
+        ("close", closing_rectangle1),
+    ):
+        ops.append(
+            {
+                "op": "morph",
+                "name": mode,
+                "mode": mode,
+                "width": 16,
+                "height": 12,
+                "kernelWidth": 4,
+                "kernelHeight": 3,
+                "runs": run_list(block),
+                "out": one_runs(fn(block_region, 4, 3, ctx=Ctx())),
+            }
+        )
+    for mode, fn, radius in (
+        ("dilateCircle", dilation_circle, 1),
+        ("erodeCircle", erosion_circle, 1.5),
+        ("openCircle", opening_circle, 2.5),
+        ("closeCircle", closing_circle, 3.5),
+    ):
+        ops.append(
+            {
+                "op": "morph",
+                "name": mode,
+                "mode": mode,
+                "width": 16,
+                "height": 12,
+                "distance": radius,
+                "runs": run_list(block),
+                "out": one_runs(fn(block_region, radius, ctx=Ctx())),
+            }
+        )
+    ops.append(
+        {
+            "op": "morph",
+            "name": "inner",
+            "mode": "inner",
+            "width": 16,
+            "height": 12,
+            "runs": run_list(block),
+            "out": one_runs(boundary(block_region, "inner", ctx=Ctx())),
+        }
+    )
+    ops.append(
+        {
+            "op": "morph",
+            "name": "outer",
+            "mode": "outer",
+            "width": 16,
+            "height": 12,
+            "runs": run_list(block),
+            "out": one_runs(boundary(block_region, "outer", ctx=Ctx())),
+        }
+    )
+    other = np.zeros_like(block)
+    other[5:9, 7:12] = 255
+    other_region = Region(16, 12, [other])
+    ops.append(
+        {
+            "op": "bool",
+            "name": "difference",
+            "mode": "difference",
+            "width": 16,
+            "height": 12,
+            "left": run_list(block),
+            "right": run_list(other),
+            "out": one_runs(difference(block_region, other_region, ctx=Ctx())),
+        }
+    )
+    ops.append(
+        {
+            "op": "bool",
+            "name": "union",
+            "mode": "union",
+            "width": 16,
+            "height": 12,
+            "left": run_list(block),
+            "right": run_list(other),
+            "out": one_runs(union2(block_region, other_region, ctx=Ctx())),
+        }
+    )
+    hole = block.copy()
+    hole[5, 6:8] = 0
+    hole_region = Region(16, 12, [hole])
+    ops.append(
+        {
+            "op": "morph",
+            "name": "fill",
+            "mode": "fill",
+            "width": 16,
+            "height": 12,
+            "runs": run_list(hole),
+            "out": one_runs(fill_up(hole_region, ctx=Ctx())),
+        }
+    )
+    crack = np.array(
+        [
+            [255, 255, 255, 255, 255],
+            [255, 255, 255, 255, 255],
+            [255, 255, 0, 255, 255],
+            [255, 0, 255, 255, 255],
+            [0, 255, 255, 255, 255],
+        ],
+        np.uint8,
+    )
+    crack_region = Region(5, 5, [crack])
+    ops.append(
+        {
+            "op": "morph",
+            "name": "fill-diagonal",
+            "mode": "fill",
+            "width": 5,
+            "height": 5,
+            "runs": run_list(crack),
+            "out": one_runs(fill_up(crack_region, ctx=Ctx())),
+        }
+    )
+    ops.append(
+        {
+            "op": "morph",
+            "name": "complement",
+            "mode": "complement",
+            "width": 16,
+            "height": 12,
+            "runs": run_list(block),
+            "out": one_runs(complement(block_region, ctx=Ctx())),
+        }
+    )
+    pieces = connection(block_region, 1, ctx=Ctx()).iconic[0]
+    kept = select_shape(pieces, "area", "and", 1, 99999, ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "shape",
+            "name": "area",
+            "width": 16,
+            "height": 12,
+            "feature": "area",
+            "minimum": 1,
+            "maximum": 99999,
+            "objects": objects_of(pieces),
+            "kept": list(range(kept.count())),
+        }
+    )
+    tone_image = np.zeros((12, 16), np.uint8)
+    tone_image[4:7, 5:9] = 40
+    tone_image[4, 5] = 80
+    means, deviations = intensity(pieces, Image(tone_image), ctx=Ctx()).control
+    ops.append(
+        {
+            "op": "tone",
+            "name": "block",
+            "width": 16,
+            "height": 12,
+            "pixels": base64.b64encode(np.ascontiguousarray(tone_image).tobytes()).decode("ascii"),
+            "objects": objects_of(pieces),
+            "means": [float(item) for item in means],
+            "deviations": [float(item) for item in deviations],
+        }
+    )
+    ops.append(
+        {
+            "op": "bounds",
+            "name": "block",
+            "width": 16,
+            "height": 12,
+            "objects": objects_of(pieces),
+            "rects": [[4, 5, 6, 8]],
+        }
+    )
+    ops.append(
+        {
+            "op": "shape",
+            "name": "area-too-small",
+            "width": 16,
+            "height": 12,
+            "feature": "area",
+            "minimum": 100,
+            "maximum": 99999,
+            "objects": objects_of(pieces),
+            "kept": [],
+        }
+    )
+    ops.append(
+        {
+            "op": "rect",
+            "name": "clipped",
+            "width": 10,
+            "height": 8,
+            "row1": 1,
+            "column1": 2,
+            "row2": 4,
+            "column2": 6,
+            "out": one_runs(gen_rectangle1(1, 2, 4, 6, ctx=RectCtx())),
+        }
+    )
+    color_pixels = np.zeros((2, 3, 3), np.uint8)
+    color_pixels[0, 0] = (10, 20, 30)
+    ops.append(
+        {
+            "op": "gray",
+            "name": "bgr",
+            "width": 3,
+            "height": 2,
+            "channels": 3,
+            "pixels": base64.b64encode(np.ascontiguousarray(color_pixels).tobytes()).decode("ascii"),
+            "row": 0,
+            "column": 0,
+            "values": [30, 20, 10],
+        }
+    )
+    field = np.full((6, 8), 200, np.uint8)
+    field[0, 0] = 10
+    window = np.zeros((6, 8), np.uint8)
+    window[1:4, 2:6] = 255
+    window_region = Region(8, 6, [window])
+    limited = reduce_domain(Image(field), window_region, ctx=Ctx()).iconic[0]
+    kept = threshold(limited, 100, 255, ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "reduce",
+            "name": "threshold-inside",
+            "width": 8,
+            "height": 6,
+            "channels": 1,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "runs": run_list(window),
+            "min": 100,
+            "max": 255,
+            "out": [] if kept.count() == 0 else run_list(kept.union_mask()),
+            "display": base64.b64encode(np.ascontiguousarray(apply_domain_dim(limited)).tobytes()).decode("ascii"),
+        }
+    )
+    inner = np.zeros((6, 8), np.uint8)
+    inner[2:3, 3:5] = 255
+    limited_again = reduce_domain(limited, Region(8, 6, [inner]), ctx=Ctx()).iconic[0]
+    kept_again = threshold(limited_again, 100, 255, ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "reduce",
+            "name": "threshold-intersect",
+            "width": 8,
+            "height": 6,
+            "channels": 1,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "runs": run_list(window),
+            "second": run_list(inner),
+            "min": 100,
+            "max": 255,
+            "out": [] if kept_again.count() == 0 else run_list(kept_again.union_mask()),
+        }
+    )
+    replaced = change_domain(limited, Region(8, 6, [inner]), ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "reduce",
+            "name": "change",
+            "mode": "change",
+            "width": 8,
+            "height": 6,
+            "channels": 1,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "runs": run_list(inner),
+            "min": 100,
+            "max": 255,
+            "out": one_runs(threshold(replaced, 100, 255, ctx=Ctx())),
+        }
+    )
+    cropped = crop_rectangle1(limited, 1, 2, 3, 5, ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "crop",
+            "name": "domain",
+            "width": 8,
+            "height": 6,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "runs": run_list(window),
+            "row1": 1,
+            "column1": 2,
+            "row2": 3,
+            "column2": 5,
+            "kernelWidth": cropped.width,
+            "kernelHeight": cropped.height,
+            "display": base64.b64encode(np.ascontiguousarray(cropped.data).tobytes()).decode("ascii"),
+            "out": one_runs(get_domain(cropped, ctx=Ctx())),
+        }
+    )
+    painted = overpaint_region(window_region, limited, 40, "fill", ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "paint",
+            "name": "over",
+            "mode": "over",
+            "feature": "fill",
+            "gray": 40,
+            "width": 8,
+            "height": 6,
+            "channels": 1,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "runs": run_list(window),
+            "left": run_list(window),
+            "display": base64.b64encode(np.ascontiguousarray(painted.data).tobytes()).decode("ascii"),
+        }
+    )
+    edged = paint_region(window_region, Image(field), 255, "margin", ctx=Ctx()).iconic[0]
+    ops.append(
+        {
+            "op": "paint",
+            "name": "margin",
+            "mode": "fill",
+            "feature": "margin",
+            "gray": 255,
+            "width": 8,
+            "height": 6,
+            "channels": 1,
+            "pixels": base64.b64encode(np.ascontiguousarray(field).tobytes()).decode("ascii"),
+            "left": run_list(window),
+            "display": base64.b64encode(np.ascontiguousarray(edged.data).tobytes()).decode("ascii"),
+        }
+    )
+    spec = folder / "cases.json"
+    spec.write_text(json.dumps({"cases": cases, "ops": ops}), encoding="utf-8")
+    check = ROOT / "dotnet" / "Vizion.Operators.Check" / "Vizion.Operators.Check.csproj"
+    completed = subprocess.run(
+        ["dotnet", "run", "-f", "net8.0", "--project", str(check), "--", "--compare", str(spec)],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
 if __name__ == "__main__":

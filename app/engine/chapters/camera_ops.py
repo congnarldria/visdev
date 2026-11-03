@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from ..objects import Image, Result
 from ..operators import P, operator, text, whole
@@ -33,6 +34,15 @@ class AcqHandle:
     cursor: int = 0
     cap: object | None = None
     closed: bool = False
+
+    def release(self) -> None:
+        if self.cap is not None:
+            try:
+                self.cap.release()
+            except Exception:
+                pass
+            self.cap = None
+        self.closed = True
 
     def summary(self) -> str:
         if self.closed:
@@ -65,7 +75,7 @@ def _device_path(ctx, device: str) -> Path:
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    raise FileNotFoundError(f"找不到 {device}")
+    raise FileNotFoundError(f"找不到 {device}。路徑請寫 samples 或 workspace 裡的檔，或在參數窗按選檔。")
 
 
 def _image_paths(folder: Path) -> list[Path]:
@@ -91,6 +101,66 @@ def _paint(data: np.ndarray, color: str, width: int, height: int) -> np.ndarray:
     return cv2.resize(data, (int(width), int(height)), interpolation=cv2.INTER_LINEAR)
 
 
+class _LiveCamera:
+    """DirectShow camera. Each read asks for the current frame.
+
+    The frame taken while opening is returned once, then later reads call
+    ``grab`` again. A failed later read does not reuse the previous picture.
+    """
+
+    def __init__(self, grab, index: int, first) -> None:
+        self._grab = grab
+        self._index = index
+        self._pending = None if first is None else np.array(first, copy=True)
+        self.opened = self._pending is not None
+
+    def isOpened(self) -> bool:
+        return self.opened
+
+    def read(self):
+        if not self.opened:
+            return False, None
+        if self._pending is not None:
+            frame = self._pending
+            self._pending = None
+            return True, frame
+        try:
+            frame = self._grab(self._index)
+        except (RuntimeError, OSError, ImportError, AttributeError):
+            return False, None
+        if frame is None:
+            return False, None
+        return True, np.array(frame, copy=True)
+
+    def release(self) -> None:
+        self.opened = False
+        self._pending = None
+
+    def set(self, *_args) -> bool:
+        return False
+
+
+def _open_camera(index: int, width: int, height: int):
+    try:
+        from ..dshow import grab_bgr
+
+        return _LiveCamera(grab_bgr, index, grab_bgr(index))
+    except (RuntimeError, OSError, ImportError, AttributeError):
+        pass
+    cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+    if not cap.isOpened():
+        cap.release()
+        cap = cv2.VideoCapture(index)
+    if not cap.isOpened():
+        raise RuntimeError(f"打不開相機 {index}。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。")
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    if width > 0:
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    if height > 0:
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    return cap
+
+
 def _note_image(ctx) -> None:
     if ctx is None:
         return
@@ -105,19 +175,19 @@ def _note_image(ctx) -> None:
 
 def _load_file(handle: AcqHandle) -> np.ndarray:
     if handle.cursor >= len(handle.paths):
-        raise RuntimeError("沒有下一張影像")
+        raise RuntimeError("沒有下一張影像。這個檔案或資料夾已經讀完，請重新 open_framegrabber，或把 start_index 設回 0。")
     path = handle.paths[handle.cursor]
     handle.cursor += 1
     data = read_cv_image(path)
     if data is None:
-        raise RuntimeError(f"無法讀取影像 {path}")
+        raise RuntimeError(f"無法讀取影像 {path}。檔案可能壞了，請改用 png 或 jpg。")
     return _paint(data, handle.color, handle.width, handle.height)
 
 
 def _load_camera(handle: AcqHandle, flush: bool) -> np.ndarray:
     cap = handle.cap
     if cap is None or not cap.isOpened():
-        raise RuntimeError("相機沒有打開")
+        raise RuntimeError("相機沒有打開。請先 open_framegrabber。若已經關閉，要重新開啟才能再抓圖。")
     frame = None
     pulls = 2 if flush else 1
     for _ in range(pulls):
@@ -125,7 +195,7 @@ def _load_camera(handle: AcqHandle, flush: bool) -> np.ndarray:
         if ok and grabbed is not None:
             frame = grabbed
     if frame is None:
-        raise RuntimeError("讀不到畫面")
+        raise RuntimeError("讀不到畫面。請確認相機還接著、沒有被別的程式占用，然後再抓一次。")
     return _paint(frame, handle.color, handle.width, handle.height)
 
 
@@ -141,7 +211,7 @@ def _grab(handle: AcqHandle, flush: bool, ctx) -> Result:
     [],
     [
         P("Name", "File 讀資料夾或單張圖，OpenCV 開本機相機", "'File'", _NAMES),
-        P("Device", "檔案路徑，或相機編號", "'0'"),
+        P("Device", "影像路徑，或相機編號。選檔會填路徑；資料夾請自己打", "'0'", browse="image"),
         P("ColorSpace", "gray、rgb 或 default", "'gray'", _COLORS),
         P("Width", "0 表示維持原寬", "0"),
         P("Height", "0 表示維持原高", "0"),
@@ -150,7 +220,7 @@ def _grab(handle: AcqHandle, flush: bool, ctx) -> Result:
     "開啟檔案或本機相機",
     "沒有廠商採集卡。參數比 HALCON 少，順序是名稱、裝置、色彩、寬、高。"
     "File 的 Device 可以是一張圖或一個資料夾，資料夾裡的圖按檔名排序。"
-    "OpenCV 的 Device 是相機編號，0 是第一台。Width 或 Height 只有一個大於 0 時會保持比例。",
+    "OpenCV 的 Device 是相機編號，0 是第一台。每次抓圖都讀目前畫面；Windows 上先問 DirectShow，打不開再試 OpenCV。Width 或 Height 只有一個大於 0 時會保持比例。",
     "Vizion.open_framegrabber ('File', 'samples/code39.png', AcqHandle)",
 )
 def open_framegrabber(name, device, color_space, width, height, *, ctx):
@@ -166,25 +236,14 @@ def open_framegrabber(name, device, color_space, width, height, *, ctx):
         path = _device_path(ctx, device_text)
         handle.paths = [path] if path.is_file() else _image_paths(path)
         if not handle.paths:
-            raise RuntimeError(f"{path} 裡沒有影像")
+            raise RuntimeError(f"{path} 裡沒有影像。請放進 png、jpg、bmp 或 tif，資料夾裡的圖會按檔名排序。")
     else:
         try:
             index = int(device_text)
         except ValueError as exc:
             raise ValueError("OpenCV 的 Device 必須是相機編號") from exc
-        cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-        if not cap.isOpened():
-            cap.release()
-            cap = cv2.VideoCapture(index)
-        if not cap.isOpened():
-            raise RuntimeError(f"打不開相機 {index}")
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        if frame_w > 0:
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_w)
-        if frame_h > 0:
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_h)
-        handle.cap = cap
         handle.device = str(index)
+        handle.cap = _open_camera(index, frame_w, frame_h)
     return Result([], [handle])
 
 
@@ -228,10 +287,7 @@ def grab_image_async(handle, _delay, *, ctx):
 )
 def close_framegrabber(handle, *, ctx):
     handle = _alive(handle, "AcqHandle")
-    if handle.cap is not None:
-        handle.cap.release()
-        handle.cap = None
-    handle.closed = True
+    handle.release()
     return Result([], [])
 
 
@@ -294,7 +350,7 @@ def set_framegrabber_param(handle, param, value, *, ctx):
         path = _device_path(ctx, text(value, "Value").strip().strip("'\""))
         handle.paths = [path] if path.is_file() else _image_paths(path)
         if not handle.paths:
-            raise RuntimeError(f"{path} 裡沒有影像")
+            raise RuntimeError(f"{path} 裡沒有影像。請放進 png、jpg、bmp 或 tif，資料夾裡的圖會按檔名排序。")
         handle.device = str(path)
         handle.cursor = 0
     else:

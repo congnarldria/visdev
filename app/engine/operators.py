@@ -19,7 +19,7 @@ from .render import normalize_color, read_cv_image, to_uint8, write_cv_image
 
 REGISTRY: dict[str, "Operator"] = {}
 _ORDER = 0
-# 程式裡的呼叫是 Vizion.算子名 (...)。C# 以後用 using Vizion.*，名稱對得上這一個前綴。
+# 程式裡的呼叫是 Vizion.算子名 (...)。C# 的 Vizion.Operators 對應讀圖、二值化、連通，前綴相同。
 CALL_PREFIX = "Vizion."
 
 
@@ -48,6 +48,7 @@ class Param:
     desc: str
     default: str | None = None
     choices: list[str] | None = None
+    browse: str | None = None
 
 
 @dataclass
@@ -63,6 +64,7 @@ class Operator:
     example: str
     fn: object
     order: int = 0
+    note: str = ""
 
     def prototype(self) -> str:
         def join(params: list[Param]) -> str:
@@ -82,6 +84,7 @@ class Operator:
                     "desc": item.desc,
                     "default": item.default,
                     "choices": item.choices or [],
+                    "browse": item.browse or "",
                 }
                 for item in params
             ]
@@ -96,6 +99,7 @@ class Operator:
             "setup": self.setup_text(),
             "prototype": self.prototype(),
             "example": self.example,
+            "note": self.note,
             "order": self.order,
             "params": pack(self.iconic_in, "圖像輸入")
             + pack(self.iconic_out, "圖像輸出")
@@ -136,11 +140,11 @@ class Operator:
         return "\n".join(lines)
 
 
-def P(name: str, desc: str, default: str | None = None, choices: list[str] | None = None) -> Param:
-    return Param(name, desc, default, choices)
+def P(name: str, desc: str, default: str | None = None, choices: list[str] | None = None, browse: str | None = None) -> Param:
+    return Param(name, desc, default, choices, browse)
 
 
-def operator(group, iconic_in, iconic_out, control_in, control_out, short, detail, example):
+def operator(group, iconic_in, iconic_out, control_in, control_out, short, detail, example, note=""):
     def deco(fn):
         global _ORDER
         _ORDER += 1
@@ -156,6 +160,7 @@ def operator(group, iconic_in, iconic_out, control_in, control_out, short, detai
             _prefix_example(fn.__name__, example),
             fn,
             _ORDER,
+            note.strip(),
         )
         REGISTRY[fn.__name__] = op
         return fn
@@ -673,7 +678,7 @@ def numbers_of(value) -> list[float]:
     "檔案",
     [],
     [P("Image", "讀入的影像")],
-    [P("FileName", "檔案路徑")],
+    [P("FileName", "檔案路徑。可按選檔，從 samples 或 workspace 挑", browse="image")],
     [],
     "讀取影像",
     "讀取灰階或彩色圖。相對路徑會依專案、samples、workspace 的順序尋找。路徑請用斜線，例如 samples/parts.png。",
@@ -701,7 +706,7 @@ def read_image(filename, *, ctx):
     "檔案",
     [P("Image", "要儲存的影像")],
     [],
-    [P("FileName", "輸出路徑")],
+    [P("FileName", "輸出路徑。選檔會填入現有影像的路徑", browse="image")],
     [],
     "儲存影像",
     "把影像寫到磁碟。相對路徑以專案目錄為起點。這版不使用 HALCON 的 Format 與 FillColor 參數。",
@@ -815,6 +820,53 @@ def mean_image(image, mask_width, mask_height, *, ctx):
     return image_out(image, cv2.blur(image.data, (width, height)))
 
 
+def _box_mean(values: np.ndarray, radius: int) -> np.ndarray:
+    window = radius * 2 + 1
+    return cv2.blur(values, (window, window))
+
+
+def _guided_channels(src: np.ndarray, guide: np.ndarray, radius: int, eps: float) -> np.ndarray:
+    mean_g = _box_mean(guide, radius)
+    mean_s = _box_mean(src, radius)
+    variance = np.maximum(_box_mean(guide * guide, radius) - mean_g * mean_g, 0.0)
+    if src.ndim == 2:
+        covariance = _box_mean(guide * src, radius) - mean_g * mean_s
+        coeff = covariance / (variance + eps)
+        offset = mean_s - coeff * mean_g
+        return _box_mean(coeff, radius) * guide + _box_mean(offset, radius)
+    guide_c = guide[:, :, None]
+    mean_g_c = mean_g[:, :, None]
+    covariance = _box_mean(guide_c * src, radius) - mean_g_c * mean_s
+    coeff = covariance / (variance[:, :, None] + eps)
+    offset = mean_s - coeff * mean_g_c
+    return _box_mean(coeff, radius) * guide_c + _box_mean(offset, radius)
+
+
+@operator(
+    "灰階與濾波",
+    [P("Image", "輸入影像，同時當引導圖")],
+    [P("ImageGuided", "保留邊緣的平滑結果")],
+    [P("Radius", "半徑，像素", "8"), P("Eps", "平滑強度，灰階平方", "800")],
+    [],
+    "引導濾波",
+    "He、Sun、Tang 2010：用影像自己當引導。平坦處的係數接近 0，輸出變成局部平均；階梯邊緣的變異大，係數接近 1，兩邊的灰階不會被拉到中間。Eps 是加在變異上的常數，灰階 0 到 255 時常用幾百到幾千。彩色影像用亮度當引導，三個通道一起濾。",
+    "Vizion.guided_filter (Image, Filtered, 8, 800)",
+    "新算子。依 He、Sun、Tang 2010 做邊緣保留平滑。不是既有的均值或高斯。",
+)
+def guided_filter(image, radius, eps, *, ctx):
+    image = expect_image(image, "Image")
+    span = whole(radius, "Radius")
+    regular = scalar(eps, "Eps")
+    if span < 1:
+        raise ValueError("Radius 至少要 1")
+    if regular <= 0:
+        raise ValueError("Eps 要大於 0")
+    guide = image.gray().astype(np.float32)
+    src = image.data.astype(np.float32)
+    out = np.clip(np.round(_guided_channels(src, guide, span, regular)), 0, 255).astype(np.uint8)
+    return image_out(image, out)
+
+
 @operator(
     "灰階與濾波",
     [P("Image", "輸入影像")],
@@ -852,6 +904,35 @@ def equ_histo_image(image, *, ctx):
     else:
         ycrcb = cv2.cvtColor(image.data, cv2.COLOR_BGR2YCrCb)
         ycrcb[:, :, 0] = cv2.equalizeHist(ycrcb[:, :, 0])
+        out = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
+    return image_out(image, out)
+
+
+@operator(
+    "灰階與濾波",
+    [P("Image", "輸入影像")],
+    [P("ImageClahe", "局部拉開對比的影像")],
+    [P("ClipLimit", "對比上限，愈大愈用力", "8"), P("Tiles", "每邊切幾塊", "8")],
+    [],
+    "局部直方圖",
+    "Zuiderveld 1994：把影像切成格子，每一格各自做直方圖等化，再把相鄰格子的結果混起來。暗角和亮區裡的小差距會一起被拉開。ClipLimit 限制單一灰階被放大的程度，避免雜訊被拉得太狠。Tiles 是每邊的格數。彩色影像只處理亮度。",
+    "Vizion.emphasize_clahe (Image, Emphasized, 8, 8)",
+    "新算子。依 Zuiderveld 1994 把每一小格的對比拉開。不是整張圖一起等化。",
+)
+def emphasize_clahe(image, clip_limit, tiles, *, ctx):
+    image = expect_image(image, "Image")
+    clip = scalar(clip_limit, "ClipLimit")
+    count = whole(tiles, "Tiles")
+    if clip <= 0:
+        raise ValueError("ClipLimit 要大於 0")
+    if count < 2:
+        raise ValueError("Tiles 至少要 2")
+    clahe = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(count, count))
+    if image.channels == 1:
+        out = clahe.apply(image.data)
+    else:
+        ycrcb = cv2.cvtColor(image.data, cv2.COLOR_BGR2YCrCb)
+        ycrcb[:, :, 0] = clahe.apply(ycrcb[:, :, 0])
         out = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
     return image_out(image, out)
 
@@ -953,6 +1034,39 @@ def binary_threshold(image, method, light_dark, *, ctx):
 @operator(
     "分割",
     [P("Image", "灰階或彩色影像")],
+    [P("Region", "比局部門檻暗的像素")],
+    [
+        P("MaskSize", "局部視窗，奇數", "15"),
+        P("K", "對比係數，愈大愈挑細的暗處", "0.5"),
+    ],
+    [],
+    "Sauvola 局部門檻",
+    "Sauvola 與 Pietikäinen 2000：門檻是局部平均乘上 1 加 K 乘（局部標準差除以 128 再減 1）。比這個門檻暗的像素留下。光照斜坡上的細暗線會留下，一大塊均勻的暗區內部不會，因為那裡的標準差很小。K 常用 0.2 到 0.5。彩色影像先轉灰階。有 domain 時只處理 domain 裡面的像素。",
+    "Vizion.sauvola (Image, Region, 15, 0.5)",
+    "新算子。依 Sauvola 與 Pietikäinen 2000 用局部平均和標準差分黑白。不是固定門檻。",
+)
+def sauvola(image, mask_size, k, *, ctx):
+    image = expect_image(image, "Image")
+    size = whole(mask_size, "MaskSize")
+    factor = scalar(k, "K")
+    if size < 3 or size % 2 == 0:
+        raise ValueError("MaskSize 要是 3 以上的奇數")
+    if not 0 < factor <= 1:
+        raise ValueError("K 要大於 0，而且不大於 1")
+    gray = image.gray().astype(np.float32)
+    mean = cv2.blur(gray, (size, size))
+    mean_sq = cv2.blur(gray * gray, (size, size))
+    deviation = np.sqrt(np.maximum(mean_sq - mean * mean, 0.0))
+    level = mean * (1.0 + factor * (deviation / 128.0 - 1.0))
+    mask = np.where(gray < level, np.uint8(255), np.uint8(0))
+    if image.domain is not None:
+        mask = cv2.bitwise_and(mask, image.domain)
+    return region_out(image.width, image.height, mask)
+
+
+@operator(
+    "分割",
+    [P("Image", "灰階或彩色影像")],
     [P("Region", "二值化區域")],
     [P("Threshold", "門檻，不含等於"), P("Method", "binary 或 binary_inv", choices=["'binary'", "'binary_inv'"])],
     [],
@@ -1031,26 +1145,31 @@ def threshold_sub_pix(image, threshold, *, ctx):
     return Result([XLD(image.width, image.height, lines, multi_color=True, groups=groups)], [])
 
 
+def _foreground_runs(mask: np.ndarray) -> tuple[list[tuple[int, int, int]], list[list[int]]]:
+    """同一套行程：左到右、上到下。相鄰的前景合成一段。"""
+    height, width = mask.shape
+    row_runs: list[list[int]] = [[] for _ in range(height)]
+    if height == 0 or width == 0:
+        return [], row_runs
+    foreground = np.asarray(mask > 0, dtype=np.uint8)
+    if not foreground.any():
+        return [], row_runs
+    padded = np.pad(foreground, ((0, 0), (1, 1)), mode="constant")
+    diff = np.diff(padded.astype(np.int8, copy=False), axis=1)
+    start_rows, start_cols = np.nonzero(diff == 1)
+    _end_rows, end_cols = np.nonzero(diff == -1)
+    runs: list[tuple[int, int, int]] = []
+    for row, start, end in zip(start_rows.tolist(), start_cols.tolist(), (end_cols - 1).tolist()):
+        row = int(row)
+        row_runs[row].append(len(runs))
+        runs.append((row, int(start), int(end)))
+    return runs, row_runs
+
+
 def halcon_components(mask: np.ndarray) -> list[np.ndarray]:
     """HALCON connection：前景八連通，依掃描遇到的第一個像素排序。"""
     height, width = mask.shape
-    foreground = mask > 0
-    runs: list[tuple[int, int, int]] = []
-    row_runs: list[list[int]] = []
-    for row in range(height):
-        line = foreground[row]
-        indices: list[int] = []
-        col = 0
-        while col < width:
-            if not line[col]:
-                col += 1
-                continue
-            start = col
-            while col < width and line[col]:
-                col += 1
-            indices.append(len(runs))
-            runs.append((row, start, col - 1))
-        row_runs.append(indices)
+    runs, row_runs = _foreground_runs(mask)
     if not runs:
         return []
     parent = list(range(len(runs)))
@@ -1371,6 +1490,101 @@ def copy_obj(obj, index, number, *, ctx):
     return Result([Region(region.width, region.height, picked, multi_color=region.multi_color, links=picked_links)], [])
 
 
+def _object_positions(value, count: int, kind: str) -> list[int]:
+    items = as_list(value)
+    if not items:
+        raise ValueError("Index 不能是空的")
+    found = []
+    for item in items:
+        pos = int(round(float(item)))
+        if pos < 1 or pos > count:
+            raise IndexError(f"{kind}索引 {pos} 超出範圍 1..{count}")
+        if pos not in found:
+            found.append(pos)
+    return found
+
+
+def _splice_objects(source, start: int, remove: int, incoming):
+    if isinstance(source, XLD):
+        if not isinstance(incoming, XLD):
+            raise ValueError("插入的物件也要是輪廓")
+        contours = list(source.contours)
+        contours[start : start + remove] = list(incoming.contours)
+        return Result([XLD(source.width, source.height, contours, multi_color=len(contours) > 1)], [])
+    region = expect_region(source, "Objects")
+    added = expect_region(incoming, "ObjectsInsert")
+    if (region.width, region.height) != (added.width, added.height):
+        raise ValueError("兩個區域的尺寸不同")
+    objects = list(region.objects)
+    objects[start : start + remove] = list(added.objects)
+    return Result([Region(region.width, region.height, objects, multi_color=len(objects) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Objects", "物件集合")],
+    [P("ObjectsReduced", "拿掉之後的物件")],
+    [P("Index", "從 1 開始，可以是 tuple")],
+    [],
+    "拿掉指定物件",
+    "索引從 1 開始。其餘物件的順序不變。區域和輪廓都可以。",
+    "Vizion.remove_obj (Objects, ObjectsReduced, 2)",
+)
+def remove_obj(obj, index, *, ctx):
+    if isinstance(obj, XLD):
+        positions = _object_positions(index, len(obj.contours), "輪廓")
+        drop = set(positions)
+        kept = [contour for pos, contour in enumerate(obj.contours, start=1) if pos not in drop]
+        return Result([XLD(obj.width, obj.height, kept, multi_color=len(kept) > 1)], [])
+    region = expect_region(obj, "Objects")
+    positions = _object_positions(index, region.count(), "物件")
+    drop = set(positions)
+    kept = [mask for pos, mask in enumerate(region.objects, start=1) if pos not in drop]
+    return Result([Region(region.width, region.height, kept, multi_color=len(kept) > 1)], [])
+
+
+@operator(
+    "區域",
+    [P("Objects", "物件集合"), P("ObjectsReplace", "換上去的物件")],
+    [P("ObjectsReplaced", "替換後的物件")],
+    [P("Index", "從 1 開始")],
+    [],
+    "替換一個物件",
+    "索引從 1 開始。那個位置換成新的物件，後面的順序跟著往後。區域和輪廓都可以。",
+    "Vizion.replace_obj (Objects, ObjectsReplace, ObjectsReplaced, 2)",
+)
+def replace_obj(obj, incoming, index, *, ctx):
+    kind = "輪廓" if isinstance(obj, XLD) else "物件"
+    count = len(obj.contours) if isinstance(obj, XLD) else expect_region(obj, "Objects").count()
+    pos = _object_positions(index, count, kind)
+    if len(pos) != 1:
+        raise ValueError("Index 只能是一個")
+    return _splice_objects(obj, pos[0] - 1, 1, incoming)
+
+
+@operator(
+    "區域",
+    [P("Objects", "物件集合"), P("ObjectsInsert", "要插入的物件")],
+    [P("ObjectsExtended", "插入後的物件")],
+    [P("Index", "從 1 開始，可以是物件數加 1")],
+    [],
+    "在指定位置插入物件",
+    "索引從 1 開始。新物件放在這個位置，原來的往後移。索引等於物件數加 1 時接在最後。",
+    "Vizion.insert_obj (Objects, ObjectsInsert, ObjectsExtended, 1)",
+)
+def insert_obj(obj, incoming, index, *, ctx):
+    if isinstance(obj, XLD):
+        count = len(obj.contours)
+        kind = "輪廓"
+    else:
+        count = expect_region(obj, "Objects").count()
+        kind = "物件"
+    pos = whole(index, "Index")
+    if pos < 1 or pos > count + 1:
+        raise IndexError(f"{kind}索引 {pos} 超出範圍 1..{count + 1}")
+    return _splice_objects(obj, pos - 1, 0, incoming)
+
+
 @operator(
     "形態學",
     [P("Region", "輸入區域")],
@@ -1479,6 +1693,31 @@ def erosion_rectangle1(region, width, height, *, ctx):
 )
 def dilation_rectangle1(region, width, height, *, ctx):
     return morph_rect(region, width, height, "dilate")
+
+
+@operator(
+    "形態學",
+    [P("Region", "輸入區域")],
+    [P("RegionRank", "排序濾波後的區域")],
+    [P("Width", "視窗寬"), P("Height", "視窗高"), P("Rank", "視窗裡至少要幾個前景像素")],
+    [],
+    "區域的排序濾波",
+    "視窗裡的前景像素達到 Rank 就留下。Rank 為 1 時和同樣奇數寬高的 dilation_rectangle1 相同。Rank 等於寬乘高時和 erosion_rectangle1 相同。作用在區域聯集上。",
+    "Vizion.rank_region (Region, RegionRank, 3, 3, 1)",
+)
+def rank_region(region, width, height, rank, *, ctx):
+    source = expect_region(region, "Region")
+    wide = whole(width, "Width")
+    high = whole(height, "Height")
+    need = whole(rank, "Rank")
+    if wide < 1 or high < 1:
+        raise ValueError("Width 和 Height 至少要 1")
+    if need < 1 or need > wide * high:
+        raise ValueError("Rank 要在 1 到 Width 乘 Height")
+    mask = (source.union_mask() > 0).astype(np.uint8)
+    counts = cv2.boxFilter(mask, cv2.CV_32S, (wide, high), normalize=False, borderType=cv2.BORDER_CONSTANT)
+    out = np.where(counts >= need, np.uint8(255), np.uint8(0))
+    return region_out(source.width, source.height, out)
 
 
 @operator(
@@ -3505,25 +3744,29 @@ def find_shape_model(
     *,
     ctx,
 ):
-    from .shape_model import find_shape_model as search
+    from .shape_model import bind_search_cancel, find_shape_model as search, release_search_cancel
 
     picture = expect_image(image, "Image")
     shape = _expect_model(model)
     mode = text(subpixel, "SubPixel").lower()
     if mode not in ("none", "interpolation", "least_squares"):
         raise ValueError("SubPixel 只能是 none、interpolation 或 least_squares")
-    rows, cols, angles, scores = search(
-        picture,
-        shape,
-        scalar(angle_start, "AngleStart"),
-        scalar(angle_extent, "AngleExtent"),
-        scalar(min_score, "MinScore"),
-        whole(num_matches, "NumMatches"),
-        scalar(max_overlap, "MaxOverlap"),
-        mode,
-        whole(num_levels, "NumLevels"),
-        scalar(greediness, "Greediness"),
-    )
+    token = bind_search_cancel(lambda: bool(getattr(ctx, "cancel", False)))
+    try:
+        rows, cols, angles, scores = search(
+            picture,
+            shape,
+            scalar(angle_start, "AngleStart"),
+            scalar(angle_extent, "AngleExtent"),
+            scalar(min_score, "MinScore"),
+            whole(num_matches, "NumMatches"),
+            scalar(max_overlap, "MaxOverlap"),
+            mode,
+            whole(num_levels, "NumLevels"),
+            scalar(greediness, "Greediness"),
+        )
+    finally:
+        release_search_cancel(token)
     rows, cols = _with_origin(rows, cols, shape)
     return Result([], [rows, cols, angles, scores])
 
@@ -4392,6 +4635,32 @@ def angle_lx(row1, column1, row2, column2, *, ctx):
     return Result([], [_line_phi(scalar(row1, "Row1"), scalar(column1, "Column1"), scalar(row2, "Row2"), scalar(column2, "Column2"))])
 
 
+def _fold_orientation(phi: float) -> float:
+    while phi > math.pi / 2:
+        phi -= math.pi
+    while phi < -math.pi / 2:
+        phi += math.pi
+    return phi
+
+
+@operator(
+    "量測",
+    [],
+    [],
+    [
+        P("Row1", "起點列"), P("Column1", "起點行"),
+        P("Row2", "終點列"), P("Column2", "終點行"),
+    ],
+    [P("Phi", "無向直線的角度，弳度")],
+    "無向直線的方向",
+    "把 angle_lx 收到 −π/2 到 π/2。朝右和朝左都是 0，朝下是 π/2。",
+    "Vizion.line_orientation (0, 0, 0, 10, Phi)",
+)
+def line_orientation(row1, column1, row2, column2, *, ctx):
+    phi = _line_phi(scalar(row1, "Row1"), scalar(column1, "Column1"), scalar(row2, "Row2"), scalar(column2, "Column2"))
+    return Result([], [_fold_orientation(phi)])
+
+
 @operator(
     "量測",
     [],
@@ -4714,12 +4983,13 @@ def intersection_segment_circle(row1, column1, row2, column2, row, column, radiu
 
 
 GROUP_ORDER = [
-    "檔案", "灰階與濾波", "幾何", "分割", "形態學", "區域", "特徵", "輪廓", "量測",
-    "文字", "條碼", "相機", "標定", "三維", "分類", "形狀匹配", "NCC定位", "顯示", "矩陣", "Tuple",
+    "檔案", "系統", "灰階與濾波", "幾何", "分割", "形態學", "區域", "特徵", "輪廓", "量測",
+    "文字", "條碼", "相機", "通訊", "標定", "三維", "分類", "形狀匹配", "NCC定位", "顯示", "矩陣", "Tuple",
 ]
 
 GROUP_PRINCIPLE = {
-    "檔案": "影像以 8 位元讀寫。灰階是一層，彩色是藍、綠、紅三層。",
+    "檔案": "影像以 8 位元讀寫。文字檔的相對路徑從專案目錄起算。",
+    "系統": "讀這台電腦的時間、處理器數量和單調秒數。等待會停住這一步，最長 30 秒。",
     "灰階與濾波": "對每個像素做灰階運算，位置不變，輸出仍是影像。",
     "幾何": "用齊次矩陣描述平移、旋轉、縮放或投影，再套到點、區域或影像。",
     "分割": "依灰階門檻或相連的像素，把前景和背景分開。",
@@ -4731,7 +5001,7 @@ GROUP_PRINCIPLE = {
     "文字": "先在影像上找出字的位置，再把筆畫讀成字串。",
     "條碼": "依條碼或二維碼的模組規則畫出符號，或從影像解回字串。",
     "相機": "打開相機裝置，抓一張畫面進來。",
-    "標定": "用已知的對應點，求出相機或平面之間的轉換。",
+    "通訊": "用 Windows API 開關序列埠，並用本機 socket 連線讀寫位元組。loopback 只在這支程式裡把寫出的資料讀回來。",
     "三維": "對點雲或高度圖計算平面、距離或曲面。",
     "分類": "用樣本的特徵，把物件分成事先定好的類別。",
     "形狀匹配": "把教導過的邊緣和場景比對，找出位置、角度和尺度。",

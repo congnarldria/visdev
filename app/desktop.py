@@ -121,8 +121,154 @@ class DesktopApi:
     def open_feature_window(self, url: str) -> bool:
         return self._open_tool("區域特徵", url, 880, 720, (640, 480))
 
+    def open_gfx_window(self, url: str) -> bool:
+        return self._open_tool("圖形視窗", url, 960, 720, (640, 480))
+
     def open_threshold_window(self, url: str) -> bool:
         return self._open_tool("二值化", url, 920, 720, (640, 520))
+
+    def _main_window(self):
+        import webview
+
+        for window in webview.windows:
+            if str(window.title).startswith("VisDev"):
+                return window
+        return webview.windows[0] if webview.windows else None
+
+    def _picked_path(self, chosen) -> str:
+        if not chosen:
+            return ""
+        if isinstance(chosen, (list, tuple)):
+            return str(chosen[0]) if chosen else ""
+        return str(chosen)
+
+    def _portable_path(self, path: str) -> str:
+        file = Path(path).expanduser()
+        try:
+            resolved = file.resolve()
+        except OSError:
+            resolved = file
+        for folder, prefix in ((ROOT / "samples", "samples"), (ROOT / "workspace", "workspace")):
+            try:
+                rel = resolved.relative_to(folder.resolve())
+            except ValueError:
+                continue
+            if rel.parts:
+                return f"{prefix}/{rel.as_posix()}"
+        return resolved.as_posix()
+
+    def pick_data_file(self, kind: str = "image") -> dict:
+        import webview
+
+        window = self._main_window()
+        if window is None:
+            return {"cancelled": True}
+        filters = {
+            "image": ("影像 (*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff)", "All files (*.*)"),
+            "plate": ("標定描述檔 (*.cpd;*.descr)", "All files (*.*)"),
+        }.get(str(kind), ("All files (*.*)",))
+        chosen = window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=filters)
+        path = self._picked_path(chosen)
+        if not path:
+            return {"cancelled": True}
+        return {"cancelled": False, "path": self._portable_path(path)}
+
+    def open_program_dialog(self) -> dict:
+        import webview
+
+        window = self._main_window()
+        if window is None:
+            return {"cancelled": True}
+        chosen = window.create_file_dialog(
+            webview.OPEN_DIALOG,
+            allow_multiple=False,
+            file_types=("程式 (*.viz;*.hdv;*.hdev;*.hdvp;*.hdpl)", "All files (*.*)"),
+        )
+        path = self._picked_path(chosen)
+        if not path:
+            return {"cancelled": True}
+        return self._read_program(path)
+
+    def save_program_dialog(self, suggested: str, source: str) -> dict:
+        import webview
+
+        window = self._main_window()
+        if window is None:
+            return {"cancelled": True}
+        chosen = window.create_file_dialog(
+            webview.SAVE_DIALOG,
+            save_filename=suggested or "program.viz",
+            file_types=("VisDev (*.viz;*.hdv)", "All files (*.*)"),
+        )
+        path = self._picked_path(chosen)
+        if not path:
+            return {"cancelled": True}
+        written = self._write_program(path, source)
+        return {"cancelled": False, "path": written, "name": Path(written).name}
+
+    def open_project_folder(self, name: str) -> dict:
+        from app.main import reveal_project_folder
+
+        try:
+            return reveal_project_folder(name)
+        except ValueError as exc:
+            return {"error": str(exc), "opened": False}
+
+    def write_program_path(self, path: str, source: str) -> dict:
+        written = self._write_program(path, source)
+        return {"path": written, "name": Path(written).name}
+
+    def _read_program(self, path: str) -> dict:
+        file = Path(path)
+        if not file.is_file():
+            return {"cancelled": False, "error": "找不到程式"}
+        raw = file.read_bytes()
+        lower = file.name.lower()
+        if lower.endswith((".hdev", ".hdvp", ".hdpl", ".dev", ".dvp")):
+            from app.engine.hdevelop_file import convert_hdevelop
+
+            source, skipped = convert_hdevelop(raw)
+            return {
+                "cancelled": False,
+                "source": source,
+                "name": f"{file.stem}.viz",
+                "path": "",
+                "skipped": skipped,
+                "converted": True,
+            }
+        return {
+            "cancelled": False,
+            "source": raw.decode("utf-8"),
+            "name": file.name,
+            "path": str(file),
+            "skipped": [],
+            "converted": False,
+        }
+
+    def _write_program(self, path: str, source: str) -> str:
+        file = Path(path)
+        if file.suffix.lower() not in (".viz", ".hdv"):
+            file = file.with_suffix(".viz")
+        file.parent.mkdir(parents=True, exist_ok=True)
+        text = str(source).replace("\r\n", "\n").replace("\r", "\n")
+        file.write_text(text, encoding="utf-8")
+        return str(file)
+
+
+def report_startup_failure(text: str) -> None:
+    log = ROOT / "visdev.log"
+    try:
+        log.write_text(text, encoding="utf-8")
+    except OSError:
+        pass
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, text[-1500:], "VisDev 沒有啟動", 0x00000010)
+    except Exception:
+        return
 
 
 def main() -> None:
@@ -133,7 +279,7 @@ def main() -> None:
     import webview
 
     window = webview.create_window(
-        "VisDev 視覺開發環境",
+        "VisDev 1.1 beta",
         f"http://127.0.0.1:{port}/",
         width=1440,
         height=900,
@@ -151,6 +297,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
-        log = ROOT / "visdev.log"
-        log.write_text(traceback.format_exc(), encoding="utf-8")
+        report_startup_failure(traceback.format_exc())
         raise

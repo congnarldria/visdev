@@ -1,0 +1,23 @@
+* 卡尺把尖刺平均掉
+* 直線計量的 MeasureLength2 是卡尺沿邊緣的半寬。0 只看中心一條線。大於 0 會把這個寬度裡的灰階平均，再找邊緣。
+* 亮區從列 40 開始，真正的邊緣在 39.5。每支卡尺正中間那一行被往下拉到 45.5。
+* 半寬 0 跟著尖刺走到 45.5。半寬 1 把尖刺平均掉，兩端都回到 39.5。圓和橢圓的卡尺同樣沿切向平均。
+Vizion.gen_image_const (Base, 'byte', 140, 90)
+Vizion.gen_image_proto (Base, Sheet, 30)
+Vizion.gen_rectangle1 (Bar, 40, 0, 89, 139)
+Vizion.paint_region (Bar, Sheet, Image, 190, 'fill')
+Cols := [26, 29, 33, 36, 40, 43, 47, 51, 54, 58, 61, 65, 68, 72, 75, 79, 82, 86, 89, 93, 97, 100, 104, 107, 111, 114]
+for Index := 1 to |Cols| by 1
+Vizion.gen_rectangle1 (Spike, 40, Cols[Index], 45, Cols[Index])
+Vizion.paint_region (Spike, Image, Image, 30, 'fill')
+endfor
+Vizion.create_metrology_model (Model)
+Vizion.set_metrology_model_image_size (Model, 140, 90)
+Vizion.add_metrology_object_line_measure (Model, 40, 20, 40, 120, 14, 0, 1, 10, Index0)
+Vizion.add_metrology_object_line_measure (Model, 40, 20, 40, 120, 14, 1, 1, 10, Index1)
+Vizion.apply_metrology_model (Image, Model)
+Vizion.get_metrology_object_result (Model, 0, 'all', 'result_type', 'row_begin', ThinBegin)
+Vizion.get_metrology_object_result (Model, 0, 'all', 'result_type', 'row_end', ThinEnd)
+Vizion.get_metrology_object_result (Model, 1, 'all', 'result_type', 'row_begin', WideBegin)
+Vizion.get_metrology_object_result (Model, 1, 'all', 'result_type', 'row_end', WideEnd)
+Vizion.dev_display (Image)

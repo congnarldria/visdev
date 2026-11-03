@@ -1,0 +1,66 @@
+* 哪個物件最像範本
+* 用法：範本一個方塊。拿去比對同樣的方塊、較大的方塊、轉 20 度的方塊，和一根長條。
+* 分數越小越像。搬家、旋轉、放大縮小都不計。i1 最常用。Score[1] 從 1 開始。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Template, 10, 10, 19, 19)
+Vizion.gen_rectangle1 (Same, 10, 40, 19, 49)
+Vizion.gen_rectangle1 (Bigger, 40, 40, 54, 54)
+Vizion.gen_rectangle2 (Tilted, 30, 60, rad(20), 6, 6)
+Vizion.gen_rectangle1 (Bar, 30, 10, 34, 39)
+Vizion.concat_obj (Same, Bigger, Pair)
+Vizion.concat_obj (Pair, Tilted, Three)
+Vizion.concat_obj (Three, Bar, Parts)
+* 四個分數：同樣的方塊是 0，較大的方塊也接近 0，轉過的約 0.00179，長條約 3.46192
+Vizion.shape_score (Parts, Template, 'i1', Score)
+S1 := Score[1]
+S2 := Score[2]
+S3 := Score[3]
+S4 := Score[4]
+* 只要最像或最不像的那一個，不必自己找最小最大
+Vizion.most_similar (Parts, Template, Best, 'i1')
+Vizion.area_center (Best, BestArea, BestRow, BestCol)
+BestN := BestArea[1]
+BestR := BestRow[1]
+BestC := BestCol[1]
+Vizion.least_similar (Parts, Template, Worst, 'i1')
+Vizion.area_center (Worst, WorstArea, WorstRow, WorstCol)
+WorstN := WorstArea[1]
+WorstR := WorstRow[1]
+WorstC := WorstCol[1]
+* near 最像的排前面，far 反過來。兩項都可省略，預設就是這樣
+Vizion.sort_shape (Parts, Template, Near, 'near', 'i1')
+Vizion.area_center (Near, NearArea, NearRow, NearCol)
+Near1 := NearArea[1]
+Near2 := NearArea[2]
+NearC := NearCol[1]
+Vizion.sort_shape (Parts, Template, FarSorted, 'far', 'i1')
+Vizion.area_center (FarSorted, FarArea, FarRow, FarCol)
+Far1 := FarArea[1]
+FarR := FarRow[1]
+* Rank 對齊原來的物件。Index 是由像到不像的原來編號，可接 select_obj
+Vizion.shape_rank (Parts, Template, 'i1', Rank)
+R1 := Rank[1]
+R2 := Rank[2]
+R3 := Rank[3]
+R4 := Rank[4]
+Vizion.shape_index (Parts, Template, 'i1', Index)
+I1 := Index[1]
+I2 := Index[2]
+I3 := Index[3]
+I4 := Index[4]
+* 0.01 留下方塊和轉過的方塊，長條被去掉
+Vizion.select_similar (Parts, Template, Kept, 0.01, 'i1')
+Vizion.count_obj (Kept, KeepN)
+Vizion.area_center (Kept, KeepArea, KeepRow, KeepCol)
+Keep1 := KeepArea[1]
+Keep2 := KeepArea[2]
+Keep3 := KeepArea[3]
+* 七個不變矩。方塊的 Hu1 約 0.16667。比像不像時，用上面的分數比較直接
+Vizion.hu_moments (Template, Hu1, Hu2, Hu3, Hu4, Hu5, Hu6, Hu7)
+H1 := Hu1[1]
+Vizion.hu_moments (Same, Same1, Same2, Same3, Same4, Same5, Same6, Same7)
+SameH := Same1[1]
+Vizion.paint_region (Best, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 14, 44, LikeGray)
+Vizion.get_grayval (Shown, 32, 24, BarGray)
+Vizion.dev_display (Shown)

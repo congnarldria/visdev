@@ -1,0 +1,33 @@
+* 量測剖面和一維函數
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_image_gray_ramp (Ramp, 0, 1, 0, 0, 0, 80, 60)
+Vizion.gen_measure_rectangle2 (30, 40, 0, 10, 0, 80, 60, 'bilinear', Rect)
+Vizion.measure_projection (Ramp, Rect, Profile)
+ProfileCount := |Profile|
+ProfileFirst := Profile[1]
+ProfileMid := Profile[21]
+ProfileLast := Profile[41]
+Vizion.measure_thresh (Ramp, Rect, 0, 40, 'all', ThreshRow, ThreshCol, ThreshDist)
+Vizion.translate_measure (Rect, 30, 50)
+Vizion.measure_projection (Ramp, Rect, Moved)
+MovedFirst := Moved[1]
+MovedLast := Moved[41]
+Vizion.gen_measure_arc (30, 40, 10, 0, rad(180), 0, 80, 60, 'bilinear', Arc)
+Vizion.measure_projection (Ramp, Arc, ArcProfile)
+ArcCount := |ArcProfile|
+ArcFirst := ArcProfile[1]
+ArcMid := ArcProfile[32]
+ArcLast := ArcProfile[63]
+Vizion.create_funct_1d_pairs ([0, 2], [10, 30], Curve)
+Vizion.get_y_value_funct_1d (Curve, 1, 'constant', MidY)
+Vizion.get_y_value_funct_1d (Curve, -1, 'constant', LowY)
+Vizion.get_y_value_funct_1d (Curve, 3, 'zero', HighY)
+Vizion.get_y_value_funct_1d (Curve, -1, 'mirror', MirrorY)
+Vizion.sample_funct_1d (Curve, 0, 2, 1, 'constant', Sampled)
+S1 := Sampled[1]
+S2 := Sampled[2]
+S3 := Sampled[3]
+Vizion.create_funct_1d_pairs ([0, 2], [-1, 1], Line)
+Vizion.zero_crossings_funct_1d (Line, Zeros)
+ZeroX := Zeros[1]
+Vizion.dev_display (Ramp)

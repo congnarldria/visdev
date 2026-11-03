@@ -1,0 +1,53 @@
+* 四個端點在哪
+* 用法：找真的有像素的端點，不是外框的空角。平邊時，上和下留最左邊的點，左和右留最上面的點。
+* top_edge 是最上的一整列，不是只有那一點。下、左、右也一樣。
+* 外框左上角缺一個像素時，最上點會往右移，最左點會往下移。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Bar, 10, 10, 19, 29)
+Vizion.gen_rectangle1 (Box, 30, 40, 39, 49)
+Vizion.gen_rectangle1 (Dot, 30, 40, 30, 40)
+Vizion.difference (Box, Dot, Cut)
+Vizion.concat_obj (Bar, Cut, Parts)
+Vizion.top_point (Parts, TopRow, TopCol)
+TR1 := TopRow[1]
+TC1 := TopCol[1]
+TR2 := TopRow[2]
+TC2 := TopCol[2]
+Vizion.bottom_point (Parts, BottomRow, BottomCol)
+BR1 := BottomRow[1]
+BC1 := BottomCol[1]
+Vizion.left_point (Parts, LeftRow, LeftCol)
+LR1 := LeftRow[1]
+LC1 := LeftCol[1]
+LR2 := LeftRow[2]
+LC2 := LeftCol[2]
+Vizion.right_point (Parts, RightRow, RightCol)
+RR1 := RightRow[1]
+RC1 := RightCol[1]
+RR2 := RightRow[2]
+RC2 := RightCol[2]
+* 長條的上邊有 20 個像素。缺角之後，上邊只剩 9 個，中心行是 45
+Vizion.top_edge (Parts, TopEdge)
+Vizion.area_center (TopEdge, TopArea, TopEdgeRow, TopEdgeCol)
+TA1 := TopArea[1]
+TER1 := TopEdgeRow[1]
+TEC1 := TopEdgeCol[1]
+TA2 := TopArea[2]
+TEC2 := TopEdgeCol[2]
+Vizion.left_edge (Parts, LeftEdge)
+Vizion.select_obj (LeftEdge, LeftCut, 2)
+Vizion.area_center (LeftCut, LeftArea, LeftEdgeRow, LeftEdgeCol)
+LA := LeftArea[1]
+LER := LeftEdgeRow[1]
+LEC := LeftEdgeCol[1]
+Vizion.right_edge (Parts, RightEdge)
+Vizion.select_obj (RightEdge, RightBar, 1)
+Vizion.area_center (RightBar, RightArea, RightEdgeRow, RightEdgeCol)
+RA := RightArea[1]
+RER := RightEdgeRow[1]
+REC := RightEdgeCol[1]
+Vizion.select_obj (TopEdge, TopBar, 1)
+Vizion.paint_region (TopBar, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 10, 19, EdgeGray)
+Vizion.get_grayval (Shown, 11, 19, BelowGray)
+Vizion.dev_display (Shown)

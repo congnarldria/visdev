@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>圖形視窗</title>
+  <link rel="icon" href="/static/magpie.ico">
+  <link rel="stylesheet" href="/static/app.css?v=31">
+  <style>
+    html, body { margin: 0; height: 100%; background: #14171c; color: #d5deea; }
+    body { display: flex; flex-direction: column; font: 13px/1.4 "Segoe UI", "Microsoft JhengHei", sans-serif; }
+    header { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid #2a3140; }
+    header strong { font-size: 14px; }
+    #title { color: #8b98ab; }
+    #stage { position: relative; flex: 1; min-height: 0; background: #101216; }
+    #view { width: 100%; height: 100%; display: block; }
+    #view.mode-select { cursor: default; }
+    #view.mode-pan { cursor: grab; }
+    #view.mode-zoom { cursor: zoom-in; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>圖形視窗</strong>
+    <span id="title">跟主視窗同一張圖。點選、手抓、拉框放大。</span>
+    <div id="mouse" class="mouse-mode" role="group" aria-label="滑鼠">
+      <button type="button" data-mode="select" title="點選">點選</button>
+      <button type="button" data-mode="pan" title="手抓移動">移動</button>
+      <button type="button" data-mode="zoom" title="拉一個範圍放大">放大</button>
+    </div>
+    <div class="spacer"></div>
+    <button id="fit" type="button">符合</button>
+    <button id="one" type="button">1:1</button>
+    <button id="out" type="button">−</button>
+    <button id="in" type="button">+</button>
+  </header>
+  <div id="stage"><canvas id="view"></canvas></div>
+  <script src="/static/geom.js?v=5"></script>
+  <script src="/static/pick_sync.js?v=2"></script>
+  <script src="/static/view.js?v=6"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get("id") || "";
+    const title = document.getElementById("title");
+    const buttons = document.querySelectorAll("#mouse button");
+    const view = VisdevView.mount(document.getElementById("view"), {
+      onMode(mode) {
+        buttons.forEach((button) => {
+          const on = button.dataset.mode === mode;
+          button.classList.toggle("on", on);
+          button.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+      },
+      onPick(hit) {
+        const payload = VisdevPick.pack("gfx", hit, sessionId);
+        applySelection(VisdevPick.graphicsSelection(payload));
+        try { localStorage.setItem("visdev.featurePick", JSON.stringify(payload)); } catch (_err) { /* 圖太大時仍走頻道 */ }
+        channel.postMessage(payload);
+      },
+    });
+    const channel = new BroadcastChannel("visdev-features");
+    const displayChannel = new BroadcastChannel("visdev-display");
+    buttons.forEach((button) => button.addEventListener("click", () => view.setMode(button.dataset.mode)));
+    document.getElementById("fit").onclick = () => view.fit(true);
+    document.getElementById("one").onclick = () => view.one();
+    document.getElementById("out").onclick = () => view.zoomBy(1 / 1.25);
+    document.getElementById("in").onclick = () => view.zoomBy(1.25);
+    const pickWatch = VisdevPick.createWatch("gfx");
+    let currentPick = null;
+    let pictureLabel = "跟主視窗同一張圖。點選、手抓、拉框放大。";
+    function pickTitle(selection) {
+      if (!selection) return pictureLabel;
+      const base = `已點選 ${selection.name} #${selection.index + 1}`;
+      return selection.summary ? `${base} · ${selection.summary}` : base;
+    }
+    function applySelection(selection) {
+      const same = VisdevPick.sameSelection(currentPick, selection);
+      currentPick = selection;
+      if (!same) view.setSelection(selection);
+      title.textContent = pickTitle(selection);
+    }
+    function acceptPick(message, force) {
+      const next = pickWatch.accept(message, force);
+      if (!next) return;
+      applySelection(next.selection);
+    }
+    channel.onmessage = (event) => acceptPick(event.data);
+    window.addEventListener("storage", (event) => {
+      if (event.key !== "visdev.featurePick" || !event.newValue) return;
+      try { acceptPick(JSON.parse(event.newValue)); } catch (_err) { /* 忽略壞掉的點選 */ }
+    });
+    setInterval(() => {
+      try { acceptPick(JSON.parse(localStorage.getItem("visdev.featurePick") || "null")); } catch (_err) { /* 尚未點選 */ }
+    }, 300);
+    try { acceptPick(JSON.parse(localStorage.getItem("visdev.featurePick") || "null"), true); } catch (_err) { /* 尚未點選 */ }
+    let displayRev = null;
+    function showDisplay(display, frame) {
+      if (frame) view.setFrame(frame);
+      pictureLabel = display ? `${display.width} × ${display.height}` : "圖形視窗是空的";
+      view.setDisplay(display);
+      title.textContent = pickTitle(currentPick);
+    }
+    displayChannel.onmessage = (event) => {
+      const data = event.data;
+      if (!data || data.type !== "display") return;
+      if (sessionId && data.id && data.id !== sessionId) return;
+      if (data.displayRev != null) displayRev = data.displayRev;
+      if (!data.display) {
+        showDisplay(null, data.frame);
+        return;
+      }
+      showDisplay(data.display, data.frame);
+    };
+    async function pull() {
+      if (!sessionId) return;
+      const query = displayRev == null ? "" : `?displayRev=${encodeURIComponent(displayRev)}`;
+      const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/display${query}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.displayRev != null) displayRev = data.displayRev;
+      if (data.displayKept) return;
+      showDisplay(data.display || null);
+    }
+    pull();
+    setInterval(pull, 800);
+  </script>
+</body>
+</html>

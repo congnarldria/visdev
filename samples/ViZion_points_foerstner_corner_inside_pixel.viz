@@ -1,0 +1,30 @@
+* 角點修進像素裡面
+* points_foerstner 先在結構張量上找整數峰，再用周圍的高斯導數解加權最小二乘，把角點修到次像素。
+* 方塊左上角的整數峰停在列 25、行 37。次像素把它拉到 24.13、36.13。
+* 整張圖往下 0.4、往右 0.35 之後，整數峰還是 25、37。次像素跟到 24.41、36.39，比整數峰更靠近平移後的角。
+Vizion.gen_image_const (Base, 'byte', 120, 90)
+Vizion.gen_image_proto (Base, Sheet, 20)
+Vizion.gen_rectangle1 (Box, 24, 36, 64, 84)
+Vizion.paint_region (Box, Sheet, Image, 220, 'fill')
+Vizion.points_foerstner (Image, 1.2, 0.04, Row, Col)
+StillRow := 0
+StillCol := 0
+for Index := 1 to |Row| by 1
+if (Row[Index] < 40 and Col[Index] < 50)
+StillRow := Row[Index]
+StillCol := Col[Index]
+endif
+endfor
+Vizion.hom_mat2d_identity (Id)
+Vizion.hom_mat2d_translate (Id, 0.4, 0.35, Shift)
+Vizion.affine_trans_image (Image, Moved, Shift, 'bicubic', 'false')
+Vizion.points_foerstner (Moved, 1.2, 0.04, MRow, MCol)
+CornerRow := 0
+CornerCol := 0
+for Index := 1 to |MRow| by 1
+if (MRow[Index] < 40 and MCol[Index] < 50)
+CornerRow := MRow[Index]
+CornerCol := MCol[Index]
+endif
+endfor
+Vizion.dev_display (Moved)

@@ -1,0 +1,61 @@
+* 兩個區域隔多遠
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (GapA, 10, 10, 19, 19)
+Vizion.gen_rectangle1 (GapB, 10, 30, 19, 39)
+Vizion.gen_rectangle1 (TouchA, 40, 10, 44, 14)
+Vizion.gen_rectangle1 (TouchB, 40, 15, 44, 19)
+Vizion.gen_rectangle1 (OverA, 50, 40, 54, 49)
+Vizion.gen_rectangle1 (OverB, 50, 45, 54, 54)
+Vizion.concat_obj (GapA, TouchA, Pair1)
+Vizion.concat_obj (Pair1, OverA, Parts)
+Vizion.concat_obj (GapB, TouchB, Pair2)
+Vizion.concat_obj (Pair2, OverB, Other)
+Vizion.distance_objects (Parts, Other, 'chessboard', MinDist)
+Min1 := MinDist[1]
+Min2 := MinDist[2]
+Min3 := MinDist[3]
+Vizion.distance_objects_far (Parts, Other, 'chessboard', FarDist)
+Far1 := FarDist[1]
+Far2 := FarDist[2]
+Far3 := FarDist[3]
+Vizion.nearest_object_point (Parts, Other, 'chessboard', NearRow1, NearCol1, NearRow2, NearCol2, NearDist)
+NearR1 := NearRow1[1]
+NearC1 := NearCol1[1]
+NearR2 := NearRow2[1]
+NearC2 := NearCol2[1]
+NearD1 := NearDist[1]
+TouchR := NearRow1[2]
+TouchC := NearCol1[2]
+TouchD := NearDist[2]
+OverR := NearRow1[3]
+OverC := NearCol1[3]
+OverD := NearDist[3]
+Vizion.farthest_object_point (Parts, Other, 'chessboard', FarRow1, FarCol1, FarRow2, FarCol2, FarPoint)
+FarR1 := FarRow1[1]
+FarC1 := FarCol1[1]
+FarP1 := FarPoint[1]
+Vizion.centroid_offset (Parts, Other, 'chessboard', OffRow, OffCol)
+OffR1 := OffRow[1]
+OffC1 := OffCol[1]
+OffC2 := OffCol[2]
+Vizion.centroid_distance (Parts, Other, 'chessboard', CenterDist)
+Center1 := CenterDist[1]
+Center2 := CenterDist[2]
+Vizion.select_object_distance (Parts, Other, GapKept, 11, 11, 'chessboard')
+Vizion.count_obj (GapKept, GapCount)
+Vizion.select_object_distance (Parts, Other, GapSwap, 20, 11, 'chessboard')
+Vizion.count_obj (GapSwap, SwapCount)
+Vizion.select_object_distance (Parts, Other, TouchKept, 1, 1, 'chessboard')
+Vizion.count_obj (TouchKept, TouchCount)
+Vizion.select_object_distance (Parts, Other, OverKept, 0, 0, 'chessboard')
+Vizion.count_obj (OverKept, OverCount)
+Vizion.facing_region (Parts, Other, Edge, 'chessboard')
+Vizion.area_center (Edge, EdgeArea, EdgeRow, EdgeCol)
+EdgeN := EdgeArea[1]
+EdgeR := EdgeRow[1]
+EdgeC := EdgeCol[1]
+Vizion.select_obj (Edge, GapEdge, 1)
+Vizion.paint_region (GapEdge, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 10, 19, EdgeGray)
+Vizion.get_grayval (Shown, 10, 18, InsideGray)
+Vizion.dev_display (Shown)

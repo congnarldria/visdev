@@ -1,0 +1,16 @@
+* 橫條的矩形度和方向
+* 寬條的方向是 0。rectangularity 和 region_features 的矩形度相同。
+* line_orientation 把朝左的水平線也收成 0。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Wide, 10, 10, 14, 29)
+Vizion.orientation_region (Wide, Phi)
+Vizion.rectangularity (Wide, Rect)
+Vizion.circularity (Wide, Circ)
+Vizion.eccentricity (Wide, Ecc)
+Vizion.region_features (Wide, 'rectangularity', FeatRect)
+Vizion.region_features (Wide, 'circularity', FeatCirc)
+Vizion.region_features (Wide, 'anisometry', FeatEcc)
+Vizion.line_orientation (10, 10, 10, 29, LinePhi)
+Vizion.angle_lx (10, 10, 10, 29, Axis)
+Angle := Phi[1]
+Rect1 := Rect[1]

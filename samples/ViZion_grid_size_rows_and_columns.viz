@@ -1,0 +1,55 @@
+* 物件排成幾列幾行
+* 用法：很多相同的小物件排成陣列時，用這個看它在第幾列第幾行，並把缺掉的格子補出來。
+* Gap 可省略。0 表示用物件高度：中心列差比高度大，就換下一列。列距比物件還近時，再自己填較小的 Gap。
+* 行距用同一列裡最小的相鄰間距。某一格的間距大約是兩倍，中間就當缺一格。每一列都缺同一行時看不出來。
+* 編號從 1 開始，Row[1] 對齊原來的第一個物件。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (A, 10, 10, 13, 13)
+Vizion.gen_rectangle1 (B, 10, 30, 13, 33)
+Vizion.gen_rectangle1 (C, 10, 50, 13, 53)
+Vizion.gen_rectangle1 (D, 30, 10, 33, 13)
+Vizion.gen_rectangle1 (E, 30, 50, 33, 53)
+Vizion.concat_obj (A, B, Pair)
+Vizion.concat_obj (Pair, C, Three)
+Vizion.concat_obj (Three, D, Four)
+Vizion.concat_obj (Four, E, Parts)
+* 上面三格、下面左右各一格。仍是 2 列 3 行，列距和行距都是 20
+Vizion.grid_size (Parts, GridRows, GridCols)
+Vizion.grid_pitch (Parts, RowPitch, ColPitch)
+Vizion.grid_index (Parts, RowIndex, ColIndex)
+R1 := RowIndex[1]
+R4 := RowIndex[4]
+R5 := RowIndex[5]
+K1 := ColIndex[1]
+K2 := ColIndex[2]
+K3 := ColIndex[3]
+K4 := ColIndex[4]
+K5 := ColIndex[5]
+* 由左上讀到右下。缺的中間格會跳過
+Vizion.sort_grid (Parts, Ordered)
+Vizion.area_center (Ordered, OrdArea, OrdRow, OrdCol)
+S1C := OrdCol[1]
+S3C := OrdCol[3]
+S4C := OrdCol[4]
+S5R := OrdRow[5]
+* 缺的是第二列第二行，補一塊和別的物件一樣大的方塊
+Vizion.missing_cell (Parts, Missing)
+Vizion.count_obj (Missing, MissN)
+Vizion.area_center (Missing, MissArea, MissRow, MissCol)
+MissA := MissArea[1]
+MissR := MissRow[1]
+MissC := MissCol[1]
+* 有物件就取出來。空格用 cell_center，不必真的有物件
+Vizion.select_grid (Parts, Cell, 2, 3)
+Vizion.area_center (Cell, CellArea, CellRow, CellCol)
+CellA := CellArea[1]
+CellR := CellRow[1]
+CellC := CellCol[1]
+Vizion.cell_center (Parts, 2, 2, HoleR, HoleC)
+* 像素值是行號。第一行是 1，缺的格子是 0
+Vizion.grid_label (Parts, Labeled)
+Vizion.get_grayval (Labeled, 11, 11, G1)
+Vizion.get_grayval (Labeled, 11, 31, G2)
+Vizion.get_grayval (Labeled, 31, 51, G3)
+Vizion.get_grayval (Labeled, 31, 31, G0)
+Vizion.dev_display (Labeled)

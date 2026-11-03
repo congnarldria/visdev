@@ -1,0 +1,51 @@
+* 每個物件的平面
+Vizion.gen_image_gray_ramp (Ramp, 0, 1, 0, 0, 0, 80, 60)
+Vizion.gen_rectangle1 (BoxA, 10, 10, 20, 20)
+Vizion.gen_rectangle1 (BoxB, 10, 40, 20, 50)
+Vizion.gen_rectangle1 (BoxC, 40, 40, 42, 42)
+Vizion.concat_obj (BoxA, BoxB, Pair)
+Vizion.concat_obj (Pair, BoxC, Parts)
+Vizion.set_grayval (Ramp, Peak, [40, 40, 40, 41, 41, 41, 42, 42, 42], [40, 41, 42, 40, 41, 42, 40, 41, 42], [0, 0, 0, 0, 9, 0, 0, 0, 0])
+Vizion.fit_plane_objects (Parts, Peak, Alpha, Beta, Gamma)
+Beta1 := Beta[1]
+Beta3 := Beta[3]
+Gamma3 := Gamma[3]
+Vizion.flatness_objects (Parts, Peak, Flatness)
+Flat1 := Flatness[1]
+Flat3 := Flatness[3]
+Vizion.mean_plane_objects (Parts, Peak, 0, 0, 0, Mean)
+Mean1 := Mean[1]
+Mean2 := Mean[2]
+Mean3 := Mean[3]
+Vizion.volume_plane_objects (Parts, Peak, 0, 0, 0, 'above', Volume)
+Vol1 := Volume[1]
+Vol2 := Volume[2]
+Vol3 := Volume[3]
+Vizion.extreme_plane_objects (Parts, Peak, 0, 0, 0, 'high', HighRow, HighCol, HighZ)
+HighR1 := HighRow[1]
+HighC1 := HighCol[1]
+HighZ1 := HighZ[1]
+HighC2 := HighCol[2]
+HighR3 := HighRow[3]
+HighC3 := HighCol[3]
+HighZ3 := HighZ[3]
+Vizion.extreme_plane_objects (Parts, Peak, 0, 0, 0, 'low', LowRow, LowCol, LowZ)
+LowC1 := LowCol[1]
+LowZ1 := LowZ[1]
+Vizion.select_flatness (Parts, Peak, Warp, 1, 10)
+Vizion.count_obj (Warp, WarpCount)
+Vizion.area_center (Warp, WarpArea, WarpRow, WarpCol)
+WarpN := WarpArea[1]
+Vizion.select_flatness (Parts, Peak, WarpSwap, 10, 1)
+Vizion.count_obj (WarpSwap, SwapCount)
+Vizion.select_flatness (Parts, Peak, Planar, 0, 0.001)
+Vizion.count_obj (Planar, PlanarCount)
+Vizion.select_plane_mean (Parts, Peak, Tall, 0, 0, 0, 40, 50)
+Vizion.area_center (Tall, TallArea, TallRow, TallCol)
+TallC := TallCol[1]
+Vizion.level_objects (Parts, Peak, Leveled, 128)
+Vizion.get_grayval (Leveled, 15, 15, FlatGray)
+Vizion.get_grayval (Leveled, 41, 41, BumpGray)
+Vizion.get_grayval (Leveled, 40, 40, EdgeGray)
+Vizion.get_grayval (Leveled, 0, 5, OutGray)
+Vizion.dev_display (Leveled)

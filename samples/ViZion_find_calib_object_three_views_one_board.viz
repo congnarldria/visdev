@@ -1,0 +1,24 @@
+* 三張同一塊棋盤放進同一個標定
+* 內角點是 5 列 7 行，格子邊長 36。仍是一台相機、一塊板。第一張放進去之後是 1，三張都放進去是 3。
+* 每張影像的寬高用 image_size 讀，不放進相機的九個參數。這三張都是寬 428、高 356。
+Vizion.read_image (Front, 'samples/calib_board_front.png')
+Vizion.read_image (Left, 'samples/calib_board_left.png')
+Vizion.read_image (Right, 'samples/calib_board_right.png')
+Vizion.create_calib_data ('calibration_object', 1, 1, CalibDataID)
+Vizion.set_calib_data_calib_object (CalibDataID, 0, '5,7,36')
+Vizion.find_calib_object (Front, CalibDataID, 0, 0, '', '')
+Vizion.get_calib_data (CalibDataID, 'model', 0, 'num_poses', AfterOne)
+Vizion.find_calib_object (Left, CalibDataID, 0, 0, '', '')
+Vizion.find_calib_object (Right, CalibDataID, 0, 0, '', '')
+Vizion.get_calib_data (CalibDataID, 'model', 0, 'num_poses', Count)
+Vizion.calibrate_cameras (CalibDataID, Error)
+Vizion.get_calib_data (CalibDataID, 'calib_obj_pose', 0, 'pose', Pose0)
+Vizion.get_calib_data (CalibDataID, 'calib_obj_pose', 2, 'pose', Pose2)
+Vizion.get_calib_data (CalibDataID, 'camera', 0, 'params', CamParam)
+Vizion.get_calib_data (CalibDataID, 'model', 0, 'image_size', Size0)
+Vizion.get_calib_data (CalibDataID, 'model', 2, 'image_size', Size2)
+ImageWidth := Size0[1]
+ImageHeight := Size0[2]
+LastWidth := Size2[1]
+LastHeight := Size2[2]
+Vizion.dev_display (Front)

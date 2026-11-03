@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VisDev 視覺開發環境</title>
   <link rel="icon" href="/static/magpie.ico">
-  <link rel="stylesheet" href="/static/app.css?v=30">
+  <link rel="stylesheet" href="/static/app.css?v=33">
 </head>
 <body>
   <nav class="menubar" aria-label="主選單">
@@ -13,9 +13,21 @@
       <button type="button">檔案</button>
       <div class="menu-drop" hidden>
         <button type="button" data-cmd="new">新增<span class="menu-kbd">Ctrl+N</span></button>
+        <button type="button" data-cmd="project">專案</button>
+        <div class="menu-sub">
+          <button type="button" data-submenu="1">範本<span class="menu-arrow">▸</span></button>
+          <div class="menu-fly" hidden>
+            <button type="button" data-cmd="inspectTemplate">零件檢測</button>
+            <button type="button" data-cmd="gaugeTemplate">邊緣量測</button>
+            <button type="button" data-cmd="locateTemplate">形狀定位</button>
+            <button type="button" data-cmd="stereoTemplate">相對姿態</button>
+            <button type="button" data-cmd="codeTemplate">條碼</button>
+          </div>
+        </div>
         <button type="button" data-cmd="open">開啟<span class="menu-kbd">Ctrl+O</span></button>
         <button type="button" data-cmd="save">儲存<span class="menu-kbd">Ctrl+S</span></button>
         <button type="button" data-cmd="saveAs">另存新檔</button>
+        <button type="button" data-cmd="exportCsharp">匯出 C#</button>
         <div class="menu-sep"></div>
         <button type="button" data-cmd="loadImage">載入影像</button>
         <div class="menu-sub" id="sampleSub">
@@ -77,6 +89,7 @@
       <button type="button">視窗</button>
       <div class="menu-drop" hidden>
         <button type="button" data-cmd="layout">回復版面</button>
+        <button type="button" data-cmd="floatGfx">拉出圖形視窗</button>
       </div>
     </div>
     <div class="menu-item">
@@ -86,6 +99,7 @@
     <div class="menu-item">
       <button type="button">說明</button>
       <div class="menu-drop" hidden>
+        <button type="button" data-cmd="help">使用說明</button>
         <button type="button" data-cmd="about">關於 VisDev</button>
       </div>
     </div>
@@ -114,12 +128,12 @@
     <button id="btnStep" type="button">單步 <kbd>F6</kbd></button>
     <button id="btnRun" class="primary" type="button">執行 <kbd>F5</kbd></button>
     <button id="btnStop" type="button">停止</button>
-    <input id="fileOpen" type="file" accept=".viz,.hdv,.txt" hidden>
+    <input id="fileOpen" type="file" accept=".viz,.hdv,.hdev,.hdvp,.hdpl,.dev,.dvp,.txt" hidden>
   </header>
 
   <main id="dock" class="workspace">
     <section class="pane program" data-dock="program">
-      <div class="pane-bar"><span>程式</span><span class="hint">點行號設斷點，F5 會停　連點算子行開啟參數　右側是該行時間　拖綠色箭頭改下一行</span></div>
+      <div class="pane-bar"><span>程式</span><span class="hint">點行號設斷點，F5 會停　點算子名稱開啟參數　右側是該行時間　拖綠色箭頭改下一行</span></div>
       <div class="editor-wrap">
         <div id="gutter" class="gutter"></div>
         <div class="editor-stage">
@@ -135,7 +149,18 @@
       <div class="pane-bar">
         <span>圖形視窗</span>
         <span id="gfxTitle" class="hint"></span>
+        <div id="gfxMouse" class="mouse-mode" role="group" aria-label="滑鼠">
+          <button type="button" data-mode="select" title="箭頭點選區域或輪廓" aria-label="點選"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M2.2 1.2 4 13.2l2.6-2.7 2.5 4.1 1.7-1.1-2.5-4.1h4.2L2.2 1.2z"/></svg></button>
+          <button type="button" data-mode="pan" title="手抓移動畫面" aria-label="手抓移動"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6 7.1V3.2a.8.8 0 0 1 1.6 0v3.3h.3V2.1a.8.8 0 0 1 1.6 0v4.4h.3V3.4a.8.8 0 0 1 1.6 0v3.3h.3V5a.8.8 0 0 1 1.6 0v5.1c0 2-1.5 3.4-3.6 3.4H7.8c-1.4 0-2.4-.6-3-1.6L2.8 9.4a.85.85 0 0 1 1.4-.9l1.2 1.5V7.1H6z"/></svg></button>
+          <button type="button" data-mode="zoom" title="拉一個範圍放大。點一下也會放大" aria-label="放大"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path stroke="currentColor" stroke-width="1.5" d="M9.8 9.8 13.5 13.5M6.8 4.8v4M4.8 6.8h4"/></svg></button>
+        </div>
+        <span id="shapeTools" hidden>
+          <button type="button" data-draw="rect" title="在圖上拖矩形，填進開啟中的算子參數">框選</button>
+          <button type="button" data-draw="circle" title="在圖上拖圓">圓</button>
+          <button type="button" data-draw="ellipse" title="在圖上拖橢圓">橢圓</button>
+        </span>
         <div class="spacer"></div>
+        <button id="btnFloatGfx" type="button" title="把圖形單獨拉成新視窗，不擋住主視窗">拉出</button>
         <button id="btnFit" type="button" title="符合視窗">符合</button>
         <button id="btnOne" type="button" title="原始像素">1:1</button>
         <button id="btnZoomOut" type="button" title="縮小">−</button>
@@ -156,7 +181,7 @@
       <div id="gfxStage" class="gfx-stage">
         <canvas id="canvas"></canvas>
         <div id="probe" hidden></div>
-        <div id="gfxEmpty" class="gfx-empty">執行程式後，影像、區域和輪廓會畫在這裡。<br>也可以把圖檔拖進來。</div>
+        <div id="gfxEmpty" class="gfx-empty">執行程式後，影像、區域和輪廓會畫在這裡。<br>點程式裡的算子名稱可改參數。有座標的算子可按「框選」在圖上拖範圍。<br>也可以把圖檔拖進來。</div>
         <div id="gfxBanner" class="gfx-banner" hidden></div>
         <div id="drawMenu" class="draw-menu" hidden></div>
         <div id="shapeConfirm" hidden>
@@ -241,18 +266,52 @@ endfor</pre>
     </section>
   </main>
 
+  <div id="projectDialog" class="modal" hidden>
+    <div class="dialog guide" role="dialog" aria-labelledby="projectTitle">
+      <h2 id="projectTitle">專案</h2>
+      <p>一個專案放多支程式。圖可以放在專案資料夾，程式裡寫檔名就讀得到；<code>samples/</code> 和 <code>workspace/</code> 也還找得到。</p>
+      <div class="project-create">
+        <input id="projectName" placeholder="專案名稱" spellcheck="false">
+        <button id="projectCreate" type="button">新專案</button>
+      </div>
+      <div id="projectList" class="project-list"></div>
+      <div id="projectPrograms" class="project-list"></div>
+      <div class="actions">
+        <button id="projectRename" type="button">改名</button>
+        <button id="projectFolder" type="button">打開資料夾</button>
+        <button id="projectSave" type="button">把這支程式存進專案</button>
+        <button id="projectNewProgram" type="button">在專案裡新增程式</button>
+        <button id="projectClose" type="button">關閉</button>
+      </div>
+    </div>
+  </div>
+  <div id="helpDialog" class="modal" hidden>
+    <div class="dialog guide" role="dialog" aria-labelledby="helpTitle">
+      <h2 id="helpTitle">使用說明</h2>
+      <p>這是 VisDev 1.1 beta，不是正式版。</p>
+      <h3>執行</h3>
+      <p>F5 執行，F6 單步，F7 步進程序。程式跑到一半失敗時，已經算出的圖和變數留著，狀態列會寫出第幾行。大圖在執行中會先縮小顯示，標題會寫預覽，跑完或停止後換成完整圖。</p>
+      <h3>範本</h3>
+      <p>檔案、範本裡有五支，打開就能跑。零件檢測讀 <code>samples/parts.png</code>，這張圖是 8 個零件。邊緣量測讀 <code>samples/gauge.png</code>。形狀定位在場景裡找到 4 個。相對姿態用寫入的角點，兩台各三組，第 k 組是同一次擺放。<code>Pose1</code> 的第一個數約 0.04 公尺。條碼讀 <code>samples/codes.png</code>，<code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。</p>
+      <h3>標定</h3>
+      <p>棋盤寫 <code>'5,7,10'</code>，也可以用 <code>.cpd</code> 或 <code>.descr</code>。多台相機時，每一台的第 k 組要是同時看到的同一塊板。<code>camera/pose</code> 是相對第 0 台的姿態，第 0 台是 0。標完的圖可以點某一張看原圖，再點一下回到全部。</p>
+      <h3>存檔與 Windows</h3>
+      <p>存檔在 <code>workspace/</code>。檔案、專案可以把多支程式放在同一個案子裡。存進去時，程式讀的 <code>workspace/</code> 圖會拷進專案資料夾，路徑改成檔名。<code>samples/</code> 的圖仍共用。可以改名，也可以打開資料夾看圖在不在。從檔案總管貼上的反斜線路徑也能讀。Windows 上用 <code>run.bat</code> 開啟，用 <code>build_windows.bat</code> 打包。打包需要 Python 3.9 或更新版本、<code>visdev_match.pyd</code> 和 PyInstaller。形狀匹配在 Windows 用這個 <code>.pyd</code>。</p>
+      <div class="actions"><button id="helpOk" type="button">確定</button></div>
+    </div>
+  </div>
   <div id="aboutDialog" class="modal" hidden>
     <div class="dialog about" role="dialog" aria-labelledby="aboutTitle">
-      <h2 id="aboutTitle">VisDev</h2>
+      <h2 id="aboutTitle">VisDev 1.1 beta</h2>
       <p>視覺開發環境。程式寫法接近 HDevelop，影像計算用 OpenCV。</p>
-      <p>上方選單：檔案可以新增、開啟、儲存和載入影像。編輯可以復原、剪貼。檢視可以開關窗格和縮放。執行是 F5、F6、F7。運算子依分類列出，點了會開參數窗再插入程式。工具會另開二值化、次像素、特徵和 OCR。</p>
+      <p>上方選單：檔案可以新增、開啟、儲存、載入影像，也可以把讀圖、定義域、二值化、連通、篩選、矩形和圓形形態學、個數和重心匯出成 C#。編輯可以復原、剪貼。檢視可以開關窗格和縮放。執行是 F5、F6、F7。運算子依分類列出，點了會開參數窗再插入程式。工具會另開二值化、次像素、特徵和 OCR。</p>
       <div class="actions"><button id="aboutOk" type="button">確定</button></div>
     </div>
   </div>
   <div id="opDialog" hidden>
     <h2 id="opDialogTitle">算子</h2>
     <div id="opDialogGuide"></div>
-    <p id="opDrawHint" class="hint" hidden>在圖上按右鍵，選矩形、圓或橢圓再拖曳。確認後填進參數。留成空字串的圖形不會使用，ocr_find 就讀整張圖。</p>
+    <p id="opDrawHint" class="hint" hidden>圖形列上的「框選」「圓」「橢圓」，或在圖上按右鍵，拖曳後按確認填入。留成空字串的圖形不會使用，ocr_find 就讀整張圖。</p>
     <form id="opForm"></form>
     <h3>範例用法</h3>
     <pre id="opPreview"></pre>
@@ -261,6 +320,7 @@ endfor</pre>
       <button id="opDialogOk" class="primary" type="button">插入</button>
     </div>
   </div>
+  <div id="opFileMenu" class="op-file-menu" hidden></div>
   <div id="errDialog" class="modal" hidden>
     <div class="dialog" role="alertdialog" aria-labelledby="errTitle">
       <h2 id="errTitle">錯誤</h2>
@@ -283,6 +343,12 @@ endfor</pre>
     <span class="hint">取代 HALCON 的第一版。常用流程先用這套語法寫，缺的算子再補。</span>
   </footer>
   <script src="/static/dock.js?v=9"></script>
-  <script src="/static/app.js?v=52"></script>
+  <script src="/static/geom.js?v=5"></script>
+  <script src="/static/editor_history.js?v=1"></script>
+  <script src="/static/program_file.js?v=1"></script>
+  <script src="/static/operator_call.js?v=1"></script>
+  <script src="/static/pick_sync.js?v=2"></script>
+  <script src="/static/run_source.js?v=1"></script>
+  <script src="/static/app.js?v=83"></script>
 </body>
 </html>

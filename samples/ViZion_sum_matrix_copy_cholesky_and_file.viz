@@ -1,0 +1,38 @@
+* 矩陣複本和喬列斯基
+* [[1, 2], [3, 4]] 全部加起來是 10。複本在原矩陣把自己加上去之後仍是 1。
+* [[0, -1], [1, 0]] 的特徵值虛部是 -1 和 1，實部是 0。
+* [[25, 15], [15, 18]] 的喬列斯基下三角是 5、0、3、3。寫成文字再讀回來還是這四個數。
+Vizion.create_matrix (2, 2, [1, 2, 3, 4], A)
+Vizion.sum_matrix (A, 'full', Sum)
+Vizion.get_value_matrix (Sum, 0, 0, Total)
+Vizion.copy_matrix (A, Copy)
+Vizion.add_matrix_mod (A, A)
+Vizion.get_full_matrix (A, Doubled)
+Vizion.get_full_matrix (Copy, Original)
+D1 := Doubled[1]
+O1 := Original[1]
+Vizion.create_matrix (2, 2, [0, -1, 1, 0], Spin)
+Vizion.eigenvalues_general_matrix (Spin, 'none', RealEV, ImagEV, EmptyR, EmptyI)
+Vizion.get_full_matrix (RealEV, Real)
+Vizion.get_full_matrix (ImagEV, Imag)
+Vizion.tuple_sort (Imag, ImagSorted)
+Low := ImagSorted[1]
+High := ImagSorted[2]
+R1 := Real[1]
+R2 := Real[2]
+Vizion.create_matrix (2, 2, [25, 15, 15, 18], SPD)
+Vizion.decompose_matrix (SPD, 'positive_definite', Lower, Upper)
+Vizion.get_full_matrix (Lower, L)
+Vizion.get_full_matrix (Upper, U)
+L1 := L[1]
+L2 := L[2]
+L3 := L[3]
+L4 := L[4]
+U1 := U[1]
+U2 := U[2]
+U3 := U[3]
+U4 := U[4]
+Vizion.write_matrix (Lower, 'ascii', 'workspace/batch124_matrix.mtx')
+Vizion.read_matrix ('workspace/batch124_matrix.mtx', ReadBack)
+Vizion.get_full_matrix (ReadBack, Back)
+B1 := Back[1]

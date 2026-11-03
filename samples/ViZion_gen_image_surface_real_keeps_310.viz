@@ -1,0 +1,12 @@
+* real 曲面保留 310
+* byte 的一次平面在列 1 被夾成 255。real 同一點是 310。二次曲面列 2，byte 是 255，real 是 404。
+Vizion.gen_image_surface_first_order (BytePlane, 'byte', 300, 0, 10, 0, 0, 2, 2)
+Vizion.get_grayval (BytePlane, 1, 0, ByteGray)
+Vizion.gen_image_surface_first_order (RealPlane, 'real', 300, 0, 10, 0, 0, 2, 2)
+Vizion.get_image_type (RealPlane, RealType)
+Vizion.get_grayval (RealPlane, 1, 0, RealGray)
+Vizion.gen_image_surface_second_order (ByteBowl, 'byte', 100, 0, 0, 0, 0, 4, 0, 0, 3, 3)
+Vizion.get_grayval (ByteBowl, 2, 0, ByteBowlGray)
+Vizion.gen_image_surface_second_order (RealBowl, 'real', 100, 0, 0, 0, 0, 4, 0, 0, 3, 3)
+Vizion.get_grayval (RealBowl, 2, 0, RealBowlGray)
+Vizion.dev_display (BytePlane)

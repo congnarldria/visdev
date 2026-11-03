@@ -31,6 +31,13 @@
       color: #ffe14a;
       border-bottom: 1px solid #2a3140;
     }
+    #viewbar { display: flex; gap: 8px; align-items: center; padding: 6px 12px; border-bottom: 1px solid #2a3140; }
+    #viewbar button.on { background: #1d4e86; color: #fff; }
+    #stage { position: relative; height: 280px; flex: none; background: #101216; }
+    #view { width: 100%; height: 100%; display: block; }
+    #view.mode-select { cursor: default; }
+    #view.mode-pan { cursor: grab; }
+    #view.mode-zoom { cursor: zoom-in; }
     #split { flex: 1; min-height: 0; display: flex; }
     #list { flex: none; overflow: auto; padding: 8px 12px 16px; border-right: 1px solid #2a3140; }
     #custom { flex: 1; min-width: 180px; overflow: auto; padding: 8px 12px 16px; }
@@ -83,6 +90,17 @@
     <strong>區域特徵</strong>
     <span>一次只顯示點到的那一個。白色虛線是點到的地方。</span>
   </header>
+  <div id="viewbar">
+    <span>圖上可點選、移動、放大</span>
+    <button type="button" data-mode="select">點選</button>
+    <button type="button" data-mode="pan">移動</button>
+    <button type="button" data-mode="zoom">放大</button>
+    <button id="fit" type="button">符合</button>
+    <button id="one" type="button">1:1</button>
+    <button id="out" type="button">−</button>
+    <button id="in" type="button">+</button>
+  </div>
+  <div id="stage"><canvas id="view"></canvas></div>
   <div id="title">請點一個區域或輪廓。沒點到之前不顯示數值。</div>
   <div id="errDialog" hidden style="position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.48)">
     <div style="width:min(420px,calc(100vw - 32px));background:#1c2028;border:1px solid #ff5d4a;padding:16px">
@@ -98,6 +116,9 @@
       <div id="customList" class="empty">執行程式後，數值會靠右顯示。</div>
     </aside>
   </div>
+  <script src="/static/geom.js?v=5"></script>
+  <script src="/static/pick_sync.js?v=2"></script>
+  <script src="/static/view.js?v=6"></script>
   <script>
     const GRAY_LABELS = {
       gray_min: "最小輝度",
@@ -117,6 +138,7 @@
     let catalog = { region: [], xld: [], gray: Object.keys(GRAY_LABELS) };
     const list = document.getElementById("list");
     const title = document.getElementById("title");
+    let picture = null;
 
     function savedKeys() {
       try {
@@ -303,15 +325,59 @@
         pick = null;
         title.textContent = "請點一個區域或輪廓。沒點到之前不顯示數值。";
         clearValues();
+        if (picture) picture.setSelection(null);
         return;
       }
       pick = data;
+      if (picture) picture.setSelection({ name: data.name, index: data.index, kind: data.kind });
       refresh();
     }
 
     document.getElementById("errOk").onclick = () => { document.getElementById("errDialog").hidden = true; };
     list.addEventListener("change", publish);
     const channel = new BroadcastChannel("visdev-features");
+    const displayChannel = new BroadcastChannel("visdev-display");
+    const modeButtons = document.querySelectorAll("#viewbar button[data-mode]");
+    picture = VisdevView.mount(document.getElementById("view"), {
+      onMode(mode) {
+        modeButtons.forEach((button) => button.classList.toggle("on", button.dataset.mode === mode));
+      },
+      onPick(hit) {
+        const payload = VisdevPick.pack("features", hit, sessionId);
+        try { localStorage.setItem("visdev.featurePick", JSON.stringify(payload)); } catch (_err) { /* 仍走頻道 */ }
+        channel.postMessage(payload);
+        takePick(payload);
+      },
+    });
+    modeButtons.forEach((button) => button.addEventListener("click", () => picture.setMode(button.dataset.mode)));
+    document.getElementById("fit").onclick = () => picture.fit(true);
+    document.getElementById("one").onclick = () => picture.one();
+    document.getElementById("out").onclick = () => picture.zoomBy(1 / 1.25);
+    document.getElementById("in").onclick = () => picture.zoomBy(1.25);
+    let displayRev = null;
+    function showPicture(display, frame) {
+      if (frame) picture.setFrame(frame);
+      picture.setDisplay(display || null);
+    }
+    displayChannel.onmessage = (event) => {
+      const data = event.data;
+      if (!data || data.type !== "display") return;
+      if (sessionId && data.id && data.id !== sessionId) return;
+      if (data.displayRev != null) displayRev = data.displayRev;
+      showPicture(data.display, data.frame);
+    };
+    async function pullDisplay() {
+      if (!sessionId) return;
+      const query = displayRev == null ? "" : `?displayRev=${encodeURIComponent(displayRev)}`;
+      const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/display${query}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.displayRev != null) displayRev = data.displayRev;
+      if (data.displayKept) return;
+      showPicture(data.display, null);
+    }
+    pullDisplay();
+    setInterval(pullDisplay, 800);
     channel.onmessage = (event) => {
       takePick(event.data);
       takeVars(event.data);

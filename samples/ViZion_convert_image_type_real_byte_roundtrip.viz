@@ -1,0 +1,14 @@
+* byte 轉 real 再轉回，灰階仍是 200
+* 200 轉成 real 還是 200。再轉回 byte 仍是 200。原來的 byte 影像沒有被改掉。
+Vizion.gen_image_const (Base, 'byte', 6, 4)
+Vizion.gen_rectangle1 (Box, 1, 1, 2, 4)
+Vizion.paint_region (Box, Base, Marked, 200, 'fill')
+Vizion.convert_image_type (Marked, AsReal, 'real')
+Vizion.get_image_type (AsReal, RealType)
+Vizion.get_grayval (AsReal, 1, 1, RealGray)
+Vizion.convert_image_type (AsReal, Back, 'byte')
+Vizion.get_image_type (Back, ByteType)
+Vizion.get_grayval (Back, 1, 1, ByteGray)
+Vizion.get_grayval (Marked, 1, 1, Original)
+Vizion.get_grayval (Marked, 0, 0, Outside)
+Vizion.dev_display (Back)

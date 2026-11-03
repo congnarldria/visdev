@@ -1,0 +1,10 @@
+* real 常數影像是 0
+* byte 仍是 0 到 255 的整數。real 是浮點數，這張全黑影像的灰階是 0，型別是 real。
+Vizion.gen_image_const (Image, 'real', 4, 3)
+Vizion.get_image_type (Image, Type)
+Vizion.get_grayval (Image, 1, 2, Gray)
+Vizion.get_image_size (Image, Width, Height)
+Vizion.gen_image_const (Bytes, 'byte', 4, 3)
+Vizion.get_image_type (Bytes, ByteType)
+Vizion.get_grayval (Bytes, 1, 2, ByteGray)
+Vizion.dev_display (Image)

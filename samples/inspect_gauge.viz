@@ -1,0 +1,11 @@
+* 邊緣量測範本。打開就能跑，再改量測線的座標。
+* 讀 samples/gauge.png。先沿一條橫線找第一個邊緣，再拟合一條直線，最後算兩點距離。
+* Gap 是邊緣點到直線起點的距離。座標是列、行。
+Vizion.read_image (Image, 'samples/gauge.png')
+Vizion.gauge_point (Image, Mark, 110, 80, 110, 220, 1, 8, 'all', 'first', PRow, PCol, Amp, Dist)
+Vizion.gauge_line (Image, Line, 200, 380, 200, 480, 12, 1, 8, 'all', 'best', LRow1, LCol1, LRow2, LCol2, LAngle, LUsed)
+Vizion.distance_pp (PRow, PCol, LRow1, LCol1, Gap)
+Vizion.dev_display (Image)
+Vizion.dev_set_color ('yellow')
+Vizion.dev_display (Mark)
+Vizion.dev_display (Line)

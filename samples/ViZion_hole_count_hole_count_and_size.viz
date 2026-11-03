@@ -1,0 +1,79 @@
+* 洞有幾個、有多大
+* 用法：洞是被物件完全包住的空白。缺口連到外面或影像邊緣，就不算洞，也不會被 fill_object 補上。
+* hole_ratio 是洞的像素除以補滿之後的像素。0 是實心。
+* hole_region 把每個洞拆開。同一個物件裡，較上面的洞先出來。largest_hole 只留最大的，一樣大留較上面的。
+* fill_object 每個物件自己補，物件數不變。fill_up 會先把全部合成一個。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Outer, 10, 10, 39, 39)
+Vizion.gen_rectangle1 (Bite, 20, 20, 29, 29)
+Vizion.difference (Outer, Bite, Frame)
+Vizion.gen_rectangle1 (Solid, 42, 10, 51, 19)
+Vizion.gen_rectangle1 (Big, 10, 50, 49, 79)
+Vizion.gen_rectangle1 (HoleA, 15, 55, 24, 64)
+Vizion.gen_rectangle1 (HoleB, 30, 60, 34, 64)
+Vizion.union2 (HoleA, HoleB, Bites)
+Vizion.difference (Big, Bites, Twin)
+Vizion.gen_rectangle1 (Cup, 42, 40, 56, 59)
+Vizion.gen_rectangle1 (Mouth, 46, 50, 52, 59)
+Vizion.difference (Cup, Mouth, Open)
+Vizion.concat_obj (Frame, Solid, Two)
+Vizion.concat_obj (Two, Twin, Parts)
+Vizion.hole_count (Parts, Counts)
+C1 := Counts[1]
+C2 := Counts[2]
+C3 := Counts[3]
+Vizion.hole_count (Open, OpenCount)
+OC := OpenCount[1]
+Vizion.hole_ratio (Parts, Ratios)
+R1 := Ratios[1]
+R2 := Ratios[2]
+R3 := Ratios[3]
+Vizion.hole_region (Parts, Holes)
+Vizion.count_obj (Holes, HoleN)
+Vizion.select_obj (Holes, FirstHole, 1)
+Vizion.area_center (FirstHole, FirstArea, FirstRow, FirstCol)
+FA := FirstArea[1]
+FR := FirstRow[1]
+FC := FirstCol[1]
+Vizion.select_obj (Holes, SmallHole, 3)
+Vizion.area_center (SmallHole, SmallArea, SmallRow, SmallCol)
+SA := SmallArea[1]
+SR := SmallRow[1]
+SC := SmallCol[1]
+Vizion.largest_hole (Parts, BigHole)
+Vizion.count_obj (BigHole, BigN)
+Vizion.area_center (BigHole, BigArea, BigRow, BigCol)
+BA := BigArea[2]
+BR := BigRow[2]
+BC := BigCol[2]
+Vizion.select_holed (Parts, Holed, 2)
+Vizion.count_obj (Holed, HoledN)
+Vizion.area_center (Holed, HoledArea, HoledRow, HoledCol)
+HA := HoledArea[1]
+HRow := HoledRow[1]
+HCol := HoledCol[1]
+Vizion.select_solid (Parts, Solids)
+Vizion.count_obj (Solids, SolidN)
+Vizion.area_center (Solids, SolidArea, SolidRow, SolidCol)
+SolidA := SolidArea[1]
+SolidR := SolidRow[1]
+SolidC := SolidCol[1]
+Vizion.select_hole_ratio (Parts, Hollow, 0.11)
+Vizion.count_obj (Hollow, HollowN)
+Vizion.area_center (Hollow, HollowArea, HollowRow, HollowCol)
+HollowA := HollowArea[1]
+HollowR := HollowRow[1]
+Vizion.fill_object (Frame, Filled)
+Vizion.area_center (Filled, FillArea, FillRow, FillCol)
+FillA := FillArea[1]
+FillR := FillRow[1]
+Vizion.fill_object (Open, OpenFilled)
+Vizion.area_center (Open, OpenArea, OpenRow, OpenCol)
+Vizion.area_center (OpenFilled, OpenFillArea, OpenFillRow, OpenFillCol)
+OA := OpenArea[1]
+OFA := OpenFillArea[1]
+Vizion.select_obj (BigHole, OneHole, 1)
+Vizion.paint_region (OneHole, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 24, 24, HoleGray)
+Vizion.get_grayval (Shown, 10, 10, WallGray)
+Vizion.dev_display (Shown)

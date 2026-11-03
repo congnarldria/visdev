@@ -16,7 +16,7 @@ from .parser import (
     Assign, Call, CatchStmt, Comment, Blank, ElseStmt, EndForStmt, EndIfStmt, EndProcedureStmt,
     EndTryStmt, EndWhileStmt, ForStmt, IfStmt, ParseError, ProcedureStmt, TryStmt, WhileStmt, parse_program,
 )
-from .render import apply_domain_dim, compose_display, jpeg_thumb, region_thumb, xld_thumb
+from .render import apply_domain_dim, compose_display, copy_display_scene, jpeg_thumb, region_thumb, xld_thumb
 from .ncc_model import NccModel
 from .shape_model import MATCH_COLORS, ShapeModel
 
@@ -30,11 +30,17 @@ class Display:
         self.base: Image | None = None
         self.base_provisional = False
         self.overlays: list = []
+        self.calib_panels = None
+        self.calib_note = None
+        self.calib_back = False
 
     def clear(self):
         self.base = None
         self.base_provisional = False
         self.overlays = []
+        self.calib_panels = None
+        self.calib_note = None
+        self.calib_back = False
 
     def drop_provisional(self):
         self.overlays = [item for item in self.overlays if not item.get("provisional")]
@@ -101,6 +107,25 @@ def full_value(value) -> str:
     return fmt_num(value)
 
 
+_OS_HANDLES = {"FileHandle", "SerialPort", "SocketLink", "AcqHandle"}
+
+
+def _release_external(value) -> None:
+    if isinstance(value, list):
+        for item in value:
+            _release_external(item)
+        return
+    if type(value).__name__ not in _OS_HANDLES:
+        return
+    release = getattr(value, "release", None)
+    if not callable(release):
+        return
+    try:
+        release()
+    except Exception:
+        return
+
+
 def _var_role(name: str, kind: str, iconic: bool) -> str:
     low = name.lower()
     if iconic and low.startswith("ho_"):
@@ -115,6 +140,7 @@ class Session:
         self.id = uuid.uuid4().hex[:12]
         self.source = source
         self.root = root
+        self.file_dir = None
         program = parse_program(source)
         self.stmts = program.stmts
         self.if_false = program.if_false
@@ -135,23 +161,69 @@ class Session:
         self.threshold_mask = None
         self.threshold_region = None
         self.image_stamp = 0
+        self.display_stamp = 0
+        self.running = False
         self.reset()
 
+    def _release_handles(self) -> None:
+        for value in list(getattr(self, "vars", {}).values()):
+            _release_external(value)
+
+    def _release_error_frames(self) -> None:
+        seen = {id(value) for value in getattr(self, "vars", {}).values()}
+        for frame in getattr(self, "error_frames", ()) or ():
+            for value in frame.get("vars", {}).values():
+                if id(value) in seen:
+                    continue
+                seen.add(id(value))
+                _release_external(value)
+
+    def _remember_failed_proc(self, proc, local: dict) -> None:
+        if not self.error:
+            return
+        frames = getattr(self, "error_frames", None)
+        if frames is None:
+            self.error_frames = []
+            frames = self.error_frames
+        frames.append({"procedure": getattr(proc, "name", None) or str(proc), "vars": dict(local)})
+
+    def _set_error(self, exc, line, *, log: bool) -> None:
+        number = int(line) if isinstance(line, int) else None
+        text = str(exc)
+        if number and f"第 {number} 行" not in text:
+            text = f"第 {number} 行：{text}"
+        self.error = text
+        self.error_line = number
+        if log:
+            self._append_log(text if text.startswith("錯誤") else f"錯誤 {text}")
+
     def reset(self):
+        self._release_error_frames()
+        self._release_handles()
         self.pc = 0
         self.vars: dict = {}
         self.done = False
         self.error = None
         self.error_line = None
+        self.error_frames = []
+        self.calib_board = None
+        self.calib_owners = None
         self.paused = None
         self.log: list[str] = []
         self.display = Display()
         self.loops: dict = {}
         self.try_stack: list = []
         self.proc_depth = 0
+        self.proc_stack = []
+        self.proc_names = []
+        self.step_into = False
         self.cancel = False
+        self.defer_wait = False
+        self.wait_until = 0.0
+        self._wait_frame = None
         self.break_skip = None
         self.arrow_line = None
+        self.arrow_note = None
         self.line_times: dict[int, dict] = {}
         self.step_count = 0
         self.ref_shape = None
@@ -161,6 +233,8 @@ class Session:
         self.threshold_mask = None
         self.threshold_region = None
         self.preview_region = None
+        self._display_cache = None
+        self._thumb_cache = {}
         self.prepare()
 
     def prepare(self):
@@ -170,12 +244,69 @@ class Session:
             self.done = True
 
     def current_line(self):
+        if self.error and self.error_line:
+            return self.error_line
+        frame = getattr(self, "_wait_frame", None)
+        if frame is not None and self.paused in ("breakpoint", "wait"):
+            inner = frame.get("pc")
+            if isinstance(inner, int) and inner < len(self.stmts):
+                return self.stmts[inner].line
         if not self.done and self.pc < len(self.stmts):
             return self.stmts[self.pc].line
         return self.arrow_line
 
+    def _paused_procedure(self):
+        if self.proc_stack:
+            return self.proc_stack[-1]["proc"].name
+        frame = getattr(self, "_wait_frame", None)
+        if frame is not None and self.paused in ("breakpoint", "wait"):
+            proc = frame.get("proc")
+            if proc is not None:
+                return proc.name
+        frames = getattr(self, "error_frames", None) or []
+        if self.error and frames:
+            return frames[0].get("procedure")
+        return None
+
+    def _scoped_vars(self) -> tuple[dict, set]:
+        layers = []
+        if self.proc_stack:
+            layers = [frame["caller_vars"] for frame in reversed(self.proc_stack)]
+        elif self.paused in ("breakpoint", "wait") and getattr(self, "_wait_frame", None) is not None:
+            frame = self._wait_frame
+            while frame is not None:
+                layers.append(frame.get("caller_vars") or {})
+                frame = frame.get("caller")
+        if not layers:
+            frames = getattr(self, "error_frames", None) or []
+            if not (self.error and frames):
+                return self.vars, set()
+            local_names: set = set()
+            merged = {}
+            for frame in frames:
+                for name, value in frame.get("vars", {}).items():
+                    local_names.add(name)
+                    if name not in merged:
+                        merged[name] = value
+            for name, value in self.vars.items():
+                if name not in merged:
+                    merged[name] = value
+            return merged, local_names
+        local_names = set(self.vars)
+        merged = dict(self.vars)
+        for layer in layers:
+            for name, value in layer.items():
+                if name not in merged:
+                    merged[name] = value
+        return merged, local_names
+
     def set_line(self, line: int):
-        """Move the program arrow. Variables stay; the next step starts at this line."""
+        """Move the program arrow. Variables stay; the next step starts at this line.
+
+        A drop inside a procedure body stays there only when that call is already
+        active. Otherwise the arrow stops on the procedure header, so the body
+        does not run with the caller's variables.
+        """
         target = None
         for index, stmt in enumerate(self.stmts):
             if isinstance(stmt, (Blank, Comment)):
@@ -183,21 +314,160 @@ class Session:
             if stmt.line >= int(line):
                 target = index
                 break
+        self._release_error_frames()
+        self.error_frames = []
         self.error = None
         self.error_line = None
         self.paused = None
         self.break_skip = None
+        self.arrow_note = None
         if target is None:
+            self._release_proc_jump(None)
             self.pc = len(self.stmts)
             self.done = True
             self.arrow_line = None
             return
-        self.pc = target
+        adjusted = self._procedure_arrow_index(target)
+        self._release_proc_jump(adjusted)
+        if adjusted != target:
+            self.arrow_note = "程序還沒呼叫，箭頭停在程序標題"
+            self._append_log(self.arrow_note)
+        self.pc = adjusted
         self.done = False
 
+    def _enclosing_proc(self, index: int):
+        found = None
+        span = None
+        for proc_index, end in self.proc_end.items():
+            if proc_index < index < end:
+                width = end - proc_index
+                if span is None or width < span:
+                    found = proc_index
+                    span = width
+        if found is None:
+            return None
+        return found, self.proc_end[found]
+
+    def _frame_proc_index(self, frame) -> int | None:
+        proc = frame.get("proc")
+        end = frame.get("end")
+        for proc_index, proc_end in self.proc_end.items():
+            if proc_end == end and self.stmts[proc_index] is proc:
+                return proc_index
+        return None
+
+    def _proc_is_active(self, proc_index: int) -> bool:
+        for frame in self.proc_stack:
+            if self._frame_proc_index(frame) == proc_index:
+                return True
+        frame = getattr(self, "_wait_frame", None)
+        while frame is not None:
+            if self._frame_proc_index(frame) == proc_index:
+                return True
+            frame = frame.get("caller")
+        return False
+
+    def _procedure_arrow_index(self, index: int) -> int:
+        found = self._enclosing_proc(index)
+        if found is None:
+            return index
+        proc_index, _end = found
+        if self._proc_is_active(proc_index):
+            return index
+        return proc_index
+
+    def _release_proc_jump(self, index: int | None) -> None:
+        while self.proc_stack:
+            proc_index = self._frame_proc_index(self.proc_stack[-1])
+            end = self.proc_stack[-1]["end"]
+            if index is not None and proc_index is not None and proc_index < index < end:
+                break
+            frame = self.proc_stack.pop()
+            self.vars = frame["caller_vars"]
+            self.proc_depth = max(0, self.proc_depth - 1)
+        if self.proc_stack:
+            self._wait_frame = None
+            return
+        if self._wait_frame is None:
+            return
+        if index is not None and self._wait_contains(index):
+            self._adopt_wait_chain(index)
+            return
+        self._drop_wait_frames()
+
+    def _wait_contains(self, index: int) -> bool:
+        frame = self._wait_frame
+        while frame is not None:
+            proc_index = self._frame_proc_index(frame)
+            end = frame.get("end")
+            if proc_index is not None and end is not None and proc_index < index < end:
+                return True
+            frame = frame.get("caller")
+        return False
+
+    def _drop_wait_frames(self) -> None:
+        frame = self._wait_frame
+        outer = None
+        while frame is not None:
+            outer = frame.get("caller_vars")
+            frame = frame.get("caller")
+        if outer is not None:
+            self.vars = outer
+        self._wait_frame = None
+        self.proc_depth = len(self.proc_stack)
+
+    def _adopt_wait_chain(self, index: int) -> None:
+        chain = []
+        frame = self._wait_frame
+        while frame is not None:
+            chain.append(frame)
+            frame = frame.get("caller")
+        chosen = None
+        for frame in chain:
+            proc_index = self._frame_proc_index(frame)
+            end = frame.get("end")
+            if proc_index is not None and end is not None and proc_index < index < end:
+                chosen = frame
+                break
+        if chosen is None:
+            self._drop_wait_frames()
+            return
+        selected = []
+        frame = chosen
+        while frame is not None:
+            selected.append(frame)
+            frame = frame.get("caller")
+        self.proc_stack = [self._stack_frame(item) for item in reversed(selected)]
+        self.vars = chosen["local"]
+        self.proc_depth = len(self.proc_stack)
+        self._wait_frame = None
+
+    def _stack_frame(self, frame) -> dict:
+        return {
+            "caller_vars": frame["caller_vars"],
+            "end": frame["end"],
+            "saved_pc": frame["saved_pc"],
+            "stmt": frame["stmt"],
+            "proc": frame["proc"],
+        }
+
     def resolve_read_path(self, filename: str) -> Path:
-        path = Path(filename).expanduser()
-        candidates = [path] if path.is_absolute() else [self.root / path, self.root / "samples" / path, self.root / "workspace" / path]
+        path = Path(str(filename).strip().replace("\\", "/")).expanduser()
+        candidates = []
+        if path.is_absolute():
+            candidates.append(path)
+        else:
+            project = getattr(self, "project_name", None)
+            if project:
+                folder = (self.root / "workspace" / "projects" / project).resolve()
+                candidate = (folder / path).resolve()
+                try:
+                    candidate.relative_to(folder)
+                except ValueError:
+                    candidate = None
+                if candidate is not None:
+                    candidates.append(candidate)
+            candidates.extend([self.root / path, self.root / "samples" / path, self.root / "workspace" / path])
         for candidate in candidates:
             if candidate.is_file():
                 return candidate
@@ -217,6 +487,11 @@ class Session:
             return self.display.base.height, self.display.base.width
         return 480, 640
 
+    def show_calib_view(self, index: int | None) -> None:
+        from .chapters.calib_ops import show_saved_calibration
+
+        show_saved_calibration(self, index)
+
     def display_obj(self, obj, provisional: bool = False, name: str | None = None):
         source = name if name is not None else getattr(self, "pending_display_name", None)
         obj = coerce_iconic(obj)
@@ -226,7 +501,11 @@ class Session:
             self.display.base = obj
             self.display.base_provisional = provisional
             self.display.overlays = []
+            self.display.calib_panels = None
+            self.display.calib_note = None
+            self.display.calib_back = False
             self.ref_shape = (obj.height, obj.width)
+            self._touch_display()
             return
         self.display.drop_provisional()
         if isinstance(obj, Region):
@@ -245,6 +524,7 @@ class Session:
                     "source": source,
                 }
             )
+            self._touch_display()
             return
         if isinstance(obj, XLD):
             self.ref_shape = self.ref_shape or (obj.height, obj.width)
@@ -267,8 +547,12 @@ class Session:
                     "source": source,
                 }
             )
+            self._touch_display()
             return
         raise TypeError("dev_display 只能顯示影像、區域或輪廓")
+
+    def _touch_display(self) -> None:
+        self.display_stamp = int(getattr(self, "display_stamp", 0)) + 1
 
     def region_palette(self, region: Region):
         count = region.count()
@@ -282,9 +566,29 @@ class Session:
             return None
         return [MATCH_COLORS[index % limit] for index in range(count)]
 
+    def _append_log(self, message: str) -> None:
+        log = self.log
+        log.append(message)
+        extra = len(log) - 2000
+        if extra > 0:
+            del log[: extra + 500]
+
     def trace_line(self, stmt, message: str):
-        if self.trace:
-            self.log.append(f"{stmt.line:>4}  {message}")
+        if not self.trace:
+            return
+        label = self._trace_proc_label()
+        if label:
+            message = f"{label}: {message}"
+        self._append_log(f"{stmt.line:>4}  {message}")
+
+    def _trace_proc_label(self) -> str | None:
+        names = [frame["proc"].name for frame in self.proc_stack]
+        names.extend(self.proc_names)
+        if not names:
+            return None
+        name = names[-1]
+        depth = sum(1 for item in names if item == name)
+        return name if depth == 1 else f"{name}×{depth}"
 
     def _on_breakpoint(self) -> bool:
         if self.pc >= len(self.stmts) or not self.breakpoints:
@@ -313,46 +617,78 @@ class Session:
     def step(self):
         if self.error:
             return
+        self.arrow_note = None
         self.paused = None
         self.break_skip = None
         self.prepare()
+        self._close_finished_procs()
         if self.done:
             return
-        self._execute_current()
-        if not self.error:
-            self.step_count += 1
+        self.step_into = True
+        try:
+            self._execute_current()
+            if not self.error:
+                self._close_finished_procs()
+        except Exception as exc:
+            if not self.error:
+                self.error = str(exc)
+                self.error_line = self.current_line()
+        finally:
+            self.step_into = False
+        if self.error:
+            return
+        self.step_count += 1
         self.prepare()
+        try:
+            self._close_finished_procs()
+        except Exception as exc:
+            self.error = str(exc)
+            self.error_line = self.current_line()
 
-    def run(self, max_steps: int = 100000):
-        if self.done or self.error:
-            self.reset()
-        self.paused = None
-        self.cancel = False
+    def run(self, max_steps: int = 100000, *, resume: bool = False):
+        with self.lock:
+            parked = getattr(self, "_wait_frame", None)
+            resume_parked = bool(resume or self.paused == "breakpoint")
+            if not resume and (self.done or self.error):
+                self.reset()
+                parked = None
+                resume_parked = False
+            self.arrow_note = None
+            self.paused = None
+            if not resume:
+                self.cancel = False
+            if parked and resume_parked:
+                self._resume_proc()
+                if self.paused in ("wait", "breakpoint") or self.error:
+                    return
         taken = 0
         while taken < max_steps:
-            self.prepare()
-            if self.done:
-                self.log.append(f"執行完成（{self.step_count} 步）")
+            with self.lock:
+                self.prepare()
+                if self.done:
+                    self._append_log(f"執行完成（{self.step_count} 步）")
+                    return
+                if self.cancel:
+                    self.paused = "stopped"
+                    self._append_log("已停止")
+                    return
+                if self._on_breakpoint() and self.pc != self.break_skip:
+                    self.break_skip = self.pc
+                    self.paused = "breakpoint"
+                    self._append_log(f"中斷點 第 {self.stmts[self.pc].line} 行")
+                    return
+                self.break_skip = None
+                self._execute_current()
+                self._close_finished_procs()
+                if self.error:
+                    return
+                self.step_count += 1
+                taken += 1
+                stop_now = self.paused in ("stop", "wait", "stopped", "breakpoint")
+            if stop_now:
                 return
-            if self.cancel:
-                self.paused = "stopped"
-                self.log.append("已停止")
-                return
-            if self._on_breakpoint() and self.pc != self.break_skip:
-                self.break_skip = self.pc
-                self.paused = "breakpoint"
-                self.log.append(f"中斷點 第 {self.stmts[self.pc].line} 行")
-                return
-            self.break_skip = None
-            self._execute_current()
-            if self.error:
-                return
-            self.step_count += 1
-            taken += 1
-            if self.paused == "stop":
-                return
-        self.error = "超過最大步數，可能有無窮迴圈"
-        self.log.append(self.error)
+        with self.lock:
+            self._set_error(RuntimeError("超過最大步數，可能有無窮迴圈"), self.current_line(), log=True)
 
     def _execute_current(self):
         index = self.pc
@@ -362,8 +698,8 @@ class Session:
         try:
             self._execute(stmt, index)
         except StopSignal:
-            self.paused = "stop"
-            self.log.append(f"Vizion.stop() 於第 {stmt.line} 行")
+            self.paused = "stopped" if self.cancel else "stop"
+            self._append_log("已停止" if self.cancel else f"Vizion.stop() 於第 {stmt.line} 行")
         except (ExprError, ParseError, Exception) as exc:
             frame = self.try_stack[-1] if self.try_stack and self.try_stack[-1][2] == self.proc_depth else None
             if frame is not None:
@@ -371,14 +707,21 @@ class Session:
                 catch_index, var, _depth = frame
                 self.vars[var] = str(exc)
                 self.pc = catch_index + 1
-                self.log.append(f"catch {var} 第 {stmt.line} 行：{exc}")
+                self._append_log(f"catch {var} 第 {stmt.line} 行：{exc}")
             elif self.proc_depth:
-                self.error = f"程序第 {stmt.line} 行：{exc}"
-                self.error_line = stmt.line
+                line = getattr(exc, "line", None) or stmt.line
+                if getattr(exc, "already_reported", False):
+                    self.error = str(exc)
+                    self.error_line = line
+                else:
+                    self._set_error(exc, line, log=True)
             else:
-                self.error = str(exc)
-                self.error_line = stmt.line
-                self.log.append(f"錯誤 第 {stmt.line} 行：{exc}")
+                line = getattr(exc, "line", None) or stmt.line
+                if getattr(exc, "already_reported", False):
+                    self.error = str(exc)
+                    self.error_line = line
+                else:
+                    self._set_error(exc, line, log=True)
         finally:
             self._note_time(stmt, time.perf_counter() - started)
 
@@ -393,7 +736,16 @@ class Session:
                 self.pc = index + 1
                 raise StopSignal()
             if stmt.name in self.procs:
+                if self.step_into:
+                    self._enter_proc(stmt, self.procs[stmt.name])
+                    return
                 self._call_proc(stmt, self.procs[stmt.name])
+                if self.paused in ("wait", "breakpoint"):
+                    if self.proc_depth == 0:
+                        frame = getattr(self, "_wait_frame", None)
+                        if frame is not None:
+                            self.vars = frame["local"]
+                    return
             else:
                 self._call(stmt)
             self.pc = index + 1
@@ -473,6 +825,38 @@ class Session:
             self.loops.pop(for_index, None)
             self.pc = index + 1
 
+    def _enter_proc(self, stmt: Call, proc_index: int) -> None:
+        if self.proc_depth >= 32:
+            raise RuntimeError("程序遞迴超過 32 層")
+        proc = self.stmts[proc_index]
+        outer = self.vars
+        local: dict = {}
+        for name, src in zip(proc.iconic_in, stmt.iconic_in):
+            if src not in outer:
+                raise RuntimeError(f"變數 {src} 還沒有值")
+            local[name] = coerce_iconic(outer[src])
+        for name, expr in zip(proc.control_in, stmt.control_in):
+            local[name] = pythonize(eval_expr(expr, outer))
+        self.proc_stack.append({
+            "caller_vars": outer,
+            "end": self.proc_end[proc_index],
+            "saved_pc": self.pc,
+            "stmt": stmt,
+            "proc": proc,
+        })
+        self.proc_depth += 1
+        self.vars = local
+        self.pc = proc_index + 1
+
+    def _close_finished_procs(self) -> None:
+        while self.proc_stack and self.pc >= self.proc_stack[-1]["end"]:
+            frame = self.proc_stack.pop()
+            local = self.vars
+            self.vars = frame["caller_vars"]
+            self.proc_depth = max(0, self.proc_depth - 1)
+            self._export_proc(frame["stmt"], frame["proc"], local)
+            self.pc = frame["saved_pc"] + 1
+
     def _call_proc(self, stmt: Call, proc_index: int):
         if self.proc_depth >= 32:
             raise RuntimeError("程序遞迴超過 32 層")
@@ -487,13 +871,19 @@ class Session:
             local[name] = pythonize(eval_expr(expr, outer))
         saved_pc = self.pc
         self.proc_depth += 1
+        self.proc_names.append(proc.name)
         self.vars = local
         self.pc = proc_index + 1
         end = self.proc_end[proc_index]
         guard = None
         try:
             steps = 0
-            while self.pc < end and not self.error and self.paused not in ("stop", "breakpoint", "stopped"):
+            while self.pc < end and not self.error and self.paused not in ("stop", "breakpoint", "stopped", "wait"):
+                if self._on_breakpoint() and self.pc != self.break_skip:
+                    self.break_skip = self.pc
+                    self.paused = "breakpoint"
+                    break
+                self.break_skip = None
                 self._execute_current()
                 steps += 1
                 if steps > 100000:
@@ -501,28 +891,119 @@ class Session:
                     break
         finally:
             local = self.vars
+            inner_pc = self.pc
+            waiting = self.paused == "wait"
+            breaking = self.paused == "breakpoint"
+            self._remember_failed_proc(proc, local)
             self.vars = outer
             self.pc = saved_pc
             self.proc_depth -= 1
+            self.proc_names.pop()
+        if waiting or breaking:
+            self._park_wait({
+                "local": local,
+                "caller_vars": outer,
+                "pc": inner_pc,
+                "end": end,
+                "saved_pc": saved_pc,
+                "stmt": stmt,
+                "proc": proc,
+            })
+            return
         if guard:
             raise RuntimeError(guard)
         if self.error:
             message = self.error
+            line = self.error_line
             self.error = None
             self.error_line = None
-            raise RuntimeError(message)
+            err = RuntimeError(message)
+            err.line = line
+            err.already_reported = True
+            raise err
+        self._export_proc(stmt, proc, local)
+
+    def _export_proc(self, stmt: Call, proc, local) -> None:
         for name, src in zip(stmt.iconic_out, proc.iconic_out):
             if src not in local:
                 raise RuntimeError(f"程序 {proc.name} 沒有設定輸出 {src}")
             value = coerce_iconic(local[src])
-            outer[name] = value
+            self.vars[name] = value
             if isinstance(value, Image):
                 self.ref_shape = (value.height, value.width)
         for name, src in zip(stmt.control_out, proc.control_out):
             if src not in local:
                 raise RuntimeError(f"程序 {proc.name} 沒有設定輸出 {src}")
-            outer[name] = pythonize(local[src])
-        self.trace_line(stmt, stmt.name)
+            self.vars[name] = pythonize(local[src])
+        returned = []
+        for name, src in zip(stmt.iconic_out, proc.iconic_out):
+            if src in local:
+                returned.append(f"{name} := {fmt_value(local[src])}")
+        for name, src in zip(stmt.control_out, proc.control_out):
+            if src in local:
+                returned.append(f"{name} := {fmt_value(self.vars[name])}")
+        call = stmt.name if not returned else stmt.name + " → " + ", ".join(returned)
+        self.trace_line(stmt, call)
+
+    def _park_wait(self, frame) -> None:
+        """Remember a procedure paused on wait. A caller stays linked behind the inner one."""
+        current = self._wait_frame
+        if current is None:
+            self._wait_frame = frame
+            return
+        node = current
+        while node.get("caller") is not None:
+            node = node["caller"]
+        node["caller"] = frame
+
+    def _resume_proc(self) -> None:
+        frame = self._wait_frame
+        self._wait_frame = None
+        self._run_wait_frame(frame, frame["pc"])
+
+    def _run_wait_frame(self, frame, start_pc: int) -> None:
+        caller_vars = frame["caller_vars"]
+        self.vars = frame["local"]
+        self.pc = start_pc
+        self.proc_depth += 1
+        self.proc_names.append(frame["proc"].name)
+        try:
+            steps = 0
+            while self.pc < frame["end"] and not self.error and self.paused not in ("stop", "breakpoint", "stopped", "wait"):
+                if self._on_breakpoint() and self.pc != self.break_skip:
+                    self.break_skip = self.pc
+                    self.paused = "breakpoint"
+                    break
+                self.break_skip = None
+                self._execute_current()
+                steps += 1
+                if steps > 100000:
+                    self._set_error(RuntimeError("程序超過 100000 步"), self.current_line(), log=True)
+                    break
+        finally:
+            local = self.vars
+            inner_pc = self.pc
+            waiting = self.paused == "wait"
+            breaking = self.paused == "breakpoint"
+            self._remember_failed_proc(frame["proc"], local)
+            self.vars = caller_vars
+            self.pc = frame["saved_pc"]
+            self.proc_depth -= 1
+            self.proc_names.pop()
+        if waiting or breaking:
+            frame["local"] = local
+            frame["pc"] = inner_pc
+            self._park_wait(frame)
+            self.vars = local
+            return
+        if self.error:
+            return
+        self._export_proc(frame["stmt"], frame["proc"], local)
+        parent = frame.get("caller")
+        if parent is not None:
+            self._run_wait_frame(parent, frame["saved_pc"] + 1)
+            return
+        self.pc = frame["saved_pc"] + 1
 
     def _call(self, stmt: Call):
         bare = operator_bare(stmt.name)
@@ -561,37 +1042,7 @@ class Session:
         message = stmt.name if not outputs else stmt.name + " → " + ", ".join(outputs)
         self.trace_line(stmt, message)
 
-    def public_state(self) -> dict:
-        iconic = []
-        control = []
-        for name, value in self.vars.items():
-            if isinstance(value, list) and value and all(isinstance(item, Image) for item in value):
-                kind, info, thumb = describe_iconic(value[-1])
-                iconic.append({
-                    "name": name, "kind": kind, "role": _var_role(name, kind, True),
-                    "info": f"{len(value)} 張  {info}", "thumb": thumb,
-                })
-            elif isinstance(value, (Image, Region, XLD)):
-                kind, info, thumb = describe_iconic(value)
-                iconic.append({
-                    "name": name, "kind": kind, "role": _var_role(name, kind, True),
-                    "info": info, "thumb": thumb,
-                })
-            elif isinstance(value, ShapeModel):
-                control.append({"name": name, "type": "shape_model", "text": value.summary(), "full": value.summary()})
-            elif isinstance(value, NccModel):
-                control.append({"name": name, "type": "ncc_model", "text": value.summary(), "full": value.summary()})
-            elif callable(getattr(value, "summary", None)):
-                text = value.summary()
-                control.append({"name": name, "type": "model", "text": text, "full": text})
-            else:
-                kind = "tuple" if isinstance(value, list) else "string" if isinstance(value, str) else "real" if isinstance(value, float) else "integer"
-                role = _var_role(name, kind, False)
-                control.append({"name": name, "type": role, "text": fmt_value(value), "full": full_value(value)})
-        histogram = None
-        if self.histogram is not None:
-            histogram = dict(self.histogram)
-            histogram["color"] = self.region_color
+    def _window_overlays(self) -> list:
         overlays = list(self.display.overlays)
         mask = self.threshold_mask
         base = self.display.base
@@ -639,25 +1090,220 @@ class Session:
                     "alpha": 120,
                 },
             )
-        return {
+        return overlays
+
+    def _display_token(self, overlays: list) -> tuple:
+        base = self.display.base
+        if base is None:
+            base_token = None
+        else:
+            domain = base.domain
+            base_token = (
+                id(base.data),
+                base.data.shape,
+                None if domain is None else id(domain),
+            )
+        parts = []
+        for item in overlays:
+            kind = item.get("kind")
+            if kind == "region":
+                region = item["region"]
+                parts.append(
+                    (
+                        "region",
+                        tuple(id(mask) for mask in region.objects),
+                        region.width,
+                        region.height,
+                        item.get("color"),
+                        item.get("draw"),
+                        item.get("width"),
+                        item.get("alpha"),
+                        tuple(item.get("colors") or ()),
+                    )
+                )
+            elif kind == "xld":
+                xld = item["xld"]
+                parts.append(
+                    (
+                        "xld",
+                        id(xld),
+                        len(xld.contours),
+                        item.get("color"),
+                        item.get("width"),
+                        tuple(item.get("colors") or ()),
+                    )
+                )
+            elif kind == "text":
+                parts.append(("text", item.get("text"), item.get("row"), item.get("col"), item.get("color")))
+            else:
+                parts.append((kind, id(item)))
+        panels = getattr(self.display, "calib_panels", None) or ()
+        extra = (
+            tuple((item.get("index"), item.get("top"), item.get("bottom")) for item in panels),
+            getattr(self.display, "calib_note", None),
+            bool(getattr(self.display, "calib_back", False)),
+        )
+        return (base_token, tuple(parts), extra)
+
+    def _revision(self, cache_name: str, token: tuple) -> int:
+        cached = getattr(self, cache_name, None)
+        if cached is not None and cached[0] == token:
+            return cached[1]
+        rev = int(cached[1] if cached is not None else 0) + 1
+        setattr(self, cache_name, (token, rev))
+        return rev
+
+    def _calib_extra(self, base: Image | None, preview: bool) -> dict | None:
+        panels = getattr(self.display, "calib_panels", None)
+        note = getattr(self.display, "calib_note", None)
+        back = bool(getattr(self.display, "calib_back", False))
+        if not panels and not note and not back:
+            return None
+        extra = {}
+        if panels:
+            shown = [dict(item) for item in panels]
+            if preview and base is not None:
+                scale = 640 / max(base.width, base.height)
+                for item in shown:
+                    item["top"] = float(item["top"]) * scale
+                    item["bottom"] = float(item["bottom"]) * scale
+            extra["calibPanels"] = shown
+        if note:
+            extra["calibNote"] = note
+        if back:
+            extra["calibBack"] = True
+        return extra
+
+    def _paint_display(self, base, overlays, preview: bool, token: tuple, rev: int) -> dict | None:
+        payload = compose_display(base, overlays, preview=preview)
+        extra = self._calib_extra(base, preview)
+        if payload is not None and extra:
+            payload = dict(payload)
+            payload.update(extra)
+        self._display_cache = (token, payload, rev)
+        return payload
+
+    def render_display_job(self, job: dict) -> dict | None:
+        payload = compose_display(job["base"], job["overlays"], preview=bool(job["preview"]))
+        extra = job.get("extra")
+        if payload is not None and extra:
+            payload = dict(payload)
+            payload.update(extra)
+        return payload
+
+    def window_display(self, *, defer: bool = False):
+        overlays = self._window_overlays()
+        base = self.display.base
+        preview = bool(getattr(self, "running", False)) and base is not None and max(base.width, base.height) > 640
+        token = (self._display_token(overlays), preview)
+        cached = getattr(self, "_display_cache", None)
+        if cached is not None and cached[0] == token:
+            return cached[1], cached[2], None
+        rev = int(getattr(self, "_display_rev", 0)) + 1
+        self._display_rev = rev
+        if not defer:
+            payload = self._paint_display(base, overlays, preview, token, rev)
+            return payload, rev, None
+        base_copy, overlay_copy = copy_display_scene(base, overlays)
+        return None, rev, {
+            "token": token,
+            "rev": rev,
+            "base": base_copy,
+            "overlays": overlay_copy,
+            "preview": preview,
+            "extra": self._calib_extra(base, preview),
+        }
+
+    def store_display(self, job: dict, payload: dict | None) -> None:
+        if int(getattr(self, "_display_rev", 0)) == int(job["rev"]):
+            self._display_cache = (job["token"], payload, job["rev"])
+
+    def public_state(self, *, defer_display: bool = False) -> dict:
+        iconic = []
+        control = []
+        thumb_jobs = []
+        variables, local_names = self._scoped_vars()
+        for name, value in variables.items():
+            scope = None
+            if local_names:
+                scope = "程序" if name in local_names else "呼叫端"
+            if isinstance(value, list) and value and all(isinstance(item, Image) for item in value):
+                kind, info, thumb, thumb_job = describe_iconic(value[-1], self._thumb_cache, defer=defer_display)
+                entry = {
+                    "name": name, "kind": kind, "role": _var_role(name, kind, True),
+                    "scope": scope,
+                    "info": f"{len(value)} 張  {info}", "thumb": thumb,
+                }
+                if thumb_job is not None:
+                    thumb_job["target"] = entry
+                    thumb_jobs.append(thumb_job)
+                iconic.append(entry)
+            elif isinstance(value, (Image, Region, XLD)):
+                kind, info, thumb, thumb_job = describe_iconic(value, self._thumb_cache, defer=defer_display)
+                entry = {
+                    "name": name, "kind": kind, "role": _var_role(name, kind, True),
+                    "scope": scope,
+                    "info": info, "thumb": thumb,
+                }
+                if thumb_job is not None:
+                    thumb_job["target"] = entry
+                    thumb_jobs.append(thumb_job)
+                iconic.append(entry)
+            elif isinstance(value, ShapeModel):
+                control.append({"name": name, "type": "shape_model", "scope": scope, "text": value.summary(), "full": value.summary()})
+            elif isinstance(value, NccModel):
+                control.append({"name": name, "type": "ncc_model", "scope": scope, "text": value.summary(), "full": value.summary()})
+            elif callable(getattr(value, "summary", None)):
+                text = value.summary()
+                control.append({"name": name, "type": "model", "scope": scope, "text": text, "full": text})
+            else:
+                kind = "tuple" if isinstance(value, list) else "string" if isinstance(value, str) else "real" if isinstance(value, float) else "integer"
+                role = _var_role(name, kind, False)
+                control.append({"name": name, "type": role, "scope": scope, "text": fmt_value(value), "full": full_value(value)})
+        histogram = None
+        if self.histogram is not None:
+            histogram = dict(self.histogram)
+            histogram["color"] = self.region_color
+        display, display_rev, display_job = self.window_display(defer=defer_display)
+        var_rev = self._revision(
+            "_var_cache",
+            (
+                tuple((item["name"], item.get("scope"), item["kind"], item["role"], item["info"], item["thumb"]) for item in iconic),
+                tuple((item["name"], item.get("scope"), item["type"], item["text"], item["full"]) for item in control),
+            ),
+        )
+        log_rev = self._revision("_log_cache", tuple(self.log[-300:]))
+        state = {
             "id": self.id,
             "line": self.current_line(),
+            "procedure": self._paused_procedure(),
+            "arrowNote": getattr(self, "arrow_note", None),
             "done": self.done,
             "error": self.error,
             "errorLine": self.error_line,
             "paused": self.paused,
             "log": self.log[-300:],
+            "logSize": len(self.log),
             "iconic": iconic,
             "control": control,
-            "display": compose_display(self.display.base, overlays),
+            "display": display,
+            "displayRev": display_rev,
+            "varRev": var_rev,
+            "logRev": log_rev,
             "histogram": histogram,
             "steps": self.step_count,
             "imageStamp": int(getattr(self, "image_stamp", 0)),
+            "displayStamp": int(getattr(self, "display_stamp", 0)),
             "lineTimes": [
                 {"line": line, "ms": round(slot["total"] * 1000, 3), "count": slot["count"]}
                 for line, slot in sorted(self.line_times.items())
             ],
         }
+        if display_job is not None:
+            state["_display_job"] = display_job
+        if thumb_jobs:
+            state["_thumb_jobs"] = thumb_jobs
+        return state
 
     def view_object(self, name: str) -> dict:
         value = self.vars[name]
@@ -692,6 +1338,49 @@ class Session:
         return {"name": name, "kind": kind, "display": display}
 
 
+def _omit_when(state: dict, have: int | None, rev_key: str, drop: dict) -> dict:
+    if have is None or state.get(rev_key) != have:
+        return state
+    trimmed = dict(state)
+    trimmed.update(drop)
+    return trimmed
+
+
+def omit_known_display(state: dict, have: int | None) -> dict:
+    return _omit_when(state, have, "displayRev", {"display": None, "displayKept": True})
+
+
+def omit_known_state(
+    state: dict,
+    display_rev: int | None,
+    var_rev: int | None,
+    log_rev: int | None,
+    log_at: int | None = None,
+) -> dict:
+    state = omit_known_display(state, display_rev)
+    state = _omit_when(
+        state,
+        var_rev,
+        "varRev",
+        {"iconic": None, "control": None, "iconicKept": True, "controlKept": True},
+    )
+    if log_rev is not None and state.get("logRev") == log_rev:
+        return _omit_when(state, log_rev, "logRev", {"log": None, "logKept": True})
+    shown = state.get("log")
+    size = state.get("logSize")
+    if log_at is None or not isinstance(shown, list) or not isinstance(size, int):
+        return state
+    if log_at < 0 or log_at > size:
+        return state
+    start = size - len(shown)
+    if log_at < start:
+        return state
+    trimmed = dict(state)
+    trimmed["log"] = shown[log_at - start :]
+    trimmed["logFrom"] = log_at
+    return trimmed
+
+
 def _num_literal(text: str) -> bool:
     return bool(re.fullmatch(r"-?\d+(?:\.\d+)?", str(text).strip()))
 
@@ -702,11 +1391,41 @@ def _in_range(current: float, end: float, step: float) -> bool:
     return current >= end - 1e-9
 
 
-def describe_iconic(value):
+def _remember_thumb(thumbs, token, build):
+    if thumbs is None:
+        return build()
+    found = thumbs.get(token)
+    if found is not None:
+        thumbs.pop(token)
+        thumbs[token] = found
+        return found
+    thumb = build()
+    thumbs[token] = thumb
+    if len(thumbs) > 48:
+        while len(thumbs) > 32:
+            thumbs.pop(next(iter(thumbs)))
+    return thumb
+
+
+def encode_thumb_job(job: dict) -> str:
+    kind = job["kind"]
+    if kind == "image":
+        return jpeg_thumb(job["array"])
+    if kind == "region":
+        return jpeg_thumb(region_thumb(job["region"]))
+    return jpeg_thumb(xld_thumb(job["xld"]))
+
+
+def describe_iconic(value, thumbs=None, *, defer: bool = False):
     if isinstance(value, Image):
         channels = "byte" if value.channels == 1 else f"{value.channels} 通道"
-        thumb = jpeg_thumb(apply_domain_dim(value))
-        return "image", f"{value.width}×{value.height}  {channels}", thumb
+        domain = value.domain
+        token = ("image", id(value.data), value.data.shape, None if domain is None else id(domain))
+        info = f"{value.width}×{value.height}  {channels}"
+        if defer and (thumbs is None or token not in thumbs):
+            return "image", info, "", {"token": token, "kind": "image", "array": apply_domain_dim(value).copy()}
+        thumb = _remember_thumb(thumbs, token, lambda: jpeg_thumb(apply_domain_dim(value)))
+        return "image", info, thumb, None
     if isinstance(value, Region):
         info = f"{value.count()} 個物件  {value.width}×{value.height}"
         if value.links:
@@ -718,5 +1437,16 @@ def describe_iconic(value):
                     else:
                         holes += 1
             info += f"  link 外{outers} 孔{holes}"
-        return "region", info, jpeg_thumb(region_thumb(value))
-    return "xld", f"{len(value.contours)} 條輪廓", jpeg_thumb(xld_thumb(value))
+        token = ("region", tuple(id(mask) for mask in value.objects), value.width, value.height)
+        if defer and (thumbs is None or token not in thumbs):
+            masks = [np.array(mask, copy=True) for mask in value.objects]
+            copied = Region(value.width, value.height, masks, bool(value.multi_color), None)
+            return "region", info, "", {"token": token, "kind": "region", "region": copied}
+        return "region", info, _remember_thumb(thumbs, token, lambda: jpeg_thumb(region_thumb(value))), None
+    token = ("xld", id(value), len(value.contours), value.width, value.height)
+    info = f"{len(value.contours)} 條輪廓"
+    if defer and (thumbs is None or token not in thumbs):
+        contours = [[[float(point[0]), float(point[1])] for point in line] for line in value.contours]
+        copied = XLD(value.width, value.height, contours, bool(value.multi_color), None)
+        return "xld", info, "", {"token": token, "kind": "xld", "xld": copied}
+    return "xld", info, _remember_thumb(thumbs, token, lambda: jpeg_thumb(xld_thumb(value))), None

@@ -1,0 +1,21 @@
+* 兩個方塊連通是 2 個
+* 拿掉第 2 個剩下 1 個。插到最前面變成 3 個。
+* Rank 為 1 的面積和 dilation_rectangle1 相同。
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Top, 10, 10, 20, 25)
+Vizion.gen_rectangle1 (Low, 35, 40, 48, 60)
+Vizion.concat_obj (Top, Low, Both)
+Vizion.connection (Both, Parts)
+Vizion.count_obj (Parts, Count)
+Vizion.remove_obj (Parts, Kept, 2)
+Vizion.count_obj (Kept, Left)
+Vizion.insert_obj (Parts, Top, Inserted, 1)
+Vizion.count_obj (Inserted, Added)
+Vizion.replace_obj (Parts, Top, Replaced, 2)
+Vizion.count_obj (Replaced, Same)
+Vizion.dilation_rectangle1 (Top, Dilated, 3, 3)
+Vizion.rank_region (Top, Ranked, 3, 3, 1)
+Vizion.area_center (Dilated, AreaD, RowD, ColD)
+Vizion.area_center (Ranked, AreaR, RowR, ColR)
+DilateArea := AreaD[1]
+RankArea := AreaR[1]

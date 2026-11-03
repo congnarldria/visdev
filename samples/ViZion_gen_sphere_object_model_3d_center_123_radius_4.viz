@@ -1,0 +1,7 @@
+* 球心是 (1, 2, 3)，半徑是 4
+* 六個軸向點。包圍盒是球心加減半徑。直徑是 8。
+Vizion.gen_sphere_object_model_3d (1, 2, 3, 4, Sphere)
+Vizion.smallest_sphere_object_model_3d (Sphere, Cx, Cy, Cz, Radius)
+Vizion.smallest_bounding_box_object_model_3d (Sphere, MinX, MinY, MinZ, MaxX, MaxY, MaxZ)
+Vizion.get_object_model_3d_params (Sphere, 'center', Center)
+Vizion.get_object_model_3d_params (Sphere, 'diameter', Diameter)

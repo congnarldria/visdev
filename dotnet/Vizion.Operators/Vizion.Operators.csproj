@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net48;net8.0</TargetFrameworks>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Vizion</RootNamespace>
+    <AssemblyName>Vizion.Operators</AssemblyName>
+    <Description>讀圖、區間門檻、八連通。結果可交給 Vizion.Display 的行程疊加顯示。Windows 7 SP1 用 .NET Framework 4.8。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Vizion.Display\Vizion.Display.csproj" />
+  </ItemGroup>
+</Project>

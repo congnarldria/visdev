@@ -235,6 +235,79 @@ def _keys_peak(samples: np.ndarray) -> float:
     return best_pos - 2.0
 
 
+def _integer_offsets(gray: np.ndarray, mask: np.ndarray, angle: float, limit: int = 768):
+    """Same point set the native matcher uses for an integer-pixel score.
+
+    Relative coordinates are rounded to the nearest pixel, so the best
+    placement is an integer row and column. An even-sized box then sits on
+    40 rather than on the half-pixel center 39.5.
+    """
+    height, width = gray.shape
+    stride = 1
+    while stride < 32 and (height // stride) * (width // stride) > limit:
+        stride += 1
+    origin_row = (height - 1) * 0.5
+    origin_col = (width - 1) * 0.5
+    dx = []
+    dy = []
+    values = []
+    for row in range(0, height, stride):
+        for col in range(0, width, stride):
+            if mask[row, col] == 0:
+                continue
+            dx.append(col - origin_col)
+            dy.append(row - origin_row)
+            values.append(float(gray[row, col]))
+    if len(values) < 16:
+        return None
+    rel_col = np.asarray(dx, np.float64)
+    rel_row = np.asarray(dy, np.float64)
+    samples = np.asarray(values, np.float64)
+    if angle:
+        cosine = math.cos(angle)
+        sine = math.sin(angle)
+        rotated_col = rel_col * cosine + rel_row * sine
+        rotated_row = -rel_col * sine + rel_row * cosine
+        rel_col, rel_row = rotated_col, rotated_row
+    samples = samples - float(samples.mean())
+    norm = float(np.sqrt(np.dot(samples, samples)))
+    return np.rint(rel_col).astype(np.int32), np.rint(rel_row).astype(np.int32), samples, norm
+
+
+def _integer_score(scene: np.ndarray, ix, iy, samples, norm: float, row: int, col: int, ignore: bool) -> float:
+    rows = row + iy
+    cols = col + ix
+    height, width = scene.shape
+    if int(rows.min()) < 0 or int(cols.min()) < 0 or int(rows.max()) >= height or int(cols.max()) >= width:
+        return -1.0
+    pixels = scene[rows, cols].astype(np.float64)
+    dot = float(np.dot(samples, pixels))
+    energy = float(np.dot(pixels, pixels) - (float(pixels.sum()) ** 2) / len(pixels))
+    if energy < 1e-6 or norm < 1e-6:
+        return 0.0
+    score = dot / (norm * math.sqrt(energy))
+    if ignore:
+        score = abs(score)
+    return float(max(-1.0, min(1.0, score)))
+
+
+def _snap_integer(scene: np.ndarray, model: NccModel, row: float, col: float, angle: float):
+    packed = _integer_offsets(model.gray, model.mask, angle)
+    if packed is None:
+        return float(row), float(col), 0.0
+    ix, iy, samples, norm = packed
+    ignore = model.metric == "ignore_global_polarity"
+    base_row = int(round(row))
+    base_col = int(round(col))
+    best = (-2.0, base_row, base_col)
+    for d_row in range(-4, 5):
+        for d_col in range(-4, 5):
+            score = _integer_score(scene, ix, iy, samples, norm, base_row + d_row, base_col + d_col, ignore)
+            if score > best[0]:
+                best = (score, base_row + d_row, base_col + d_col)
+    return float(best[1]), float(best[2]), best[0]
+
+
 def _axis_peak(value_at, center: float, spacing: float = 1.0) -> float:
     offsets = (-2, -1, 0, 1, 2)
 
@@ -490,6 +563,14 @@ def find_ncc_model(
         found = _suppress(refined, max(3.0, model.radius / (2**level_index) * 0.5), 48, np.deg2rad(18))
         if not found:
             break
+
+    if found:
+        full = image.gray().astype(np.float32)
+        snapped = []
+        for row, col, angle, score in found:
+            integer_row, integer_col, integer_score = _snap_integer(full, model, row, col, angle)
+            snapped.append((integer_row, integer_col, angle, integer_score if integer_score > 0 else score))
+        found = snapped
 
     if found and mode == "interpolation":
         poses = _interpolate_ncc(

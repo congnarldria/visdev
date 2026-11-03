@@ -1,0 +1,64 @@
+* 空白分給最近的物件
+Vizion.gen_image_const (Image, 'byte', 80, 60)
+Vizion.gen_rectangle1 (Left, 10, 10, 19, 19)
+Vizion.gen_rectangle1 (Right, 10, 30, 19, 39)
+Vizion.concat_obj (Left, Right, Parts)
+Vizion.partition_nearest (Parts, Grown, 'city-block')
+Vizion.count_obj (Grown, GrownN)
+Vizion.area_center (Grown, GrownArea, GrownRow, GrownCol)
+G1 := GrownArea[1]
+G2 := GrownArea[2]
+GR := GrownRow[1]
+GC1 := GrownCol[1]
+GC2 := GrownCol[2]
+Vizion.partition_area (Parts, 'city-block', Territory)
+T1 := Territory[1]
+T2 := Territory[2]
+Vizion.owner_index (Parts, [14, 14], [24, 25], 'city-block', GapOwn)
+OwnL := GapOwn[1]
+OwnR := GapOwn[2]
+Vizion.owner_index (Parts, [0, 59], [0, 79], 'city-block', Corners)
+CornerL := Corners[1]
+CornerR := Corners[2]
+Vizion.partition_border (Parts, Border, 'city-block')
+Vizion.count_obj (Border, BorderN)
+Vizion.area_center (Border, BorderArea, BorderRow, BorderCol)
+B1 := BorderArea[1]
+B2 := BorderArea[2]
+BC1 := BorderCol[1]
+BC2 := BorderCol[2]
+Vizion.select_territory (Parts, Big, 'large', 'city-block')
+Vizion.area_center (Big, BigArea, BigRow, BigCol)
+BigN := BigArea[1]
+BigC := BigCol[1]
+Vizion.select_territory (Parts, Small, 'small', 'city-block')
+Vizion.area_center (Small, SmallArea, SmallRow, SmallCol)
+SmallN := SmallArea[1]
+SmallC := SmallCol[1]
+Vizion.gen_rectangle1 (Strip, 0, 20, 59, 29)
+Vizion.partition_domain (Parts, Strip, Inside, 'city-block')
+Vizion.count_obj (Inside, InsideN)
+Vizion.area_center (Inside, InArea, InRow, InCol)
+In1 := InArea[1]
+In2 := InArea[2]
+InC1 := InCol[1]
+InC2 := InCol[2]
+Vizion.test_region_point (Inside, 14, 14, OffStrip)
+Vizion.test_region_point (Inside, 14, 22, OnStrip)
+Vizion.partition_label (Parts, Labels, 'city-block')
+Vizion.get_grayval (Labels, 14, 24, LabelL)
+Vizion.get_grayval (Labels, 14, 25, LabelR)
+Vizion.gen_region_points (DotA, 40, 10)
+Vizion.gen_region_points (DotB, 40, 12)
+Vizion.concat_obj (DotA, DotB, Dots)
+Vizion.tie_region (Dots, Ties, 'city-block')
+Vizion.count_obj (Ties, TieCount)
+Vizion.area_center (Ties, TieArea, TieRow, TieCol)
+TieN := TieArea[1]
+TieR := TieRow[1]
+TieC := TieCol[1]
+Vizion.paint_region (Border, Image, Shown, 255, 'fill')
+Vizion.get_grayval (Shown, 14, 24, CutGray)
+Vizion.get_grayval (Shown, 14, 25, CutGray2)
+Vizion.get_grayval (Shown, 14, 23, SideGray)
+Vizion.dev_display (Shown)
