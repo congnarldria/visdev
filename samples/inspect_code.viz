@@ -1,0 +1,10 @@
+* 條碼檢測範本。打開就能跑。
+* 讀 samples/codes.png。auto 會讀到這張圖上的 EAN-13。
+* Count 是個數。Text 是第一個讀到的字，從 1 開始。
+Vizion.read_image (Image, 'samples/codes.png')
+Vizion.create_bar_code_model ('', '', Handle)
+Vizion.find_bar_code (Image, Symbol, Handle, 'auto', Decoded)
+Vizion.tuple_length (Decoded, Count)
+Text := Decoded[1]
+Vizion.dev_display (Image)
+Vizion.dev_display (Symbol)

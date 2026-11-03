@@ -1155,11 +1155,13 @@ class Session:
 
     def window_display(self) -> tuple[dict | None, int]:
         overlays = self._window_overlays()
-        token = self._display_token(overlays)
+        base = self.display.base
+        preview = bool(getattr(self, "running", False)) and base is not None and max(base.width, base.height) > 640
+        token = (self._display_token(overlays), preview)
         cached = getattr(self, "_display_cache", None)
         if cached is not None and cached[0] == token:
             return cached[1], cached[2]
-        payload = compose_display(self.display.base, overlays)
+        payload = compose_display(self.display.base, overlays, preview=preview)
         if payload is not None:
             panels = getattr(self.display, "calib_panels", None)
             note = getattr(self.display, "calib_note", None)
@@ -1167,7 +1169,14 @@ class Session:
             if panels or note or back:
                 payload = dict(payload)
                 if panels:
-                    payload["calibPanels"] = panels
+                    shown = panels
+                    if preview:
+                        scale = 640 / max(base.width, base.height)
+                        shown = [
+                            {**item, "top": float(item["top"]) * scale, "bottom": float(item["bottom"]) * scale}
+                            for item in panels
+                        ]
+                    payload["calibPanels"] = shown
                 if note:
                     payload["calibNote"] = note
                 if back:

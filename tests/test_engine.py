@@ -3617,6 +3617,76 @@ def test_inspect_parts_template_counts_eight_parts():
     assert session.display.base is not None
 
 
+def test_running_large_image_is_a_preview_until_the_run_finishes():
+    session = run_source("Vizion.gen_image_const (Image, 'byte', 1200, 800)\n")
+    assert session.error is None, session.error
+    full = session.public_state()["display"]
+    assert full["width"] == 1200 and full["height"] == 800
+    assert full["image"].startswith("data:image/png")
+    assert not full.get("preview")
+    session.running = True
+    preview = session.public_state()["display"]
+    assert preview["width"] <= 640 and preview["height"] <= 640
+    assert preview["width"] == 640
+    assert preview["image"].startswith("data:image/jpeg")
+    assert preview.get("preview") is True
+    assert session.vars["Image"].width == 1200
+    session.running = False
+    again = session.public_state()["display"]
+    assert again["width"] == 1200 and again["height"] == 800
+    assert again["image"].startswith("data:image/png")
+    assert not again.get("preview")
+    small = run_source("Vizion.gen_image_const (Image, 'byte', 320, 200)\n")
+    small.running = True
+    shown = small.public_state()["display"]
+    assert shown["width"] == 320 and shown["image"].startswith("data:image/png")
+
+
+def test_stop_during_wait_replaces_the_preview_with_the_full_image():
+    import asyncio
+    import time
+
+    from app.main import SESSIONS, ExecIn, exec_program, session_state, stop
+
+    source = "Vizion.gen_image_const (Image, 'byte', 1200, 800)\nVizion.wait_seconds (3)\n"
+    started = asyncio.run(exec_program(ExecIn(source=source, action="run")))
+    sid = started["id"]
+    session = SESSIONS[sid]
+    seen_preview = False
+    final = None
+    try:
+        for _ in range(80):
+            state = session_state(sid)
+            display = state.get("display") or {}
+            if state.get("running") and display.get("preview"):
+                seen_preview = True
+                stop(sid)
+            if not state.get("running"):
+                final = state
+                break
+            time.sleep(0.05)
+        assert seen_preview
+        assert final is not None and final.get("running") is False
+        assert final["display"]["width"] == 1200 and final["display"]["height"] == 800
+        assert final["display"]["image"].startswith("data:image/png")
+        assert not final["display"].get("preview")
+        assert session.vars["Image"].width == 1200
+    finally:
+        stop(sid)
+        runner = getattr(session, "runner", None)
+        if runner is not None:
+            runner.join(timeout=2)
+        SESSIONS.pop(sid, None)
+
+
+def test_inspect_code_template_reads_the_ean():
+    session = run_source((ROOT / "samples" / "inspect_code.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 1
+    assert session.vars["Text"] == "4006381333931"
+    assert session.display.base is not None
+
+
 def test_inspect_stereo_template_shows_the_baseline():
     session = run_source((ROOT / "samples" / "inspect_stereo.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error

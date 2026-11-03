@@ -1394,7 +1394,9 @@ async function loadDisplay(display) {
   }
   publishDisplay(display);
   gfxEmpty.hidden = true;
-  gfxTitle.textContent = `${display.width} × ${display.height}`;
+  gfxTitle.textContent = display.preview
+    ? `${display.width} × ${display.height}　預覽`
+    : `${display.width} × ${display.height}`;
   const refit = VisdevGeom.shouldRefit(cam.user, cam.fitW, cam.fitH, display.width, display.height);
   cam.fitW = display.width;
   cam.fitH = display.height;
@@ -2340,6 +2342,9 @@ window.VisDevCommands = {
   },
   stereoTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_stereo.viz", "這是相對姿態範本。第 k 組是同一次擺放。執行後看 Pose1。");
+  },
+  codeTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_code.viz", "這是條碼範本。執行後看 Text。");
   },
   new() {
     code.value = "* 新程式\n";

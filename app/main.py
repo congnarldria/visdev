@@ -202,7 +202,8 @@ def _session_or_404(sid: str) -> Session:
 def _snapshot(current: Session) -> dict:
     with current.lock:
         state = current.public_state()
-    state["running"] = bool(getattr(current, "running", False))
+        # 和這張畫面一起讀。執行緒只在鎖內改 running，避免預覽配上「已停止」。
+        state["running"] = bool(getattr(current, "running", False))
     return state
 
 
@@ -906,13 +907,15 @@ async def exec_program(body: ExecIn):
         return await asyncio.to_thread(sync)
 
     def background():
-        current.running = True
         try:
             _prepare_action(current, body, False)
             _finish_wait(current)
         finally:
-            current.running = False
+            with current.lock:
+                current.running = False
 
+    with current.lock:
+        current.running = True
     current.runner = threading.Thread(target=background, daemon=True, name="visdev-run")
     current.runner.start()
     return {"id": current.id, "running": True}
