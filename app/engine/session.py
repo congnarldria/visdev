@@ -196,6 +196,7 @@ class Session:
         self.error_line = number
         if log:
             self._append_log(text if text.startswith("錯誤") else f"錯誤 {text}")
+        self._release_handles()
 
     def reset(self):
         self._release_error_frames()

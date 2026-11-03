@@ -152,7 +152,10 @@ def _open_camera(index: int, width: int, height: int):
         cap.release()
         cap = cv2.VideoCapture(index)
     if not cap.isOpened():
-        raise RuntimeError(f"打不開相機 {index}。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。")
+        raise RuntimeError(
+            f"打不開相機 {index}。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。"
+            "沒有相機時，請改跑檔案、範本裡的產線，用 samples/line_batch。"
+        )
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if width > 0:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -195,7 +198,10 @@ def _load_camera(handle: AcqHandle, flush: bool) -> np.ndarray:
         if ok and grabbed is not None:
             frame = grabbed
     if frame is None:
-        raise RuntimeError("讀不到畫面。請確認相機還接著、沒有被別的程式占用，然後再抓一次。")
+        raise RuntimeError(
+            "讀不到畫面。請確認相機還接著、沒有被別的程式占用，然後再抓一次。"
+            "沒有相機時，請改跑檔案、範本裡的產線，用 samples/line_batch。"
+        )
     return _paint(frame, handle.color, handle.width, handle.height)
 
 

@@ -61,5 +61,23 @@ const line = run.resultSummary([
   { name: "Count", text: "1" },
 ]);
 assert(line === "判定 不合格 · 合格 3 · 不合格 2 · 總數 5 · 明細 workspace/line_result.csv", "a line run reports pass and fail counts");
+const running = run.liveLine("專案 demo · ", 18, [
+  { name: "Judge", text: "'不合格'" },
+  { name: "OkCount", text: "1" },
+  { name: "NgCount", text: "1" },
+  { name: "Total", text: "2" },
+  { name: "Count", text: "0" },
+]);
+assert(running === "專案 demo · 下一行 18 · 判定 不合格 · 合格 1 · 不合格 1 · 總數 2", "a running line shows the counts");
+assert(run.liveLine("", null, []) === "執行中", "running without a line still says it is running");
+const lastNg = run.resultSummary([
+  { name: "Judge", text: "'不合格'" },
+  { name: "OkCount", text: "3" },
+  { name: "NgCount", text: "2" },
+  { name: "Total", text: "5" },
+  { name: "LastNg", text: "'ng_02.png'" },
+  { name: "CsvFile", text: "'workspace/line_result.csv'" },
+]);
+assert(lastNg === "判定 不合格 · 合格 3 · 不合格 2 · 總數 5 · 不合格圖 ng_02.png", "a line run names the latest failed image");
 
 console.log("run source ok");

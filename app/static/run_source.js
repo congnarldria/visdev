@@ -19,6 +19,7 @@
     ["OkCount", "合格"],
     ["NgCount", "不合格"],
     ["Total", "總數"],
+    ["LastNg", "不合格圖"],
     ["CsvFile", "明細"],
     ["Diameter", "直徑"],
     ["Width", "寬"],
@@ -77,6 +78,12 @@
     return parts.slice(0, 5).join(" · ");
   }
 
+  function liveLine(prefix, line, control) {
+    const where = line ? "下一行 " + line : "執行中";
+    const result = resultSummary(control);
+    return String(prefix || "") + where + (result ? " · " + result : "");
+  }
+
   function statusText(running, editor, line, active, paused) {
     if (running == null || sameProgram(running, editor)) return "";
     const where = line ? `第 ${line} 行 · ` : "";
@@ -86,7 +93,7 @@
     return "跑完的是按下執行時的程式，再按執行或單步才用現在的內容";
   }
 
-  const api = { sameProgram: sameProgram, arrowLine: arrowLine, statusText: statusText, resultSummary: resultSummary };
+  const api = { sameProgram: sameProgram, arrowLine: arrowLine, statusText: statusText, resultSummary: resultSummary, liveLine: liveLine };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof window !== "undefined") window.VisdevRun = api;
 })();

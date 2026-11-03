@@ -537,6 +537,7 @@ function setStatus() {
     const result = VisdevRun.resultSummary(server.control);
     stLine.textContent = `${project}${proc}已停止${result ? ` · ${result}` : ""}`;
   }
+  else if (server.running) stLine.textContent = VisdevRun.liveLine(`${project}${proc}`, server.line, server.control);
   else if (server.line) stLine.textContent = `${project}${proc}下一行 ${server.line}`;
   else stLine.textContent = currentProject ? `專案 ${currentProject}` : (server.done ? "程式結束" : "");
 }
@@ -2412,10 +2413,10 @@ window.VisDevCommands = {
     return VisDevCommands.openNamedTemplate("inspect_stripe.viz", "這是條紋寬度範本。執行後看 Width。");
   },
   lineTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_line.viz", "這是產線範本。執行後看合格、不合格，NG 圖和 CSV 在 workspace。");
+    return VisDevCommands.openNamedTemplate("inspect_line.viz", "這是產線範本。執行後看合格、不合格。沒有相機時用這支。NG 圖和 CSV 在 workspace。");
   },
   lineCameraTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_line_camera.viz", "這是相機產線。編號 0。Windows 先問 DirectShow。按停止就停，已經計的張數留著。");
+    return VisDevCommands.openNamedTemplate("inspect_line_camera.viz", "這是相機產線。編號 0。沒有相機時改跑檔案產線。執行中會看到合格和不合格。按停止就停。");
   },
   locateTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");

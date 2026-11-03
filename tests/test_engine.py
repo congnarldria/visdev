@@ -3540,17 +3540,21 @@ def test_inspect_line_template_counts_saves_ng_and_writes_csv():
     shutil.rmtree(folder, ignore_errors=True)
     report.unlink(missing_ok=True)
     try:
+        folder.mkdir(parents=True)
+        cv2.imwrite(str(folder / "old.png"), np.zeros((4, 4), np.uint8))
         session = run_source((ROOT / "samples" / "inspect_line.viz").read_text(encoding="utf-8"))
         assert session.error is None, session.error
         assert int(session.vars["Total"]) == 5
         assert int(session.vars["OkCount"]) == 3
         assert int(session.vars["NgCount"]) == 2
         assert session.vars["Judge"] == "不合格"
+        assert session.vars["LastNg"] == "ng_02.png"
         lines = report.read_text(encoding="utf-8").splitlines()
         assert lines[0] == "index,file,judge,count"
         assert "1,ng_01.png,NG,0" in lines
         assert "3,ok_01.png,OK,1" in lines
         assert sorted(path.name for path in folder.glob("*.png")) == ["ng_01.png", "ng_02.png"]
+        assert not (folder / "old.png").exists()
         assert session.display.base is not None
     finally:
         shutil.rmtree(folder, ignore_errors=True)
@@ -3628,7 +3632,8 @@ def test_camera_line_stops_and_keeps_the_counts():
         lines = report.read_text(encoding="utf-8").splitlines()
         assert lines[0] == "index,file,judge,count"
         assert len(lines) == grabbed + 1
-        assert lines[1].startswith("1,camera_1.png,")
+        assert lines[1] == "1,camera_1.png,NG,0"
+        assert all(row.split(",")[2] in ("OK", "NG") for row in lines[1:])
     finally:
         camera_ops._open_camera = original
         if session is not None:
@@ -3637,6 +3642,72 @@ def test_camera_line_stops_and_keeps_the_counts():
             if runner is not None:
                 runner.join(timeout=2)
             SESSIONS.pop(session.id, None)
+        shutil.rmtree(folder, ignore_errors=True)
+        report.unlink(missing_ok=True)
+
+
+def test_camera_grab_failure_keeps_counts_and_closes_the_file():
+    import shutil
+
+    from app.engine.chapters import camera_ops
+
+    class FakeCap:
+        def __init__(self):
+            self.n = 0
+            self.released = False
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            self.n += 1
+            if self.n > 2:
+                return False, None
+            image = np.zeros((40, 40), np.uint8)
+            if self.n % 2 == 0:
+                image[10:30, 10:30] = 255
+            else:
+                image[16:24, 16:24] = 255
+            return True, image
+
+        def release(self):
+            self.released = True
+
+        def set(self, *_args):
+            return False
+
+    fake = FakeCap()
+    folder = ROOT / "workspace" / "line_ng"
+    report = ROOT / "workspace" / "line_camera.csv"
+    shutil.rmtree(folder, ignore_errors=True)
+    report.unlink(missing_ok=True)
+    original = camera_ops._open_camera
+    camera_ops._open_camera = lambda *_args, **_kwargs: fake
+    try:
+        folder.mkdir(parents=True)
+        cv2.imwrite(str(folder / "old.png"), np.zeros((4, 4), np.uint8))
+        session = run_source((ROOT / "samples" / "inspect_line_camera.viz").read_text(encoding="utf-8"))
+        assert session.error
+        assert "讀不到畫面" in session.error
+        assert "samples/line_batch" in session.error
+        assert int(session.vars["OkCount"]) == 1
+        assert int(session.vars["NgCount"]) == 1
+        assert int(session.vars["Total"]) == 2
+        assert session.vars["Judge"] == "不合格"
+        assert session.vars["LastNg"] == "camera_1.png"
+        assert session.vars["Report"].closed is True
+        assert session.vars["Acq"].closed is True
+        assert fake.released is True
+        assert session.display.base is not None
+        lines = report.read_text(encoding="utf-8").splitlines()
+        assert lines == [
+            "index,file,judge,count",
+            "1,camera_1.png,NG,0",
+            "2,camera_2.png,OK,1",
+        ]
+        assert sorted(path.name for path in folder.glob("*.png")) == ["camera_1.png"]
+    finally:
+        camera_ops._open_camera = original
         shutil.rmtree(folder, ignore_errors=True)
         report.unlink(missing_ok=True)
 
@@ -4408,7 +4479,10 @@ def test_unopened_camera_error_stays_the_same():
         try:
             camera_ops._open_camera(0, 0, 0)
         except RuntimeError as exc:
-            assert str(exc) == "打不開相機 0。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。"
+            assert str(exc) == (
+                "打不開相機 0。請確認相機有接上、沒有被別的程式占用。編號 0 是第一台。"
+                "沒有相機時，請改跑檔案、範本裡的產線，用 samples/line_batch。"
+            )
         else:
             raise AssertionError("camera should not open")
     finally:
