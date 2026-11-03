@@ -71,5 +71,11 @@ int main(void)
         return 1;
     }
     printf("亮度自我檢查通過\n");
+    code = vizion_rotate_selftest();
+    if (code != 0) {
+        fprintf(stderr, "旋轉自我檢查失敗 %d\n", code);
+        return 1;
+    }
+    printf("旋轉自我檢查通過\n");
     return 0;
 }

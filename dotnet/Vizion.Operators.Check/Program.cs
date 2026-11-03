@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--rotate")
+{
+    RotateNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--intensity")
 {
     IntensityNativeCheck();
@@ -919,6 +925,85 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void RotateNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var turnedBand = new byte[40 * 40];
+    for (int row = 16; row <= 23; row++)
+        for (int column = 0; column < 40; column++)
+            turnedBand[row * 40 + column] = 255;
+    var band = ImageBuffer.Gray(40, 40, turnedBand);
+    bool previous = NativeCore.UseNative;
+    var nativeBand = Operators.RotateNearest(band, 90);
+    NativeCore.UseNative = false;
+    var managedBand = Operators.RotateNearest(band, 90);
+    NativeCore.UseNative = true;
+    ExpectSameImage(nativeBand, managedBand, "轉 90 度");
+    var turnedWidth = Operators.MeasureWidth(nativeBand, 20);
+    if (Math.Abs(turnedWidth.Width - 8) > 1e-6)
+        throw new InvalidOperationException($"轉正後的寬度應是 8，得到 {turnedWidth.Width}");
+    var pattern = new byte[37 * 29];
+    for (int i = 0; i < pattern.Length; i++)
+        pattern[i] = (byte)((i * 13 + 4) & 255);
+    var picture = ImageBuffer.Gray(37, 29, pattern);
+    ExpectSameImage(Operators.RotateNearest(picture, 0), picture, "轉 0 度");
+    var nativeTilt = Operators.RotateNearest(picture, 17);
+    NativeCore.UseNative = false;
+    var managedTilt = Operators.RotateNearest(picture, 17);
+    NativeCore.UseNative = true;
+    ExpectSameImage(nativeTilt, managedTilt, "轉 17 度");
+    double[] angles = { -20, 0.1, 1, 15, 33, 45, 73, 180 };
+    foreach (double angle in angles)
+    {
+        var nativeAngle = Operators.RotateNearest(picture, angle);
+        NativeCore.UseNative = false;
+        var managedAngle = Operators.RotateNearest(picture, angle);
+        NativeCore.UseNative = true;
+        ExpectSameImage(nativeAngle, managedAngle, "轉 " + angle + " 度");
+    }
+    var wide = new byte[640 * 480];
+    for (int i = 0; i < wide.Length; i++)
+        wide[i] = (byte)((i * 3) & 255);
+    var wideImage = ImageBuffer.Gray(640, 480, wide);
+    var nativeWide = Operators.RotateNearest(wideImage, 45);
+    NativeCore.UseNative = false;
+    var managedWide = Operators.RotateNearest(wideImage, 45);
+    NativeCore.UseNative = true;
+    ExpectSameImage(nativeWide, managedWide, "640×480 轉 45 度");
+    var bench = new byte[960 * 540];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)(i & 255);
+    var benchImage = ImageBuffer.Gray(960, 540, bench);
+    Operators.RotateNearest(benchImage, 17);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 6; i++)
+        Operators.RotateNearest(benchImage, 17);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.RotateNearest(benchImage, 17);
+    watch.Restart();
+    for (int i = 0; i < 6; i++)
+        Operators.RotateNearest(benchImage, 17);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("旋轉原生檢查通過");
+    Console.WriteLine($"960×540 旋轉 17 度共 6 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void ExpectSameImage(ImageBuffer actual, ImageBuffer expected, string label)
+{
+    if (actual.Pixels.Length != expected.Pixels.Length)
+        throw new InvalidOperationException($"{label} 的長度不同");
+    for (int i = 0; i < actual.Pixels.Length; i++)
+    {
+        if (actual.Pixels[i] != expected.Pixels[i])
+            throw new InvalidOperationException($"{label} 像素 {i} 原生 {actual.Pixels[i]}，C# {expected.Pixels[i]}");
+    }
 }
 
 static void IntensityNativeCheck()

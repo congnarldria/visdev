@@ -18,6 +18,8 @@ public static partial class Operators
         double cosine = Math.Cos(radians);
         double sine = Math.Sin(radians);
         var result = new byte[source.Length];
+        if (NativeCore.TryRotateNearest(source, result, width, height, cosine, sine))
+            return ImageBuffer.Gray(width, height, result);
         for (int row = 0; row < height; row++)
         {
             for (int column = 0; column < width; column++)

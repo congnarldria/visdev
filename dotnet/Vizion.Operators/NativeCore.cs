@@ -234,6 +234,25 @@ public static class NativeCore
         }
     }
 
+    public static bool TryRotateNearest(byte[] source, byte[] destination, int width, int height, double cosine, double sine)
+    {
+        if (!IsLoaded || !UseNative || width < 1 || height < 1 || source.Length < width * height || destination.Length < width * height)
+            return false;
+        try
+        {
+            return vizion_rotate_nearest(source, destination, width, height, cosine, sine) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TryIntensity(byte[] gray, int width, int[] rows, int[] columns, int[] lengths, out double mean, out double deviation)
     {
         mean = 0;
@@ -417,6 +436,9 @@ public static class NativeCore
             return false;
         }
     }
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_rotate_nearest(byte[] source, byte[] destination, int width, int height, double cosine, double sine);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_intensity(

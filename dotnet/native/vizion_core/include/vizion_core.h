@@ -147,6 +147,12 @@ VIZION_EXPORT int VIZION_CALL vizion_intensity(
 
 VIZION_EXPORT int VIZION_CALL vizion_intensity_selftest(void);
 
+/* 繞影像中心最近鄰旋轉。正弦餘弦由呼叫端算好。圖外是 0。 */
+VIZION_EXPORT int VIZION_CALL vizion_rotate_nearest(
+    const uint8_t* src, uint8_t* dst, int width, int height, double cosine, double sine);
+
+VIZION_EXPORT int VIZION_CALL vizion_rotate_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif
