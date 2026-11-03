@@ -1,0 +1,49 @@
+* 色彩範本。打開就能跑。量綠色塊的面積和色調。
+* samples/color_part.png 有一塊綠、一塊紅，底是灰的。
+* 綠塊面積 1200，色調 60。紅塊色調是 0，不在範圍裡。灰底飽和度是 0。
+* 先用色調 40 到 80、飽和度 80 以上找出綠塊。這兩個數字不是合格窗口。
+* HueMin、HueMax 是合格的色調，OpenCV 的 H，0 到 180。預設 50 到 70。
+* AreaMin、AreaMax 預設 1100 到 1300。超出時 Judge 是不合格，區域改成紅色。
+* 不開相機，也不改 Windows 開 COM 的方式。
+HueMin := 50
+HueMax := 70
+AreaMin := 1100
+AreaMax := 1300
+SatMin := 80
+Vizion.read_image (Image, 'samples/color_part.png')
+Vizion.decompose3 (Image, Red, Green, Blue)
+Vizion.trans_from_rgb (Red, Green, Blue, HueImage, SatImage, ValueImage, 'hsv')
+Vizion.threshold (HueImage, HueBand, 40, 80)
+Vizion.threshold (SatImage, SatBand, SatMin, 255)
+Vizion.intersection (HueBand, SatBand, Colored)
+Vizion.connection (Colored, Parts, 1)
+Vizion.select_shape (Parts, Kept, 'area', 'and', 100, 99999)
+Vizion.count_obj (Kept, Count)
+if (Count >= 1)
+    Vizion.area_center (Kept, Area, Row, Column)
+    Vizion.intensity (Kept, HueImage, Mean, Dev)
+    Vizion.intensity (Kept, ValueImage, ValueMean, ValueDev)
+    Hue := Mean[1]
+    AreaValue := Area[1]
+else
+    Hue := 0
+    AreaValue := 0
+    Area := 0
+    Row := 0
+    Column := 0
+    Dev := 0
+    ValueMean := 0
+    ValueDev := 0
+endif
+if (Count == 1 and Hue >= HueMin and Hue <= HueMax and AreaValue >= AreaMin and AreaValue <= AreaMax and Row > 0 and Column > 0 and Dev >= 0 and ValueDev >= 0 and ValueMean > 0)
+    Judge := '合格'
+else
+    Judge := '不合格'
+endif
+Vizion.dev_display (Image)
+if (Judge == '合格')
+    Vizion.dev_set_color ('green')
+else
+    Vizion.dev_set_color ('red')
+endif
+Vizion.dev_display (Kept)

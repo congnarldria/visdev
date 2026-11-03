@@ -2541,6 +2541,9 @@ window.VisDevCommands = {
   defectTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_defect.viz", "這是瑕疵範本。暗塊看 Count、Area，亮點看 BrightCount、BrightArea。");
   },
+  colorTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_color.viz", "這是色彩範本。綠塊面積 1200、色調 60。紅塊不算。超出就不合格。");
+  },
   stripeTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_stripe.viz", "這是條紋寬度範本。執行後看 Width。");
   },

@@ -31,6 +31,7 @@
     ["Count", "個數"],
     ["BrightCount", "亮點"],
     ["Score", "最低分"],
+    ["Hue", "色調"],
     ["Area", "面積"],
     ["BrightArea", "亮點面積"],
   ];

@@ -3495,6 +3495,27 @@ def test_inspect_defect_template_finds_dark_and_bright():
     assert session.display.base is not None
 
 
+def test_inspect_color_template_measures_green_area_and_hue():
+    session = run_source((ROOT / "samples" / "inspect_color.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 1
+    assert int(session.vars["AreaValue"]) == 1200
+    assert int(session.vars["Hue"]) == 60
+    assert session.vars["Judge"] == "合格"
+    colors = {shape.get("color") for shape in session.public_state()["display"]["shapes"]}
+    assert "#00e05a" in colors
+    assert session.display.base is not None
+    assert session.display.base.channels == 3
+    tight = (ROOT / "samples" / "inspect_color.viz").read_text(encoding="utf-8").replace("HueMax := 70", "HueMax := 55")
+    failed = run_source(tight)
+    assert failed.error is None, failed.error
+    assert int(failed.vars["Hue"]) == 60
+    assert int(failed.vars["AreaValue"]) == 1200
+    assert failed.vars["Judge"] == "不合格"
+    failed_colors = {shape.get("color") for shape in failed.public_state()["display"]["shapes"]}
+    assert "#ff2a2a" in failed_colors
+
+
 def test_gauge_line_failure_keeps_the_image_and_says_what_to_try():
     session = run_source(
         "Vizion.read_image (Image, 'samples/gauge.png')\n"

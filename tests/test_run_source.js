@@ -84,5 +84,12 @@ assert(run.namedText([
   { name: "CsvFile", text: "'workspace/line_result.csv'" },
 ], "LastNg") === "ng_02.png", "the failed image name drops the quotes");
 assert(run.namedText([], "CsvFile") === "", "a missing file name stays blank");
+const color = run.resultSummary([
+  { name: "Judge", text: "'合格'" },
+  { name: "Count", text: "1" },
+  { name: "Hue", text: "60" },
+  { name: "Area", text: "[1200]" },
+]);
+assert(color === "判定 合格 · 個數 1 · 色調 60 · 面積 1200", "a color run names hue and area");
 
 console.log("run source ok");
