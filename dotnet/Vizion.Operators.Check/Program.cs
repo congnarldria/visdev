@@ -36,6 +36,21 @@ static void SelfTest()
     if (Math.Abs(circle.Row - 50) > 1e-6 || Math.Abs(circle.Column - 80) > 1e-6 || Math.Abs(circle.Radius - 20) > 1e-6)
         throw new InvalidOperationException($"飛點不該把圓拉走，得到列 {circle.Row} 行 {circle.Column} 半徑 {circle.Radius}");
 
+    var step = new byte[24 * 32];
+    for (int row = 0; row < 24; row++)
+        for (int col = 16; col < 32; col++)
+            step[row * 32 + col] = 255;
+    var edges = Operators.EdgesSubPix(ImageBuffer.Gray(32, 24, step), 1, 20, 40);
+    if (edges.Length != 1 || edges[0].Length != 24)
+        throw new InvalidOperationException($"階躍應是 1 條 24 點的邊緣，得到 {edges.Length} 條");
+    foreach (var point in edges[0])
+    {
+        if (Math.Abs(point.Column - 15.5) > 1e-3)
+            throw new InvalidOperationException($"邊緣應在行 15.5，得到 {point.Column}");
+    }
+    if (Math.Abs(edges[0][0].Row) > 1e-3 || Math.Abs(edges[0][^1].Row - 23) > 1e-3)
+        throw new InvalidOperationException($"邊緣應從列 0 到列 23，得到 {edges[0][0].Row} 到 {edges[0][^1].Row}");
+
     Expect(GrayConvert.Bgr(10, 20, 30), 22, "灰階 10,20,30");
     Expect(GrayConvert.Bgr(255, 128, 0), 104, "灰階 255,128,0");
     Expect(GrayConvert.Bgr(1, 2, 3), 2, "灰階 1,2,3");

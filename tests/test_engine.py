@@ -4345,6 +4345,27 @@ def test_project_holds_two_programs_and_its_image():
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def test_subpixel_step_lands_on_the_half_pixel():
+    import numpy as np
+
+    from app.engine.chapters.xld_ops import edges_sub_pix
+    from app.engine.objects import Image
+
+    session = run_source((ROOT / "samples" / "inspect_edge.viz").read_text(encoding="utf-8"))
+    assert session.error is None, session.error
+    assert int(session.vars["Count"]) == 1
+    ends = {
+        (round(float(session.vars["RowBegin"][0]), 4), round(float(session.vars["ColBegin"][0]), 4)),
+        (round(float(session.vars["RowEnd"][0]), 4), round(float(session.vars["ColEnd"][0]), 4)),
+    }
+    assert ends == {(0.0, 15.5), (23.0, 15.5)}
+    noise = np.full((24, 32), 128, np.uint8)
+    noise[3, 4] = 131
+    noise[10, 20] = 125
+    empty = edges_sub_pix(Image(noise), "canny", 1.0, 20, 40, ctx=None)
+    assert empty.iconic[0].contours == []
+
+
 def test_inspect_fit_template_rejects_the_outliers():
     session = run_source((ROOT / "samples" / "inspect_fit.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error

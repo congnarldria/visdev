@@ -7,7 +7,7 @@ function assert(cond, message) {
 }
 
 const items = templates.templates;
-assert(items.length === 17, "seventeen templates are listed");
+assert(items.length === 18, "eighteen templates are listed");
 const cmds = items.map((item) => item.cmd);
 assert(new Set(cmds).size === cmds.length, "each template command is unique");
 const files = items.map((item) => item.file);
@@ -25,6 +25,7 @@ assert(byCmd.charsTemplate.expect.includes("VISDEV 168"), "the character templat
 assert(byCmd.colorTemplate.expect.includes("1200"), "the color template names the area");
 assert(byCmd.missingTemplate.expect.includes("8"), "the missing-part template names eight parts");
 assert(byCmd.fitTemplate.expect.includes("半徑 20"), "the fit template names the circle radius");
+assert(byCmd.edgeTemplate.expect.includes("15.5"), "the edge template names the half pixel");
 const page = fs.readFileSync(path.join(__dirname, "../app/static/index.html"), "utf8");
 assert(page.includes('id="templateFly"'), "the template menu is filled from the catalog");
 assert(page.includes('data-cmd="templateList"'), "the file menu opens the catalog");

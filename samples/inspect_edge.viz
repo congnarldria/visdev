@@ -1,0 +1,12 @@
+* 次像素邊緣。打開就能跑。不開相機，也不改 Windows。
+* 左半是 0，右半是 255，階躍在行 16。平滑 1，門檻 20 和 40。
+* 邊緣落在行 15.5，從列 0 連到列 23，不是整數像素的外框。
+Vizion.gen_image_const (Dark, 'byte', 32, 24)
+Vizion.gen_rectangle1 (Right, 0, 16, 23, 31)
+Vizion.paint_region (Right, Dark, Image, 255, 'fill')
+Vizion.edges_sub_pix (Image, Edges, 'canny', 1, 20, 40)
+Vizion.count_obj (Edges, Count)
+Vizion.fit_line_contour_xld (Edges, Line, RowBegin, ColBegin, RowEnd, ColEnd)
+Vizion.dev_display (Image)
+Vizion.dev_set_color ('green')
+Vizion.dev_display (Edges)

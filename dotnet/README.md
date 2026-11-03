@@ -31,4 +31,12 @@ var line = Operators.FitLine(new (double Row, double Col)[]
 var circle = Operators.FitCircle(pointsOnTheCircle);
 ```
 
+## 次像素邊緣
+
+`Operators.EdgesSubPix` 和 `Vizion.edges_sub_pix` 的 canny 相同。寬 32、高 24、左半 0、右半 255 的階躍，邊緣在行 15.5，從列 0 到列 23。Python 範例是 `samples/inspect_edge.viz`。差幾個灰階的雜訊不會留下。
+
+```csharp
+var edges = Operators.EdgesSubPix(image, alpha: 1, low: 20, high: 40);
+```
+
 既有的 `Threshold`、`Connection`、`AreaCenterOf` 仍在 `Operators`。讀圖目前讀 PNG。

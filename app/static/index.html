@@ -309,6 +309,7 @@ endfor</pre>
         <li>相對姿態：<code>Pose1</code> 的第一個數約 0.04 公尺。狀態列寫基線。</li>
         <li>條碼：<code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。</li>
         <li>找線找圓：<code>samples/inspect_fit.viz</code>。直線飛點在列 8，擬合後仍是列 0、行 0 到行 30。圓的飛點在行 108，圓心仍是列 50、行 80，半徑 20。</li>
+        <li>次像素邊緣：<code>samples/inspect_edge.viz</code>。左半是 0、右半是 255。邊緣在行 15.5，從列 0 到列 23。</li>
       </ul>
       <p>點量規或直線量規時，可以按「線」在圖上拖。起點到終點的方向會保留。圖上已有影像時，確認前會畫出沿這條線找到的邊緣和首尾間距。</p>
       <h3>把結果送到外面</h3>
@@ -402,7 +403,7 @@ endfor</pre>
   <script src="/static/tolerance.js?v=8"></script>
   <script src="/static/var_list.js?v=1"></script>
   <script src="/static/highlight_sync.js?v=3"></script>
-  <script src="/static/templates.js?v=2"></script>
+  <script src="/static/templates.js?v=3"></script>
   <script src="/static/app.js?v=111"></script>
 </body>
 </html>
