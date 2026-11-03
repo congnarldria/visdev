@@ -3637,6 +3637,11 @@ def test_inspect_line_template_counts_saves_ng_and_writes_csv():
         assert ng_only["ngTotal"] == 2
         assert ng_only["onlyNg"] is True
         assert report.read_bytes() == saved_csv
+        stats = session.line_stats()
+        assert stats["total"] == 5 and stats["ok"] == 3 and stats["ng"] == 2
+        assert stats["yield"] == 60 and stats["lastNg"] == "ng_02.png"
+        assert stats["noJudge"] is False
+        assert report.read_bytes() == saved_csv
         assert int(session.vars["OkCount"]) == 3
         program = session.display.base.data.copy()
         assert session.show_ng_file("ng_01.png") == "ng_01.png"
@@ -4019,6 +4024,10 @@ def test_last_ng_and_csv_stay_inside_the_workspace():
                 assert failed["opens"] == [f"ng_{i}.png" for i in range(1, 6)]
                 assert failed["truncated"] is False
                 assert mixed.read_bytes().decode("utf-8").count(",OK,") == 25
+                stats = session.line_stats()
+                assert stats["total"] == 30 and stats["ok"] == 25 and stats["ng"] == 5
+                assert stats["yield"] == 83.3 and stats["lastNg"] == "ng_5.png"
+                assert mixed.read_bytes().decode("utf-8").count(",OK,") == 25
             finally:
                 mixed.unlink(missing_ok=True)
         finally:
@@ -4388,6 +4397,9 @@ def test_hole_line_uses_the_same_center_and_diameter_rules():
         assert int(red.sum()) > 8
         assert session.show_last_ng() == "ng_wide.png"
         assert int(session.vars["OkCount"]) == 2
+        stats = session.line_stats()
+        assert stats["total"] == 5 and stats["ok"] == 2 and stats["ng"] == 3
+        assert stats["yield"] == 40 and stats["lastNg"] == "ng_wide.png"
     finally:
         shutil.rmtree(folder, ignore_errors=True)
         report.unlink(missing_ok=True)

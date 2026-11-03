@@ -1032,6 +1032,19 @@ def show_ng_file_view(sid: str, body: NgFileIn):
     return _snapshot(current)
 
 
+@app.post("/api/session/{sid}/line-stats")
+def show_line_stats(sid: str):
+    current = _session_or_404(sid)
+    if getattr(current, "running", False):
+        raise HTTPException(409, "程式還在跑，停下來才能看統計")
+    with current.lock:
+        try:
+            stats = current.line_stats()
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return stats
+
+
 @app.post("/api/session/{sid}/line-csv")
 def show_line_csv(sid: str, onlyNg: bool = False):
     current = _session_or_404(sid)

@@ -159,14 +159,32 @@ def _csv_column(header: str, names: tuple[str, ...]) -> int | None:
     return None
 
 
-def _csv_is_ng(row: str, judge_at: int | None) -> bool:
+def _csv_judge_token(row: str, judge_at: int | None) -> str:
     if judge_at is None:
-        return False
+        return ""
     cells = _csv_cells(row)
     if judge_at >= len(cells):
-        return False
-    token = cells[judge_at].strip().strip("'\"")
+        return ""
+    return cells[judge_at].strip().strip("'\"")
+
+
+def _csv_is_ng(row: str, judge_at: int | None) -> bool:
+    token = _csv_judge_token(row, judge_at)
     return token.upper() == "NG" or token == "不合格"
+
+
+def _csv_is_ok(row: str, judge_at: int | None) -> bool:
+    token = _csv_judge_token(row, judge_at)
+    return token.upper() == "OK" or token == "合格"
+
+
+def _yield_percent(ok: int, total: int):
+    if total <= 0:
+        return None
+    rounded = round(1000 * ok / total) / 10
+    if abs(rounded - round(rounded)) < 1e-9:
+        return int(round(rounded))
+    return rounded
 
 
 def _csv_open_name(row: str, file_at: int | None, judge_at: int | None) -> str:
@@ -581,11 +599,7 @@ class Session:
         self._ng_file = filename
         return filename
 
-    def line_csv_preview(self, limit: int = 20, only_ng: bool = False) -> dict:
-        """Read the line CSV named by CsvFile. Only files inside workspace.
-
-        only_ng keeps rows whose judge cell is NG. The file on disk is not changed.
-        """
+    def _line_csv_lines(self) -> tuple[str, list[str]]:
         raw = self.vars.get("CsvFile", "")
         text = str(raw).strip().strip("'\"")
         if not text:
@@ -604,6 +618,14 @@ class Session:
         lines = path.read_text(encoding="utf-8").splitlines()
         if not lines:
             raise RuntimeError("明細是空的")
+        return normalized, lines
+
+    def line_csv_preview(self, limit: int = 20, only_ng: bool = False) -> dict:
+        """Read the line CSV named by CsvFile. Only files inside workspace.
+
+        only_ng keeps rows whose judge cell is NG. The file on disk is not changed.
+        """
+        normalized, lines = self._line_csv_lines()
         header = lines[0]
         body = lines[1:]
         judge_at = _csv_column(header, ("judge", "判定"))
@@ -621,6 +643,44 @@ class Session:
             "truncated": len(chosen) > limit,
             "onlyNg": bool(only_ng),
             "noJudge": judge_at is None,
+        }
+
+    def line_stats(self) -> dict:
+        """Count every row in the line CSV. The file on disk is not changed."""
+        normalized, lines = self._line_csv_lines()
+        header = lines[0]
+        body = lines[1:]
+        judge_at = _csv_column(header, ("judge", "判定"))
+        file_at = _csv_column(header, ("file", "檔名"))
+        if judge_at is None:
+            return {
+                "file": normalized,
+                "total": len(body),
+                "ok": 0,
+                "ng": 0,
+                "yield": None,
+                "noJudge": True,
+                "lastNg": "",
+            }
+        ok = 0
+        ng = 0
+        last = ""
+        for row in body:
+            if _csv_is_ng(row, judge_at):
+                ng += 1
+                name = _csv_open_name(row, file_at, judge_at)
+                if name:
+                    last = name
+            elif _csv_is_ok(row, judge_at):
+                ok += 1
+        return {
+            "file": normalized,
+            "total": len(body),
+            "ok": ok,
+            "ng": ng,
+            "yield": _yield_percent(ok, len(body)),
+            "noJudge": False,
+            "lastNg": last,
         }
 
     def show_calib_view(self, index: int | None) -> None:

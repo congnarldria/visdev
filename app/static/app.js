@@ -643,13 +643,15 @@ function setStatus() {
 function syncLineActions() {
   const ng = document.getElementById("btnLastNg");
   const csv = document.getElementById("btnLineCsv");
-  if (!ng || !csv || !window.VisdevRun) return;
+  const stats = document.getElementById("btnLineStats");
+  if (!ng || !csv || !stats || !window.VisdevRun) return;
   const running = Boolean(server && server.running);
   const name = server ? VisdevRun.namedText(server.control, "LastNg") : "";
   const file = server ? VisdevRun.namedText(server.control, "CsvFile") : "";
   ng.hidden = !name || running;
   ng.textContent = server && server.ngShowing ? "回到程式畫面" : "看不合格圖";
   csv.hidden = !file || running;
+  stats.hidden = !file || running;
 }
 
 let imageStamp = null;
@@ -2073,6 +2075,10 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     document.getElementById("aboutDialog").hidden = true;
   }
+  if (!document.getElementById("statsDialog").hidden) {
+    event.preventDefault();
+    document.getElementById("statsDialog").hidden = true;
+  }
   if (shapeDraw) {
     event.preventDefault();
     cancelShapeDraw();
@@ -2092,6 +2098,13 @@ document.getElementById("btnStop").onclick = async () => {
 };
 document.getElementById("btnLastNg").onclick = () => showLastNg();
 document.getElementById("btnLineCsv").onclick = () => showLineCsv(false);
+document.getElementById("btnLineStats").onclick = () => showLineStats();
+document.getElementById("statsOk").onclick = () => {
+  document.getElementById("statsDialog").hidden = true;
+};
+document.getElementById("statsDialog").addEventListener("mousedown", (event) => {
+  if (event.target.id === "statsDialog") document.getElementById("statsDialog").hidden = true;
+});
 document.getElementById("csvNg").onclick = () => showLineCsv(!csvOnlyNg);
 document.getElementById("csvOk").onclick = () => {
   document.getElementById("csvDialog").hidden = true;
@@ -2126,6 +2139,61 @@ async function showLastNg() {
 }
 
 let csvOnlyNg = false;
+
+function renderStats(data) {
+  document.getElementById("statsNote").textContent = data.file || "";
+  const body = document.getElementById("statsBody");
+  body.replaceChildren();
+  if (data.noJudge) {
+    const note = document.createElement("p");
+    note.textContent = "這份明細沒有判定欄";
+    body.appendChild(note);
+    return;
+  }
+  const grid = document.createElement("div");
+  grid.className = "stats-grid";
+  const yieldText = data.yield == null || data.yield === "" ? "" : `${data.yield}%`;
+  [["總數", data.total], ["合格", data.ok], ["不合格", data.ng], ["良率", yieldText]].forEach((pair) => {
+    const label = document.createElement("div");
+    label.textContent = pair[0];
+    const value = document.createElement("div");
+    value.textContent = pair[1] == null ? "" : String(pair[1]);
+    grid.appendChild(label);
+    grid.appendChild(value);
+  });
+  body.appendChild(grid);
+  const total = Number(data.total) || 0;
+  const bar = document.createElement("div");
+  bar.className = "yield-bar";
+  const ok = document.createElement("div");
+  ok.className = "ok";
+  const ng = document.createElement("div");
+  ng.className = "ng";
+  if (total > 0) {
+    ok.style.flex = String(Number(data.ok) || 0);
+    ng.style.flex = String(Number(data.ng) || 0);
+  }
+  bar.appendChild(ok);
+  bar.appendChild(ng);
+  body.appendChild(bar);
+  if (data.lastNg) {
+    const last = document.createElement("p");
+    last.textContent = `最近不合格 ${data.lastNg}`;
+    body.appendChild(last);
+  }
+}
+
+async function showLineStats() {
+  if (!sessionId || server.running) return;
+  const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/line-stats`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  renderStats(data);
+  document.getElementById("statsDialog").hidden = false;
+}
 
 function csvNote(data) {
   const ng = Number(data.ngTotal) || 0;

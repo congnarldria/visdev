@@ -976,7 +976,7 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-#btnLastNg, #btnLineCsv {
+#btnLastNg, #btnLineCsv, #btnLineStats {
   height: 22px;
   padding: 0 8px;
   border-radius: 2px;
@@ -986,7 +986,13 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
   flex: none;
 }
 #btnLastNg { border-color: #a33b32; color: #ffd0c8; background: #3a2424; }
-#btnLastNg[hidden], #btnLineCsv[hidden] { display: none !important; }
+#btnLastNg[hidden], #btnLineCsv[hidden], #btnLineStats[hidden] { display: none !important; }
+.dialog.stats { border-color: #465066; }
+.dialog.stats h2 { color: var(--text); }
+.stats-grid { display: grid; grid-template-columns: 5em 1fr; gap: 6px 12px; margin: 8px 0 12px; }
+.yield-bar { display: flex; height: 14px; width: 100%; background: #2a303a; margin: 0 0 12px; }
+.yield-bar .ok { background: #1f8a4c; }
+.yield-bar .ng { background: #c4473a; }
 #csvBody {
   max-height: 280px;
   overflow: auto;
