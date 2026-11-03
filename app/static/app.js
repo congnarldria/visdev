@@ -269,27 +269,18 @@ function renderEditor() {
 function renderVars() {
   const iconic = server.iconic || [];
   const control = server.control || [];
-  iconicCount.textContent = iconic.length ? String(iconic.length) : "";
-  iconicList.innerHTML = iconic.map((item) => `
-    <button class="var ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="iconic">
-      <img alt="" src="${item.thumb || ""}">
-      <span class="vn">${esc(item.name)}</span>
-      <span class="vm">${esc(item.scope ? item.scope + " · " : "")}${esc(item.role && item.role !== item.kind ? item.role + " · " + item.kind : item.kind)} · ${esc(item.info)}</span>
-    </button>`).join("") || `<div class="hint">還沒有圖像變數</div>`;
-  controlList.innerHTML = control.map((item) => `
-    <button class="var ctrl ${selectedVar === item.name ? "on" : ""}" data-name="${esc(item.name)}" data-kind="control" title="${esc(item.full || item.text)}">
-      <span class="vn">${esc(item.name)}<small>${esc(item.scope ? item.scope + " " : "")}${esc(item.type)}</small></span>
-      <span class="vm">${esc(item.text)}</span>
-    </button>`).join("") || `<div class="hint">還沒有控制變數</div>`;
+  const count = iconic.length ? String(iconic.length) : "";
+  if (iconicCount.textContent !== count) iconicCount.textContent = count;
+  VisdevVars.syncVarList(iconicList, iconic, "iconic", selectedVar, "還沒有圖像變數");
+  VisdevVars.syncVarList(controlList, control, "control", selectedVar, "還沒有控制變數");
 }
 
 function renderLog() {
   const lines = logHidden ? [] : (server.log || []);
-  logBox.innerHTML = lines.map((line) => {
-    const cls = String(line).startsWith("錯誤") ? "bad" : "";
-    return `<span class="${cls}">${esc(line)}</span>`;
-  }).join("\n");
-  logBox.scrollTop = logBox.scrollHeight;
+  const slack = logBox.scrollHeight - logBox.scrollTop - logBox.clientHeight;
+  const follow = slack < 24;
+  const change = VisdevVars.syncLog(logBox, lines);
+  if (follow && (change.appended > 0 || change.kept !== lines.length)) logBox.scrollTop = logBox.scrollHeight;
   renderProblems();
 }
 
@@ -429,15 +420,7 @@ function renderProblems() {
   }
   if (stMessages) stMessages.textContent = `訊息 ${counts.message}`;
   const visible = diagnostics.filter((item) => problemFilter[item.sev]);
-  const label = { error: "錯誤", warning: "警告", message: "訊息" };
-  body.innerHTML = visible.map((item) => `
-    <tr data-line="${item.line || ""}">
-      <td class="sev-${item.sev}">${label[item.sev]}</td>
-      <td>${esc(item.code)}</td>
-      <td class="desc">${esc(item.text)}</td>
-      <td>${esc(item.file)}</td>
-      <td>${item.line || ""}</td>
-    </tr>`).join("") || `<tr><td></td><td></td><td class="desc">沒有要顯示的項目</td><td></td><td></td></tr>`;
+  VisdevVars.syncProblems(body, visible, { error: "錯誤", warning: "警告", message: "訊息" });
 }
 
 function goToLine(line) {
