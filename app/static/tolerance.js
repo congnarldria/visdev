@@ -1,5 +1,5 @@
 (function () {
-  const LABELS = { Dia: "直徑", Width: "寬", Height: "高", Dark: "暗塊", Bright: "亮點", Hue: "色調", Area: "面積", Count: "個數" };
+  const LABELS = { Dia: "直徑", Width: "寬", Height: "高", Dark: "暗塊", Bright: "亮點", Hue: "色調", Area: "面積", Count: "個數", Shift: "偏移" };
 
   function readLimits(source) {
     const lines = String(source || "").split("\n");

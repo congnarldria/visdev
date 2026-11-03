@@ -4342,12 +4342,31 @@ def test_inspect_holes_template_counts_four():
     assert session.error is None, session.error
     assert int(session.vars["Count"]) == 4
     assert [int(item) for item in session.vars["Area"]] == [613, 613, 613, 613]
+    assert float(session.vars["Shift"]) == 0
+    assert abs(float(session.vars["Dia"]) - 28) < 0.01
     assert session.vars["Judge"] == "合格"
+    assert len(session.vars["Cross"].contours) == 8
     short = (ROOT / "samples" / "inspect_holes.viz").read_text(encoding="utf-8").replace("CountMax := 4", "CountMax := 3")
     failed = run_source(short)
     assert failed.error is None, failed.error
     assert int(failed.vars["Count"]) == 4
     assert failed.vars["Judge"] == "不合格"
+    moved = (ROOT / "samples" / "inspect_holes.viz").read_text(encoding="utf-8").replace(
+        "WantRow := [50, 50, 120, 120]", "WantRow := [55, 50, 120, 120]", 1
+    )
+    off = run_source(moved)
+    assert off.error is None, off.error
+    assert int(off.vars["Count"]) == 4
+    assert abs(float(off.vars["Shift"]) - 5) < 1e-6
+    assert off.vars["Judge"] == "不合格"
+    narrow = (ROOT / "samples" / "inspect_holes.viz").read_text(encoding="utf-8").replace(
+        "DiaMax := 30", "DiaMax := 20", 1
+    )
+    small = run_source(narrow)
+    assert small.error is None, small.error
+    assert abs(float(small.vars["Dia"]) - 28) < 0.01
+    assert small.vars["Judge"] == "不合格"
+    assert float(session.vars["CenterOk"]) > 0
 
 
 def test_inspect_parts_template_counts_eight_parts():

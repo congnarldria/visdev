@@ -100,5 +100,11 @@ const chars = run.resultSummary([
 ]);
 assert(chars === "判定 合格 · 文字 VISDEV 168 · 預期 VISDEV 168 · 個數 1 · 最低分 0.91", "a character run names the text and the expected word");
 assert(run.resultSummary([{ name: "Register", text: "2" }]) === "暫存器 2", "a modbus read names the register");
+assert(run.resultSummary([
+  { name: "Judge", text: "'合格'" },
+  { name: "Dia", text: "28.0002" },
+  { name: "Count", text: "4" },
+  { name: "Shift", text: "0" },
+]) === "判定 合格 · 直徑 28 · 個數 4 · 偏移 0", "a hole run names diameter and center shift");
 
 console.log("run source ok");
