@@ -1,7 +1,9 @@
 * 字元範本。打開就能跑。讀 samples/ocr_label.png 上的 VISDEV 168。
 * Chars 是讀到的整段字。Count 是字塊個數。Score 是信心，0 到 1。
+* Expect 是要對上的字。圖形視窗可以改，再按執行。
 * 讀對、只有一塊、信心至少 0.5，Judge 才是合格。否則是不合格，字改成紅色。
 * 這支用本機引擎，不把圖送到雲端。不開相機，也不改 Windows 開 COM 的方式。
+Expect := 'VISDEV 168'
 Vizion.read_image (Label, 'samples/ocr_label.png')
 Vizion.create_text_model_reader ('auto', 'auto', TextModel)
 Vizion.find_text (Label, TextModel, TextResult)
@@ -15,7 +17,7 @@ else
     Chars := ''
     Score := 0
 endif
-if (Chars == 'VISDEV 168' and Count == 1 and Score >= 0.5)
+if (Chars == Expect and Count == 1 and Score >= 0.5)
     Judge := '合格'
 else
     Judge := '不合格'

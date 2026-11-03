@@ -27,6 +27,7 @@
     ["Gap", "間距"],
     ["BaselineX", "基線"],
     ["Chars", "文字"],
+    ["Expect", "預期"],
     ["Text", "條碼"],
     ["QrText", "二維碼"],
     ["Count", "個數"],

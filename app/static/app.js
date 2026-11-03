@@ -274,8 +274,9 @@ function renderTolerances() {
   const bar = document.getElementById("tolBar");
   if (!bar || typeof VisdevTol === "undefined") return;
   const fields = VisdevTol.readLimits(code.value);
-  const signature = JSON.stringify(fields);
-  if (!fields.length) {
+  const expects = VisdevTol.readExpects(code.value);
+  const signature = JSON.stringify({ fields, expects });
+  if (!fields.length && !expects.length) {
     bar.hidden = true;
     bar.innerHTML = "";
     bar.dataset.sig = "";
@@ -285,15 +286,49 @@ function renderTolerances() {
   if (bar.dataset.sig === signature) return;
   if (applyingTolerance && bar.contains(document.activeElement)) return;
   bar.dataset.sig = signature;
-  bar.innerHTML = `<span>公差會記在這台電腦，改完按執行</span>` + fields.map((field) => `
+  const note = expects.length && !fields.length
+    ? "預期字會記在這台電腦，改完按執行"
+    : "公差會記在這台電腦，改完按執行";
+  const numbers = fields.map((field) => `
     <label>${field.label}
-      <input data-line="${field.minLine}" data-name="${field.minName}" value="${field.min}" inputmode="decimal" aria-label="${field.label}下限" title="${field.label}下限">
+      <input data-kind="number" data-line="${field.minLine}" data-name="${field.minName}" value="${field.min}" inputmode="decimal" aria-label="${field.label}下限" title="${field.label}下限">
       <span>到</span>
-      <input data-line="${field.maxLine}" data-name="${field.maxName}" value="${field.max}" inputmode="decimal" aria-label="${field.label}上限" title="${field.label}上限">
-    </label>`).join("") + `<button type="button" id="tolReset">預設</button>`;
+      <input data-kind="number" data-line="${field.maxLine}" data-name="${field.maxName}" value="${field.max}" inputmode="decimal" aria-label="${field.label}上限" title="${field.label}上限">
+    </label>`).join("");
+  const words = expects.map((field) => `
+    <label>${field.label}
+      <input data-kind="text" data-line="${field.line}" data-name="${field.name}" value="${esc(field.value)}" aria-label="${field.label}" title="${field.label}">
+    </label>`).join("");
+  bar.innerHTML = `<span>${note}</span>${numbers}${words}<button type="button" id="tolReset">預設</button>`;
+}
+
+function toleranceSignature() {
+  return JSON.stringify({
+    fields: VisdevTol.readLimits(code.value),
+    expects: VisdevTol.readExpects(code.value),
+  });
 }
 
 function commitTolerance(input) {
+  if (input.dataset.kind === "text") {
+    const next = VisdevTol.applyExpect(code.value, input.dataset.line, input.dataset.name, input.value);
+    if (next === code.value) {
+      applyingTolerance = false;
+      const bar = document.getElementById("tolBar");
+      if (bar) bar.dataset.sig = "";
+      renderTolerances();
+      return;
+    }
+    applyingTolerance = true;
+    code.value = next;
+    commitProgram("checkpoint");
+    renderEditor();
+    applyingTolerance = false;
+    const bar = document.getElementById("tolBar");
+    if (bar) bar.dataset.sig = toleranceSignature();
+    VisdevTol.remember(localStorage, document.getElementById("progName").value, code.value);
+    return;
+  }
   const value = input.value.trim();
   if (!/^-?\d+(?:\.\d+)?$/.test(value)) {
     applyingTolerance = false;
@@ -310,7 +345,7 @@ function commitTolerance(input) {
   renderEditor();
   applyingTolerance = false;
   const bar = document.getElementById("tolBar");
-  if (bar) bar.dataset.sig = JSON.stringify(VisdevTol.readLimits(code.value));
+  if (bar) bar.dataset.sig = toleranceSignature();
   VisdevTol.remember(localStorage, document.getElementById("progName").value, code.value);
 }
 
@@ -329,7 +364,9 @@ document.getElementById("tolBar").addEventListener("click", async (event) => {
   VisdevTol.clearStored(localStorage, fileName);
   if (saveTarget && saveTarget.name) {
     await openProgram(saveTarget.kind, saveTarget.name);
-    stLine.textContent = "已恢復預設上下限";
+    stLine.textContent = VisdevTol.readExpects(code.value).length && !VisdevTol.readLimits(code.value).length
+      ? "已恢復預設預期字"
+      : "已恢復預設上下限";
   }
 });
 
@@ -2545,7 +2582,7 @@ window.VisDevCommands = {
     return VisDevCommands.openNamedTemplate("inspect_color.viz", "這是色彩範本。綠塊面積 1200、色調 60。紅塊不算。超出就不合格。");
   },
   charsTemplate() {
-    return VisDevCommands.openNamedTemplate("inspect_chars.viz", "這是字元範本。讀 VISDEV 168。狀態列寫文字。讀錯就不合格。");
+    return VisDevCommands.openNamedTemplate("inspect_chars.viz", "這是字元範本。圖形視窗可改預期字，再按執行。讀錯就不合格。");
   },
   stripeTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_stripe.viz", "這是條紋寬度範本。執行後看 Width。");

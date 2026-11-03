@@ -94,9 +94,10 @@ assert(color === "判定 合格 · 個數 1 · 色調 60 · 面積 1200", "a col
 const chars = run.resultSummary([
   { name: "Judge", text: "'合格'" },
   { name: "Chars", text: "'VISDEV 168'" },
+  { name: "Expect", text: "'VISDEV 168'" },
   { name: "Count", text: "1" },
   { name: "Score", text: "[0.91]" },
 ]);
-assert(chars === "判定 合格 · 文字 VISDEV 168 · 個數 1 · 最低分 0.91", "a character run names the text");
+assert(chars === "判定 合格 · 文字 VISDEV 168 · 預期 VISDEV 168 · 個數 1 · 最低分 0.91", "a character run names the text and the expected word");
 
 console.log("run source ok");

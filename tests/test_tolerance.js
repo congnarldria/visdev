@@ -44,4 +44,16 @@ assert(tol.restore(store, "inspect_stripe.viz", stripe) === stripe, "another tem
 tol.clearStored(store, "inspect_caliper.viz");
 assert(tol.restore(store, "inspect_caliper.viz", caliper) === caliper, "clearing the saved limits returns the file");
 
+const chars = "Expect := 'VISDEV 168'\nif (Chars == Expect)\n";
+const expects = tol.readExpects(chars);
+assert(expects.length === 1 && expects[0].label === "預期字" && expects[0].value === "VISDEV 168", "the expected word is read from the program");
+assert(tol.applyExpect(chars, expects[0].line, "Expect", "NOPE").includes("Expect := 'NOPE'"), "a new expected word replaces the assignment");
+assert(tol.applyExpect(chars, expects[0].line, "Expect", "A'B") === chars, "a quote is not written into the program");
+assert(tol.readLimits(chars).length === 0, "an expected word is not a numeric limit");
+const wordStore = memoryStore();
+tol.remember(wordStore, "inspect_chars.viz", "Expect := 'NOPE'\n");
+assert(tol.restore(wordStore, "samples/inspect_chars.viz", chars).includes("Expect := 'NOPE'"), "reopening the character template fills the saved word");
+tol.clearStored(wordStore, "inspect_chars.viz");
+assert(tol.restore(wordStore, "inspect_chars.viz", chars) === chars, "clearing the saved word returns VISDEV 168");
+
 console.log("tolerance ok");

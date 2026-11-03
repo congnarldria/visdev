@@ -672,6 +672,7 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
 .tol-bar[hidden] { display: none; }
 .tol-bar label { display: flex; align-items: center; gap: 4px; }
 .tol-bar input { width: 64px; }
+.tol-bar input[data-kind="text"] { width: 180px; }
 .gfx-stage { position: relative; flex: 1; min-height: 0; background: #101216; }
 #probe {
   position: absolute;

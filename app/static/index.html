@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VisDev 視覺開發環境</title>
   <link rel="icon" href="/static/magpie.ico">
-  <link rel="stylesheet" href="/static/app.css?v=38">
+  <link rel="stylesheet" href="/static/app.css?v=39">
 </head>
 <body>
   <nav class="menubar" aria-label="主選單">
@@ -307,7 +307,7 @@ endfor</pre>
         <li>零件檢測：<code>samples/parts.png</code>，8 個零件。狀態列寫個數。</li>
         <li>瑕疵：<code>samples/hard_contrast.png</code>。暗塊 1 個、面積 3550；亮點 1 個、面積 144。預設灰階是暗塊 0 到 40、亮點 210 到 255。圖形視窗可以改這兩個範圍，再按執行。</li>
         <li>色彩：<code>samples/color_part.png</code>。綠塊面積 1200、色調 60。紅塊色調是 0，灰底飽和度是 0，都不計。預設色調 50 到 70、面積 1100 到 1300。圖形視窗可以改這兩個範圍。超出時判定不合格，區域是紅色。</li>
-        <li>字元：<code>samples/ocr_label.png</code> 寫著 VISDEV 168。<code>Chars</code> 是讀到的字，狀態列寫文字。外框畫在圖上。讀對且信心至少 0.5 才合格，否則是紅色。這支用本機引擎，不把圖送到雲端。</li>
+        <li>字元：<code>samples/ocr_label.png</code> 寫著 VISDEV 168。<code>Chars</code> 是讀到的字，<code>Expect</code> 是要對上的字。圖形視窗可以改預期字，再按執行。改過的字會記在這台電腦，按「預設」回到 VISDEV 168。讀對且信心至少 0.5 才合格，否則是紅色。狀態列同時寫讀到的字和預期字。這支用本機引擎，不把圖送到雲端。</li>
         <li>邊緣量測：<code>samples/gauge.png</code>。狀態列寫間距。</li>
         <li>卡尺：同一張圖。直徑約 83.93，寬 140，高 90。預設公差是直徑 80 到 90、寬 130 到 150、高 80 到 100。圖形視窗可以改上下限，再按執行。卡尺、條紋和瑕疵改過的範圍會記在這台電腦，再打開同一支範本會填回去。按「預設」回到程式裡的數字。存進專案的程式以檔案裡的數字為準。超出的線是紅色。</li>
         <li>條紋寬度：<code>samples/stripes.png</code>。最寬的亮條是 22，預設公差 20 到 24。圖形視窗可以改上下限，再按執行。超出時十字是紅色。</li>
@@ -320,7 +320,7 @@ endfor</pre>
       </ul>
       <p>點量規或直線量規時，可以按「線」在圖上拖。起點到終點的方向會保留。圖上已有影像時，確認前會畫出沿這條線找到的邊緣和首尾間距。</p>
       <h3>把結果送到外面</h3>
-      <p>產線輸出每一張寫一行，TCP 和序列埠相同：<code>VISDEV,OK 或 NG,合格張數,不合格張數,檔名</code>，結尾換行。合格、不合格會寫成 OK、NG。檔名用英文。範本用 loopback，<code>Wire</code> 讀回那 5 行，所以合格仍是 3、不合格仍是 2。讀到的字另送一行 <code>VISDEV,TEXT,文字</code>，不改上面那一行的欄位。送到外面時，把 <code>open_socket_connect</code> 的 loopback 改成主機和埠號，或改成 <code>open_serial ('COM3', Link)</code>，並拿掉 <code>receive_data</code>。Windows 開 COM 仍用原來的 API，不在這一行裡重開。</p>
+      <p>產線輸出每一張寫一行，TCP 和序列埠相同：<code>VISDEV,OK 或 NG,合格張數,不合格張數,檔名</code>，結尾換行。合格、不合格會寫成 OK、NG。檔名用英文。範本用 loopback，<code>Wire</code> 讀回那 5 行，所以合格仍是 3、不合格仍是 2。讀到的字另送一行 <code>VISDEV,TEXT,文字</code>，不改上面那一行的欄位。Modbus TCP 可以用 <code>write_modbus_register</code> 寫一個 0 到 65535 的暫存器，不開 COM。送到外面時，把 <code>open_socket_connect</code> 的 loopback 改成主機和埠號，或改成 <code>open_serial ('COM3', Link)</code>，並拿掉 <code>receive_data</code>。Windows 開 COM 仍用原來的 API，不在這一行裡重開。</p>
       <h3>標定</h3>
       <p>棋盤寫 <code>'5,7,10'</code>，也可以用 <code>.cpd</code> 或 <code>.descr</code>。多台相機時，每一台的第 k 組要是同時看到的同一塊板。<code>camera/pose</code> 是相對第 0 台的姿態，第 0 台是 0。標完的圖可以點某一張看原圖，再點一下回到全部。</p>
       <h3>存檔與 Windows</h3>
@@ -389,10 +389,10 @@ endfor</pre>
   <script src="/static/program_file.js?v=1"></script>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
-  <script src="/static/run_source.js?v=9"></script>
-  <script src="/static/tolerance.js?v=3"></script>
+  <script src="/static/run_source.js?v=10"></script>
+  <script src="/static/tolerance.js?v=4"></script>
   <script src="/static/var_list.js?v=1"></script>
   <script src="/static/highlight_sync.js?v=3"></script>
-  <script src="/static/app.js?v=102"></script>
+  <script src="/static/app.js?v=103"></script>
 </body>
 </html>

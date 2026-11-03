@@ -3527,10 +3527,11 @@ def test_inspect_chars_template_reads_visdev_168():
     assert len(session.vars["Outline"].contours) >= 1
     texts = [shape.get("text") for shape in session.public_state()["display"]["shapes"]]
     assert "VISDEV 168" in texts
-    wrong = (ROOT / "samples" / "inspect_chars.viz").read_text(encoding="utf-8").replace("'VISDEV 168'", "'NOPE'")
+    wrong = (ROOT / "samples" / "inspect_chars.viz").read_text(encoding="utf-8").replace("Expect := 'VISDEV 168'", "Expect := 'NOPE'")
     failed = run_source(wrong)
     assert failed.error is None, failed.error
     assert failed.vars["Chars"] == "VISDEV 168"
+    assert failed.vars["Expect"] == "NOPE"
     assert failed.vars["Judge"] == "不合格"
 
 
@@ -3700,6 +3701,54 @@ def test_line_result_goes_out_on_tcp_and_serial():
     finally:
         shutil.rmtree(folder, ignore_errors=True)
         report.unlink(missing_ok=True)
+
+
+def test_modbus_writes_one_register_and_leaves_com_alone():
+    import socket
+    import struct
+    import threading
+
+    import pytest
+
+    from app.engine.chapters.serial_ops import _open_windows
+
+    assert "CreateFileW" in _open_windows.__code__.co_names
+    got = {}
+    ready = threading.Event()
+
+    def serve():
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        got["port"] = server.getsockname()[1]
+        ready.set()
+        conn, _addr = server.accept()
+        data = b""
+        while len(data) < 12:
+            chunk = conn.recv(12 - len(data))
+            if not chunk:
+                break
+            data += chunk
+        got["request"] = data
+        conn.sendall(data)
+        conn.close()
+        server.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    assert ready.wait(2)
+    session = run_source(
+        f"Vizion.write_modbus_register ('127.0.0.1', {got['port']}, 16, 2)\n"
+    )
+    assert session.error is None, session.error
+    request = got["request"]
+    assert request[7] == 6
+    assert struct.unpack(">HH", request[8:12]) == (16, 2)
+    refused = run_source("Vizion.write_modbus_register ('127.0.0.1', 502, 70000, 1)\n")
+    assert refused.error and "65535" in refused.error
+    with pytest.raises(RuntimeError, match="連不上 Modbus"):
+        from app.engine.chapters.modbus_ops import write_holding_register
+
+        write_holding_register("127.0.0.1", 1, 0, 1)
 
 
 def test_last_ng_and_csv_stay_inside_the_workspace():

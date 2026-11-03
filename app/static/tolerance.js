@@ -32,6 +32,33 @@
       .sort((a, b) => a.minLine - b.minLine);
   }
 
+  function readExpects(source) {
+    const lines = String(source || "").split("\n");
+    const found = [];
+    lines.forEach((line, index) => {
+      const match = line.match(/^(\s*)(Expect)\s*:=\s*'([^']*)'\s*$/);
+      if (!match) return;
+      found.push({
+        name: match[2],
+        label: "預期字",
+        value: match[3],
+        line: index,
+      });
+    });
+    return found;
+  }
+
+  function applyExpect(source, lineIndex, name, value) {
+    const lines = String(source || "").split("\n");
+    const index = Number(lineIndex);
+    const shown = String(value == null ? "" : value);
+    if (!Number.isInteger(index) || index < 0 || index >= lines.length) return String(source || "");
+    if (name !== "Expect" || /['\r\n\\]/.test(shown)) return String(source || "");
+    const indent = (lines[index].match(/^\s*/) || [""])[0];
+    lines[index] = indent + "Expect := '" + shown + "'";
+    return lines.join("\n");
+  }
+
   function applyLimit(source, lineIndex, name, value) {
     const lines = String(source || "").split("\n");
     const index = Number(lineIndex);
@@ -68,6 +95,9 @@
       values[field.minName] = field.min;
       values[field.maxName] = field.max;
     });
+    readExpects(source).forEach((field) => {
+      values[field.name] = field.value;
+    });
     return values;
   }
 
@@ -91,6 +121,9 @@
       if (saved[field.minName] != null) next = applyLimit(next, field.minLine, field.minName, saved[field.minName]);
       if (saved[field.maxName] != null) next = applyLimit(next, field.maxLine, field.maxName, saved[field.maxName]);
     });
+    readExpects(next).forEach((field) => {
+      if (saved[field.name] != null) next = applyExpect(next, field.line, field.name, saved[field.name]);
+    });
     return next;
   }
 
@@ -104,7 +137,9 @@
 
   const api = {
     readLimits: readLimits,
+    readExpects: readExpects,
     applyLimit: applyLimit,
+    applyExpect: applyExpect,
     remember: remember,
     restore: restore,
     clearStored: clearStored,
