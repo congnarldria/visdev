@@ -234,6 +234,47 @@ public static class NativeCore
         }
     }
 
+    public static bool TrySubpix(
+        float[] gray, int width, int height, float[] smooth, float[] deriv,
+        float[] dx, float[] dy, float[] magnitude, float[] normalX, float[] normalY,
+        float[] shift, byte[] center)
+    {
+        if (!IsLoaded || !UseNative)
+            return false;
+        try
+        {
+            return vizion_subpix(gray, width, height, smooth, smooth.Length, deriv, deriv.Length, dx, dy, magnitude, normalX, normalY, shift, center) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryRemap(byte[] source, int width, int height, double[] mapX, double[] mapY, byte[] destination)
+    {
+        if (!IsLoaded || !UseNative)
+            return false;
+        try
+        {
+            return vizion_remap(source, width, height, mapX, mapY, destination) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TryMeasureRow(byte[] row, out double left, out double right, out bool found)
     {
         left = 0;
@@ -296,6 +337,14 @@ public static class NativeCore
             return false;
         }
     }
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_subpix(
+        float[] gray, int width, int height, float[] smooth, int smoothLength, float[] deriv, int derivLength,
+        float[] dx, float[] dy, float[] magnitude, float[] normalX, float[] normalY, float[] shift, byte[] center);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_remap(byte[] source, int width, int height, double[] mapX, double[] mapY, byte[] destination);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_measure_row(byte[] row, int width, out double left, out double right);

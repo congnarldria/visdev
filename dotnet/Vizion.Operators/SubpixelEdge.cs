@@ -26,40 +26,55 @@ public static partial class Operators
             gray[i] = source[i];
 
         Kernels(alpha, out float[] smooth, out float[] first);
-        float[] dx = Sep(gray, width, height, first, smooth);
-        float[] dy = Sep(gray, width, height, smooth, first);
         var magnitude = new float[gray.Length];
         var normalX = new float[gray.Length];
         var normalY = new float[gray.Length];
-        for (int i = 0; i < gray.Length; i++)
-        {
-            float mag = (float)Math.Sqrt(dx[i] * dx[i] + dy[i] * dy[i]);
-            magnitude[i] = mag;
-            float scale = Math.Max(mag, 1e-6f);
-            normalX[i] = dx[i] / scale;
-            normalY[i] = dy[i] / scale;
-        }
-
         var shift = new float[gray.Length];
         var center = new bool[gray.Length];
         bool[]? domain = DomainMask(image);
-        for (int row = 0; row < height; row++)
+        var nativeDx = new float[gray.Length];
+        var nativeDy = new float[gray.Length];
+        var nativeCenter = new byte[gray.Length];
+        if (NativeCore.TrySubpix(gray, width, height, smooth, first, nativeDx, nativeDy, magnitude, normalX, normalY, shift, nativeCenter))
         {
-            for (int col = 0; col < width; col++)
+            for (int i = 0; i < gray.Length; i++)
             {
-                int index = row * width + col;
-                float ahead = Sample(magnitude, width, height, row + normalY[index], col + normalX[index]);
-                float behind = Sample(magnitude, width, height, row - normalY[index], col - normalX[index]);
-                float denom = behind + ahead - 2f * magnitude[index];
-                float moved = Math.Abs(denom) > 1e-6f ? 0.5f * (behind - ahead) / denom : 9f;
-                shift[index] = moved;
-                // Python 用 OpenCV 的 float32，邊界上的位移會剛好是 -0.5，所以不算中心。
-                // 這裡的卷積可能差 1 ulp，-0.5 會變成 -0.49999997。1e-6 把這個邊界留在同一側。
-                bool on = magnitude[index] >= ahead && magnitude[index] >= behind && magnitude[index] > 0
-                    && moved > -0.5f + 1e-6f && moved <= 0.5f;
+                bool on = nativeCenter[i] != 0;
                 if (domain != null)
-                    on &= domain[index];
-                center[index] = on;
+                    on &= domain[i];
+                center[i] = on;
+            }
+        }
+        else
+        {
+            float[] dx = Sep(gray, width, height, first, smooth);
+            float[] dy = Sep(gray, width, height, smooth, first);
+            for (int i = 0; i < gray.Length; i++)
+            {
+                float mag = (float)Math.Sqrt(dx[i] * dx[i] + dy[i] * dy[i]);
+                magnitude[i] = mag;
+                float scale = Math.Max(mag, 1e-6f);
+                normalX[i] = dx[i] / scale;
+                normalY[i] = dy[i] / scale;
+            }
+            for (int row = 0; row < height; row++)
+            {
+                for (int col = 0; col < width; col++)
+                {
+                    int index = row * width + col;
+                    float ahead = Sample(magnitude, width, height, row + normalY[index], col + normalX[index]);
+                    float behind = Sample(magnitude, width, height, row - normalY[index], col - normalX[index]);
+                    float denom = behind + ahead - 2f * magnitude[index];
+                    float moved = Math.Abs(denom) > 1e-6f ? 0.5f * (behind - ahead) / denom : 9f;
+                    shift[index] = moved;
+                    // Python 用 OpenCV 的 float32，邊界上的位移會剛好是 -0.5，所以不算中心。
+                    // 這裡的卷積可能差 1 ulp，-0.5 會變成 -0.49999997。1e-6 把這個邊界留在同一側。
+                    bool on = magnitude[index] >= ahead && magnitude[index] >= behind && magnitude[index] > 0
+                        && moved > -0.5f + 1e-6f && moved <= 0.5f;
+                    if (domain != null)
+                        on &= domain[index];
+                    center[index] = on;
+                }
             }
         }
 

@@ -109,6 +109,20 @@ VIZION_EXPORT int VIZION_CALL vizion_measure_scan(
 
 VIZION_EXPORT int VIZION_CALL vizion_measure_selftest(void);
 
+/* 可分離高斯導數、梯度模和法線上的非極大抑制。核由呼叫端算好。成功回 0。 */
+VIZION_EXPORT int VIZION_CALL vizion_subpix(
+    const float* gray, int width, int height,
+    const float* smooth, int smooth_len, const float* deriv, int deriv_len,
+    float* dx, float* dy, float* magnitude, float* normal_x, float* normal_y,
+    float* shift, uint8_t* center);
+
+/* 套用已建好的去畸變對照表。雙線性，圖外 0，四捨五入遠離 0。 */
+VIZION_EXPORT int VIZION_CALL vizion_remap(
+    const uint8_t* src, int width, int height,
+    const double* map_x, const double* map_y, uint8_t* dst);
+
+VIZION_EXPORT int VIZION_CALL vizion_edge_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

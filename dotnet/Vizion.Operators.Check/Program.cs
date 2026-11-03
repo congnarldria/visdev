@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--edge")
+{
+    EdgeNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--measure")
 {
     MeasureNativeCheck();
@@ -889,6 +895,120 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void EdgeNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var step = new byte[24 * 32];
+    for (int row = 0; row < 24; row++)
+        for (int col = 16; col < 32; col++)
+            step[row * 32 + col] = 255;
+    var edges = Operators.EdgesSubPix(ImageBuffer.Gray(32, 24, step), 1, 20, 40);
+    if (edges.Length != 1 || edges[0].Length != 24)
+        throw new InvalidOperationException($"階躍應是 1 條 24 點的邊緣，得到 {edges.Length} 條");
+    foreach (var point in edges[0])
+    {
+        if (Math.Abs(point.Column - 15.5) > 1e-3)
+            throw new InvalidOperationException($"邊緣應在行 15.5，得到 {point.Column}");
+    }
+    if (Math.Abs(edges[0][0].Row) > 1e-3 || Math.Abs(edges[0][^1].Row - 23) > 1e-3)
+        throw new InvalidOperationException($"邊緣應從列 0 到列 23，得到 {edges[0][0].Row} 到 {edges[0][^1].Row}");
+    var distortedDot = new byte[41 * 41];
+    distortedDot[20 * 41 + 35] = 255;
+    var camera = new Intrinsics(40, 40, 20, 20, -0.5);
+    var undistorted = Operators.Undistort(ImageBuffer.Gray(41, 41, distortedDot), camera);
+    if (undistorted.Pixels[20 * 41 + 36] != 184)
+        throw new InvalidOperationException($"去畸變後行 36 應是 184，得到 {undistorted.Pixels[20 * 41 + 36]}");
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedEdges = Operators.EdgesSubPix(ImageBuffer.Gray(32, 24, step), 1, 20, 40);
+    var managedImage = Operators.Undistort(ImageBuffer.Gray(41, 41, distortedDot), camera);
+    NativeCore.UseNative = true;
+    if (managedEdges.Length != edges.Length || managedEdges[0].Length != edges[0].Length)
+        throw new InvalidOperationException("次像素邊緣和 C# 後備的點數不同");
+    for (int i = 0; i < edges[0].Length; i++)
+    {
+        if (Math.Abs(edges[0][i].Row - managedEdges[0][i].Row) > 1e-4 || Math.Abs(edges[0][i].Column - managedEdges[0][i].Column) > 1e-4)
+            throw new InvalidOperationException($"次像素點和 C# 不同：{edges[0][i].Row},{edges[0][i].Column}");
+    }
+    for (int i = 0; i < undistorted.Pixels.Length; i++)
+    {
+        if (undistorted.Pixels[i] != managedImage.Pixels[i])
+            throw new InvalidOperationException($"去畸變像素 {i} 原生 {undistorted.Pixels[i]}，C# {managedImage.Pixels[i]}");
+    }
+    var slanted = new byte[36 * 48];
+    for (int row = 0; row < 36; row++)
+        for (int col = 0; col < 48; col++)
+            slanted[row * 48 + col] = (byte)(col > row + 8 ? 200 : 20);
+    NativeCore.UseNative = false;
+    var managedSlant = Operators.EdgesSubPix(ImageBuffer.Gray(48, 36, slanted), 1.2, 15, 30);
+    NativeCore.UseNative = true;
+    var nativeSlant = Operators.EdgesSubPix(ImageBuffer.Gray(48, 36, slanted), 1.2, 15, 30);
+    if (nativeSlant.Length != managedSlant.Length)
+        throw new InvalidOperationException($"斜向邊緣 {nativeSlant.Length} 條，C# {managedSlant.Length} 條");
+    for (int chain = 0; chain < managedSlant.Length; chain++)
+    {
+        if (nativeSlant[chain].Length != managedSlant[chain].Length)
+            throw new InvalidOperationException($"斜向第 {chain} 條點數不同");
+        for (int i = 0; i < managedSlant[chain].Length; i++)
+        {
+            if (Math.Abs(nativeSlant[chain][i].Row - managedSlant[chain][i].Row) > 1e-3
+                || Math.Abs(nativeSlant[chain][i].Column - managedSlant[chain][i].Column) > 1e-3)
+                throw new InvalidOperationException($"斜向點和 C# 不同：{nativeSlant[chain][i].Row},{nativeSlant[chain][i].Column}");
+        }
+    }
+    var bench = new byte[480 * 360];
+    for (int row = 0; row < 360; row++)
+        for (int col = 160; col < 480; col++)
+            bench[row * 480 + col] = 220;
+    var benchImage = ImageBuffer.Gray(480, 360, bench);
+    Operators.EdgesSubPix(benchImage, 1, 20, 40);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 8; i++)
+        Operators.EdgesSubPix(benchImage, 1, 20, 40);
+    watch.Stop();
+    double nativeEdge = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.EdgesSubPix(benchImage, 1, 20, 40);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        Operators.EdgesSubPix(benchImage, 1, 20, 40);
+    watch.Stop();
+    double managedEdge = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = true;
+    var wide = new byte[640 * 480];
+    for (int i = 0; i < wide.Length; i++)
+        wide[i] = (byte)(i % 17);
+    var wideImage = ImageBuffer.Gray(640, 480, wide);
+    var wideCamera = new Intrinsics(600, 600, 320, 240, -0.2);
+    var nativeWide = Operators.Undistort(wideImage, wideCamera);
+    NativeCore.UseNative = false;
+    var managedWide = Operators.Undistort(wideImage, wideCamera);
+    NativeCore.UseNative = true;
+    for (int i = 0; i < nativeWide.Pixels.Length; i++)
+    {
+        if (nativeWide.Pixels[i] != managedWide.Pixels[i])
+            throw new InvalidOperationException($"大圖去畸變像素 {i} 原生 {nativeWide.Pixels[i]}，C# {managedWide.Pixels[i]}");
+    }
+    Operators.Undistort(wideImage, wideCamera);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        Operators.Undistort(wideImage, wideCamera);
+    watch.Stop();
+    double nativeRemap = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.Undistort(wideImage, wideCamera);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        Operators.Undistort(wideImage, wideCamera);
+    watch.Stop();
+    double managedRemap = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("邊緣原生檢查通過");
+    Console.WriteLine($"480×360 次像素邊緣 8 次：原生 {nativeEdge:0.0} ms，C# {managedEdge:0.0} ms，加速 {managedEdge / nativeEdge:0.0} 倍");
+    Console.WriteLine($"640×480 去畸變取樣 8 次：原生 {nativeRemap:0.0} ms，C# {managedRemap:0.0} ms，加速 {managedRemap / nativeRemap:0.0} 倍");
 }
 
 static void MeasureNativeCheck()

@@ -112,6 +112,21 @@
     <ClCompile Include="src\measure_sample_avx2.c">
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
+    <ClCompile Include="src\edge.c">
+      <AdditionalOptions Condition="'$(Platform)'=='Win32'">/arch:IA32 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="src\edge_sep_sse2.c">
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+    </ClCompile>
+    <ClCompile Include="src\edge_sep_avx2.c">
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+    </ClCompile>
+    <ClCompile Include="src\remap_sse2.c">
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+    </ClCompile>
+    <ClCompile Include="src\remap_avx2.c">
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\vizion_core.h" />
