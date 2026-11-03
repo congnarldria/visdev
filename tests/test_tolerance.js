@@ -27,4 +27,21 @@ const gray = tol.readLimits(defect);
 assert(gray.map((item) => item.label).join(",") === "暗塊,亮點", "defect gray limits use the same editor");
 assert(gray[0].min === "0" && gray[0].max === "40" && gray[1].min === "210" && gray[1].max === "255", "dark is 0 to 40 and bright is 210 to 255");
 
+function memoryStore() {
+  const data = {};
+  return {
+    getItem(key) { return Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null; },
+    setItem(key, value) { data[key] = String(value); },
+  };
+}
+
+const store = memoryStore();
+tol.remember(store, "inspect_caliper.viz", changed);
+const reopened = tol.restore(store, "samples/inspect_caliper.viz", caliper);
+assert(reopened.includes("WidthMax := 100"), "reopening the same template fills the saved upper width");
+assert(reopened.includes("DiaMin := 80"), "limits that were not changed stay at the file value");
+assert(tol.restore(store, "inspect_stripe.viz", stripe) === stripe, "another template keeps its own limits");
+tol.clearStored(store, "inspect_caliper.viz");
+assert(tol.restore(store, "inspect_caliper.viz", caliper) === caliper, "clearing the saved limits returns the file");
+
 console.log("tolerance ok");

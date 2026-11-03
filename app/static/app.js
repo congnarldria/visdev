@@ -285,12 +285,12 @@ function renderTolerances() {
   if (bar.dataset.sig === signature) return;
   if (applyingTolerance && bar.contains(document.activeElement)) return;
   bar.dataset.sig = signature;
-  bar.innerHTML = `<span>公差，改完按執行</span>` + fields.map((field) => `
+  bar.innerHTML = `<span>公差會記在這台電腦，改完按執行</span>` + fields.map((field) => `
     <label>${field.label}
       <input data-line="${field.minLine}" data-name="${field.minName}" value="${field.min}" inputmode="decimal" aria-label="${field.label}下限" title="${field.label}下限">
       <span>到</span>
       <input data-line="${field.maxLine}" data-name="${field.maxName}" value="${field.max}" inputmode="decimal" aria-label="${field.label}上限" title="${field.label}上限">
-    </label>`).join("");
+    </label>`).join("") + `<button type="button" id="tolReset">預設</button>`;
 }
 
 function commitTolerance(input) {
@@ -311,6 +311,7 @@ function commitTolerance(input) {
   applyingTolerance = false;
   const bar = document.getElementById("tolBar");
   if (bar) bar.dataset.sig = JSON.stringify(VisdevTol.readLimits(code.value));
+  VisdevTol.remember(localStorage, document.getElementById("progName").value, code.value);
 }
 
 document.getElementById("tolBar").addEventListener("change", (event) => {
@@ -320,6 +321,15 @@ document.getElementById("tolBar").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && event.target.matches("input")) {
     event.preventDefault();
     commitTolerance(event.target);
+  }
+});
+document.getElementById("tolBar").addEventListener("click", async (event) => {
+  if (event.target.id !== "tolReset") return;
+  const fileName = document.getElementById("progName").value;
+  VisdevTol.clearStored(localStorage, fileName);
+  if (saveTarget && saveTarget.name) {
+    await openProgram(saveTarget.kind, saveTarget.name);
+    stLine.textContent = "已恢復預設上下限";
   }
 });
 
@@ -2379,8 +2389,8 @@ function syncViewMenu() {
 
 window.VisDevCommands = {
   async openNamedTemplate(name, note) {
-    await openProgram("samples", name);
-    stLine.textContent = note;
+    const usedSaved = await openProgram("samples", name);
+    stLine.textContent = usedSaved ? `${note} 已用這台電腦上次的上下限。` : note;
   },
   inspectTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_parts.viz", "這是零件檢測範本。改 MinGray 和面積下限，再按執行。");
@@ -3471,8 +3481,13 @@ async function openProgram(kind, name) {
     showDetail(data);
     return;
   }
-  code.value = data.source.replace(/\r\n/g, "\n");
+  const opened = data.source.replace(/\r\n/g, "\n");
+  const restored = kind === "samples"
+    ? VisdevTol.restore(localStorage, data.name || name, opened)
+    : opened;
+  code.value = restored;
   document.getElementById("progName").value = data.name;
+  openProgram.usedSaved = restored !== opened;
   saveTarget = { kind, name: data.name };
   sessionId = null;
   breakpoints = new Set();
@@ -3481,6 +3496,7 @@ async function openProgram(kind, name) {
   markSaved();
   renderEditor();
   await exec("reset");
+  return Boolean(openProgram.usedSaved);
 }
 
 async function loadFiles() {

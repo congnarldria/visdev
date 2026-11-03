@@ -42,7 +42,73 @@
     return lines.join("\n");
   }
 
-  const api = { readLimits: readLimits, applyLimit: applyLimit };
+  const STORE_KEY = "visdev.tolerances";
+
+  function fileKey(name) {
+    return String(name || "").replace(/\\/g, "/").split("/").pop();
+  }
+
+  function readStore(storage) {
+    if (!storage) return {};
+    try {
+      const parsed = JSON.parse(storage.getItem(STORE_KEY) || "{}");
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_err) {
+      return {};
+    }
+  }
+
+  function writeStore(storage, data) {
+    storage.setItem(STORE_KEY, JSON.stringify(data));
+  }
+
+  function currentValues(source) {
+    const values = {};
+    readLimits(source).forEach((field) => {
+      values[field.minName] = field.min;
+      values[field.maxName] = field.max;
+    });
+    return values;
+  }
+
+  function remember(storage, fileName, source) {
+    const key = fileKey(fileName);
+    if (!key || !storage) return;
+    const values = currentValues(source);
+    if (!Object.keys(values).length) return;
+    const all = readStore(storage);
+    all[key] = values;
+    writeStore(storage, all);
+  }
+
+  function restore(storage, fileName, source) {
+    const text = String(source || "");
+    const key = fileKey(fileName);
+    const saved = key && storage ? readStore(storage)[key] : null;
+    if (!saved) return text;
+    let next = text;
+    readLimits(next).forEach((field) => {
+      if (saved[field.minName] != null) next = applyLimit(next, field.minLine, field.minName, saved[field.minName]);
+      if (saved[field.maxName] != null) next = applyLimit(next, field.maxLine, field.maxName, saved[field.maxName]);
+    });
+    return next;
+  }
+
+  function clearStored(storage, fileName) {
+    const key = fileKey(fileName);
+    if (!key || !storage) return;
+    const all = readStore(storage);
+    delete all[key];
+    writeStore(storage, all);
+  }
+
+  const api = {
+    readLimits: readLimits,
+    applyLimit: applyLimit,
+    remember: remember,
+    restore: restore,
+    clearStored: clearStored,
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof window !== "undefined") window.VisdevTol = api;
 })();
