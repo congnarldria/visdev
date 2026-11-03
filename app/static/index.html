@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VisDev 視覺開發環境</title>
+  <title>VisDev 1.1</title>
   <link rel="icon" href="/static/magpie.ico">
   <link rel="stylesheet" href="/static/app.css?v=40">
 </head>
@@ -300,7 +300,7 @@ endfor</pre>
   <div id="helpDialog" class="modal" hidden>
     <div class="dialog guide" role="dialog" aria-labelledby="helpTitle">
       <h2 id="helpTitle">使用說明</h2>
-      <p>這是 VisDev 1.1 beta，不是正式版。</p>
+      <p>這是 VisDev 1.1。</p>
       <h3>執行</h3>
       <p>F5 執行，F6 單步，F7 步進程序。程式跑到一半失敗時，已經算出的圖和變數留著，狀態列會寫出第幾行，相機和檔案會關掉。執行中若已經有直徑、寬度、合格或不合格，狀態列會直接寫出來。跑完或停止後也會留著這些數字。變數很多時，單步只改有變動的那一列。打字時語法著色、行號和該行時間只改有變動的列。輸出往上翻時，新的一行不會把畫面拉回底部。錯誤清單只改有變動的列。大圖在執行中會先縮小顯示，標題會寫預覽，跑完或停止後換成完整圖。</p>
       <h3>範本</h3>
@@ -317,7 +317,7 @@ endfor</pre>
         <li>產線相機：本機相機編號 0。Windows 先問 DirectShow，打不開再試 OpenCV。沒有相機時，請改跑上面的產線，用 <code>samples/line_batch</code>。規則和產線相同，明細每一列是這張的 OK 或 NG。執行中狀態列會寫出合格和不合格。按停止就停，已經計的張數留著，不合格圖是最近一張的檔名。出錯也會關掉相機和 CSV。明細在 <code>workspace/line_camera.csv</code>。</li>
         <li>產線輸出：同一套 5 張。每一張多送一行 <code>VISDEV,OK 或 NG,合格張數,不合格張數,檔名</code>。圖形視窗先選 TCP、序列埠或 Modbus，再填該出現的欄位。預設是 TCP loopback，<code>Wire</code> 讀回 5 行，合格 3、不合格 2。序列埠預設名稱是 loopback，不開真的 COM。Windows 開 COM 的方式沒有改。</li>
         <li>缺件：<code>samples/parts.png</code> 應有 8 個。少於或多於 8 個就不合格。圖形視窗可改個數上下限，再按執行。</li>
-        <li>孔數：<code>samples/holes.png</code> 有 4 個暗孔，每個面積 613。預設要剛好 4 個。少了就不合格。圖形視窗可改個數上下限。</li>
+        <li>孔數：<code>samples/holes.png</code> 有 4 個暗孔，每個面積 613。預設要剛好 4 個。少了就不合格。圖形視窗可改個數上下限。這一版只數個數，不檢查圓心有沒有偏離。</li>
         <li>形狀定位：場景裡找到 4 個。狀態列寫個數和最低分。</li>
         <li>相對姿態：<code>Pose1</code> 的第一個數約 0.04 公尺。狀態列寫基線。</li>
         <li>條碼：<code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。</li>
@@ -334,7 +334,7 @@ endfor</pre>
   </div>
   <div id="aboutDialog" class="modal" hidden>
     <div class="dialog about" role="dialog" aria-labelledby="aboutTitle">
-      <h2 id="aboutTitle">VisDev 1.1 beta</h2>
+      <h2 id="aboutTitle">VisDev 1.1</h2>
       <p>視覺開發環境。程式寫法接近 HDevelop，影像計算用 OpenCV。</p>
       <p>上方選單：檔案可以新增、開啟、儲存、載入影像，也可以把讀圖、定義域、二值化、連通、篩選、矩形和圓形形態學、個數和重心匯出成 C#。編輯可以復原、剪貼。檢視可以開關窗格和縮放。執行是 F5、F6、F7。運算子依分類列出，點了會開參數窗再插入程式。工具會另開二值化、次像素、特徵和 OCR。</p>
       <div class="actions"><button id="aboutOk" type="button">確定</button></div>
@@ -397,6 +397,6 @@ endfor</pre>
   <script src="/static/tolerance.js?v=6"></script>
   <script src="/static/var_list.js?v=1"></script>
   <script src="/static/highlight_sync.js?v=3"></script>
-  <script src="/static/app.js?v=105"></script>
+  <script src="/static/app.js?v=106"></script>
 </body>
 </html>

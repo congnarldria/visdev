@@ -1,17 +1,13 @@
-# 改進計畫
+# VisDev 1.1
 
-從 VisDev 1.1 beta 接著做。這還不是正式版。公差的數字上下限先停在這裡，編輯器的局部更新也先停在這裡。產線的不合格圖瀏覽也先停在這裡。Modbus 先停在連續暫存器，不再加功能碼。Windows 仍用 `app/engine/visdev_match.pyd`。開相機仍先問 DirectShow，打不開再試 OpenCV。開 COM 仍用原來的 API。Linux 的 `visdev_match.so` 不進版控。
+這一版在這裡停下。孔的圓心沒有做，孔數檢測維持可用：`samples/holes.png` 有 4 個暗孔，少了就不合格。
 
-## 已完成
+Windows 仍用 `app/engine/visdev_match.pyd`。開相機仍先問 DirectShow，打不開再試 OpenCV。開 COM 仍用原來的 API。Linux 的 `visdev_match.so` 不進版控。
 
-產線輸出在圖形視窗先選 TCP、序列埠或 Modbus，再填該出現的欄位。預設是 TCP loopback，合格 3、不合格 2。序列埠用 loopback 時不開真的 COM。Modbus 把每一張的判定寫成 1 或 2 再讀回。
+## 這一版有的
 
-孔數範本讀 `samples/holes.png`，4 個暗孔，每個面積 613。少了就不合格。缺件仍是 8 個。色彩的面積 1200、色調 60 沒有改。
+產線輸出可在圖形視窗選 TCP、序列埠或 Modbus。預設是 TCP loopback，合格 3、不合格 2。色彩範本的綠塊面積 1200、色調 60。字元範本讀出 VISDEV 168。缺件範本應有 8 個零件。
 
-## 接著做
+## 沒有做
 
-1. **孔的位置。** 現在只數有幾個孔。再標出每個孔的圓心，偏離預設位置就不合格。不改個數 4，也不改 Windows 開相機和開 COM 的順序。
-
-## 以後
-
-六角形標定板的尋找標記對位還沒做。`'5,7,10'` 和矩形圓點板可以用。
+孔的圓心偏差。六角形標定板的尋找標記對位。`'5,7,10'` 和矩形圓點板可以用。
