@@ -1815,6 +1815,64 @@ function useNewImage(path) {
   insertAtCursor(`read_image (Image, '${path}')`);
 }
 
+function paintSnapshot(g) {
+  g.drawImage(baseImage, 0, 0, disp.width, disp.height);
+  for (const shape of disp.shapes || []) {
+    if (shape.type === "fill" && shape._img) g.drawImage(shape._img, 0, 0);
+  }
+  for (const shape of disp.shapes || []) {
+    if (shape.type === "polyline" && shape.points && shape.points.length && !shape.hit) {
+      g.beginPath();
+      g.moveTo(shape.points[0][0], shape.points[0][1]);
+      for (let i = 1; i < shape.points.length; i += 1) g.lineTo(shape.points[i][0], shape.points[i][1]);
+      if (shape.closed) g.closePath();
+      g.strokeStyle = shape.color || "#00e05a";
+      const width = shape.kind === "xld" ? contourWidth(shape.width || 2) : (shape.width || 2);
+      g.lineWidth = width;
+      g.stroke();
+    } else if (shape.type === "text") {
+      g.font = "14px \"Segoe UI\", \"Microsoft JhengHei\", sans-serif";
+      g.lineWidth = 3;
+      g.strokeStyle = "rgba(0,0,0,0.75)";
+      g.strokeText(shape.text, shape.col, shape.row);
+      g.fillStyle = shape.color || "#fff";
+      g.fillText(shape.text, shape.col, shape.row);
+    }
+  }
+}
+
+async function saveView() {
+  if (server && server.running) {
+    stLine.textContent = "跑完再存畫面";
+    return;
+  }
+  if (!disp || !baseImage || !disp.width || !disp.height) {
+    stLine.textContent = "還沒有畫面可以存";
+    return;
+  }
+  const shot = document.createElement("canvas");
+  shot.width = disp.width;
+  shot.height = disp.height;
+  paintSnapshot(shot.getContext("2d"));
+  const blob = await new Promise((resolve) => shot.toBlob(resolve, "image/png"));
+  if (!blob) {
+    stLine.textContent = "存不了畫面";
+    return;
+  }
+  const body = new FormData();
+  body.append("file", blob, "view.png");
+  const query = currentProject ? `?project=${encodeURIComponent(currentProject)}` : "";
+  const res = await fetch(`/api/upload${query}`, { method: "POST", body });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  stLine.textContent = `已存畫面 ${data.path}`;
+}
+
+document.getElementById("btnSaveView").onclick = () => { saveView(); };
+
 async function uploadFile(file) {
   const body = new FormData();
   body.append("file", file);
