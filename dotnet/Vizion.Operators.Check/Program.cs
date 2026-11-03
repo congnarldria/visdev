@@ -180,6 +180,72 @@ static void SelfTest()
     var closed = Operators.GrayCloseRectangle(ImageBuffer.Gray(7, 7, hole), 3, 3);
     if (closed.Pixels[3 * 7 + 3] != 180)
         throw new InvalidOperationException($"閉運算應補上暗點，得到 {closed.Pixels[3 * 7 + 3]}");
+    var roundSpecks = new byte[9 * 9];
+    for (int row = 2; row <= 4; row++)
+        for (int column = 2; column <= 4; column++)
+            roundSpecks[row * 9 + column] = 180;
+    roundSpecks[4 * 9 + 4] = 200;
+    roundSpecks[7 * 9 + 7] = 200;
+    var circleOpened = Operators.GrayOpenCircle(ImageBuffer.Gray(9, 9, roundSpecks), 1);
+    if (circleOpened.Pixels[3 * 9 + 3] != 180 || circleOpened.Pixels[3 * 9 + 2] != 180 || circleOpened.Pixels[2 * 9 + 3] != 180)
+        throw new InvalidOperationException("半徑 1 的圓形開運算應留下十字中心 180");
+    if (circleOpened.Pixels[4 * 9 + 4] != 0 || circleOpened.Pixels[7 * 9 + 7] != 0 || circleOpened.Pixels[2 * 9 + 2] != 0)
+        throw new InvalidOperationException("半徑 1 應去掉方塊四角和單獨的亮點");
+
+    var distortedDot = new byte[41 * 41];
+    distortedDot[20 * 41 + 35] = 255;
+    var camera = new Intrinsics(40, 40, 20, 20, -0.5);
+    var undistortedImage = Operators.Undistort(ImageBuffer.Gray(41, 41, distortedDot), camera);
+    if (undistortedImage.Pixels[20 * 41 + 36] != 184)
+        throw new InvalidOperationException($"去畸變後行 36 應是 184，得到 {undistortedImage.Pixels[20 * 41 + 36]}");
+    var identityRotation = new double[,] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
+    var onPlane = Operators.ImageToPlane(20, 30, camera, identityRotation, 0, 0, 200);
+    if (Math.Abs(onPlane.X - 51.73040180762383) > 1e-3 || Math.Abs(onPlane.Y) > 1e-6)
+        throw new InvalidOperationException($"像素 (20,30) 應落到平面 x 51.730，得到 {onPlane.X:0.000} {onPlane.Y:0.000}");
+    var plainCamera = new Intrinsics(40, 40, 20, 20);
+    var plainPlane = Operators.ImageToPlane(20, 30, plainCamera, identityRotation, 0, 0, 200);
+    if (Math.Abs(plainPlane.X - 50) > 1e-9 || Math.Abs(plainPlane.Y) > 1e-9)
+        throw new InvalidOperationException($"沒有畸變時平面 x 應是 50，得到 {plainPlane.X}");
+
+    var turnedBand = new byte[40 * 40];
+    for (int row = 16; row <= 23; row++)
+        for (int column = 0; column < 40; column++)
+            turnedBand[row * 40 + column] = 255;
+    var rotatedBand = Operators.RotateNearest(ImageBuffer.Gray(40, 40, turnedBand), 90);
+    var turnedWidth = Operators.MeasureWidth(rotatedBand, 20);
+    if (Math.Abs(turnedWidth.Width - 8) > 1e-6)
+        throw new InvalidOperationException($"轉正後的寬度應是 8，得到 {turnedWidth.Left:0.00} {turnedWidth.Right:0.00} {turnedWidth.Width:0.00}");
+    var leftMillimetre = Operators.ImageToPlane(20, turnedWidth.Left, plainCamera, identityRotation, 0, 0, 200, scale: 1);
+    var rightMillimetre = Operators.ImageToPlane(20, turnedWidth.Right, plainCamera, identityRotation, 0, 0, 200, scale: 1);
+    if (Math.Abs((rightMillimetre.X - leftMillimetre.X) - 40) > 1e-6)
+        throw new InvalidOperationException($"8 像素在這個相機下應是 40，得到 {rightMillimetre.X - leftMillimetre.X}");
+    var idealBar = new byte[41 * 41];
+    for (int row = 0; row < 41; row++)
+        for (int column = 16; column <= 23; column++)
+            idealBar[row * 41 + column] = 255;
+    var warpedBar = new byte[41 * 41];
+    for (int row = 0; row < 41; row++)
+    {
+        for (int column = 0; column < 41; column++)
+        {
+            double normalizedX = (column - 20.0) / 40.0;
+            double normalizedY = (row - 20.0) / 40.0;
+            double radius = normalizedX * normalizedX + normalizedY * normalizedY;
+            double factor = 1 - 0.5 * radius;
+            if (Math.Abs(factor) < 1e-8)
+                continue;
+            double idealColumn = 20 + 40 * (normalizedX / factor);
+            double idealRow = 20 + 40 * (normalizedY / factor);
+            int sampleColumn = (int)Math.Round(idealColumn, MidpointRounding.AwayFromZero);
+            int sampleRow = (int)Math.Round(idealRow, MidpointRounding.AwayFromZero);
+            if ((uint)sampleRow >= 41 || (uint)sampleColumn >= 41)
+                continue;
+            warpedBar[row * 41 + column] = idealBar[sampleRow * 41 + sampleColumn];
+        }
+    }
+    double planeWidth = Operators.MeasurePlaneWidth(ImageBuffer.Gray(41, 41, warpedBar), 20, camera, identityRotation, 0, 0, 200);
+    if (Math.Abs(planeWidth - 40) > 1)
+        throw new InvalidOperationException($"去畸變後的寬度應約 40，得到 {planeWidth:0.00}");
 
     var board = CalibPlate.Parse("5,7,10");
     var objectX = new double[board.CornerCount];
