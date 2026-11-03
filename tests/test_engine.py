@@ -4349,6 +4349,50 @@ def test_inspect_missing_template_accepts_eight_parts():
     assert failed.vars["Judge"] == "不合格"
 
 
+def test_hole_line_uses_the_same_center_and_diameter_rules():
+    import shutil
+
+    from app.engine.render import read_cv_image
+
+    folder = ROOT / "workspace" / "line_ng"
+    report = ROOT / "workspace" / "line_holes.csv"
+    shutil.rmtree(folder, ignore_errors=True)
+    report.unlink(missing_ok=True)
+    try:
+        session = run_source((ROOT / "samples" / "inspect_line_holes.viz").read_text(encoding="utf-8"))
+        assert session.error is None, session.error
+        assert int(session.vars["Total"]) == 5
+        assert int(session.vars["OkCount"]) == 2
+        assert int(session.vars["NgCount"]) == 3
+        assert session.vars["Judge"] == "不合格"
+        assert session.vars["LastNg"] == "ng_wide.png"
+        rows = {}
+        lines = report.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "index,file,judge,count,shift,dia"
+        for line in lines[1:]:
+            index, name, judge, count, shift, dia = line.split(",")
+            rows[name] = (judge, int(count), float(shift), float(dia), int(index))
+        assert rows["ng_miss.png"][:3] == ("NG", 3, 70.0)
+        assert rows["ng_shift.png"][0] == "NG" and rows["ng_shift.png"][1] == 4
+        assert abs(rows["ng_shift.png"][2] - 10) < 1e-6
+        assert rows["ng_wide.png"][0] == "NG" and abs(rows["ng_wide.png"][3] - 40) < 0.01
+        assert rows["ok_01.png"][0] == "OK" and rows["ok_01.png"][1] == 4 and rows["ok_01.png"][2] == 0
+        assert abs(rows["ok_01.png"][3] - 28) < 0.01
+        assert rows["ok_02.png"][0] == "OK"
+        assert sorted(path.name for path in folder.glob("*.png")) == ["ng_miss.png", "ng_shift.png", "ng_wide.png"]
+        saved = read_cv_image(folder / "ng_wide.png")
+        assert saved is not None and saved.ndim == 3
+        red = (saved[:, :, 2].astype(np.int16) > saved[:, :, 1].astype(np.int16) + 30) & (
+            saved[:, :, 2].astype(np.int16) > saved[:, :, 0].astype(np.int16) + 30
+        )
+        assert int(red.sum()) > 8
+        assert session.show_last_ng() == "ng_wide.png"
+        assert int(session.vars["OkCount"]) == 2
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+        report.unlink(missing_ok=True)
+
+
 def test_inspect_holes_template_counts_four():
     session = run_source((ROOT / "samples" / "inspect_holes.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error

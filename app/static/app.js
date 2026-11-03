@@ -2720,6 +2720,9 @@ window.VisDevCommands = {
   holesTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_holes.viz", "這是孔數範本。應有 4 個暗孔。少了就不合格。");
   },
+  lineHolesTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_line_holes.viz", "這是孔數產線。5 張用同一套圓心、個數和直徑。合格 2、不合格 3。NG 圖和明細在 workspace。");
+  },
   locateTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");
   },

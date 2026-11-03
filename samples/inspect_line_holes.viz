@@ -1,0 +1,115 @@
+* 孔數產線。打開就能跑。samples/hole_batch 有 5 張，按檔名排序。
+* 規則和孔數範本相同。應有 4 個暗孔，圓心在列 50 或 120、行 50 或 170。
+* 偏差不超過 2，直徑 26 到 30。合格 2 張，不合格 3 張：少一孔、圓心偏 10、直徑約 40。
+* 不合格圖寫到 workspace/line_ng，十字是紅色，並寫 NG。明細在 workspace/line_holes.csv。
+* 不開相機，也不改 Windows 開 COM。samples/line_batch 的白塊產線沒有改。
+CountMin := 4
+CountMax := 4
+ShiftMin := 0
+ShiftMax := 2
+DiaMin := 26
+DiaMax := 30
+WantRow := [50, 50, 120, 120]
+WantCol := [50, 170, 50, 170]
+Vizion.file_exists ('workspace/line_ng', NgDir)
+if (NgDir == 1)
+    Vizion.list_files ('workspace/line_ng', 'files', OldNg)
+    Vizion.tuple_length (OldNg, OldCount)
+    for OldIndex := 1 to OldCount by 1
+        Vizion.delete_file (OldNg[OldIndex])
+    endfor
+endif
+OkCount := 0
+NgCount := 0
+LastNg := ''
+CsvFile := 'workspace/line_holes.csv'
+Vizion.open_framegrabber ('File', 'samples/hole_batch', 'gray', 0, 0, Acq)
+Vizion.get_framegrabber_param (Acq, 'image_count', Total)
+Vizion.open_file (CsvFile, 'output', Report)
+Vizion.fwrite_string (Report, 'index,file,judge,count,shift,dia')
+Vizion.fnew_line (Report)
+for Index := 1 to Total by 1
+    Vizion.grab_image (Image, Acq)
+    Vizion.get_framegrabber_param (Acq, 'image_name', Name)
+    Vizion.threshold (Image, Region, 0, 60)
+    Vizion.connection (Region, Parts, 1)
+    Vizion.select_shape (Parts, Kept, 'area', 'and', 200, 2000)
+    Vizion.count_obj (Kept, Count)
+    Shift := 0
+    Dia := 0
+    CenterOk := 0
+    if (Count >= 1)
+        Vizion.area_center (Kept, Area, Row, Column)
+        Vizion.smallest_circle (Kept, CircleRow, CircleCol, Radius)
+        Dia := 0
+        for Hole := 1 to Count by 1
+            One := Radius[Hole] * 2
+            if (One > Dia)
+                Dia := One
+            endif
+        endfor
+        CenterOk := CircleRow[1] + CircleCol[1]
+        for Hole := 1 to Count by 1
+            Best := 9999
+            for Want := 1 to |WantRow| by 1
+                Dr := Row[Hole] - WantRow[Want]
+                Dc := Column[Hole] - WantCol[Want]
+                Dist := sqrt(Dr * Dr + Dc * Dc)
+                if (Dist < Best)
+                    Best := Dist
+                endif
+            endfor
+            if (Best > Shift)
+                Shift := Best
+            endif
+        endfor
+        for Want := 1 to |WantRow| by 1
+            Best := 9999
+            for Hole := 1 to Count by 1
+                Dr := WantRow[Want] - Row[Hole]
+                Dc := WantCol[Want] - Column[Hole]
+                Dist := sqrt(Dr * Dr + Dc * Dc)
+                if (Dist < Best)
+                    Best := Dist
+                endif
+            endfor
+            if (Best > Shift)
+                Shift := Best
+            endif
+        endfor
+        Vizion.gen_cross_contour_xld (Cross, Row, Column, 16, 0)
+    endif
+    if (Count >= CountMin and Count <= CountMax and Shift <= ShiftMax and Shift >= ShiftMin and Dia >= DiaMin and Dia <= DiaMax and CenterOk >= 0)
+        Judge := 'OK'
+        OkCount := OkCount + 1
+    else
+        Judge := 'NG'
+        NgCount := NgCount + 1
+        LastNg := Name
+    endif
+    CsvRow := Index + ',' + Name + ',' + Judge + ',' + Count + ',' + Shift + ',' + Dia
+    Vizion.fwrite_string (Report, CsvRow)
+    Vizion.fnew_line (Report)
+    Vizion.dev_display (Image)
+    Vizion.dev_display (Kept)
+    if (Count >= 1)
+        if (Judge == 'OK')
+            Vizion.dev_set_color ('green')
+        else
+            Vizion.dev_set_color ('red')
+        endif
+        Vizion.dev_display (Cross)
+    endif
+    if (Judge == 'NG')
+        Vizion.dev_set_color ('red')
+        Vizion.dev_disp_text ('NG', 16, 8)
+        Vizion.dump_window ('workspace/line_ng/' + Name)
+    endif
+endfor
+if (NgCount == 0 and LastNg == '')
+    Judge := '合格'
+else
+    Judge := '不合格'
+endif
+Vizion.close_file (Report)
+Vizion.close_framegrabber (Acq)
