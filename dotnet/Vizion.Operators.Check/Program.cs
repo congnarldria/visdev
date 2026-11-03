@@ -51,6 +51,36 @@ static void SelfTest()
     if (Math.Abs(edges[0][0].Row) > 1e-3 || Math.Abs(edges[0][^1].Row - 23) > 1e-3)
         throw new InvalidOperationException($"邊緣應從列 0 到列 23，得到 {edges[0][0].Row} 到 {edges[0][^1].Row}");
 
+    var plate = CalibPlate.Parse("5,7,10");
+    if (plate.Rows != 5 || plate.Columns != 7 || plate.Square != 10 || plate.CornerCount != 35)
+        throw new InvalidOperationException($"5,7,10 應是 5 列 7 行、邊長 10、35 個角點，得到 {plate.Rows}x{plate.Columns} 邊長 {plate.Square}");
+    if (plate.PatternWidth != 7 || plate.PatternHeight != 5)
+        throw new InvalidOperationException("OpenCV 的 patternSize 應是寬 7、高 5");
+    var origin = plate.Point(0, 0);
+    var along = plate.Point(0, 1);
+    var down = plate.Point(1, 0);
+    var last = plate.Point(4, 6);
+    if (origin != (0, 0, 0) || along != (10, 0, 0) || down != (0, 10, 0) || last != (60, 40, 0))
+        throw new InvalidOperationException($"物點應從 (0,0,0) 到 (60,40,0)，得到 {origin} {along} {down} {last}");
+    if (CalibPlate.Parse("5x7x10").CornerCount != 35 || CalibPlate.Parse("5，7，10").CornerCount != 35)
+        throw new InvalidOperationException("x 和中文逗號也要能寫成同一塊棋盤");
+    try
+    {
+        CalibPlate.Parse("1,7,10");
+        throw new InvalidOperationException("不到 2x2 的棋盤不該被接受");
+    }
+    catch (ArgumentException)
+    {
+    }
+    try
+    {
+        CalibPlate.Parse("samples/calplate_4x5.cpd");
+        throw new InvalidOperationException("描述檔不該在這份 C# 參考裡被當成棋盤");
+    }
+    catch (ArgumentException)
+    {
+    }
+
     var template = Operators.ReadImage(SampleFile("shape_template.png"));
     var scene = Operators.ReadImage(SampleFile("shapes_scene.png"));
     var found = Operators.FindShape(scene, template, 15, 15, 164, 164);

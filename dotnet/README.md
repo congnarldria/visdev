@@ -53,4 +53,16 @@ var hits = Operators.FindShape(scene, template, 15, 15, 164, 164);
 
 自我檢查會從目前目錄往上找 `samples/`。Visual Studio 按 F5 時，工作目錄若在 `bin` 裡也找得到。
 
+## 棋盤標定板
+
+`CalibPlate.Parse("5,7,10")` 是內角點 5 列、7 行、方格邊長 10，角點共 35 個。`5x7x10` 和 `5，7，10` 一樣。物點是 X = 行索引 × 10、Y = 列索引 × 10、Z = 0。第一點是 (0,0,0)，最後一點是 (60,40,0)。OpenCV 的 `patternSize` 是寬 7、高 5。
+
+這份不估計相機的九個參數，也不讀 `.cpd`。圓點板和六角形標定板仍由 Python 處理。單台相機標完的九個參數沒有改。
+
+```csharp
+var plate = CalibPlate.Parse("5,7,10");
+int corners = plate.CornerCount;
+var last = plate.Point(4, 6);
+```
+
 既有的 `Threshold`、`Connection`、`AreaCenterOf` 仍在 `Operators`。讀圖目前讀 PNG。

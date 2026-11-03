@@ -42,7 +42,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8765
 
 ## 標定
 
-`set_calib_data_calib_object` 接受棋盤三個數，例如 `'5,7,10'`（內角點 5 列、7 行、方格邊長 10），也接受 `.cpd` 或 `.descr`。圓點板用 `findCirclesGrid`，亮標記會先反相。範例描述檔是 `samples/calplate_4x5.cpd`。
+`set_calib_data_calib_object` 接受棋盤三個數，例如 `'5,7,10'`（內角點 5 列、7 行、方格邊長 10，角點共 35 個），也接受 `.cpd` 或 `.descr`。C# 的 `CalibPlate.Parse` 用同一組三個數，不估計九個參數。圓點板用 `findCirclesGrid`，亮標記會先反相。範例描述檔是 `samples/calplate_4x5.cpd`。
 
 `create_calib_data` 的相機數可以大於 1。每台相機用自己的影像估計九個參數：fx、fy、cx、cy、k1、k2、p1、p2、k3。標完之後，`get_calib_data` 的 `camera/pose` 是這台相機相對第 0 台的姿態，七個數是 Tx、Ty、Tz、Rx、Ry、Rz、0。第 0 台是 0。每一台的第 k 組必須是同時看到的同一塊板。
 

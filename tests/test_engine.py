@@ -4750,6 +4750,29 @@ def test_calibration_draws_points_and_errors():
     assert sum(1 for shape in drawn["shapes"] if shape["type"] == "polyline") > 200
 
 
+def test_chessboard_5_7_10_is_thirty_five_corners():
+    from app.engine.chapters.calib_ops import CalibData, _object_points, _parse_descr
+
+    class Ctx:
+        root = ROOT
+
+    plate = _parse_descr("5,7,10", Ctx())
+    assert plate.kind == "chessboard"
+    assert plate.rows == 5 and plate.cols == 7 and plate.square == 10
+    same = _parse_descr("5x7x10", Ctx())
+    assert (same.rows, same.cols, same.square) == (5, 7, 10)
+    wide = _parse_descr("5，7，10", Ctx())
+    assert (wide.rows, wide.cols, wide.square) == (5, 7, 10)
+    model = CalibData()
+    model.rows, model.cols, model.square = plate.rows, plate.cols, plate.square
+    points = _object_points(model)
+    assert len(points) == 35
+    assert points[0].tolist() == [0.0, 0.0, 0.0]
+    assert points[1].tolist() == [10.0, 0.0, 0.0]
+    assert points[7].tolist() == [0.0, 10.0, 0.0]
+    assert points[-1].tolist() == [60.0, 40.0, 0.0]
+
+
 def test_plate_file_and_two_cameras():
     import cv2
     import numpy as np
