@@ -3524,7 +3524,7 @@ def test_inspect_stripe_template_measures_the_wide_band():
 
 def test_stripe_outside_tolerance_turns_the_marks_red():
     source = (ROOT / "samples" / "inspect_stripe.viz").read_text(encoding="utf-8")
-    source = source.replace("Width >= 20 and Width <= 24", "Width >= 1 and Width <= 2")
+    source = source.replace("WidthMin := 20", "WidthMin := 1").replace("WidthMax := 24", "WidthMax := 2")
     session = run_source(source)
     assert session.error is None, session.error
     assert session.vars["Judge"] == "不合格"

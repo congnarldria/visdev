@@ -265,7 +265,63 @@ function renderEditor() {
   renderTimes();
   placeBars();
   gutterArrow = programArrow();
+  renderTolerances();
 }
+
+let applyingTolerance = false;
+
+function renderTolerances() {
+  const bar = document.getElementById("tolBar");
+  if (!bar || typeof VisdevTol === "undefined") return;
+  const fields = VisdevTol.readLimits(code.value);
+  const signature = JSON.stringify(fields);
+  if (!fields.length) {
+    bar.hidden = true;
+    bar.innerHTML = "";
+    bar.dataset.sig = "";
+    return;
+  }
+  bar.hidden = false;
+  if (bar.dataset.sig === signature) return;
+  if (applyingTolerance && bar.contains(document.activeElement)) return;
+  bar.dataset.sig = signature;
+  bar.innerHTML = `<span>公差，改完按執行</span>` + fields.map((field) => `
+    <label>${field.label}
+      <input data-line="${field.minLine}" data-name="${field.minName}" value="${field.min}" inputmode="decimal" aria-label="${field.label}下限" title="${field.label}下限">
+      <span>到</span>
+      <input data-line="${field.maxLine}" data-name="${field.maxName}" value="${field.max}" inputmode="decimal" aria-label="${field.label}上限" title="${field.label}上限">
+    </label>`).join("");
+}
+
+function commitTolerance(input) {
+  const value = input.value.trim();
+  if (!/^-?\d+(?:\.\d+)?$/.test(value)) {
+    applyingTolerance = false;
+    const bar = document.getElementById("tolBar");
+    if (bar) bar.dataset.sig = "";
+    renderTolerances();
+    return;
+  }
+  const next = VisdevTol.applyLimit(code.value, input.dataset.line, input.dataset.name, value);
+  if (next === code.value) return;
+  applyingTolerance = true;
+  code.value = next;
+  commitProgram("checkpoint");
+  renderEditor();
+  applyingTolerance = false;
+  const bar = document.getElementById("tolBar");
+  if (bar) bar.dataset.sig = JSON.stringify(VisdevTol.readLimits(code.value));
+}
+
+document.getElementById("tolBar").addEventListener("change", (event) => {
+  if (event.target.matches("input")) commitTolerance(event.target);
+});
+document.getElementById("tolBar").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && event.target.matches("input")) {
+    event.preventDefault();
+    commitTolerance(event.target);
+  }
+});
 
 function renderVars() {
   const iconic = server.iconic || [];

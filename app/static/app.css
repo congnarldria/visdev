@@ -657,6 +657,21 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
   user-select: none;
 }
 
+.tol-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  padding: 4px 8px;
+  background: #191d24;
+  border-bottom: 1px solid var(--line);
+  color: #c5ccd6;
+  font-size: 12px;
+  flex: none;
+}
+.tol-bar[hidden] { display: none; }
+.tol-bar label { display: flex; align-items: center; gap: 4px; }
+.tol-bar input { width: 64px; }
 .gfx-stage { position: relative; flex: 1; min-height: 0; background: #101216; }
 #probe {
   position: absolute;

@@ -1,14 +1,16 @@
-* 條紋寬度範本。打開就能跑，再改搜尋線和公差。
+* 條紋寬度範本。打開就能跑。圖形視窗可以改上下限，再按執行。
 * 讀 samples/stripes.png。沿第 40 列、從行 5 到 220 找全部邊緣。
 * 第 5 個和第 6 個邊緣夾住最寬的亮條。Width 是這兩點的距離。
-* 公差是 20 到 24。超出時十字是紅色，Judge 是不合格。
+* 預設公差是 20 到 24。超出時十字是紅色，Judge 是不合格。
+WidthMin := 20
+WidthMax := 24
 Vizion.read_image (Image, 'samples/stripes.png')
 Vizion.gauge_point (Image, Mark, 40, 5, 40, 220, 1, 8, 'all', 'all', PRow, PCol, Amp, Dist)
 Vizion.tuple_length (PCol, EdgeCount)
 Left := PCol[5]
 Right := PCol[6]
 Vizion.distance_pp (PRow[5], PCol[5], PRow[6], PCol[6], Width)
-WidthOk := Width >= 20 and Width <= 24
+WidthOk := Width >= WidthMin and Width <= WidthMax
 if (WidthOk)
     Judge := '合格'
     Vizion.dev_set_color ('yellow')
