@@ -139,6 +139,14 @@ VIZION_EXPORT int VIZION_CALL vizion_bgr_gray(const uint8_t* bgr, int count, uin
 
 VIZION_EXPORT int VIZION_CALL vizion_bgr_selftest(void);
 
+/* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
+VIZION_EXPORT int VIZION_CALL vizion_intensity(
+    const uint8_t* gray, int width,
+    const int* rows, const int* columns, const int* lengths, int runs,
+    double* mean, double* deviation);
+
+VIZION_EXPORT int VIZION_CALL vizion_intensity_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

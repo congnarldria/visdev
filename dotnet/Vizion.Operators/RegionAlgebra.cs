@@ -240,9 +240,14 @@ public static partial class Operators
         var found = new Intensity[regions.Count];
         for (int index = 0; index < regions.Count; index++)
         {
+            var region = regions[index];
+            if (NativeCore.TryIntensity(gray, image.Width, region.Rows, region.Columns, region.Lengths, out double nativeMean, out double nativeDeviation))
+            {
+                found[index] = new Intensity(nativeMean, nativeDeviation);
+                continue;
+            }
             long count = 0;
             double sum = 0;
-            var region = regions[index];
             for (int i = 0; i < region.Rows.Length; i++)
             {
                 int offset = region.Rows[i] * image.Width + region.Columns[i];

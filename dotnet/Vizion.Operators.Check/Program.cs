@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--intensity")
+{
+    IntensityNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--gray")
 {
     GrayNativeCheck();
@@ -913,6 +919,68 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void IntensityNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var three = new byte[] { 1, 2, 3 };
+    var shortRun = new Region(3, 1, new[] { 0 }, new[] { 0 }, new[] { 3 });
+    var empty = new Region(3, 1, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<int>());
+    bool previous = NativeCore.UseNative;
+    var nativeThree = Operators.IntensityOf(shortRun, ImageBuffer.Gray(3, 1, three));
+    var nativeEmpty = Operators.IntensityOf(empty, ImageBuffer.Gray(3, 1, three));
+    NativeCore.UseNative = false;
+    var managedThree = Operators.IntensityOf(shortRun, ImageBuffer.Gray(3, 1, three));
+    var managedEmpty = Operators.IntensityOf(empty, ImageBuffer.Gray(3, 1, three));
+    NativeCore.UseNative = true;
+    ExpectIntensity(nativeThree[0], managedThree[0], "1,2,3");
+    ExpectIntensity(nativeEmpty[0], managedEmpty[0], "空區域");
+    if (Math.Abs(nativeThree[0].Mean - 2) > 1e-12 || Math.Abs(nativeThree[0].Deviation - Math.Sqrt(2.0 / 3.0)) > 1e-12)
+        throw new InvalidOperationException($"1,2,3 的平均應是 2，得到 {nativeThree[0].Mean} / {nativeThree[0].Deviation}");
+    var wide = new byte[960 * 540];
+    for (int i = 0; i < wide.Length; i++)
+        wide[i] = (byte)((i * 13 + 7) & 255);
+    var rows = new int[540];
+    var columns = new int[540];
+    var lengths = new int[540];
+    for (int row = 0; row < 540; row++)
+    {
+        rows[row] = row;
+        columns[row] = row % 7;
+        lengths[row] = 960 - columns[row];
+    }
+    var region = new Region(960, 540, rows, columns, lengths);
+    var image = ImageBuffer.Gray(960, 540, wide);
+    var nativeWide = Operators.IntensityOf(region, image);
+    NativeCore.UseNative = false;
+    var managedWide = Operators.IntensityOf(region, image);
+    NativeCore.UseNative = previous;
+    ExpectIntensity(nativeWide[0], managedWide[0], "大圖");
+    NativeCore.UseNative = true;
+    Operators.IntensityOf(region, image);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 20; i++)
+        Operators.IntensityOf(region, image);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.IntensityOf(region, image);
+    watch.Restart();
+    for (int i = 0; i < 20; i++)
+        Operators.IntensityOf(region, image);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("亮度原生檢查通過");
+    Console.WriteLine($"960×540 區域統計共 20 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void ExpectIntensity(Intensity actual, Intensity expected, string label)
+{
+    if (Math.Abs(actual.Mean - expected.Mean) > 1e-9 || Math.Abs(actual.Deviation - expected.Deviation) > 1e-9)
+        throw new InvalidOperationException($"{label} 平均 {actual.Mean} / {actual.Deviation}，C# {expected.Mean} / {expected.Deviation}");
 }
 
 static void GrayNativeCheck()

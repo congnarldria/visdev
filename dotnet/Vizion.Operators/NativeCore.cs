@@ -234,6 +234,27 @@ public static class NativeCore
         }
     }
 
+    public static bool TryIntensity(byte[] gray, int width, int[] rows, int[] columns, int[] lengths, out double mean, out double deviation)
+    {
+        mean = 0;
+        deviation = 0;
+        if (!IsLoaded || !UseNative || width < 1)
+            return false;
+        try
+        {
+            return vizion_intensity(gray, width, rows, columns, lengths, rows.Length, out mean, out deviation) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TryBgrGray(byte[] bgr, int count, byte[] gray)
     {
         if (!IsLoaded || !UseNative || count < 1 || bgr.Length < count * 3 || gray.Length < count)
@@ -396,6 +417,10 @@ public static class NativeCore
             return false;
         }
     }
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_intensity(
+        byte[] gray, int width, int[] rows, int[] columns, int[] lengths, int runs, out double mean, out double deviation);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_bgr_gray(byte[] bgr, int count, byte[] gray);
