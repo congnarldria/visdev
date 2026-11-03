@@ -129,6 +129,11 @@ VIZION_EXPORT int VIZION_CALL vizion_sobel(
 
 VIZION_EXPORT int VIZION_CALL vizion_sobel_selftest(void);
 
+/* 5 點高斯 [1,4,6,4,1] 後隔點取樣。輸出寬高是 (n+1)/2。 */
+VIZION_EXPORT int VIZION_CALL vizion_pyrdown(const uint8_t* src, int width, int height, uint8_t* dst);
+
+VIZION_EXPORT int VIZION_CALL vizion_pyrdown_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

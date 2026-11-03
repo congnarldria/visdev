@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--pyr")
+{
+    PyrNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--sobel")
 {
     SobelNativeCheck();
@@ -901,6 +907,158 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void PyrNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    ExpectPyr(new byte[] { 200 }, 1, 1);
+    ExpectPyr(new byte[] { 1, 2, 3, 4, 5, 6 }, 2, 3);
+    var pattern = new byte[40 * 21];
+    for (int i = 0; i < pattern.Length; i++)
+        pattern[i] = (byte)((i * 13 + 5) & 255);
+    ExpectPyr(pattern, 40, 21);
+    var odd = new byte[17 * 9];
+    for (int i = 0; i < odd.Length; i++)
+        odd[i] = (byte)(255 - (i & 255));
+    ExpectPyr(odd, 17, 9);
+    var block = new byte[64 * 64];
+    for (int row = 16; row < 48; row++)
+        for (int col = 16; col < 48; col++)
+            block[row * 64 + col] = 255;
+    var shifted = new byte[96 * 96];
+    for (int row = 36; row < 68; row++)
+        for (int col = 31; col < 63; col++)
+            shifted[row * 96 + col] = 255;
+    var scene = ImageBuffer.Gray(96, 96, shifted);
+    var template = ImageBuffer.Gray(64, 64, block);
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    var managedNcc = Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    NativeCore.UseNative = true;
+    var nativeShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    var nativeNcc = Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    if (nativeShape.Length != managedShape.Length || nativeShape.Length < 1)
+        throw new InvalidOperationException($"形狀命中 {nativeShape.Length} 個，C# {managedShape.Length} 個");
+    for (int i = 0; i < managedShape.Length; i++)
+    {
+        if (Math.Abs(nativeShape[i].Row - managedShape[i].Row) > 1e-6
+            || Math.Abs(nativeShape[i].Column - managedShape[i].Column) > 1e-6
+            || Math.Abs(nativeShape[i].Angle - managedShape[i].Angle) > 1e-6
+            || Math.Abs(nativeShape[i].Score - managedShape[i].Score) > 1e-6)
+            throw new InvalidOperationException($"形狀分數和 C# 不同 {nativeShape[i].Score} / {managedShape[i].Score}");
+    }
+    if (nativeNcc.Length != managedNcc.Length || nativeNcc.Length < 1)
+        throw new InvalidOperationException($"正規相關命中 {nativeNcc.Length} 個，C# {managedNcc.Length} 個");
+    for (int i = 0; i < managedNcc.Length; i++)
+    {
+        if (Math.Abs(nativeNcc[i].Row - managedNcc[i].Row) > 1e-6
+            || Math.Abs(nativeNcc[i].Column - managedNcc[i].Column) > 1e-6
+            || Math.Abs(nativeNcc[i].Angle - managedNcc[i].Angle) > 1e-6
+            || Math.Abs(nativeNcc[i].Score - managedNcc[i].Score) > 1e-6)
+            throw new InvalidOperationException($"正規相關和 C# 不同 {nativeNcc[i].Score} / {managedNcc[i].Score}");
+    }
+    var bench = new byte[960 * 540];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)((i * 19) & 255);
+    var nativeDown = new byte[480 * 270];
+    var managedDown = new byte[480 * 270];
+    if (!NativeCore.TryPyrDown(bench, 960, 540, nativeDown))
+        throw new InvalidOperationException("金字塔沒有走到 C 核心");
+    PyrFill(bench, 960, 540, managedDown);
+    for (int i = 0; i < nativeDown.Length; i++)
+    {
+        if (nativeDown[i] != managedDown[i])
+            throw new InvalidOperationException($"大圖縮小像素 {i} 原生 {nativeDown[i]}，C# {managedDown[i]}");
+    }
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 12; i++)
+        NativeCore.TryPyrDown(bench, 960, 540, nativeDown);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    PyrFill(bench, 960, 540, managedDown);
+    watch.Restart();
+    for (int i = 0; i < 12; i++)
+        PyrFill(bench, 960, 540, managedDown);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("金字塔原生檢查通過");
+    Console.WriteLine($"960×540 縮小共 12 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void ExpectPyr(byte[] source, int width, int height)
+{
+    int destWidth = (width + 1) / 2;
+    int destHeight = (height + 1) / 2;
+    var native = new byte[destWidth * destHeight];
+    var managed = new byte[destWidth * destHeight];
+    if (!NativeCore.TryPyrDown(source, width, height, native))
+        throw new InvalidOperationException("金字塔沒有走到 C 核心");
+    PyrFill(source, width, height, managed);
+    for (int i = 0; i < native.Length; i++)
+    {
+        if (native[i] != managed[i])
+            throw new InvalidOperationException($"{width}×{height} 縮小像素 {i} 原生 {native[i]}，C# {managed[i]}");
+    }
+}
+
+static int PyrReflect(int position, int length)
+{
+    if ((uint)position < (uint)length)
+        return position;
+    if (length == 1)
+        return 0;
+    do
+    {
+        if (position < 0)
+            position = -position - 1;
+        else
+            position = length - 1 - (position - length);
+    }
+    while ((uint)position >= (uint)length);
+    return position;
+}
+
+static void PyrFill(byte[] source, int width, int height, byte[] destination)
+{
+    int destWidth = (width + 1) / 2;
+    int destHeight = (height + 1) / 2;
+    int[] kernel = { 1, 4, 6, 4, 1 };
+    var horizontal = new int[width * height];
+    for (int row = 0; row < height; row++)
+    {
+        int rowOffset = row * width;
+        for (int col = 0; col < width; col++)
+        {
+            int sum = 0;
+            for (int tap = -2; tap <= 2; tap++)
+                sum += kernel[tap + 2] * source[rowOffset + PyrReflect(col + tap, width)];
+            horizontal[rowOffset + col] = sum;
+        }
+    }
+    for (int row = 0; row < destHeight; row++)
+    {
+        int sourceRow = row * 2;
+        for (int col = 0; col < destWidth; col++)
+        {
+            int sourceCol = col * 2;
+            int sum = 0;
+            for (int tap = -2; tap <= 2; tap++)
+            {
+                int rr = PyrReflect(sourceRow + tap, height);
+                sum += kernel[tap + 2] * horizontal[rr * width + sourceCol];
+            }
+            int value = (sum + 128) / 256;
+            if (value < 0)
+                value = 0;
+            if (value > 255)
+                value = 255;
+            destination[row * destWidth + col] = (byte)value;
+        }
+    }
 }
 
 static void SobelNativeCheck()

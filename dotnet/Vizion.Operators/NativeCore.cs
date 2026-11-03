@@ -234,6 +234,27 @@ public static class NativeCore
         }
     }
 
+    public static bool TryPyrDown(byte[] source, int width, int height, byte[] destination)
+    {
+        int destWidth = (width + 1) / 2;
+        int destHeight = (height + 1) / 2;
+        if (!IsLoaded || !UseNative || width < 1 || height < 1 || source.Length < width * height || destination.Length < destWidth * destHeight)
+            return false;
+        try
+        {
+            return vizion_pyrdown(source, width, height, destination) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TrySobel(byte[] gray, int width, int height, float[] gx, float[] gy, float[] magnitude)
     {
         if (!IsLoaded || !UseNative || gray.Length < width * height)
@@ -356,6 +377,9 @@ public static class NativeCore
             return false;
         }
     }
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_sobel(byte[] gray, int width, int height, float[] gx, float[] gy, float[] magnitude);

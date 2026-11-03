@@ -53,5 +53,11 @@ int main(void)
         return 1;
     }
     printf("梯度自我檢查通過\n");
+    code = vizion_pyrdown_selftest();
+    if (code != 0) {
+        fprintf(stderr, "金字塔自我檢查失敗 %d\n", code);
+        return 1;
+    }
+    printf("金字塔自我檢查通過\n");
     return 0;
 }

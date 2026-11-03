@@ -114,6 +114,9 @@ public static partial class Operators
     {
         destWidth = (width + 1) / 2;
         destHeight = (height + 1) / 2;
+        destination = new byte[destWidth * destHeight];
+        if (NativeCore.TryPyrDown(source, width, height, destination))
+            return;
         int[] kernel = { 1, 4, 6, 4, 1 };
         var horizontal = new int[width * height];
         for (int row = 0; row < height; row++)
@@ -127,7 +130,6 @@ public static partial class Operators
                 horizontal[rowOffset + col] = sum;
             }
         }
-        destination = new byte[destWidth * destHeight];
         for (int row = 0; row < destHeight; row++)
         {
             int sourceRow = row * 2;
