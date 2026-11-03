@@ -75,6 +75,15 @@ VIZION_EXPORT int VIZION_CALL vizion_region_disk(
 
 VIZION_EXPORT int VIZION_CALL vizion_morph_selftest(void);
 
+/* 平均遮罩至少 1。高斯 Size 是大於等於 3 的奇數。邊界是 REFLECT_101。 */
+VIZION_EXPORT int VIZION_CALL vizion_mean(
+    const uint8_t* src, uint8_t* dst, int width, int height, int mask_width, int mask_height);
+
+VIZION_EXPORT int VIZION_CALL vizion_gauss(
+    const uint8_t* src, uint8_t* dst, int width, int height, int size);
+
+VIZION_EXPORT int VIZION_CALL vizion_filter_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

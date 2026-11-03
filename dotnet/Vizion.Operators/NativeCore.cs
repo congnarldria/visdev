@@ -150,6 +150,50 @@ public static class NativeCore
         int kernelWidth, int kernelHeight, int dilate,
         int[]? outRows, int[]? outColumns, int[]? outLengths, int capacity, out int written);
 
+    public static bool TryMean(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight)
+    {
+        if (!IsLoaded || !UseNative)
+            return false;
+        try
+        {
+            return vizion_mean(source, destination, width, height, maskWidth, maskHeight) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryGauss(byte[] source, byte[] destination, int width, int height, int size)
+    {
+        if (!IsLoaded || !UseNative)
+            return false;
+        try
+        {
+            return vizion_gauss(source, destination, width, height, size) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_mean(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gauss(byte[] source, byte[] destination, int width, int height, int size);
+
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_region_disk(
         int[] rows, int[] columns, int[] lengths, int count, int width, int height, double radius, int dilate,

@@ -23,5 +23,11 @@ int main(void)
         return 1;
     }
     printf("型態學自我檢查通過\n");
+    code = vizion_filter_selftest();
+    if (code != 0) {
+        fprintf(stderr, "濾波自我檢查失敗 %d\n", code);
+        return 1;
+    }
+    printf("濾波自我檢查通過\n");
     return 0;
 }

@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--filter")
+{
+    FilterNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--morph")
 {
     MorphNativeCheck();
@@ -871,6 +877,88 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void FilterNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var grid = new byte[16];
+    for (int i = 0; i < grid.Length; i++)
+        grid[i] = (byte)i;
+    var mean3 = Operators.MeanImage(ImageBuffer.Gray(4, 4, grid), 3, 3);
+    byte[] expect3 = { 3, 4, 5, 5, 5, 5, 6, 6, 9, 9, 10, 10, 10, 10, 11, 12 };
+    if (!mean3.Pixels.AsSpan().SequenceEqual(expect3))
+        throw new InvalidOperationException("3x3 平均和 OpenCV 不同");
+    var mean2 = Operators.MeanImage(ImageBuffer.Gray(4, 4, grid), 2, 2);
+    byte[] expect2 = { 3, 3, 4, 5, 3, 3, 4, 5, 7, 7, 8, 9, 11, 11, 12, 13 };
+    if (!mean2.Pixels.AsSpan().SequenceEqual(expect2))
+        throw new InvalidOperationException("2x2 平均和 OpenCV 不同");
+    var spike = new byte[49];
+    spike[24] = 255;
+    var blurred = Operators.GaussImage(ImageBuffer.Gray(7, 7, spike), 5);
+    if (blurred.Pixels[24] != 36 || blurred.Pixels[16] != 16 || blurred.Pixels[9] != 4 || blurred.Pixels[10] != 6 || blurred.Pixels[0] != 0)
+        throw new InvalidOperationException("5x5 高斯和 OpenCV 不同");
+    var color = new byte[12];
+    for (int i = 0; i < color.Length; i++)
+        color[i] = (byte)(i * 20);
+    CompareFilter(color, 2, 2, 3, 1, 3);
+    var random = new byte[48 * 36];
+    for (int i = 0; i < random.Length; i++)
+        random[i] = (byte)((i * 17) & 255);
+    CompareFilter(random, 48, 36, 1, 5, 7);
+
+    var bench = new byte[1920 * 1080];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)((i * 17) & 255);
+    var benchImage = ImageBuffer.Gray(1920, 1080, bench);
+    Operators.MeanImage(benchImage, 9, 9);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 4; i++)
+        Operators.MeanImage(benchImage, 9, 9);
+    watch.Stop();
+    double nativeMean = watch.Elapsed.TotalMilliseconds;
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    Operators.MeanImage(benchImage, 9, 9);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.MeanImage(benchImage, 9, 9);
+    watch.Stop();
+    double managedMean = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = true;
+    Operators.GaussImage(benchImage, 5);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.GaussImage(benchImage, 5);
+    watch.Stop();
+    double nativeGauss = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.GaussImage(benchImage, 5);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.GaussImage(benchImage, 5);
+    watch.Stop();
+    double managedGauss = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("濾波原生檢查通過");
+    Console.WriteLine($"1920x1080 的 9x9 平均共 4 次：原生 {nativeMean:0.0} ms，C# {managedMean:0.0} ms，加速 {managedMean / nativeMean:0.0} 倍");
+    Console.WriteLine($"1920x1080 的 5x5 高斯共 4 次：原生 {nativeGauss:0.0} ms，C# {managedGauss:0.0} ms，加速 {managedGauss / nativeGauss:0.0} 倍");
+}
+
+static void CompareFilter(byte[] pixels, int width, int height, int channels, int mask, int gauss)
+{
+    bool previous = NativeCore.UseNative;
+    ImageBuffer image = channels == 1 ? ImageBuffer.Gray(width, height, pixels) : ImageBuffer.Bgr(width, height, pixels);
+    NativeCore.UseNative = false;
+    var managedMean = Operators.MeanImage(image, mask, mask + 1);
+    var managedGauss = Operators.GaussImage(image, gauss);
+    NativeCore.UseNative = true;
+    var nativeMean = Operators.MeanImage(image, mask, mask + 1);
+    var nativeGauss = Operators.GaussImage(image, gauss);
+    NativeCore.UseNative = previous;
+    if (!managedMean.Pixels.AsSpan().SequenceEqual(nativeMean.Pixels) || !managedGauss.Pixels.AsSpan().SequenceEqual(nativeGauss.Pixels))
+        throw new InvalidOperationException("濾波和 C# 後備不同");
 }
 
 static void MorphNativeCheck()

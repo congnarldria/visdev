@@ -24,7 +24,10 @@ add_library(vizion_core SHARED
     src/gray_morph.c
     src/gray_rect_sse2.c
     src/gray_rect_avx2.c
-    src/region_morph.c)
+    src/region_morph.c
+    src/filter.c
+    src/filter_mean_sse2.c
+    src/filter_mean_avx2.c)
 target_include_directories(vizion_core PUBLIC include PRIVATE src)
 target_compile_definitions(vizion_core PRIVATE VIZION_BUILD)
 
@@ -33,9 +36,9 @@ target_link_libraries(vizion_core PUBLIC Threads::Threads m)
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(vizion_core PRIVATE -fvisibility=hidden -Wall -Wextra -Wno-unused-parameter)
-    set_source_files_properties(src/threshold_scalar.c src/region_runs.c src/gray_morph.c src/region_morph.c PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize")
-    set_source_files_properties(src/threshold_sse2.c src/gray_rect_sse2.c PROPERTIES COMPILE_OPTIONS "-msse2")
-    set_source_files_properties(src/threshold_avx2.c src/gray_rect_avx2.c PROPERTIES COMPILE_OPTIONS "-mavx2")
+    set_source_files_properties(src/threshold_scalar.c src/region_runs.c src/gray_morph.c src/region_morph.c src/filter.c PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize")
+    set_source_files_properties(src/threshold_sse2.c src/gray_rect_sse2.c src/filter_mean_sse2.c PROPERTIES COMPILE_OPTIONS "-msse2")
+    set_source_files_properties(src/threshold_avx2.c src/gray_rect_avx2.c src/filter_mean_avx2.c PROPERTIES COMPILE_OPTIONS "-mavx2")
 endif()
 
 add_executable(vizion_core_check src/check_threshold.c)
