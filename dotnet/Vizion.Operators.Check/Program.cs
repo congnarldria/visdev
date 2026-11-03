@@ -159,6 +159,27 @@ static void SelfTest()
     var barWidth = Operators.MeasureWidth(ImageBuffer.Gray(64, 32, barImage), 16);
     if (Math.Abs(barWidth.Left - 15.5) > 1e-6 || Math.Abs(barWidth.Right - 47.5) > 1e-6 || Math.Abs(barWidth.Width - 32) > 1e-6)
         throw new InvalidOperationException($"亮條寬度應是 32，左右在 15.5 和 47.5，得到 {barWidth.Left} {barWidth.Right} {barWidth.Width}");
+    var leftEdge = Operators.FitLine(new (double Row, double Col)[] { (0, 15.5), (20, 15.5), (40, 15.5) });
+    var rightEdge = Operators.FitLine(new (double Row, double Col)[] { (0, 47.5), (30, 47.5) });
+    double edgeGap = Operators.LineDistance(leftEdge, rightEdge);
+    if (Math.Abs(edgeGap - 32) > 1e-6)
+        throw new InvalidOperationException($"兩條邊緣的距離應是 32，得到 {edgeGap}");
+    var speck = new byte[7 * 7];
+    for (int row = 1; row <= 3; row++)
+        for (int column = 1; column <= 3; column++)
+            speck[row * 7 + column] = 180;
+    speck[3 * 7 + 3] = 200;
+    speck[5 * 7 + 5] = 200;
+    var opened = Operators.GrayOpenRectangle(ImageBuffer.Gray(7, 7, speck), 3, 3);
+    if (opened.Pixels[3 * 7 + 3] != 180 || opened.Pixels[0] != 0 || opened.Pixels[5 * 7 + 5] != 0)
+        throw new InvalidOperationException($"開運算應留下 3x3 的 180，去掉單獨的 200，得到中心 {opened.Pixels[3 * 7 + 3]}、角落 {opened.Pixels[5 * 7 + 5]}");
+    var hole = new byte[7 * 7];
+    for (int i = 0; i < hole.Length; i++)
+        hole[i] = 180;
+    hole[3 * 7 + 3] = 0;
+    var closed = Operators.GrayCloseRectangle(ImageBuffer.Gray(7, 7, hole), 3, 3);
+    if (closed.Pixels[3 * 7 + 3] != 180)
+        throw new InvalidOperationException($"閉運算應補上暗點，得到 {closed.Pixels[3 * 7 + 3]}");
 
     var board = CalibPlate.Parse("5,7,10");
     var objectX = new double[board.CornerCount];
@@ -247,6 +268,75 @@ static void SelfTest()
         || Math.Abs(distorted.Fx - trueFx) > 1e-2 || Math.Abs(distorted.Fy - trueFy) > 1e-2
         || Math.Abs(distorted.Cx - trueCx) > 1e-2 || Math.Abs(distorted.Cy - trueCy) > 1e-2)
         throw new InvalidOperationException($"帶畸變的內參應接近 k1 -0.3、焦距 600/610，得到 k1 {distorted.K1:0.000} {distorted.Fx:0.00} {distorted.Fy:0.00} {distorted.Cx:0.00} {distorted.Cy:0.00}");
+
+    ImageBuffer Board(double[,] rotation, double tx, double ty, double tz) =>
+        ChessboardPhoto.Render(640, 480, new Intrinsics(trueFx, trueFy, trueCx, trueCy), rotation, tx, ty, tz, 5, 7, 10);
+    (double X, double Y) ProjectBoard(double[,] rotation, double tx, double ty, double tz, double x, double y)
+    {
+        double cameraX = rotation[0, 0] * x + rotation[0, 1] * y + tx;
+        double cameraY = rotation[1, 0] * x + rotation[1, 1] * y + ty;
+        double cameraZ = rotation[2, 0] * x + rotation[2, 1] * y + tz;
+        return (trueFx * cameraX / cameraZ + trueCx, trueFy * cameraY / cameraZ + trueCy);
+    }
+    PlanarCalib.View MatchBoard(double[,] rotation, double tx, double ty, double tz)
+    {
+        var found = ChessboardPhoto.FindCorners(Board(rotation, tx, ty, tz), 5, 7);
+        var columns = new double[found.Column.Length];
+        var rows = new double[found.Row.Length];
+        var used = new bool[found.Column.Length];
+        double worst = 0;
+        string worstText = "";
+        for (int rowIndex = 0; rowIndex < 5; rowIndex++)
+        {
+            for (int columnIndex = 0; columnIndex < 7; columnIndex++)
+            {
+                var expected = ProjectBoard(rotation, tx, ty, tz, columnIndex * 10, rowIndex * 10);
+                int nearest = -1;
+                double best = double.PositiveInfinity;
+                for (int i = 0; i < found.Column.Length; i++)
+                {
+                    if (used[i])
+                        continue;
+                    double dx = found.Column[i] - expected.X;
+                    double dy = found.Row[i] - expected.Y;
+                    double distance = dx * dx + dy * dy;
+                    if (distance < best)
+                    {
+                        best = distance;
+                        nearest = i;
+                    }
+                }
+                if (nearest < 0)
+                    throw new InvalidOperationException("棋盤角點沒有對上");
+                if (best > worst)
+                {
+                    worst = best;
+                    worstText = $"({rowIndex},{columnIndex}) 差 {Math.Sqrt(best):0.00}，落在 {found.Column[nearest]:0.00},{found.Row[nearest]:0.00}，應在 {expected.X:0.00},{expected.Y:0.00}";
+                }
+                used[nearest] = true;
+                columns[rowIndex * 7 + columnIndex] = found.Column[nearest];
+                rows[rowIndex * 7 + columnIndex] = found.Row[nearest];
+            }
+        }
+        if (worst > 0.75 * 0.75)
+            throw new InvalidOperationException("棋盤角點偏了：" + worstText);
+        return new PlanarCalib.View(columns, rows);
+    }
+    double photoYaw = 28 * Math.PI / 180;
+    double photoPitch = 24 * Math.PI / 180;
+    double cosPhotoYaw = Math.Cos(photoYaw);
+    double sinPhotoYaw = Math.Sin(photoYaw);
+    double cosPhotoPitch = Math.Cos(photoPitch);
+    double sinPhotoPitch = Math.Sin(photoPitch);
+    var photoAroundY = new double[,] { { cosPhotoYaw, 0, sinPhotoYaw }, { 0, 1, 0 }, { -sinPhotoYaw, 0, cosPhotoYaw } };
+    var photoAroundX = new double[,] { { 1, 0, 0 }, { 0, cosPhotoPitch, -sinPhotoPitch }, { 0, sinPhotoPitch, cosPhotoPitch } };
+    var photoFront = MatchBoard(identity, -30, -20, 150);
+    var photoTurned = MatchBoard(photoAroundY, -30, -20, 170);
+    var photoTilted = MatchBoard(photoAroundX, -30, -20, 165);
+    var fromPhotos = PlanarCalib.Estimate(objectX, objectY, new[] { photoFront, photoTurned, photoTilted });
+    if (Math.Abs(fromPhotos.Fx - trueFx) > 8 || Math.Abs(fromPhotos.Fy - trueFy) > 8
+        || Math.Abs(fromPhotos.Cx - trueCx) > 2 || Math.Abs(fromPhotos.Cy - trueCy) > 2)
+        throw new InvalidOperationException($"從棋盤圖估出的內參應接近 600、610、320、240，得到 {fromPhotos.Fx:0.00} {fromPhotos.Fy:0.00} {fromPhotos.Cx:0.00} {fromPhotos.Cy:0.00}");
 
     var block = new byte[64 * 64];
     for (int row = 16; row < 48; row++)

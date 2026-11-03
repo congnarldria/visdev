@@ -81,7 +81,11 @@ var last = plate.Point(4, 6);
 
 `Operators.ShapeOf` 給圓度、矩形度、方向，還有等效橢圓的長短軸。橫條方向是 0，直條是 1.5708。圓度是 4π 乘面積除以周長平方。矩形度是面積除以輪廓最小外接矩形，實心橫條大約 1.32。
 
-`Operators.MeasureWidth` 量一列亮條的左右邊緣。左半 0、中間 255、右半 0 時，邊緣在 15.5 和 47.5，寬度是 32。
+`Operators.MeasureWidth` 量一列亮條的左右邊緣。左半 0、中間 255、右半 0 時，邊緣在 15.5 和 47.5，寬度是 32。兩條已經擬合的邊緣用 `Operators.LineDistance`，垂直距離同樣是 32。
+
+## 從棋盤圖到內參
+
+`ChessboardPhoto.Render` 用已知內參和姿態把 `'5,7,10'` 畫成灰階圖。`ChessboardPhoto.FindCorners` 從黑格的四邊交點取出 35 個內角點，順序和 `CalibPlate.Point` 相同。再送進 `PlanarCalib.Estimate`。合成的 600、610、320、240，焦距差在 8 以內，主點差在 2 以內。不改 Python 從真實標定圖算出的九個參數，也不找六角形標記。
 
 ## 相機內參
 
@@ -92,5 +96,7 @@ var shape = Operators.ShapeOf(region);
 var width = Operators.MeasureWidth(image, row: 16);
 var camera = PlanarCalib.Estimate(objectX, objectY, views);
 ```
+
+`GrayOpenRectangle` 和 `GrayCloseRectangle` 是灰階矩形開運算、閉運算。3×3 遮罩會去掉單獨的 200，留下 3×3 的 180；周圍都是 180 時，中間的 0 會補成 180。
 
 既有的 `Threshold`、`Connection`、`AreaCenterOf` 仍在 `Operators`。矩形和圓形的膨脹、侵蝕、開運算、閉運算也還在。讀圖目前讀 PNG。
