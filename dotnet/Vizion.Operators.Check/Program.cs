@@ -81,29 +81,66 @@ static void SelfTest()
     {
     }
 
+    var block = new byte[64 * 64];
+    for (int row = 16; row < 48; row++)
+        for (int col = 16; col < 48; col++)
+            block[row * 64 + col] = 255;
+    var shifted = new byte[96 * 96];
+    for (int row = 36; row < 68; row++)
+        for (int col = 31; col < 63; col++)
+            shifted[row * 96 + col] = 255;
+    var squareHits = Operators.FindShape(ImageBuffer.Gray(96, 96, shifted), ImageBuffer.Gray(64, 64, block), 8, 8, 55, 55);
+    if (squareHits.Length < 1)
+        throw new InvalidOperationException("平移的方塊應找得到");
+    var square = squareHits.OrderByDescending(hit => hit.Score).First();
+    double squareRow = square.Row - 51.5;
+    double squareCol = square.Column - 46.5;
+    if (squareRow * squareRow + squareCol * squareCol > 0.45 * 0.45)
+        throw new InvalidOperationException($"方塊中心應在列 51.5、行 46.5 的 0.45 像素內，得到 {square.Row:0.000},{square.Column:0.000} 角度 {square.Angle * 180 / Math.PI:0.00} 分 {square.Score:0.00}");
+    double squareDegrees = square.Angle * 180 / Math.PI;
+    double squareMod = squareDegrees % 90;
+    if (squareMod < 0)
+        squareMod += 90;
+    if (Math.Min(squareMod, 90 - squareMod) > 1)
+        throw new InvalidOperationException($"方塊角度應靠近 90 度的倍數，得到 {squareDegrees:0.00}");
+
     var template = Operators.ReadImage(SampleFile("shape_template.png"));
     var scene = Operators.ReadImage(SampleFile("shapes_scene.png"));
     var found = Operators.FindShape(scene, template, 15, 15, 164, 164);
-    var expected = new (double Row, double Column)[]
+    var expected = new (double Row, double Column, double Angle)[]
     {
-        (130.107, 160.439),
-        (359.343, 169.994),
-        (124.702, 469.511),
-        (349.923, 479.0),
+        (130.107, 160.439, 0.1545),
+        (359.343, 169.994, -0.4662),
+        (124.702, 469.511, 0.5583),
+        (349.923, 479.0, 1.1242),
     };
     if (found.Length < 4)
-        throw new InvalidOperationException("場景裡應找到 4 個，得到 " + found.Length + "：" + string.Join("; ", found.Select(hit => $"{hit.Row:0.0},{hit.Column:0.0},{hit.Score:0.00}")));
+        throw new InvalidOperationException("場景裡應找到 4 個，得到 " + found.Length + "：" + string.Join("; ", found.Select(hit => $"{hit.Row:0.00},{hit.Column:0.00},{hit.Angle * 180 / Math.PI:0.00},{hit.Score:0.00}")));
+    int fractional = 0;
     foreach (var pose in expected)
     {
-        bool close = found.Any(hit =>
+        var hit = found.OrderBy(item =>
         {
-            double dRow = hit.Row - pose.Row;
-            double dCol = hit.Column - pose.Column;
-            return dRow * dRow + dCol * dCol <= 12 * 12;
-        });
-        if (!close)
-            throw new InvalidOperationException($"沒有對上 Python 的 ({pose.Row:0.0},{pose.Column:0.0})。C# 得到 " + string.Join("; ", found.Select(hit => $"{hit.Row:0.0},{hit.Column:0.0}")));
+            double dRow = item.Row - pose.Row;
+            double dCol = item.Column - pose.Column;
+            return dRow * dRow + dCol * dCol;
+        }).First();
+        double dRow = hit.Row - pose.Row;
+        double dCol = hit.Column - pose.Column;
+        double rowPart = Math.Abs(hit.Row - Math.Round(hit.Row));
+        double colPart = Math.Abs(hit.Column - Math.Round(hit.Column));
+        if (rowPart > 0.02 || colPart > 0.02)
+            fractional++;
+        double dAngle = hit.Angle - pose.Angle;
+        while (dAngle > Math.PI)
+            dAngle -= 2 * Math.PI;
+        while (dAngle < -Math.PI)
+            dAngle += 2 * Math.PI;
+        if (dRow * dRow + dCol * dCol > 1.5 * 1.5 || Math.Abs(dAngle) > 1.0 * Math.PI / 180.0)
+            throw new InvalidOperationException($"沒有對上 Python 的 ({pose.Row:0.0},{pose.Column:0.0},{pose.Angle * 180 / Math.PI:0.00}°)。C# 得到 {hit.Row:0.00},{hit.Column:0.00},{hit.Angle * 180 / Math.PI:0.00}°");
     }
+    if (fractional < 3)
+        throw new InvalidOperationException("次像素精修後，四個裡至少三個的列或行要離開整數。得到 " + string.Join("; ", found.Select(item => $"{item.Row:0.00},{item.Column:0.00}")));
 
     Expect(GrayConvert.Bgr(10, 20, 30), 22, "灰階 10,20,30");
     Expect(GrayConvert.Bgr(255, 128, 0), 104, "灰階 255,128,0");

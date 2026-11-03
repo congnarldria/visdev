@@ -41,11 +41,11 @@ var edges = Operators.EdgesSubPix(image, alpha: 1, low: 20, high: 40);
 
 ## 形狀比對
 
-`Operators.FindShape` 讀 `samples/shape_template.png` 和 `samples/shapes_scene.png`，教導框是列 15 到 164、行 15 到 164，和 `samples/inspect_locate.viz` 一樣。場景裡找到 4 個，位置和 Python 差在 12 像素以內。
+`Operators.FindShape` 讀 `samples/shape_template.png` 和 `samples/shapes_scene.png`，教導框是列 15 到 164、行 15 到 164，和 `samples/inspect_locate.viz` 一樣。場景裡找到 4 個。位置和 Python 差在 1.5 像素以內，角度差在 1 度以內。
 
-相同的地方：同一張樣板、同一張場景、同一個教導框、原點是教導框中心、找到 4 個。
+相同的地方：同一張樣板、同一張場景、同一個教導框、原點是教導框中心、找到 4 個。先在高斯金字塔的粗圖搜尋，再回到原圖。原圖上用分數曲面的拋物線修列、行和角度，再沿邊緣法線做最小二乘。
 
-不同的地方：Windows 上 VisDev 執行時仍用 `app/engine/visdev_match.pyd`，那裡的分數都高於 0.9。這份 C# 沒有金字塔，也沒有 `least_squares`。分數是邊緣方向有多一致，不是 `.pyd` 的分數。角度先每 4 度掃一圈，再在候選附近細化。
+不同的地方：Windows 上 VisDev 執行時仍用 `app/engine/visdev_match.pyd`，那裡的分數都高於 0.9。這份 C# 的分數是邊緣方向有多一致，不是 `.pyd` 的分數。粗層角度步距是 4 度。
 
 ```csharp
 var hits = Operators.FindShape(scene, template, 15, 15, 164, 164);
