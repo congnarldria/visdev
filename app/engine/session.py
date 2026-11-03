@@ -16,7 +16,7 @@ from .parser import (
     Assign, Call, CatchStmt, Comment, Blank, ElseStmt, EndForStmt, EndIfStmt, EndProcedureStmt,
     EndTryStmt, EndWhileStmt, ForStmt, IfStmt, ParseError, ProcedureStmt, TryStmt, WhileStmt, parse_program,
 )
-from .render import apply_domain_dim, compose_display, copy_display_scene, jpeg_thumb, region_thumb, xld_thumb
+from .render import apply_domain_dim, compose_display, copy_display_scene, jpeg_thumb, read_cv_image, region_thumb, xld_thumb
 from .ncc_model import NccModel
 from .shape_model import MATCH_COLORS, ShapeModel
 
@@ -212,6 +212,9 @@ class Session:
         self.paused = None
         self.log: list[str] = []
         self.display = Display()
+        self._ng_hold = None
+        self._ng_showing = False
+        self._ng_file = ""
         self.loops: dict = {}
         self.try_stack: list = []
         self.proc_depth = 0
@@ -488,6 +491,78 @@ class Session:
             return self.display.base.height, self.display.base.width
         return 480, 640
 
+    def _drop_ng_view(self) -> None:
+        if getattr(self, "_ng_showing", False) and getattr(self, "_ng_hold", None) is not None:
+            self.display = self._ng_hold
+            self._touch_display()
+        self._ng_hold = None
+        self._ng_showing = False
+        self._ng_file = ""
+
+    def show_last_ng(self) -> str:
+        """Show workspace/line_ng/<LastNg>, or restore the program picture."""
+        if getattr(self, "_ng_showing", False):
+            self._drop_ng_view()
+            return ""
+        raw = self.vars.get("LastNg", "")
+        name = str(raw).strip().strip("'\"")
+        if not name:
+            raise RuntimeError("這一輪沒有不合格圖")
+        if name in (".", "..") or "/" in name or "\\" in name or Path(name).name != name:
+            raise RuntimeError("不合格圖的檔名不正確")
+        if Path(name).suffix.lower() not in {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}:
+            raise RuntimeError("不合格圖必須是影像檔")
+        folder = (self.root / "workspace" / "line_ng").resolve()
+        path = (folder / name).resolve()
+        try:
+            path.relative_to(folder)
+        except ValueError as exc:
+            raise RuntimeError("不合格圖不能離開不合格圖資料夾") from exc
+        if not path.is_file():
+            raise RuntimeError(f"找不到不合格圖 {name}。它可能已被清掉，請再跑一次產線。")
+        data = read_cv_image(path)
+        if data is None:
+            raise RuntimeError(f"無法讀取不合格圖 {name}")
+        self._ng_hold = self.display
+        fresh = Display()
+        fresh.line_width = self._ng_hold.line_width
+        fresh.color = "#ff2a2a"
+        self.display = fresh
+        self.display_obj(Image(np.array(data)), name="LastNg")
+        self._ng_showing = True
+        self._ng_file = name
+        return name
+
+    def line_csv_preview(self, limit: int = 20) -> dict:
+        """Read the line CSV named by CsvFile. Only files inside workspace."""
+        raw = self.vars.get("CsvFile", "")
+        text = str(raw).strip().strip("'\"")
+        if not text:
+            raise RuntimeError("這一輪沒有明細")
+        normalized = text.replace("\\", "/")
+        if normalized.startswith("/") or ".." in Path(normalized).parts:
+            raise RuntimeError("明細路徑不正確")
+        path = (self.root / normalized).resolve()
+        workspace = (self.root / "workspace").resolve()
+        try:
+            path.relative_to(workspace)
+        except ValueError as exc:
+            raise RuntimeError("明細只能讀 workspace 裡的 CSV") from exc
+        if path.suffix.lower() != ".csv" or not path.is_file():
+            raise RuntimeError(f"找不到明細 {normalized}")
+        lines = path.read_text(encoding="utf-8").splitlines()
+        if not lines:
+            raise RuntimeError("明細是空的")
+        body = lines[1:]
+        shown = body[-limit:] if len(body) > limit else body
+        return {
+            "file": normalized,
+            "total": len(body),
+            "header": lines[0],
+            "rows": shown,
+            "truncated": len(body) > limit,
+        }
+
     def show_calib_view(self, index: int | None) -> None:
         from .chapters.calib_ops import show_saved_calibration
 
@@ -618,6 +693,7 @@ class Session:
     def step(self):
         if self.error:
             return
+        self._drop_ng_view()
         self.arrow_note = None
         self.paused = None
         self.break_skip = None
@@ -654,6 +730,8 @@ class Session:
                 self.reset()
                 parked = None
                 resume_parked = False
+            else:
+                self._drop_ng_view()
             self.arrow_note = None
             self.paused = None
             if not resume:
@@ -1296,6 +1374,8 @@ class Session:
             "steps": self.step_count,
             "imageStamp": int(getattr(self, "image_stamp", 0)),
             "displayStamp": int(getattr(self, "display_stamp", 0)),
+            "ngShowing": bool(getattr(self, "_ng_showing", False)),
+            "ngFile": str(getattr(self, "_ng_file", "") or ""),
             "lineTimes": [
                 {"line": line, "ms": round(slot["total"] * 1000, 3), "count": slot["count"]}
                 for line, slot in sorted(self.line_times.items())

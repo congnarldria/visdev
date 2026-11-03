@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VisDev 視覺開發環境</title>
   <link rel="icon" href="/static/magpie.ico">
-  <link rel="stylesheet" href="/static/app.css?v=35">
+  <link rel="stylesheet" href="/static/app.css?v=37">
 </head>
 <body>
   <nav class="menubar" aria-label="主選單">
@@ -306,7 +306,7 @@ endfor</pre>
         <li>邊緣量測：<code>samples/gauge.png</code>。狀態列寫間距。</li>
         <li>卡尺：同一張圖。直徑約 83.93，寬 140，高 90。預設公差是直徑 80 到 90、寬 130 到 150、高 80 到 100。圖形視窗可以改上下限，再按執行。卡尺、條紋和瑕疵改過的範圍會記在這台電腦，再打開同一支範本會填回去。按「預設」回到程式裡的數字。存進專案的程式以檔案裡的數字為準。超出的線是紅色。</li>
         <li>條紋寬度：<code>samples/stripes.png</code>。最寬的亮條是 22，預設公差 20 到 24。圖形視窗可以改上下限，再按執行。超出時十字是紅色。</li>
-        <li>產線：<code>samples/line_batch</code> 有 5 張，白塊面積 200 以上算合格。合格 3、不合格 2。不合格的圖在 <code>workspace/line_ng</code>，明細在 <code>workspace/line_result.csv</code>。這支用檔案資料夾，不開相機。再跑一次會先清掉上一輪的不合格圖。狀態列的不合格圖是最近一張，<code>ng_02.png</code>。</li>
+        <li>產線：<code>samples/line_batch</code> 有 5 張，白塊面積 200 以上算合格。合格 3、不合格 2。不合格的圖在 <code>workspace/line_ng</code>，明細在 <code>workspace/line_result.csv</code>。這支用檔案資料夾，不開相機。再跑一次會先清掉上一輪的不合格圖。狀態列的不合格圖是最近一張，<code>ng_02.png</code>。按「看不合格圖」把它開回圖形視窗，再按一次回到程式畫面。按「看明細」可看 CSV，不必開資料夾。</li>
         <li>產線相機：本機相機編號 0。Windows 先問 DirectShow，打不開再試 OpenCV。沒有相機時，請改跑上面的產線，用 <code>samples/line_batch</code>。規則和產線相同，明細每一列是這張的 OK 或 NG。執行中狀態列會寫出合格和不合格。按停止就停，已經計的張數留著，不合格圖是最近一張的檔名。出錯也會關掉相機和 CSV。明細在 <code>workspace/line_camera.csv</code>。</li>
         <li>形狀定位：場景裡找到 4 個。狀態列寫個數和最低分。</li>
         <li>相對姿態：<code>Pose1</code> 的第一個數約 0.04 公尺。狀態列寫基線。</li>
@@ -341,6 +341,14 @@ endfor</pre>
     </div>
   </div>
   <div id="opFileMenu" class="op-file-menu" hidden></div>
+  <div id="csvDialog" class="modal" hidden>
+    <div class="dialog" role="dialog" aria-labelledby="csvTitle">
+      <h2 id="csvTitle">產線明細</h2>
+      <p id="csvNote" class="hint"></p>
+      <pre id="csvBody"></pre>
+      <div class="actions"><button id="csvOk" type="button">關閉</button></div>
+    </div>
+  </div>
   <div id="errDialog" class="modal" hidden>
     <div class="dialog" role="alertdialog" aria-labelledby="errTitle">
       <h2 id="errTitle">錯誤</h2>
@@ -353,6 +361,8 @@ endfor</pre>
   <footer class="status">
     <span id="stState">就緒</span>
     <span id="stLine"></span>
+    <button id="btnLastNg" type="button" hidden>看不合格圖</button>
+    <button id="btnLineCsv" type="button" hidden>看明細</button>
     <span id="stZoom"></span>
     <span id="stPix">Row — &nbsp; Column — &nbsp; R — G — B —</span>
     <button id="stErrors" class="problem-count" type="button">錯誤 0</button>
@@ -368,10 +378,10 @@ endfor</pre>
   <script src="/static/program_file.js?v=1"></script>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
-  <script src="/static/run_source.js?v=6"></script>
+  <script src="/static/run_source.js?v=7"></script>
   <script src="/static/tolerance.js?v=2"></script>
   <script src="/static/var_list.js?v=1"></script>
   <script src="/static/highlight_sync.js?v=3"></script>
-  <script src="/static/app.js?v=97"></script>
+  <script src="/static/app.js?v=98"></script>
 </body>
 </html>

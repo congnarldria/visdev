@@ -79,5 +79,10 @@ const lastNg = run.resultSummary([
   { name: "CsvFile", text: "'workspace/line_result.csv'" },
 ]);
 assert(lastNg === "判定 不合格 · 合格 3 · 不合格 2 · 總數 5 · 不合格圖 ng_02.png", "a line run names the latest failed image");
+assert(run.namedText([
+  { name: "LastNg", text: "'ng_02.png'" },
+  { name: "CsvFile", text: "'workspace/line_result.csv'" },
+], "LastNg") === "ng_02.png", "the failed image name drops the quotes");
+assert(run.namedText([], "CsvFile") === "", "a missing file name stays blank");
 
 console.log("run source ok");

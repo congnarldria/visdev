@@ -540,6 +540,19 @@ function setStatus() {
   else if (server.running) stLine.textContent = VisdevRun.liveLine(`${project}${proc}`, server.line, server.control);
   else if (server.line) stLine.textContent = `${project}${proc}下一行 ${server.line}`;
   else stLine.textContent = currentProject ? `專案 ${currentProject}` : (server.done ? "程式結束" : "");
+  syncLineActions();
+}
+
+function syncLineActions() {
+  const ng = document.getElementById("btnLastNg");
+  const csv = document.getElementById("btnLineCsv");
+  if (!ng || !csv || !window.VisdevRun) return;
+  const running = Boolean(server && server.running);
+  const name = server ? VisdevRun.namedText(server.control, "LastNg") : "";
+  const file = server ? VisdevRun.namedText(server.control, "CsvFile") : "";
+  ng.hidden = !name || running;
+  ng.textContent = server && server.ngShowing ? "回到程式畫面" : "看不合格圖";
+  csv.hidden = !file || running;
 }
 
 let imageStamp = null;
@@ -570,6 +583,9 @@ function applyState(data) {
   } else if (data.display && data.display.calibNote) {
     gfxBanner.hidden = false;
     gfxBanner.textContent = data.display.calibNote;
+  } else if (data.ngShowing && data.ngFile) {
+    gfxBanner.hidden = false;
+    gfxBanner.textContent = `不合格圖 ${data.ngFile}`;
   } else if (data.done || data.paused === "stopped") {
     const result = VisdevRun.resultSummary(data.control);
     if (result) {
@@ -1919,6 +1935,51 @@ document.getElementById("btnReset").onclick = () => exec("reset");
 document.getElementById("btnStop").onclick = async () => {
   if (sessionId) await fetch(`/api/stop/${sessionId}`, { method: "POST" });
 };
+document.getElementById("btnLastNg").onclick = () => showLastNg();
+document.getElementById("btnLineCsv").onclick = () => showLineCsv();
+document.getElementById("csvOk").onclick = () => {
+  document.getElementById("csvDialog").hidden = true;
+};
+
+async function showLastNg() {
+  if (!sessionId || server.running) return;
+  const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/last-ng`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  server.ngShowing = Boolean(data.ngShowing);
+  server.ngFile = data.ngFile || "";
+  clearPick();
+  if (data.display) await loadDisplay(data.display);
+  if (server.ngShowing) {
+    gfxBanner.hidden = false;
+    gfxBanner.textContent = `不合格圖 ${server.ngFile}`;
+  } else {
+    const result = VisdevRun.resultSummary(server.control);
+    gfxBanner.hidden = !result;
+    gfxBanner.textContent = result;
+  }
+  syncLineActions();
+}
+
+async function showLineCsv() {
+  if (!sessionId || server.running) return;
+  const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/line-csv`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  const note = data.truncated
+    ? `${data.file}，共 ${data.total} 列，這裡是最後 ${data.rows.length} 列`
+    : `${data.file}，共 ${data.total} 列`;
+  document.getElementById("csvNote").textContent = note;
+  document.getElementById("csvBody").textContent = [data.header].concat(data.rows || []).join("\n");
+  document.getElementById("csvDialog").hidden = false;
+  document.getElementById("csvOk").focus();
+}
 document.getElementById("btnFit").onclick = () => { cam.user = false; fit(false); };
 document.getElementById("btnOne").onclick = () => {
   if (!disp) return;

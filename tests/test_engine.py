@@ -3556,9 +3556,74 @@ def test_inspect_line_template_counts_saves_ng_and_writes_csv():
         assert sorted(path.name for path in folder.glob("*.png")) == ["ng_01.png", "ng_02.png"]
         assert not (folder / "old.png").exists()
         assert session.display.base is not None
+        before = session.display.base.data.copy()
+        assert session.show_last_ng() == "ng_02.png"
+        assert session.public_state()["ngShowing"] is True
+        assert session.public_state()["ngFile"] == "ng_02.png"
+        from app.engine.render import read_cv_image
+
+        saved = read_cv_image(folder / "ng_02.png")
+        assert saved is not None and np.array_equal(session.display.base.data, saved)
+        assert int(session.vars["OkCount"]) == 3
+        assert session.vars["Judge"] == "不合格"
+        assert session.show_last_ng() == ""
+        assert session.public_state()["ngShowing"] is False
+        assert np.array_equal(session.display.base.data, before)
+        preview = session.line_csv_preview()
+        assert preview["header"] == "index,file,judge,count"
+        assert preview["total"] == 5
+        assert preview["truncated"] is False
+        assert "1,ng_01.png,NG,0" in preview["rows"]
+        assert "3,ok_01.png,OK,1" in preview["rows"]
     finally:
         shutil.rmtree(folder, ignore_errors=True)
         report.unlink(missing_ok=True)
+
+
+def test_last_ng_and_csv_stay_inside_the_workspace():
+    import pytest
+    from fastapi import HTTPException
+
+    from app.main import SESSIONS, show_last_ng_view
+
+    session = run_source("OkCount := 3\n")
+    session.vars["LastNg"] = "..\\secret.png"
+    session.vars["CsvFile"] = "workspace/../../etc/passwd"
+    try:
+        with pytest.raises(RuntimeError, match="檔名不正確"):
+            session.show_last_ng()
+        assert session.vars["OkCount"] == 3
+        with pytest.raises(RuntimeError, match="明細路徑不正確"):
+            session.line_csv_preview()
+        session.vars["CsvFile"] = "/etc/passwd"
+        with pytest.raises(RuntimeError, match="明細路徑不正確"):
+            session.line_csv_preview()
+        session.vars["LastNg"] = ""
+        with pytest.raises(RuntimeError, match="沒有不合格圖"):
+            session.show_last_ng()
+        report = ROOT / "workspace" / "_line_preview.csv"
+        report.write_text(
+            "index,file,judge,count\n" + "".join(f"{i},a.png,NG,0\n" for i in range(1, 26)),
+            encoding="utf-8",
+        )
+        try:
+            session.vars["CsvFile"] = "workspace\\_line_preview.csv"
+            preview = session.line_csv_preview()
+            assert preview["total"] == 25
+            assert preview["truncated"] is True
+            assert len(preview["rows"]) == 20
+            assert preview["rows"][0] == "6,a.png,NG,0"
+            assert preview["rows"][-1] == "25,a.png,NG,0"
+        finally:
+            report.unlink(missing_ok=True)
+        SESSIONS[session.id] = session
+        session.running = True
+        with pytest.raises(HTTPException) as caught:
+            show_last_ng_view(session.id)
+        assert caught.value.status_code == 409
+    finally:
+        session.running = False
+        SESSIONS.pop(session.id, None)
 
 
 def test_camera_line_stops_and_keeps_the_counts():

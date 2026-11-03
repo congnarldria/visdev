@@ -1001,6 +1001,33 @@ def stop(sid: str):
     return {"ok": True}
 
 
+@app.post("/api/session/{sid}/last-ng")
+def show_last_ng_view(sid: str):
+    current = _session_or_404(sid)
+    if getattr(current, "running", False):
+        raise HTTPException(409, "程式還在跑，停下來才能看不合格圖")
+    with current.lock:
+        try:
+            current.show_last_ng()
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    state = _snapshot(current)
+    return state
+
+
+@app.post("/api/session/{sid}/line-csv")
+def show_line_csv(sid: str):
+    current = _session_or_404(sid)
+    if getattr(current, "running", False):
+        raise HTTPException(409, "程式還在跑，停下來才能看明細")
+    with current.lock:
+        try:
+            preview = current.line_csv_preview()
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return preview
+
+
 @app.post("/api/session/{sid}/calib-view")
 def set_calib_view(sid: str, body: CalibViewIn):
     current = _session_or_404(sid)

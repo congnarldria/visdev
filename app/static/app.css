@@ -962,6 +962,31 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
 .log { flex: 1; margin: 8px; overflow: auto; }
 .log .bad { color: #ffb0a6; }
 
+.status .hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#btnLastNg, #btnLineCsv {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 2px;
+  border: 1px solid var(--line);
+  background: #101318;
+  color: var(--text);
+  flex: none;
+}
+#btnLastNg { border-color: #a33b32; color: #ffd0c8; background: #3a2424; }
+#btnLastNg[hidden], #btnLineCsv[hidden] { display: none !important; }
+#csvBody {
+  max-height: 280px;
+  overflow: auto;
+  margin: 8px 0 12px;
+  white-space: pre;
+  font: 12px/1.5 var(--mono);
+}
 #stState.bad { color: #ffb0a6; }
 #stState.ok { color: #b6f5cd; }
 #stState.pause { color: #ffe14a; }
