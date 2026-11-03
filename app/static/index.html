@@ -276,6 +276,7 @@ endfor</pre>
       <div id="projectPrograms" class="project-list"></div>
       <div class="actions">
         <button id="projectRename" type="button">改名</button>
+        <button id="projectFolder" type="button">打開資料夾</button>
         <button id="projectSave" type="button">把這支程式存進專案</button>
         <button id="projectNewProgram" type="button">在專案裡新增程式</button>
         <button id="projectClose" type="button">關閉</button>
@@ -293,7 +294,7 @@ endfor</pre>
       <h3>標定</h3>
       <p>棋盤寫 <code>'5,7,10'</code>，也可以用 <code>.cpd</code> 或 <code>.descr</code>。多台相機時，每一台的第 k 組要是同時看到的同一塊板。<code>camera/pose</code> 是相對第 0 台的姿態，第 0 台是 0。標完的圖可以點某一張看原圖，再點一下回到全部。</p>
       <h3>存檔與 Windows</h3>
-      <p>存檔在 <code>workspace/</code>。檔案、專案可以把多支程式放在同一個案子裡。存進去時，程式讀的 <code>workspace/</code> 圖會拷進專案資料夾，路徑改成檔名。<code>samples/</code> 的圖仍共用。可以改專案名稱。Windows 上用 <code>run.bat</code> 開啟，用 <code>build_windows.bat</code> 打包。打包需要 Python 3.9 或更新版本、<code>visdev_match.pyd</code> 和 PyInstaller。形狀匹配在 Windows 用這個 <code>.pyd</code>。</p>
+      <p>存檔在 <code>workspace/</code>。檔案、專案可以把多支程式放在同一個案子裡。存進去時，程式讀的 <code>workspace/</code> 圖會拷進專案資料夾，路徑改成檔名。<code>samples/</code> 的圖仍共用。可以改名，也可以打開資料夾看圖在不在。從檔案總管貼上的反斜線路徑也能讀。Windows 上用 <code>run.bat</code> 開啟，用 <code>build_windows.bat</code> 打包。打包需要 Python 3.9 或更新版本、<code>visdev_match.pyd</code> 和 PyInstaller。形狀匹配在 Windows 用這個 <code>.pyd</code>。</p>
       <div class="actions"><button id="helpOk" type="button">確定</button></div>
     </div>
   </div>
@@ -346,6 +347,6 @@ endfor</pre>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
   <script src="/static/run_source.js?v=1"></script>
-  <script src="/static/app.js?v=79"></script>
+  <script src="/static/app.js?v=80"></script>
 </body>
 </html>

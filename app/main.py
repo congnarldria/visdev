@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import os
 import re
 import shutil
+import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -510,6 +513,29 @@ def rename_project_record(old: str, new: str) -> dict:
     return {"name": target.name, "previous": old}
 
 
+def reveal_project_folder(name: str) -> dict:
+    folder = project_dir(name)
+    if not folder.is_dir() or not (folder / "visdev.json").is_file():
+        raise ValueError("找不到專案")
+    target = folder.resolve()
+    opened = False
+    if sys.platform == "win32":
+        os.startfile(target)  # noqa: S606  Windows 檔案總管
+        opened = True
+    else:
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        try:
+            subprocess.Popen(
+                [opener, str(target)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            opened = True
+        except OSError:
+            opened = False
+    return {"name": folder.name, "path": str(target), "opened": opened}
+
+
 def read_project_program(project: str, name: str) -> dict:
     folder = project_dir(project)
     filename = clean_program_name(name)
@@ -536,6 +562,14 @@ def api_create_project(body: ProjectIn):
 def api_project_programs(name: str):
     try:
         return project_programs(name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/projects/{name}/folder")
+def api_reveal_project_folder(name: str):
+    try:
+        return reveal_project_folder(name)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 

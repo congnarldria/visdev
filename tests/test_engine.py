@@ -3523,6 +3523,42 @@ def test_project_rename_keeps_programs_and_copies_workspace_images():
         image.unlink(missing_ok=True)
 
 
+def test_backslash_path_reads_the_workspace_image():
+    import cv2
+    import numpy as np
+
+    from app.main import create_project_record, reveal_project_folder
+
+    image = ROOT / "workspace" / "beta_slash.png"
+    folder_name = "beta_slash_case"
+    folder = ROOT / "workspace" / "projects" / folder_name
+    image.unlink(missing_ok=True)
+    import shutil
+    shutil.rmtree(folder, ignore_errors=True)
+    try:
+        cv2.imwrite(str(image), np.full((4, 11), 70, np.uint8))
+        program = "Vizion.read_image (Image, 'workspace" + "\\" + "beta_slash.png')\n"
+        session = Session(program, ROOT)
+        session.run()
+        assert session.error is None, session.error
+        assert session.vars["Image"].width == 11
+        create_project_record(folder_name)
+        nested = folder / "shot.png"
+        cv2.imwrite(str(nested), np.full((3, 5), 20, np.uint8))
+        local = Session("Vizion.read_image (Image, 'shot.png')\n", ROOT)
+        local.project_name = folder_name
+        local.run()
+        assert local.error is None, local.error
+        assert local.vars["Image"].width == 5
+        info = reveal_project_folder(folder_name)
+        assert info["name"] == folder_name
+        assert Path(info["path"]).is_dir()
+        assert isinstance(info["opened"], bool)
+    finally:
+        image.unlink(missing_ok=True)
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def test_project_holds_two_programs_and_its_image():
     import shutil
 

@@ -206,6 +206,14 @@ class DesktopApi:
         written = self._write_program(path, source)
         return {"cancelled": False, "path": written, "name": Path(written).name}
 
+    def open_project_folder(self, name: str) -> dict:
+        from app.main import reveal_project_folder
+
+        try:
+            return reveal_project_folder(name)
+        except ValueError as exc:
+            return {"error": str(exc), "opened": False}
+
     def write_program_path(self, path: str, source: str) -> dict:
         written = self._write_program(path, source)
         return {"path": written, "name": Path(written).name}

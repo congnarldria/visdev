@@ -452,7 +452,7 @@ class Session:
         }
 
     def resolve_read_path(self, filename: str) -> Path:
-        path = Path(filename).expanduser()
+        path = Path(str(filename).strip().replace("\\", "/")).expanduser()
         candidates = []
         if path.is_absolute():
             candidates.append(path)

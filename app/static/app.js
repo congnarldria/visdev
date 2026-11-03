@@ -2049,6 +2049,36 @@ async function renameCurrentProject() {
   stLine.textContent = `專案 ${data.name}`;
 }
 
+async function revealProjectFolder() {
+  if (!currentProject) {
+    stLine.textContent = "先選一個專案";
+    return;
+  }
+  const api = desktopApi();
+  let data = null;
+  if (api && api.open_project_folder) {
+    try {
+      data = await api.open_project_folder(currentProject);
+    } catch (err) {
+      showDetail({ error: "打不開資料夾：" + err.message });
+      return;
+    }
+  } else {
+    const res = await fetch(`/api/projects/${encodeURIComponent(currentProject)}/folder`, { method: "POST" });
+    data = await res.json();
+    if (!res.ok) {
+      showDetail(data);
+      return;
+    }
+  }
+  if (data && data.error) {
+    showDetail({ error: data.error });
+    return;
+  }
+  const path = data && data.path ? data.path : currentProject;
+  stLine.textContent = data && data.opened ? `已打開資料夾 ${path}` : `專案資料夾：${path}`;
+}
+
 function openProjectDialog() {
   document.getElementById("projectDialog").hidden = false;
   refreshProjectDialog();
@@ -2425,6 +2455,7 @@ document.getElementById("helpOk").onclick = () => { document.getElementById("hel
 document.getElementById("projectClose").onclick = () => { document.getElementById("projectDialog").hidden = true; };
 document.getElementById("projectCreate").onclick = () => createProjectFromDialog();
 document.getElementById("projectRename").onclick = () => renameCurrentProject();
+document.getElementById("projectFolder").onclick = () => revealProjectFolder();
 document.getElementById("projectSave").onclick = () => saveCurrentIntoProject();
 document.getElementById("projectNewProgram").onclick = () => addProjectProgram();
 document.getElementById("projectList").onclick = (event) => {
