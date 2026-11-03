@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VisDev 視覺開發環境</title>
   <link rel="icon" href="/static/magpie.ico">
-  <link rel="stylesheet" href="/static/app.css?v=33">
+  <link rel="stylesheet" href="/static/app.css?v=34">
 </head>
 <body>
   <nav class="menubar" aria-label="主選單">
@@ -294,11 +294,19 @@ endfor</pre>
       <h2 id="helpTitle">使用說明</h2>
       <p>這是 VisDev 1.1 beta，不是正式版。</p>
       <h3>執行</h3>
-      <p>F5 執行，F6 單步，F7 步進程序。程式跑到一半失敗時，已經算出的圖和變數留著，狀態列會寫出第幾行。變數很多時，單步只改有變動的那一列。打字時語法著色、行號和該行時間只改有變動的列。輸出往上翻時，新的一行不會把畫面拉回底部。錯誤清單只改有變動的列。大圖在執行中會先縮小顯示，標題會寫預覽，跑完或停止後換成完整圖。</p>
+      <p>F5 執行，F6 單步，F7 步進程序。程式跑到一半失敗時，已經算出的圖和變數留著，狀態列會寫出第幾行。跑完後若有直徑、寬度、間距、條碼或個數，狀態列會直接寫出來。變數很多時，單步只改有變動的那一列。打字時語法著色、行號和該行時間只改有變動的列。輸出往上翻時，新的一行不會把畫面拉回底部。錯誤清單只改有變動的列。大圖在執行中會先縮小顯示，標題會寫預覽，跑完或停止後換成完整圖。</p>
       <h3>範本</h3>
-      <p>檔案、範本打開就能跑。</p>
-      <p>零件檢測讀 <code>samples/parts.png</code>，這張圖是 8 個零件。瑕疵讀 <code>samples/hard_contrast.png</code>：暗塊 1 個，面積 3550；亮點 1 個，面積 144，灰階從 210 起算，背景噪點不會被算進去。</p>
-      <p>邊緣量測、卡尺讀 <code>samples/gauge.png</code>。卡尺的矩形寬 140、高 90，圓的直徑約 83.93。條紋寬度讀 <code>samples/stripes.png</code>，最寬的亮條是 22。形狀定位在場景裡找到 4 個。相對姿態的 <code>Pose1</code> 第一個數約 0.04 公尺。條碼的 <code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。</p>
+      <p>檔案、範本打開就能跑。跑完後，狀態列和圖形視窗會寫出下面這些數字。</p>
+      <ul class="guide-list">
+        <li>零件檢測：<code>samples/parts.png</code>，8 個零件。狀態列寫個數。</li>
+        <li>瑕疵：<code>samples/hard_contrast.png</code>。暗塊 1 個、面積 3550；亮點 1 個、面積 144。亮點從灰階 210 起算。個數不對時判定不合格。</li>
+        <li>邊緣量測：<code>samples/gauge.png</code>。狀態列寫間距。</li>
+        <li>卡尺：同一張圖。直徑約 83.93，寬 140，高 90。公差是直徑 80 到 90、寬 130 到 150、高 80 到 100。超出的線是紅色。</li>
+        <li>條紋寬度：<code>samples/stripes.png</code>。最寬的亮條是 22，公差 20 到 24。超出時十字是紅色。</li>
+        <li>形狀定位：場景裡找到 4 個。狀態列寫個數和最低分。</li>
+        <li>相對姿態：<code>Pose1</code> 的第一個數約 0.04 公尺。狀態列寫基線。</li>
+        <li>條碼：<code>Text</code> 是 4006381333931，<code>QrText</code> 是 VISDEV-3。</li>
+      </ul>
       <p>點量規或直線量規時，可以按「線」在圖上拖。起點到終點的方向會保留。圖上已有影像時，確認前會畫出沿這條線找到的邊緣和首尾間距。</p>
       <h3>標定</h3>
       <p>棋盤寫 <code>'5,7,10'</code>，也可以用 <code>.cpd</code> 或 <code>.descr</code>。多台相機時，每一台的第 k 組要是同時看到的同一塊板。<code>camera/pose</code> 是相對第 0 台的姿態，第 0 台是 0。標完的圖可以點某一張看原圖，再點一下回到全部。</p>
@@ -355,9 +363,9 @@ endfor</pre>
   <script src="/static/program_file.js?v=1"></script>
   <script src="/static/operator_call.js?v=1"></script>
   <script src="/static/pick_sync.js?v=2"></script>
-  <script src="/static/run_source.js?v=1"></script>
+  <script src="/static/run_source.js?v=2"></script>
   <script src="/static/var_list.js?v=1"></script>
   <script src="/static/highlight_sync.js?v=3"></script>
-  <script src="/static/app.js?v=90"></script>
+  <script src="/static/app.js?v=92"></script>
 </body>
 </html>

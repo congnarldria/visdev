@@ -463,7 +463,10 @@ function setStatus() {
   if (server.error) stLine.textContent = `${project}${proc}${server.error}`;
   else if (server.arrowNote) stLine.textContent = `${project}${server.arrowNote}`;
   else if (server.line && server.paused === "breakpoint") stLine.textContent = `${project}${proc}中斷於第 ${server.line} 行`;
-  else if (server.line && server.done) stLine.textContent = `${project}${proc}結束於第 ${server.line} 行`;
+  else if (server.line && server.done) {
+    const result = VisdevRun.resultSummary(server.control);
+    stLine.textContent = `${project}${proc}結束於第 ${server.line} 行${result ? ` · ${result}` : ""}`;
+  }
   else if (server.line) stLine.textContent = `${project}${proc}下一行 ${server.line}`;
   else stLine.textContent = currentProject ? `專案 ${currentProject}` : (server.done ? "程式結束" : "");
 }
@@ -496,6 +499,12 @@ function applyState(data) {
   } else if (data.display && data.display.calibNote) {
     gfxBanner.hidden = false;
     gfxBanner.textContent = data.display.calibNote;
+  } else if (data.done) {
+    const result = VisdevRun.resultSummary(data.control);
+    if (result) {
+      gfxBanner.hidden = false;
+      gfxBanner.textContent = result;
+    }
   }
   if (localStorage.getItem("visdev.contourWidth") == null && data.display) {
     const xld = (data.display.shapes || []).find((shape) => shape.kind === "xld" && shape.width);
@@ -622,6 +631,7 @@ function applyLiveState(data) {
   if (data.running) {
     stState.textContent = "執行中";
     stState.className = "";
+    gfxBanner.hidden = true;
   }
   takeDisplay(data);
   if (imageChanged) clearPick();

@@ -535,6 +535,8 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
 .dialog.about { border-color: #465066; }
 .dialog.guide { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; }
 .dialog.guide h3 { margin: 14px 0 6px; font-size: 13px; color: #9aa6bb; }
+.dialog.guide ul { margin: 0 0 10px; padding-left: 1.2em; }
+.dialog.guide li { margin: 0 0 6px; }
 .dialog.guide code { color: #d7e2f2; }
 .project-create { display: flex; gap: 8px; margin: 8px 0 12px; }
 .project-create input { flex: 1; }

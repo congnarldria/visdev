@@ -18,4 +18,39 @@ assert(run.statusText(source, "A := 1\n", 2, false).indexOf("再按執行或單�
 const paused = run.statusText(source, "A := 1\n", 3, false, "breakpoint");
 assert(paused.indexOf("第 3 行") === 0 && paused.indexOf("中斷點") > 0, "a breakpoint stays on the program that was started");
 
+const caliper = run.resultSummary([
+  { name: "Diameter", text: "83.92768" },
+  { name: "Width", text: "140" },
+  { name: "Height", text: "90" },
+  { name: "Radius", text: "41.96384" },
+]);
+assert(caliper === "直徑 83.93 · 寬 140 · 高 90", "a caliper run names diameter, width, and height");
+const judged = run.resultSummary([
+  { name: "Judge", text: "'不合格'" },
+  { name: "Width", text: "22" },
+]);
+assert(judged === "判定 不合格 · 寬 22", "a failed tolerance is named before the width");
+assert(run.resultSummary([{ name: "Width", text: "22" }]) === "寬 22", "a stripe run names the width");
+const defect = run.resultSummary([
+  { name: "Count", text: "1" },
+  { name: "BrightCount", text: "1" },
+  { name: "Area", text: "[3550]" },
+  { name: "BrightArea", text: "[144]" },
+  { name: "Row", text: "[29.5]" },
+]);
+assert(defect === "個數 1 · 亮點 1 · 面積 3550 · 亮點面積 144", "a defect run names both counts and areas");
+assert(run.resultSummary([{ name: "Area", text: "[2988, 100, 20]" }]) === "", "a long area list stays out of the status line");
+const code = run.resultSummary([
+  { name: "Text", text: "'4006381333931'" },
+  { name: "QrText", text: "'VISDEV-3'" },
+  { name: "Count", text: "1" },
+]);
+assert(code === "條碼 4006381333931 · 二維碼 VISDEV-3 · 個數 1", "barcode text drops the quotes");
+const locate = run.resultSummary([
+  { name: "Count", text: "4" },
+  { name: "Score", text: "[0.97, 0.91, 0.95, 0.93]" },
+]);
+assert(locate === "個數 4 · 最低分 0.91", "shape scores report the lowest one");
+assert(run.resultSummary([]) === "", "a program without those names adds nothing");
+
 console.log("run source ok");

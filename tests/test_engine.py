@@ -3461,6 +3461,7 @@ def test_inspect_caliper_template_measures_diameter_and_size():
     assert abs(float(session.vars["Diameter"]) - 83.92768304367884) < 1e-6
     assert float(session.vars["Width"]) == 140.0
     assert float(session.vars["Height"]) == 90.0
+    assert session.vars["Judge"] == "合格"
     assert int(session.vars["CircleUsed"]) == 66
     assert int(session.vars["RectUsed"]) > 0
     assert session.display.base is not None
@@ -3490,6 +3491,7 @@ def test_inspect_defect_template_finds_dark_and_bright():
     assert session.vars["Area"][0] == 3550
     assert int(session.vars["BrightCount"]) == 1
     assert session.vars["BrightArea"][0] == 144
+    assert session.vars["Judge"] == "合格"
     assert session.display.base is not None
 
 
@@ -3514,7 +3516,20 @@ def test_inspect_stripe_template_measures_the_wide_band():
     assert float(session.vars["Left"]) == 127.5
     assert float(session.vars["Right"]) == 149.5
     assert float(session.vars["Width"]) == 22.0
+    assert session.vars["Judge"] == "合格"
+    colors = {shape.get("color") for shape in session.public_state()["display"]["shapes"]}
+    assert "#ffe14a" in colors
     assert session.display.base is not None
+
+
+def test_stripe_outside_tolerance_turns_the_marks_red():
+    source = (ROOT / "samples" / "inspect_stripe.viz").read_text(encoding="utf-8")
+    source = source.replace("Width >= 20 and Width <= 24", "Width >= 1 and Width <= 2")
+    session = run_source(source)
+    assert session.error is None, session.error
+    assert session.vars["Judge"] == "不合格"
+    colors = {shape.get("color") for shape in session.public_state()["display"]["shapes"]}
+    assert "#ff2a2a" in colors
 
 
 def test_inspect_locate_template_finds_four():

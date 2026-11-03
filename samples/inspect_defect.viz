@@ -13,6 +13,11 @@ Vizion.connection (Bright, Specks, 1)
 Vizion.select_shape (Specks, Hot, 'area', 'and', 20, 400)
 Vizion.count_obj (Hot, BrightCount)
 Vizion.area_center (Hot, BrightArea, BrightRow, BrightCol)
+if (Count == 1 and BrightCount == 1)
+    Judge := '合格'
+else
+    Judge := '不合格'
+endif
 Vizion.dev_display (Image)
 Vizion.dev_set_color ('red')
 Vizion.dev_display (Defects)
