@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -75,6 +76,10 @@ class SaveIn(BaseModel):
 
 
 class ProjectIn(BaseModel):
+    name: str
+
+
+class RenameProjectIn(BaseModel):
     name: str
 
 
@@ -399,14 +404,110 @@ def project_programs(name: str) -> dict:
     return {"name": folder.name, "programs": [{"name": item} for item in files]}
 
 
+_IMAGE_SUFFIX = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
+
+
+def _workspace_image(raw: str) -> Path | None:
+    text = str(raw).strip().replace("\\", "/")
+    if not text or text.startswith("samples/"):
+        return None
+    workspace = (ROOT / "workspace").resolve()
+    path = Path(text)
+    if path.is_absolute():
+        candidate = path
+    elif text.lower().startswith("workspace/"):
+        candidate = ROOT / text
+    else:
+        return None
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to(workspace)
+    except (OSError, ValueError):
+        return None
+    if not resolved.is_file() or resolved.suffix.lower() not in _IMAGE_SUFFIX:
+        return None
+    return resolved
+
+
+def _copy_image_into(folder: Path, source: Path) -> str:
+    try:
+        source.resolve().relative_to(folder.resolve())
+        return source.name
+    except ValueError:
+        pass
+    dest = folder / source.name
+    if dest.exists():
+        try:
+            if dest.is_file() and dest.read_bytes() == source.read_bytes():
+                return dest.name
+        except OSError:
+            pass
+        number = 2
+        while (folder / f"{source.stem}_{number}{source.suffix}").exists():
+            number += 1
+        dest = folder / f"{source.stem}_{number}{source.suffix}"
+    shutil.copy2(source, dest)
+    return dest.name
+
+
+def adopt_workspace_images(folder: Path, source: str) -> tuple[str, list[str]]:
+    """Copy workspace images into the project and point the program at the file name."""
+    copied: list[str] = []
+    assigned: dict[Path, str] = {}
+
+    def replace(match: re.Match) -> str:
+        quote, body = match.group(1), match.group(2)
+        image = _workspace_image(body)
+        if image is None:
+            return match.group(0)
+        if image not in assigned:
+            assigned[image] = _copy_image_into(folder, image)
+            if assigned[image] not in copied and not _already_in_folder(folder, image):
+                copied.append(assigned[image])
+        return f"{quote}{assigned[image]}{quote}"
+
+    rewritten = re.sub(r"""(['"])([^'"\r\n]*)\1""", replace, source)
+    return rewritten, copied
+
+
+def _already_in_folder(folder: Path, image: Path) -> bool:
+    try:
+        image.resolve().relative_to(folder.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def write_project_program(project: str, name: str, source: str) -> dict:
     folder = project_dir(project)
     if not folder.is_dir():
         raise ValueError("找不到專案")
     filename = clean_program_name(name)
+    text = str(source).replace("\r\n", "\n").replace("\r", "\n")
+    text, images = adopt_workspace_images(folder, text)
     path = folder / filename
-    path.write_text(str(source).replace("\r\n", "\n").replace("\r", "\n"), encoding="utf-8")
-    return {"project": folder.name, "name": filename, "path": f"workspace/projects/{folder.name}/{filename}"}
+    path.write_text(text, encoding="utf-8")
+    return {
+        "project": folder.name,
+        "name": filename,
+        "path": f"workspace/projects/{folder.name}/{filename}",
+        "source": text,
+        "images": images,
+    }
+
+
+def rename_project_record(old: str, new: str) -> dict:
+    folder = project_dir(old)
+    if not folder.is_dir() or not (folder / "visdev.json").is_file():
+        raise ValueError("找不到專案")
+    target_name = clean_project_name(new)
+    if target_name == folder.name:
+        return {"name": target_name, "previous": folder.name}
+    target = projects_dir() / target_name
+    if target.exists():
+        raise ValueError("已經有這個專案")
+    folder.rename(target)
+    return {"name": target.name, "previous": old}
 
 
 def read_project_program(project: str, name: str) -> dict:
@@ -439,6 +540,14 @@ def api_project_programs(name: str):
         raise HTTPException(400, str(exc)) from exc
 
 
+@app.post("/api/projects/{name}/rename")
+def api_rename_project(name: str, body: RenameProjectIn):
+    try:
+        return rename_project_record(name, body.name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.post("/api/projects/{name}/programs")
 def api_write_project_program(name: str, body: SaveIn):
     try:
@@ -467,19 +576,32 @@ async def import_hdevelop(file: UploadFile = File(...)):
 
 
 @app.post("/api/upload")
-async def upload(file: UploadFile = File(...)):
+async def upload(file: UploadFile = File(...), project: str | None = None):
     raw = Path(file.filename or "image.png").name
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", raw)
     if not safe.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")):
         safe += ".png"
-    dest = ROOT / "workspace" / safe
+    if project:
+        try:
+            dest_dir = project_dir(project)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if not dest_dir.is_dir():
+            raise HTTPException(400, "找不到專案")
+        stored = safe
+    else:
+        dest_dir = ROOT / "workspace"
+        stored = f"workspace/{safe}"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / safe
     if dest.exists():
-        dest = ROOT / "workspace" / f"{dest.stem}_{uuid.uuid4().hex[:6]}{dest.suffix}"
+        dest = dest_dir / f"{dest.stem}_{uuid.uuid4().hex[:6]}{dest.suffix}"
+        stored = dest.name if project else f"workspace/{dest.name}"
     dest.write_bytes(await file.read())
     if read_cv_image(dest) is None:
         dest.unlink(missing_ok=True)
         raise HTTPException(400, "這不是可讀的影像")
-    return {"path": f"workspace/{dest.name}"}
+    return {"path": stored}
 
 
 def _level_from_histogram(histogram: dict | None) -> float | None:

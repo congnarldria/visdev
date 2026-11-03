@@ -3465,6 +3465,64 @@ def test_inspect_locate_template_finds_four():
     assert session.display.base is not None
 
 
+def test_project_rename_keeps_programs_and_copies_workspace_images():
+    import shutil
+
+    import cv2
+    import numpy as np
+
+    from app.main import (
+        create_project_record,
+        project_programs,
+        read_project_program,
+        rename_project_record,
+        write_project_program,
+    )
+
+    name = "beta_case_rename"
+    renamed = "beta_case_renamed"
+    folder = ROOT / "workspace" / "projects" / name
+    target = ROOT / "workspace" / "projects" / renamed
+    image = ROOT / "workspace" / "beta_mark.png"
+    shutil.rmtree(folder, ignore_errors=True)
+    shutil.rmtree(target, ignore_errors=True)
+    image.unlink(missing_ok=True)
+    try:
+        cv2.imwrite(str(image), np.full((5, 9), 40, np.uint8))
+        create_project_record(name)
+        saved = write_project_program(
+            name,
+            "read_mark.viz",
+            "Vizion.read_image (Image, 'workspace/beta_mark.png')\n"
+            "Vizion.read_image (Sample, 'samples/parts.png')\n",
+        )
+        assert saved["images"] == ["beta_mark.png"]
+        assert "read_image (Image, 'beta_mark.png')" in saved["source"]
+        assert "samples/parts.png" in saved["source"]
+        assert (folder / "beta_mark.png").is_file()
+        assert not (folder / "parts.png").exists()
+        moved = rename_project_record(name, renamed)
+        assert moved["name"] == renamed
+        assert not folder.exists()
+        assert [item["name"] for item in project_programs(renamed)["programs"]] == ["read_mark.viz"]
+        text = read_project_program(renamed, "read_mark.viz")["source"]
+        session = Session(text, ROOT)
+        session.project_name = renamed
+        session.run()
+        assert session.error is None, session.error
+        assert session.vars["Image"].width == 9
+        assert session.vars["Sample"].width > 9
+        try:
+            rename_project_record(renamed, renamed)
+        except ValueError:
+            raise AssertionError("同名應該留下")
+        assert project_programs(renamed)["name"] == renamed
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+        shutil.rmtree(target, ignore_errors=True)
+        image.unlink(missing_ok=True)
+
+
 def test_project_holds_two_programs_and_its_image():
     import shutil
 

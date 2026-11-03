@@ -1637,7 +1637,8 @@ function useNewImage(path) {
 async function uploadFile(file) {
   const body = new FormData();
   body.append("file", file);
-  const res = await fetch("/api/upload", { method: "POST", body });
+  const query = currentProject ? `?project=${encodeURIComponent(currentProject)}` : "";
+  const res = await fetch(`/api/upload${query}`, { method: "POST", body });
   const data = await res.json();
   if (!res.ok) {
     showDetail(data);
@@ -2001,11 +2002,51 @@ async function saveToWorkspace(name, copy) {
   }
   document.getElementById("progName").value = data.name;
   saveTarget = { kind: "workspace", name: data.name };
+  leaveProject();
   markSaved();
   stState.textContent = copy ? `範例已另存 ${data.path}` : `已儲存 ${data.path}`;
   stState.className = "ok";
   loadFiles();
   return true;
+}
+
+function leaveProject() {
+  currentProject = null;
+  try { localStorage.removeItem("visdev.project"); } catch (_err) { /* 視窗還沒準備 */ }
+}
+
+function rememberOpenProject() {
+  if (!currentProject || !saveTarget || saveTarget.kind !== "project") return;
+  try {
+    localStorage.setItem("visdev.project", JSON.stringify({ project: currentProject, program: saveTarget.name }));
+  } catch (_err) { /* 視窗還沒準備 */ }
+}
+
+async function renameCurrentProject() {
+  if (!currentProject) {
+    stLine.textContent = "先選一個專案";
+    return;
+  }
+  const next = window.prompt("新的專案名稱", currentProject);
+  if (!next || !next.trim() || next.trim() === currentProject) return;
+  const previous = currentProject;
+  const res = await fetch(`/api/projects/${encodeURIComponent(previous)}/rename`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: next.trim() }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  currentProject = data.name;
+  if (saveTarget && saveTarget.kind === "project" && saveTarget.project === previous) {
+    saveTarget = { kind: "project", project: data.name, name: saveTarget.name };
+    rememberOpenProject();
+  }
+  await refreshProjectDialog();
+  stLine.textContent = `專案 ${data.name}`;
 }
 
 function openProjectDialog() {
@@ -2085,6 +2126,7 @@ async function openProjectProgram(project, name) {
   renderEditor();
   await exec("reset");
   stLine.textContent = `專案 ${data.project} · ${data.name}`;
+  rememberOpenProject();
   document.getElementById("projectDialog").hidden = true;
 }
 
@@ -2124,13 +2166,19 @@ async function saveToProject(project, name) {
     showDetail(data);
     return false;
   }
+  if (typeof data.source === "string" && data.source !== code.value) {
+    code.value = data.source;
+    renderEditor();
+  }
   document.getElementById("progName").value = data.name;
   saveTarget = { kind: "project", project: data.project, name: data.name };
   currentProject = data.project;
   markSaved();
+  rememberOpenProject();
   stState.textContent = `已存進專案 ${data.project}`;
   stState.className = "ok";
-  stLine.textContent = `專案 ${data.project} · ${data.name}`;
+  const images = Array.isArray(data.images) && data.images.length ? ` · 已放入 ${data.images.join("、")}` : "";
+  stLine.textContent = `專案 ${data.project} · ${data.name}${images}`;
   refreshProjectDialog();
   return true;
 }
@@ -2138,6 +2186,7 @@ async function saveToProject(project, name) {
 async function rememberFileSave(data) {
   document.getElementById("progName").value = data.name;
   saveTarget = { kind: "file", name: data.name, path: data.path };
+  leaveProject();
   markSaved();
   stState.textContent = `已儲存 ${data.path}`;
   stState.className = "ok";
@@ -2263,6 +2312,7 @@ window.VisDevCommands = {
     code.value = "* 新程式\n";
     document.getElementById("progName").value = "untitled.viz";
     saveTarget = { kind: "workspace", name: "untitled.viz" };
+    leaveProject();
     savedText = "";
     sessionId = null;
     breakpoints = new Set();
@@ -2374,6 +2424,7 @@ document.getElementById("aboutOk").onclick = () => { document.getElementById("ab
 document.getElementById("helpOk").onclick = () => { document.getElementById("helpDialog").hidden = true; };
 document.getElementById("projectClose").onclick = () => { document.getElementById("projectDialog").hidden = true; };
 document.getElementById("projectCreate").onclick = () => createProjectFromDialog();
+document.getElementById("projectRename").onclick = () => renameCurrentProject();
 document.getElementById("projectSave").onclick = () => saveCurrentIntoProject();
 document.getElementById("projectNewProgram").onclick = () => addProjectProgram();
 document.getElementById("projectList").onclick = (event) => {
@@ -3221,6 +3272,7 @@ function sampleButtons(items) {
 }
 
 async function openProgram(kind, name) {
+  leaveProject();
   const res = await fetch(`/api/files/${kind}/${encodeURIComponent(name)}`);
   const data = await res.json();
   if (!res.ok) {
@@ -3542,6 +3594,37 @@ function fillOcrMethods(engines) {
   if ([...select.options].some((option) => option.value === current)) select.value = current;
 }
 
+async function restoreProject() {
+  let stored = null;
+  try {
+    stored = JSON.parse(localStorage.getItem("visdev.project") || "null");
+  } catch (_err) {
+    return false;
+  }
+  if (!stored || !stored.project || !stored.program) return false;
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(stored.project)}/programs/${encodeURIComponent(stored.program)}`);
+    if (!res.ok) {
+      leaveProject();
+      return false;
+    }
+    const data = await res.json();
+    currentProject = data.project;
+    code.value = String(data.source || "").replace(/\r\n/g, "\n");
+    document.getElementById("progName").value = data.name;
+    saveTarget = { kind: "project", project: data.project, name: data.name };
+    resetProgramHistory();
+    markSaved();
+    renderEditor();
+    resizeCanvas();
+    await exec("reset");
+    stLine.textContent = `專案 ${data.project} · ${data.name}`;
+    return true;
+  } catch (_err) {
+    return false;
+  }
+}
+
 async function boot() {
   operators = await fetch("/api/operators").then((res) => res.json());
   try {
@@ -3554,6 +3637,7 @@ async function boot() {
   renderOps();
   if (operators[0]) showOp(operators[0].name);
   await loadFiles();
+  if (await restoreProject()) return;
   const sample = await fetch("/api/files/samples/blob_inspect.hdv").then((res) => res.json());
   code.value = sample.source;
   document.getElementById("progName").value = sample.name;
