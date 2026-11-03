@@ -671,6 +671,7 @@ class Session:
                 if self.cancel:
                     self.paused = "stopped"
                     self._append_log("已停止")
+                    self._release_handles()
                     return
                 if self._on_breakpoint() and self.pc != self.break_skip:
                     self.break_skip = self.pc

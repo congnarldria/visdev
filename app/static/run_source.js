@@ -19,6 +19,7 @@
     ["OkCount", "合格"],
     ["NgCount", "不合格"],
     ["Total", "總數"],
+    ["CsvFile", "明細"],
     ["Diameter", "直徑"],
     ["Width", "寬"],
     ["Height", "高"],

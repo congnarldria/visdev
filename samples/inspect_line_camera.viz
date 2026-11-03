@@ -1,0 +1,50 @@
+* 產線相機。需要本機相機，編號 0。沒有相機時這支會失敗。
+* Windows 先問 DirectShow，打不開再試 OpenCV。這支不改那個順序。
+* 白塊面積 200 以上算合格。按停止就停，已經計的張數留著。
+* 不合格的圖寫到 workspace/line_ng。明細在 workspace/line_camera.csv。
+OkCount := 0
+NgCount := 0
+Grabbed := 0
+CsvFile := 'workspace/line_camera.csv'
+Vizion.open_framegrabber ('OpenCV', '0', 'gray', 0, 0, Acq)
+Vizion.open_file (CsvFile, 'output', Report)
+Vizion.fwrite_string (Report, 'index,file,judge,count')
+Vizion.fnew_line (Report)
+while (1)
+    Vizion.grab_image (Image, Acq)
+    Grabbed := Grabbed + 1
+    Vizion.get_framegrabber_param (Acq, 'image_name', Name)
+    if (Name == '')
+        Name := 'camera_' + Grabbed + '.png'
+    endif
+    Vizion.threshold (Image, Region, 128, 255)
+    Vizion.connection (Region, Parts, 1)
+    Vizion.select_shape (Parts, Kept, 'area', 'and', 200, 99999)
+    Vizion.count_obj (Kept, Count)
+    if (Count >= 1)
+        Judge := 'OK'
+        OkCount := OkCount + 1
+    else
+        Judge := 'NG'
+        NgCount := NgCount + 1
+        Vizion.write_image (Image, 'workspace/line_ng/' + Name)
+    endif
+    Total := OkCount + NgCount
+    if (NgCount == 0)
+        Judge := '合格'
+    else
+        Judge := '不合格'
+    endif
+    Row := Grabbed + ',' + Name + ',' + Judge + ',' + Count
+    Vizion.fwrite_string (Report, Row)
+    Vizion.fnew_line (Report)
+    Vizion.dev_display (Image)
+    if (Count >= 1)
+        Vizion.dev_set_color ('green')
+    else
+        Vizion.dev_set_color ('red')
+    endif
+    Vizion.dev_display (Kept)
+endwhile
+Vizion.close_file (Report)
+Vizion.close_framegrabber (Acq)

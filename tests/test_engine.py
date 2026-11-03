@@ -3557,6 +3557,90 @@ def test_inspect_line_template_counts_saves_ng_and_writes_csv():
         report.unlink(missing_ok=True)
 
 
+def test_camera_line_stops_and_keeps_the_counts():
+    import asyncio
+    import inspect
+    import shutil
+    import time
+
+    import numpy as np
+
+    from app.engine.chapters import camera_ops
+    from app.main import SESSIONS, ExecIn, exec_program, stop
+
+    opened = inspect.getsource(camera_ops._open_camera)
+    assert opened.index("grab_bgr") < opened.index("CAP_DSHOW") < opened.rindex("VideoCapture(index)")
+
+    class FakeCap:
+        def __init__(self):
+            self.n = 0
+            self.opened = True
+            self.released = False
+
+        def isOpened(self):
+            return self.opened
+
+        def read(self):
+            time.sleep(0.05)
+            self.n += 1
+            image = np.zeros((40, 40), np.uint8)
+            if self.n % 2 == 0:
+                image[10:30, 10:30] = 255
+            else:
+                image[16:24, 16:24] = 255
+            return True, image
+
+        def release(self):
+            self.released = True
+            self.opened = False
+
+        def set(self, *_args):
+            return False
+
+    fake = FakeCap()
+    folder = ROOT / "workspace" / "line_ng"
+    report = ROOT / "workspace" / "line_camera.csv"
+    shutil.rmtree(folder, ignore_errors=True)
+    report.unlink(missing_ok=True)
+    original = camera_ops._open_camera
+    camera_ops._open_camera = lambda *_args, **_kwargs: fake
+    started = None
+    session = None
+    try:
+        source = (ROOT / "samples" / "inspect_line_camera.viz").read_text(encoding="utf-8")
+        started = asyncio.run(exec_program(ExecIn(source=source, action="run")))
+        session = SESSIONS[started["id"]]
+        deadline = time.time() + 2
+        while time.time() < deadline:
+            done = int(session.vars.get("OkCount", 0) or 0) + int(session.vars.get("NgCount", 0) or 0)
+            if done >= 1:
+                break
+            time.sleep(0.05)
+        stop(started["id"])
+        session.runner.join(timeout=3)
+        assert session.error is None, session.error
+        assert session.paused == "stopped"
+        grabbed = int(session.vars["OkCount"]) + int(session.vars["NgCount"])
+        assert grabbed >= 1
+        assert int(session.vars["Total"]) == grabbed
+        assert session.vars["Report"].closed is True
+        assert fake.released is True
+        lines = report.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "index,file,judge,count"
+        assert len(lines) == grabbed + 1
+        assert lines[1].startswith("1,camera_1.png,")
+    finally:
+        camera_ops._open_camera = original
+        if session is not None:
+            stop(session.id)
+            runner = getattr(session, "runner", None)
+            if runner is not None:
+                runner.join(timeout=2)
+            SESSIONS.pop(session.id, None)
+        shutil.rmtree(folder, ignore_errors=True)
+        report.unlink(missing_ok=True)
+
+
 def test_inspect_locate_template_finds_four():
     session = run_source((ROOT / "samples" / "inspect_locate.viz").read_text(encoding="utf-8"))
     assert session.error is None, session.error

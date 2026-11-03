@@ -57,8 +57,9 @@ const line = run.resultSummary([
   { name: "OkCount", text: "3" },
   { name: "NgCount", text: "2" },
   { name: "Total", text: "5" },
+  { name: "CsvFile", text: "'workspace/line_result.csv'" },
   { name: "Count", text: "1" },
 ]);
-assert(line === "判定 不合格 · 合格 3 · 不合格 2 · 總數 5", "a line run reports pass and fail counts");
+assert(line === "判定 不合格 · 合格 3 · 不合格 2 · 總數 5 · 明細 workspace/line_result.csv", "a line run reports pass and fail counts");
 
 console.log("run source ok");
