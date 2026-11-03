@@ -36,7 +36,7 @@ public static partial class Operators
         return ImageBuffer.Gray(width, height, result);
     }
 
-    /// <summary>繞著指定點把列、行轉正。正角度在畫面上順時針。</summary>
+    /// <summary>繞著指定點把列、行轉正。正角度在畫面上順時針，和 RotateNearest 把圖轉走的方向相同。</summary>
     public static (double Row, double Column) RotatePoint(double row, double column, double degrees, double pivotRow, double pivotColumn)
     {
         double radians = degrees * Math.PI / 180.0;
@@ -44,6 +44,6 @@ public static partial class Operators
         double sine = Math.Sin(radians);
         double dx = column - pivotColumn;
         double dy = row - pivotRow;
-        return (pivotRow + dx * sine + dy * cosine, pivotColumn + dx * cosine - dy * sine);
+        return (pivotRow - dx * sine + dy * cosine, pivotColumn + dx * cosine + dy * sine);
     }
 }

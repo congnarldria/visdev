@@ -35,7 +35,7 @@
 - C# 的 `Operators.ShapeOf` 給圓度、矩形度和方向。橫條方向是 0，直條是 1.5708，矩形度約 1.32。`Operators.MeasureWidth` 量亮條左右邊緣，寬度 32。兩條擬合邊緣的垂直距離用 `Operators.LineDistance`。`PlanarCalib.Estimate` 從三個視角的平面點估回 fx、fy、cx、cy。`EstimateDistorted` 再估徑向 k1。
 - `ChessboardPhoto` 把 `'5,7,10'` 畫成圖，取出 35 個內角點，再送進內參估計。焦距差在 8 以內，主點差在 2 以內。不改 Python 已經算出的九個參數，也不找六角形標記。
 - C# 的 `GrayOpenRectangle` 用 3x3 遮罩去掉單獨的亮點，3x3 的 180 還在。`GrayCloseRectangle` 把周圍都是 180 的暗點補成 180。和 Python 的灰階矩形開閉同一組結果。`GrayOpenCircle` 半徑 1 是十字，3×3 方塊開完剩下十字，單獨亮點消失。`GrayCloseCircle` 把單獨的暗點補成 180。
-- `Vizion.Inspect.Sample` 是一條可在 Visual Studio 直接跑的檢查：讀圖、圓形開運算、形狀對上 90 度、轉正、寬度 70 像素（平面上 140）、孔的圓度 0.95，印出「判定  合格」。方案是 `dotnet/Vizion.Display.sln`。
+- `Vizion.Inspect.Sample` 是一條可在 Visual Studio 直接跑的檢查：讀圖、圓形開運算、形狀對上 90 度、轉正、寬度 70 像素（平面上 140）、孔的圓度 0.95，印出「判定  合格」。方案是 `dotnet/Vizion.Display.sln`。`RotatePoint` 和 `RotateNearest` 都是畫面上的順時針，對位後量到的就是這 70。
 - `Undistort` 用 k1 校正影像。`ImageToPlane` 把像素投到 Z=0 平面，沒有畸變時得到 50，k1 為 -0.5 時約 51.730。`RotateNearest` 把橫條轉正後寬度仍是 8 像素，換成世界單位是 40。`MeasurePlaneWidth` 先去畸變再量到平面上，這條亮條約 40。不改 Python 已經算出的九個參數。
 - 產線相機用編號 0 連續抓圖，規則和產線相同。Windows 仍先問 DirectShow，打不開再試 OpenCV。按停止就停，已經計的張數留著，相機和 CSV 會關掉。明細在 `workspace/line_camera.csv`。
 - 沒有相機時，錯誤訊息會請改跑檔案、範本裡的產線，用 `samples/line_batch`。抓不到畫面也一樣。程式出錯會關掉相機和 CSV，已經計的張數和畫面留著。

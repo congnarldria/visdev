@@ -102,6 +102,6 @@ var camera = PlanarCalib.Estimate(objectX, objectY, views);
 
 `GrayOpenRectangle` 和 `GrayCloseRectangle` 是灰階矩形開運算、閉運算。3×3 遮罩會去掉單獨的 200，留下 3×3 的 180；周圍都是 180 時，中間的 0 會補成 180。`GrayOpenCircle` 的半徑 1 是十字。3×3 方塊開完剩下十字，單獨的亮點消失。`GrayCloseCircle` 用同一個十字把單獨的暗點補成周圍的灰階。9×9 圖中間和角落的 0 會變成 180。
 
-`Undistort` 用 k1 把圖校成直線模型。行 36 的理想位置會到原圖的 34.72 取樣。`ImageToPlane` 把像素投到 Z=0 的平面。沒有畸變時 (列 20, 行 30) 是平面 x 50；k1 為 -0.5 時約 51.730。`RotateNearest` 正角度在畫面上順時針。橫條轉 90 度後，寬度仍是 8 像素，在焦距 40、距離 200 時是 40 個世界單位。`MeasurePlaneWidth` 先去掉 k1，再把左右邊緣投到平面上，同一條亮條約 40。
+`Undistort` 用 k1 把圖校成直線模型。行 36 的理想位置會到原圖的 34.72 取樣。`ImageToPlane` 把像素投到 Z=0 的平面。沒有畸變時 (列 20, 行 30) 是平面 x 50；k1 為 -0.5 時約 51.730。`RotateNearest` 和 `RotatePoint` 都是畫面上的順時針。橫條轉 90 度後，寬度仍是 8 像素，在焦距 40、距離 200 時是 40 個世界單位。`MeasurePlaneWidth` 先去掉 k1，再把左右邊緣投到平面上，同一條亮條約 40。
 
 既有的 `Threshold`、`Connection`、`AreaCenterOf` 仍在 `Operators`。矩形和圓形的膨脹、侵蝕、開運算、閉運算也還在。讀圖目前讀 PNG。
