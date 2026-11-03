@@ -234,6 +234,79 @@ public static class NativeCore
         }
     }
 
+    public static bool TryMeasureRow(byte[] row, out double left, out double right, out bool found)
+    {
+        left = 0;
+        right = 0;
+        found = false;
+        if (!IsLoaded || !UseNative)
+            return false;
+        try
+        {
+            int code = vizion_measure_row(row, row.Length, out left, out right);
+            if (code < 0)
+                return false;
+            found = code == 0;
+            return true;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryMeasureScan(
+        byte[] gray, int width, int height, double column1, double row1, double column2, double row2,
+        double sigma, double threshold, int transition, out MeasureEdge[] edges)
+    {
+        edges = Array.Empty<MeasureEdge>();
+        if (!IsLoaded || !UseNative)
+            return false;
+        try
+        {
+            int code = vizion_measure_scan(gray, width, height, column1, row1, column2, row2, sigma, threshold, transition, null, null, null, null, 0, out int count);
+            if (code != 0)
+                return false;
+            if (count == 0)
+                return true;
+            var rows = new double[count];
+            var columns = new double[count];
+            var amps = new double[count];
+            var dists = new double[count];
+            code = vizion_measure_scan(gray, width, height, column1, row1, column2, row2, sigma, threshold, transition, rows, columns, amps, dists, count, out int written);
+            if (code != 0 || written != count)
+                return false;
+            edges = new MeasureEdge[count];
+            for (int i = 0; i < count; i++)
+                edges[i] = new MeasureEdge(rows[i], columns[i], amps[i], dists[i]);
+            return true;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_measure_row(byte[] row, int width, out double left, out double right);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_measure_scan(
+        byte[] gray, int width, int height, double column1, double row1, double column2, double row2,
+        double sigma, double threshold, int transition,
+        double[]? rows, double[]? columns, double[]? amplitudes, double[]? distances,
+        int capacity, out int written);
+
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern double vizion_shape_score(
         float[] gx, float[] gy, float[] mag, int width, int height, double column, double row,

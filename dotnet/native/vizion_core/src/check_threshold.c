@@ -35,5 +35,11 @@ int main(void)
         return 1;
     }
     printf("分數自我檢查通過\n");
+    code = vizion_measure_selftest();
+    if (code != 0) {
+        fprintf(stderr, "量測自我檢查失敗 %d\n", code);
+        return 1;
+    }
+    printf("量測自我檢查通過\n");
     return 0;
 }

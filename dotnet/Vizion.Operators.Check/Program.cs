@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--measure")
+{
+    MeasureNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--match")
 {
     MatchNativeCheck();
@@ -883,6 +889,63 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void MeasureNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var bar = new byte[32 * 64];
+    for (int row = 0; row < 32; row++)
+        for (int column = 16; column < 48; column++)
+            bar[row * 64 + column] = 255;
+    var width = Operators.MeasureWidth(ImageBuffer.Gray(64, 32, bar), 16);
+    if (Math.Abs(width.Left - 15.5) > 1e-6 || Math.Abs(width.Right - 47.5) > 1e-6 || Math.Abs(width.Width - 32) > 1e-6)
+        throw new InvalidOperationException($"亮條應是 15.5 到 47.5，得到 {width.Left} {width.Right}");
+    var edges = Operators.MeasureScan(ImageBuffer.Gray(64, 32, bar), 16, 0, 16, 63, 0, 20, "all");
+    if (edges.Length != 2 || Math.Abs(edges[0].Column - 15.5) > 1e-6 || Math.Abs(edges[0].Amplitude - 255) > 1e-6
+        || Math.Abs(edges[1].Column - 47.5) > 1e-6 || Math.Abs(edges[1].Amplitude + 255) > 1e-6)
+        throw new InvalidOperationException("水平掃描和 Python 不同");
+    var soft = Operators.MeasureScan(ImageBuffer.Gray(64, 32, bar), 16, 0, 16, 63, 1, 10, "positive");
+    if (soft.Length != 1 || Math.Abs(soft[0].Column - 15.5) > 1e-6 || Math.Abs(soft[0].Amplitude - 95.851631) > 1e-4)
+        throw new InvalidOperationException($"平滑後的邊緣應是 95.851631，得到 {soft[0].Amplitude}");
+    var diagonal = new byte[40 * 40];
+    for (int row = 0; row < 40; row++)
+        for (int column = 20; column < 40; column++)
+            diagonal[row * 40 + column] = 180;
+    var crossed = Operators.MeasureScan(ImageBuffer.Gray(40, 40, diagonal), 5, 5, 34, 34, 0.8, 15, "由暗到亮");
+    if (crossed.Length != 1 || Math.Abs(crossed[0].Row - 19.5) > 1e-4 || Math.Abs(crossed[0].Column - 19.5) > 1e-4
+        || Math.Abs(crossed[0].Distance - 20.506097) > 1e-4)
+        throw new InvalidOperationException($"斜向邊緣應在 19.5，得到 {crossed[0].Row} {crossed[0].Column}");
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managed = Operators.MeasureScan(ImageBuffer.Gray(40, 40, diagonal), 5, 5, 34, 34, 0.8, 15, "positive");
+    var managedBar = Operators.MeasureWidth(ImageBuffer.Gray(64, 32, bar), 16);
+    NativeCore.UseNative = true;
+    if (Math.Abs(managedBar.Left - width.Left) > 1e-9 || Math.Abs(managed[0].Amplitude - crossed[0].Amplitude) > 1e-6)
+        throw new InvalidOperationException("量測和 C# 後備不同");
+    var bench = new byte[960 * 540];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)(i % 960 < 400 ? 30 : 200);
+    var benchImage = ImageBuffer.Gray(960, 540, bench);
+    for (int i = 0; i < 2; i++)
+        Operators.MeasureScan(benchImage, 40, 0, 40, 959, 0.6, 20, "all");
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 20; i++)
+        Operators.MeasureScan(benchImage, 40, 0, 40, 959, 0.6, 20, "all");
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    for (int i = 0; i < 2; i++)
+        Operators.MeasureScan(benchImage, 40, 0, 40, 959, 0.6, 20, "all");
+    watch.Restart();
+    for (int i = 0; i < 20; i++)
+        Operators.MeasureScan(benchImage, 40, 0, 40, 959, 0.6, 20, "all");
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("量測原生檢查通過");
+    Console.WriteLine($"960 像素掃描線共 20 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
 }
 
 static void MatchNativeCheck()

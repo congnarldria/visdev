@@ -96,6 +96,19 @@ VIZION_EXPORT double VIZION_CALL vizion_ncc_correlate(
 
 VIZION_EXPORT int VIZION_CALL vizion_score_selftest(void);
 
+/* 沿一列量亮條。找不到回 1。左緣、右緣是半像素加拋物線偏差。 */
+VIZION_EXPORT int VIZION_CALL vizion_measure_row(const uint8_t* row, int width, double* left, double* right);
+
+/* transition：0 全部、1 由暗到亮、2 由亮到暗。座標是行、列，和影像 x、y 相同。 */
+VIZION_EXPORT int VIZION_CALL vizion_measure_scan(
+    const uint8_t* gray, int width, int height,
+    double x0, double y0, double x1, double y1,
+    double sigma, double threshold, int transition,
+    double* out_rows, double* out_columns, double* out_amps, double* out_dists,
+    int capacity, int* written);
+
+VIZION_EXPORT int VIZION_CALL vizion_measure_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif
