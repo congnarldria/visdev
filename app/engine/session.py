@@ -135,6 +135,52 @@ def _var_role(name: str, kind: str, iconic: bool) -> str:
     return kind
 
 
+_NG_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
+
+
+def _ng_filename(name: str) -> str:
+    filename = str(name).strip().strip("'\"")
+    if not filename or filename in (".", "..") or "/" in filename or "\\" in filename or Path(filename).name != filename:
+        raise RuntimeError("不合格圖的檔名不正確")
+    if Path(filename).suffix.lower() not in _NG_SUFFIXES:
+        raise RuntimeError("不合格圖必須是影像檔")
+    return filename
+
+
+def _csv_cells(row: str) -> list[str]:
+    return [cell.strip() for cell in str(row).split(",")]
+
+
+def _csv_column(header: str, names: tuple[str, ...]) -> int | None:
+    cells = [cell.strip().lower() for cell in _csv_cells(header)]
+    for name in names:
+        if name in cells:
+            return cells.index(name)
+    return None
+
+
+def _csv_is_ng(row: str, judge_at: int | None) -> bool:
+    if judge_at is None:
+        return False
+    cells = _csv_cells(row)
+    if judge_at >= len(cells):
+        return False
+    token = cells[judge_at].strip().strip("'\"")
+    return token.upper() == "NG" or token == "不合格"
+
+
+def _csv_open_name(row: str, file_at: int | None, judge_at: int | None) -> str:
+    if file_at is None or not _csv_is_ng(row, judge_at):
+        return ""
+    cells = _csv_cells(row)
+    if file_at >= len(cells):
+        return ""
+    try:
+        return _ng_filename(cells[file_at])
+    except RuntimeError:
+        return ""
+
+
 class Session:
     def __init__(self, source: str, root: Path):
         self.id = uuid.uuid4().hex[:12]
@@ -508,33 +554,38 @@ class Session:
         name = str(raw).strip().strip("'\"")
         if not name:
             raise RuntimeError("這一輪沒有不合格圖")
-        if name in (".", "..") or "/" in name or "\\" in name or Path(name).name != name:
-            raise RuntimeError("不合格圖的檔名不正確")
-        if Path(name).suffix.lower() not in {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}:
-            raise RuntimeError("不合格圖必須是影像檔")
+        return self.show_ng_file(name)
+
+    def show_ng_file(self, name: str) -> str:
+        """Show one image already saved in workspace/line_ng. Counts stay."""
+        filename = _ng_filename(name)
         folder = (self.root / "workspace" / "line_ng").resolve()
-        path = (folder / name).resolve()
+        path = (folder / filename).resolve()
         try:
             path.relative_to(folder)
         except ValueError as exc:
             raise RuntimeError("不合格圖不能離開不合格圖資料夾") from exc
         if not path.is_file():
-            raise RuntimeError(f"找不到不合格圖 {name}。它可能已被清掉，請再跑一次產線。")
+            raise RuntimeError(f"找不到不合格圖 {filename}。它可能已被清掉，請再跑一次產線。")
         data = read_cv_image(path)
         if data is None:
-            raise RuntimeError(f"無法讀取不合格圖 {name}")
-        self._ng_hold = self.display
+            raise RuntimeError(f"無法讀取不合格圖 {filename}")
+        if not getattr(self, "_ng_showing", False) or getattr(self, "_ng_hold", None) is None:
+            self._ng_hold = self.display
         fresh = Display()
         fresh.line_width = self._ng_hold.line_width
         fresh.color = "#ff2a2a"
         self.display = fresh
         self.display_obj(Image(np.array(data)), name="LastNg")
         self._ng_showing = True
-        self._ng_file = name
-        return name
+        self._ng_file = filename
+        return filename
 
-    def line_csv_preview(self, limit: int = 20) -> dict:
-        """Read the line CSV named by CsvFile. Only files inside workspace."""
+    def line_csv_preview(self, limit: int = 20, only_ng: bool = False) -> dict:
+        """Read the line CSV named by CsvFile. Only files inside workspace.
+
+        only_ng keeps rows whose judge cell is NG. The file on disk is not changed.
+        """
         raw = self.vars.get("CsvFile", "")
         text = str(raw).strip().strip("'\"")
         if not text:
@@ -553,14 +604,23 @@ class Session:
         lines = path.read_text(encoding="utf-8").splitlines()
         if not lines:
             raise RuntimeError("明細是空的")
+        header = lines[0]
         body = lines[1:]
-        shown = body[-limit:] if len(body) > limit else body
+        judge_at = _csv_column(header, ("judge", "判定"))
+        file_at = _csv_column(header, ("file", "檔名"))
+        ng_rows = [row for row in body if _csv_is_ng(row, judge_at)]
+        chosen = ng_rows if only_ng else body
+        shown = chosen[-limit:] if len(chosen) > limit else list(chosen)
         return {
             "file": normalized,
             "total": len(body),
-            "header": lines[0],
+            "ngTotal": len(ng_rows),
+            "header": header,
             "rows": shown,
-            "truncated": len(body) > limit,
+            "opens": [_csv_open_name(row, file_at, judge_at) for row in shown],
+            "truncated": len(chosen) > limit,
+            "onlyNg": bool(only_ng),
+            "noJudge": judge_at is None,
         }
 
     def show_calib_view(self, index: int | None) -> None:

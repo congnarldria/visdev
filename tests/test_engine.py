@@ -3533,6 +3533,7 @@ def test_stripe_outside_tolerance_turns_the_marks_red():
 
 
 def test_inspect_line_template_counts_saves_ng_and_writes_csv():
+    import pytest
     import shutil
 
     folder = ROOT / "workspace" / "line_ng"
@@ -3569,12 +3570,33 @@ def test_inspect_line_template_counts_saves_ng_and_writes_csv():
         assert session.show_last_ng() == ""
         assert session.public_state()["ngShowing"] is False
         assert np.array_equal(session.display.base.data, before)
+        saved_csv = report.read_bytes()
         preview = session.line_csv_preview()
         assert preview["header"] == "index,file,judge,count"
         assert preview["total"] == 5
+        assert preview["ngTotal"] == 2
         assert preview["truncated"] is False
+        assert preview["onlyNg"] is False
         assert "1,ng_01.png,NG,0" in preview["rows"]
         assert "3,ok_01.png,OK,1" in preview["rows"]
+        ng_only = session.line_csv_preview(only_ng=True)
+        assert ng_only["rows"] == ["1,ng_01.png,NG,0", "2,ng_02.png,NG,0"]
+        assert ng_only["opens"] == ["ng_01.png", "ng_02.png"]
+        assert ng_only["ngTotal"] == 2
+        assert ng_only["onlyNg"] is True
+        assert report.read_bytes() == saved_csv
+        assert int(session.vars["OkCount"]) == 3
+        program = session.display.base.data.copy()
+        assert session.show_ng_file("ng_01.png") == "ng_01.png"
+        assert session.show_ng_file("ng_02.png") == "ng_02.png"
+        assert session.public_state()["ngFile"] == "ng_02.png"
+        assert int(session.vars["OkCount"]) == 3
+        assert session.show_last_ng() == ""
+        assert np.array_equal(session.display.base.data, program)
+        with pytest.raises(RuntimeError, match="檔名不正確"):
+            session.show_ng_file("..\\secret.png")
+        with pytest.raises(RuntimeError, match="找不到不合格圖"):
+            session.show_ng_file("ok_01.png")
     finally:
         shutil.rmtree(folder, ignore_errors=True)
         report.unlink(missing_ok=True)
@@ -3584,7 +3606,7 @@ def test_last_ng_and_csv_stay_inside_the_workspace():
     import pytest
     from fastapi import HTTPException
 
-    from app.main import SESSIONS, show_last_ng_view
+    from app.main import SESSIONS, show_last_ng_view, show_line_csv
 
     session = run_source("OkCount := 3\n")
     session.vars["LastNg"] = "..\\secret.png"
@@ -3614,6 +3636,33 @@ def test_last_ng_and_csv_stay_inside_the_workspace():
             assert len(preview["rows"]) == 20
             assert preview["rows"][0] == "6,a.png,NG,0"
             assert preview["rows"][-1] == "25,a.png,NG,0"
+            ng_only = session.line_csv_preview(only_ng=True)
+            assert ng_only["ngTotal"] == 25
+            assert ng_only["rows"][0] == "6,a.png,NG,0"
+            assert ng_only["opens"][0] == "a.png"
+            SESSIONS[session.id] = session
+            routed = show_line_csv(session.id, onlyNg=True)
+            assert routed["onlyNg"] is True
+            assert routed["rows"][-1] == "25,a.png,NG,0"
+            assert report.read_bytes().count(b"\n") == 26
+            mixed = ROOT / "workspace" / "_line_mixed.csv"
+            mixed_lines = ["index,file,judge,count"]
+            mixed_lines.extend(f"{i},ng_{i}.png,NG,0" for i in range(1, 6))
+            mixed_lines.extend(f"{i},ok_{i}.png,OK,1" for i in range(6, 31))
+            mixed.write_text("\n".join(mixed_lines) + "\n", encoding="utf-8")
+            try:
+                session.vars["CsvFile"] = "workspace/_line_mixed.csv"
+                recent = session.line_csv_preview()
+                assert recent["ngTotal"] == 5
+                assert all(",OK," in row for row in recent["rows"])
+                assert recent["opens"] == [""] * len(recent["rows"])
+                failed = session.line_csv_preview(only_ng=True)
+                assert failed["rows"] == [f"{i},ng_{i}.png,NG,0" for i in range(1, 6)]
+                assert failed["opens"] == [f"ng_{i}.png" for i in range(1, 6)]
+                assert failed["truncated"] is False
+                assert mixed.read_bytes().decode("utf-8").count(",OK,") == 25
+            finally:
+                mixed.unlink(missing_ok=True)
         finally:
             report.unlink(missing_ok=True)
         SESSIONS[session.id] = session

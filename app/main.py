@@ -1015,14 +1015,31 @@ def show_last_ng_view(sid: str):
     return state
 
 
+class NgFileIn(BaseModel):
+    name: str
+
+
+@app.post("/api/session/{sid}/ng-file")
+def show_ng_file_view(sid: str, body: NgFileIn):
+    current = _session_or_404(sid)
+    if getattr(current, "running", False):
+        raise HTTPException(409, "程式還在跑，停下來才能看不合格圖")
+    with current.lock:
+        try:
+            current.show_ng_file(body.name)
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return _snapshot(current)
+
+
 @app.post("/api/session/{sid}/line-csv")
-def show_line_csv(sid: str):
+def show_line_csv(sid: str, onlyNg: bool = False):
     current = _session_or_404(sid)
     if getattr(current, "running", False):
         raise HTTPException(409, "程式還在跑，停下來才能看明細")
     with current.lock:
         try:
-            preview = current.line_csv_preview()
+            preview = current.line_csv_preview(only_ng=onlyNg)
         except RuntimeError as exc:
             raise HTTPException(400, str(exc)) from exc
     return preview

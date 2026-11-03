@@ -984,9 +984,22 @@ body.arrow-drag, body.arrow-drag * { cursor: grabbing !important; }
   max-height: 280px;
   overflow: auto;
   margin: 8px 0 12px;
-  white-space: pre;
   font: 12px/1.5 var(--mono);
 }
+.csv-row {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 1px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  white-space: pre;
+}
+button.csv-row.ng { color: #ffd0c8; cursor: pointer; }
+button.csv-row.ng:hover { background: #3a2424; }
 #stState.bad { color: #ffb0a6; }
 #stState.ok { color: #b6f5cd; }
 #stState.pause { color: #ffe14a; }

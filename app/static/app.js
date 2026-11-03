@@ -1936,9 +1936,15 @@ document.getElementById("btnStop").onclick = async () => {
   if (sessionId) await fetch(`/api/stop/${sessionId}`, { method: "POST" });
 };
 document.getElementById("btnLastNg").onclick = () => showLastNg();
-document.getElementById("btnLineCsv").onclick = () => showLineCsv();
+document.getElementById("btnLineCsv").onclick = () => showLineCsv(false);
+document.getElementById("csvNg").onclick = () => showLineCsv(!csvOnlyNg);
 document.getElementById("csvOk").onclick = () => {
   document.getElementById("csvDialog").hidden = true;
+};
+document.getElementById("csvBody").onclick = (event) => {
+  const button = event.target.closest("button[data-file]");
+  if (!button) return;
+  openNgFile(button.dataset.file);
 };
 
 async function showLastNg() {
@@ -1964,21 +1970,86 @@ async function showLastNg() {
   syncLineActions();
 }
 
-async function showLineCsv() {
+let csvOnlyNg = false;
+
+function csvNote(data) {
+  const ng = Number(data.ngTotal) || 0;
+  const total = Number(data.total) || 0;
+  if (data.noJudge) return `${data.file}，這份明細沒有判定欄`;
+  if (data.onlyNg && ng === 0) return `${data.file}，共 ${total} 列，沒有不合格的列`;
+  if (data.onlyNg && data.truncated) {
+    return `${data.file}，共 ${total} 列，不合格 ${ng} 列，這裡是最後 ${data.rows.length} 列不合格`;
+  }
+  if (data.onlyNg) return `${data.file}，共 ${total} 列，不合格 ${ng} 列`;
+  if (data.truncated) return `${data.file}，共 ${total} 列，不合格 ${ng} 列，這裡是最後 ${data.rows.length} 列`;
+  return `${data.file}，共 ${total} 列，不合格 ${ng} 列`;
+}
+
+function renderCsv(data) {
+  document.getElementById("csvNote").textContent = csvNote(data);
+  const body = document.getElementById("csvBody");
+  body.replaceChildren();
+  const header = document.createElement("div");
+  header.className = "csv-row";
+  header.textContent = data.header || "";
+  body.appendChild(header);
+  (data.rows || []).forEach((row, index) => {
+    const file = (data.opens || [])[index] || "";
+    if (!file) {
+      const line = document.createElement("div");
+      line.className = "csv-row";
+      line.textContent = row;
+      body.appendChild(line);
+      return;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "csv-row ng";
+    button.dataset.file = file;
+    button.title = "打開這張不合格圖";
+    button.textContent = row;
+    body.appendChild(button);
+  });
+  const toggle = document.getElementById("csvNg");
+  toggle.textContent = data.onlyNg ? "看全部" : "只看不合格";
+  toggle.setAttribute("aria-pressed", data.onlyNg ? "true" : "false");
+}
+
+async function showLineCsv(onlyNg) {
   if (!sessionId || server.running) return;
-  const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/line-csv`, { method: "POST" });
+  const query = onlyNg ? "?onlyNg=true" : "";
+  const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/line-csv${query}`, { method: "POST" });
   const data = await res.json();
   if (!res.ok) {
     showDetail(data);
     return;
   }
-  const note = data.truncated
-    ? `${data.file}，共 ${data.total} 列，這裡是最後 ${data.rows.length} 列`
-    : `${data.file}，共 ${data.total} 列`;
-  document.getElementById("csvNote").textContent = note;
-  document.getElementById("csvBody").textContent = [data.header].concat(data.rows || []).join("\n");
+  csvOnlyNg = Boolean(data.onlyNg);
+  renderCsv(data);
   document.getElementById("csvDialog").hidden = false;
-  document.getElementById("csvOk").focus();
+  if (!onlyNg) document.getElementById("csvOk").focus();
+}
+
+async function openNgFile(name) {
+  if (!sessionId || server.running || !name) return;
+  const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/ng-file`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    showDetail(data);
+    return;
+  }
+  server.ngShowing = Boolean(data.ngShowing);
+  server.ngFile = data.ngFile || "";
+  clearPick();
+  if (data.display) await loadDisplay(data.display);
+  gfxBanner.hidden = false;
+  gfxBanner.textContent = `不合格圖 ${server.ngFile}`;
+  document.getElementById("csvDialog").hidden = true;
+  syncLineActions();
 }
 document.getElementById("btnFit").onclick = () => { cam.user = false; fit(false); };
 document.getElementById("btnOne").onclick = () => {
