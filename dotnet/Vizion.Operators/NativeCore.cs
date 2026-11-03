@@ -5,6 +5,7 @@ namespace Vizion;
 
 public static class NativeCore
 {
+    public static bool UseNative { get; set; } = true;
     public static bool IsLoaded { get; private set; }
     public static int CpuFlags { get; private set; }
     public static string LoadDetail { get; private set; } = "";
@@ -46,7 +47,7 @@ public static class NativeCore
     public static bool TryThreshold(byte[] gray, int width, int height, int minGray, int maxGray, out Region region)
     {
         region = new Region(width, height, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<int>());
-        if (!IsLoaded)
+        if (!IsLoaded || !UseNative)
             return false;
         try
         {
@@ -121,4 +122,108 @@ public static class NativeCore
     static extern int vizion_threshold_runs(
         byte[] gray, int width, int height, int minGray, int maxGray,
         int[]? rows, int[]? columns, int[]? lengths, int capacity, out int written);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_connection8(
+        int[] rows, int[] columns, int[] lengths, int count, int height,
+        int[] outRows, int[] outColumns, int[] outLengths, int[] outOffsets, int[] outCounts);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_area_center(
+        int[] rows, int[] columns, int[] lengths, int count,
+        out int area, out double row, out double column);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_bounds(
+        int[] rows, int[] columns, int[] lengths, int count,
+        out int row1, out int column1, out int row2, out int column2);
+
+    public static bool TryConnection(Region region, out Region[] objects)
+    {
+        objects = Array.Empty<Region>();
+        if (!IsLoaded || !UseNative)
+            return false;
+        int count = region.Rows.Length;
+        if (count == 0)
+            return true;
+        try
+        {
+            var rows = new int[count];
+            var columns = new int[count];
+            var lengths = new int[count];
+            var offsets = new int[count];
+            var counts = new int[count];
+            int found = vizion_connection8(region.Rows, region.Columns, region.Lengths, count, region.Height, rows, columns, lengths, offsets, counts);
+            if (found < 0)
+                return false;
+            objects = new Region[found];
+            for (int index = 0; index < found; index++)
+            {
+                int runCount = counts[index];
+                int at = offsets[index];
+                var objectRows = new int[runCount];
+                var objectColumns = new int[runCount];
+                var objectLengths = new int[runCount];
+                Array.Copy(rows, at, objectRows, 0, runCount);
+                Array.Copy(columns, at, objectColumns, 0, runCount);
+                Array.Copy(lengths, at, objectLengths, 0, runCount);
+                objects[index] = new Region(region.Width, region.Height, objectRows, objectColumns, objectLengths);
+            }
+            return true;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryAreaCenter(Region region, out int area, out double row, out double column)
+    {
+        area = 0;
+        row = 0;
+        column = 0;
+        if (!IsLoaded || !UseNative)
+            return false;
+        try
+        {
+            return vizion_area_center(region.Rows, region.Columns, region.Lengths, region.Rows.Length, out area, out row, out column) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryBounds(Region region, out int row1, out int column1, out int row2, out int column2)
+    {
+        row1 = 0;
+        column1 = 0;
+        row2 = 0;
+        column2 = 0;
+        if (!IsLoaded || !UseNative || region.Rows.Length == 0)
+            return false;
+        try
+        {
+            return vizion_bounds(region.Rows, region.Columns, region.Lengths, region.Rows.Length, out row1, out column1, out row2, out column2) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
 }

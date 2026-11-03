@@ -11,5 +11,11 @@ int main(void)
         return 1;
     }
     printf("閾值自我檢查通過 flags %d\n", flags);
+    code = vizion_region_selftest();
+    if (code != 0) {
+        fprintf(stderr, "區域自我檢查失敗 %d\n", code);
+        return 1;
+    }
+    printf("區域自我檢查通過\n");
     return 0;
 }

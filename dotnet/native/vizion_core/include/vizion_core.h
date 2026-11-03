@@ -40,6 +40,21 @@ VIZION_EXPORT int VIZION_CALL vizion_threshold_runs(
 
 VIZION_EXPORT int VIZION_CALL vizion_threshold_selftest(void);
 
+/* 八連通。輸出行程依物件排好，物件順序是掃描時第一次遇到的那段。回傳物件數，失敗 -1。 */
+VIZION_EXPORT int VIZION_CALL vizion_connection8(
+    const int* rows, const int* columns, const int* lengths, int count, int height,
+    int* out_rows, int* out_columns, int* out_lengths, int* out_offsets, int* out_counts);
+
+VIZION_EXPORT int VIZION_CALL vizion_area_center(
+    const int* rows, const int* columns, const int* lengths, int count,
+    int* area, double* row, double* column);
+
+VIZION_EXPORT int VIZION_CALL vizion_bounds(
+    const int* rows, const int* columns, const int* lengths, int count,
+    int* row1, int* column1, int* row2, int* column2);
+
+VIZION_EXPORT int VIZION_CALL vizion_region_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

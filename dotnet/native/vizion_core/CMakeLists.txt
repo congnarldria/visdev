@@ -19,16 +19,17 @@ add_library(vizion_core SHARED
     src/threshold.c
     src/threshold_scalar.c
     src/threshold_sse2.c
-    src/threshold_avx2.c)
+    src/threshold_avx2.c
+    src/region_runs.c)
 target_include_directories(vizion_core PUBLIC include PRIVATE src)
 target_compile_definitions(vizion_core PRIVATE VIZION_BUILD)
 
 find_package(Threads REQUIRED)
-target_link_libraries(vizion_core PUBLIC Threads::Threads)
+target_link_libraries(vizion_core PUBLIC Threads::Threads m)
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(vizion_core PRIVATE -fvisibility=hidden -Wall -Wextra -Wno-unused-parameter)
-    set_source_files_properties(src/threshold_scalar.c PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize")
+    set_source_files_properties(src/threshold_scalar.c src/region_runs.c PROPERTIES COMPILE_OPTIONS "-fno-tree-vectorize")
     set_source_files_properties(src/threshold_sse2.c PROPERTIES COMPILE_OPTIONS "-msse2")
     set_source_files_properties(src/threshold_avx2.c PROPERTIES COMPILE_OPTIONS "-mavx2")
 endif()

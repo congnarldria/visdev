@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--connection")
+{
+    ConnectionNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--threshold")
 {
     ThresholdNativeCheck();
@@ -859,6 +865,125 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void ConnectionNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    CompareConnection(new Region(8, 8, new[] { 0, 1 }, new[] { 0, 1 }, new[] { 1, 1 }), 1, "斜角");
+    CompareConnection(new Region(8, 8, new[] { 0, 1 }, new[] { 0, 2 }, new[] { 1, 1 }), 1, "隔開");
+    CompareConnection(new Region(10, 8, new[] { 1, 2, 3 }, new[] { 2, 2, 2 }, new[] { 4, 4, 4 }), 1, "方塊");
+    CompareConnection(new Region(6, 6, new[] { 1, 0 }, new[] { 0, 0 }, new[] { 1, 1 }), 1, "未排序");
+    var apart = new Region(4, 30, new[] { 0, 0 }, new[] { 0, 8 }, new[] { 1, 1 });
+    CompareConnection(apart, 1, "同一列");
+    CompareConnection(apart, 20, "距離合併");
+    var block = new Region(10, 8, new[] { 1, 2, 3 }, new[] { 2, 2, 2 }, new[] { 4, 4, 4 });
+    CompareFeatures(block, "方塊");
+    var center = Operators.AreaCenterOf(block)[0];
+    var box = Operators.Bounds(block)[0];
+    if (center.Area != 12 || Math.Abs(center.Row - 2) > 1e-9 || Math.Abs(center.Column - 3.5) > 1e-9)
+        throw new InvalidOperationException($"方塊中心不對 {center.Area} {center.Row} {center.Column}");
+    if (box.Row1 != 1 || box.Column1 != 2 || box.Row2 != 3 || box.Column2 != 5)
+        throw new InvalidOperationException("方塊外接框不對");
+
+    var rows = new List<int>();
+    var columns = new List<int>();
+    var lengths = new List<int>();
+    for (int row = 0; row < 400; row++)
+    {
+        for (int column = 0; column < 400; column++)
+        {
+            if (((row * 3 + column) & 3) != 0)
+                continue;
+            rows.Add(row);
+            columns.Add(column);
+            lengths.Add(1);
+        }
+    }
+    var scattered = new Region(400, 400, rows.ToArray(), columns.ToArray(), lengths.ToArray());
+    CompareConnection(scattered, 1, "散點");
+    CompareFeatures(scattered, "散點");
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = true;
+    Operators.Connection(scattered);
+    Operators.AreaCenterOf(scattered);
+    Operators.Bounds(scattered);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 8; i++)
+        Operators.Connection(scattered);
+    watch.Stop();
+    double nativeConnection = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.Connection(scattered);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        Operators.Connection(scattered);
+    watch.Stop();
+    double managedConnection = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = true;
+    watch.Restart();
+    for (int i = 0; i < 20; i++)
+    {
+        Operators.AreaCenterOf(scattered);
+        Operators.Bounds(scattered);
+    }
+    watch.Stop();
+    double nativeFeatures = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    watch.Restart();
+    for (int i = 0; i < 20; i++)
+    {
+        Operators.AreaCenterOf(scattered);
+        Operators.Bounds(scattered);
+    }
+    watch.Stop();
+    double managedFeatures = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("連通與區域特徵檢查通過");
+    Console.WriteLine($"散點 {rows.Count} 段共 8 次：原生 {nativeConnection:0.0} ms，C# {managedConnection:0.0} ms，加速 {managedConnection / nativeConnection:0.0} 倍");
+    Console.WriteLine($"面積與外接框 20 次：原生 {nativeFeatures:0.0} ms，C# {managedFeatures:0.0} ms，加速 {managedFeatures / nativeFeatures:0.0} 倍");
+}
+
+static void CompareConnection(Region region, double distance, string label)
+{
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managed = Operators.Connection(region, distance);
+    NativeCore.UseNative = true;
+    var native = Operators.Connection(region, distance);
+    NativeCore.UseNative = previous;
+    if (native.Length != managed.Length)
+        throw new InvalidOperationException($"{label} 連通 {native.Length} 個，C# {managed.Length} 個");
+    for (int i = 0; i < managed.Length; i++)
+        SameRegion(native[i], managed[i], label + " " + i);
+}
+
+static void CompareFeatures(Region region, string label)
+{
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedCenter = Operators.AreaCenterOf(region);
+    var managedBounds = Operators.Bounds(region);
+    NativeCore.UseNative = true;
+    var nativeCenter = Operators.AreaCenterOf(region);
+    var nativeBounds = Operators.Bounds(region);
+    NativeCore.UseNative = previous;
+    if (nativeCenter.Length != managedCenter.Length || nativeBounds.Length != managedBounds.Length)
+        throw new InvalidOperationException(label + " 特徵個數不同");
+    for (int i = 0; i < managedCenter.Length; i++)
+    {
+        if (nativeCenter[i].Area != managedCenter[i].Area
+            || Math.Abs(nativeCenter[i].Row - managedCenter[i].Row) > 1e-9
+            || Math.Abs(nativeCenter[i].Column - managedCenter[i].Column) > 1e-9)
+            throw new InvalidOperationException(label + " 面積或中心不同");
+    }
+    for (int i = 0; i < managedBounds.Length; i++)
+    {
+        if (nativeBounds[i].Row1 != managedBounds[i].Row1 || nativeBounds[i].Column1 != managedBounds[i].Column1
+            || nativeBounds[i].Row2 != managedBounds[i].Row2 || nativeBounds[i].Column2 != managedBounds[i].Column2)
+            throw new InvalidOperationException(label + " 外接框不同");
+    }
 }
 
 static void ThresholdNativeCheck()

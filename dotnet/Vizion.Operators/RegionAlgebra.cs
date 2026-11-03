@@ -881,6 +881,8 @@ public static partial class Operators
 
     static AxisRectangle BoundsOf(Region region)
     {
+        if (NativeCore.TryBounds(region, out int nativeRow1, out int nativeColumn1, out int nativeRow2, out int nativeColumn2))
+            return new AxisRectangle(nativeRow1, nativeColumn1, nativeRow2, nativeColumn2);
         int row1 = int.MaxValue;
         int column1 = int.MaxValue;
         int row2 = int.MinValue;

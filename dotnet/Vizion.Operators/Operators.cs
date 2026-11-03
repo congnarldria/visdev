@@ -109,6 +109,16 @@ public static partial class Operators
         int count = region.Rows.Length;
         if (count == 0)
             return Array.Empty<Region>();
+        if (!NativeCore.TryConnection(region, out Region[] objects))
+            objects = ConnectEight(region);
+        if (distance < 2 || objects.Length < 2)
+            return objects;
+        return MergeWithin(objects, distance);
+    }
+
+    static Region[] ConnectEight(Region region)
+    {
+        int count = region.Rows.Length;
         var order = new int[count];
         for (int i = 0; i < count; i++)
             order[i] = i;
@@ -212,9 +222,7 @@ public static partial class Operators
             }
             objects[objectIndex] = new Region(region.Width, region.Height, rows, columns, lengths);
         }
-        if (distance < 2 || objects.Length < 2)
-            return objects;
-        return MergeWithin(objects, distance);
+        return objects;
     }
 
     public readonly struct AreaCenter
@@ -270,6 +278,8 @@ public static partial class Operators
 
     static AreaCenter CenterOf(Region region)
     {
+        if (NativeCore.TryAreaCenter(region, out int nativeArea, out double nativeRow, out double nativeColumn))
+            return new AreaCenter(nativeArea, nativeRow, nativeColumn);
         long area = 0;
         double rowMoment = 0;
         double columnMoment = 0;
