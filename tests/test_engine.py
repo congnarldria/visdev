@@ -3602,6 +3602,59 @@ def test_inspect_line_template_counts_saves_ng_and_writes_csv():
         report.unlink(missing_ok=True)
 
 
+def test_line_result_goes_out_on_tcp_and_serial():
+    import shutil
+
+    from app.engine.chapters.line_out import format_line_result
+    from app.engine.chapters.serial_ops import _open_windows
+
+    assert "CreateFileW" in _open_windows.__code__.co_names
+
+    serial = run_source(
+        "Vizion.open_serial ('loopback', Port)\n"
+        "Vizion.send_line_result (Port, '不合格', 1, 2, 'ng_01.png')\n"
+        "Vizion.read_serial (Port, 24, Line)\n"
+    )
+    assert serial.error is None, serial.error
+    assert serial.vars["Line"] == "VISDEV,NG,1,2,ng_01.png\n"
+    assert format_line_result("合格", 3, 0, "ok_03.png") == "VISDEV,OK,3,0,ok_03.png\n"
+    refused = run_source(
+        "Vizion.open_serial ('loopback', Port)\n"
+        "Vizion.send_line_result (Port, 'maybe', 0, 0, 'a.png')\n"
+    )
+    assert refused.error and "判定只能是" in refused.error
+    comma = run_source(
+        "Vizion.open_serial ('loopback', Port)\n"
+        "Vizion.send_line_result (Port, 'OK', 0, 0, 'a,b.png')\n"
+    )
+    assert comma.error and "檔名" in comma.error
+
+    folder = ROOT / "workspace" / "line_ng"
+    report = ROOT / "workspace" / "line_out.csv"
+    shutil.rmtree(folder, ignore_errors=True)
+    report.unlink(missing_ok=True)
+    try:
+        session = run_source((ROOT / "samples" / "inspect_line_out.viz").read_text(encoding="utf-8"))
+        assert session.error is None, session.error
+        assert int(session.vars["OkCount"]) == 3
+        assert int(session.vars["NgCount"]) == 2
+        assert session.vars["Judge"] == "不合格"
+        assert session.vars["Wire"] == (
+            "VISDEV,NG,0,1,ng_01.png\n"
+            "VISDEV,NG,0,2,ng_02.png\n"
+            "VISDEV,OK,1,2,ok_01.png\n"
+            "VISDEV,OK,2,2,ok_02.png\n"
+            "VISDEV,OK,3,2,ok_03.png\n"
+        )
+        assert session.vars["Link"].closed is True
+        lines = report.read_text(encoding="utf-8").splitlines()
+        assert "1,ng_01.png,NG,0" in lines
+        assert "3,ok_01.png,OK,1" in lines
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+        report.unlink(missing_ok=True)
+
+
 def test_last_ng_and_csv_stay_inside_the_workspace():
     import pytest
     from fastapi import HTTPException

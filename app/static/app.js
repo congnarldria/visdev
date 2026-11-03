@@ -2550,6 +2550,9 @@ window.VisDevCommands = {
   lineCameraTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_line_camera.viz", "這是相機產線。編號 0。沒有相機時改跑檔案產線。執行中會看到合格和不合格。按停止就停。");
   },
+  lineOutTemplate() {
+    return VisDevCommands.openNamedTemplate("inspect_line_out.viz", "這是產線輸出。每一張送一行 VISDEV。這支用 loopback，Wire 是讀回來的字。合格仍是 3、不合格仍是 2。");
+  },
   locateTemplate() {
     return VisDevCommands.openNamedTemplate("inspect_locate.viz", "這是形狀定位範本。換場景和樣板，再按執行。");
   },
