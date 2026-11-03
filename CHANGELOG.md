@@ -30,8 +30,8 @@
 - 找線、找圓範例是 `samples/inspect_fit.viz`。直線有一個飛點，擬合後仍是列 0、行 0 到行 30。圓有一個飛點，圓心仍是列 50、行 80，半徑 20。C# 的 `Operators.FitLine`、`Operators.FitCircle` 用同一組點，建置方式在 `dotnet/README.md`。
 - 次像素邊緣範例是 `samples/inspect_edge.viz`。左半 0、右半 255 的階躍落在行 15.5，從列 0 到列 23。C# 的 `Operators.EdgesSubPix` 用同一張圖，得到同一個位置。差幾個灰階的雜訊不會留下。
 - C# 的 `Operators.FindShape` 用 `samples/shape_template.png` 和 `samples/shapes_scene.png`，教導框 15 到 164，找到 4 個。位置和 Python 差在 1.5 像素以內，角度差在 1 度以內。粗搜在高斯金字塔上，原圖再用拋物線和沿邊緣法線的最小二乘修列、行、角度。Windows 執行時仍用 `visdev_match.pyd`，分數仍高於 0.9。C# 的分數不是 `.pyd` 的分數。說明在 `dotnet/README.md`。
-- C# 的 `Operators.FindNcc` 用同一張樣板和場景。粗圖做灰階正規相關，原圖再用拋物線修列、行和角度。4 個姿態和 Python 差在 1 像素、1.5 度以內。`ignoreGlobalPolarity` 為真時黑白對調仍算對上，沒開則不算。不改 `find_ncc_model` 的結果。
-- C# 的 `CalibPlate.Parse("5,7,10")` 是內角點 5 列、7 行、方格邊長 10，角點 35 個。物點從 (0,0,0) 到 (60,40,0)。不估計相機的九個參數，也不讀六角形標定板。
+- C# 的 `Operators.FindNcc` 用同一張樣板和場景。粗圖做灰階正規相關，原圖用 Keys 三次內插修列、行和角度，平坦的峰留在取樣點上，接著沿灰階梯度做 Lucas-Kanade。分數沒有變好就不留下。4 個姿態和 Python 差在 1 像素、1.5 度以內。`ignoreGlobalPolarity` 為真時黑白對調仍算對上，沒開則不算。不改 `find_ncc_model` 的結果。
+- C# 的 `CalibPlate.Parse("5,7,10")` 是內角點 5 列、7 行、方格邊長 10，角點 35 個。物點從 (0,0,0) 到 (60,40,0)。`CalibPlate.ParseDots` 讀 `samples/calplate_4x5.cpd` 的文字：4 列 5 行、20 個標記、間距 0.01、第一點 (0, 0.03, 0)。尋找標記略過，不做對位。不估計相機的九個參數，也不做六角形標定板。
 - 產線相機用編號 0 連續抓圖，規則和產線相同。Windows 仍先問 DirectShow，打不開再試 OpenCV。按停止就停，已經計的張數留著，相機和 CSV 會關掉。明細在 `workspace/line_camera.csv`。
 - 沒有相機時，錯誤訊息會請改跑檔案、範本裡的產線，用 `samples/line_batch`。抓不到畫面也一樣。程式出錯會關掉相機和 CSV，已經計的張數和畫面留著。
 - 產線執行中，狀態列會寫出合格、不合格和總數。相機明細每一列是這張的 OK 或 NG。再跑一次會先清掉 `workspace/line_ng` 裡上一輪的圖。相機要先打開才清，打不開時上一輪的圖還在。

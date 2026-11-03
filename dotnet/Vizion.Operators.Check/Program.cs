@@ -80,6 +80,26 @@ static void SelfTest()
     catch (ArgumentException)
     {
     }
+    var dotPlate = CalibPlate.ParseDots(File.ReadAllText(SampleFile("calplate_4x5.cpd")));
+    if (dotPlate.Rows != 4 || dotPlate.Columns != 5 || dotPlate.MarkCount != 20 || dotPlate.Polarity != "light")
+        throw new InvalidOperationException($"圓點板應是 4 列 5 行、20 點、亮標記，得到 {dotPlate.Rows}x{dotPlate.Columns} {dotPlate.MarkCount} {dotPlate.Polarity}");
+    if (Math.Abs(dotPlate.Square - 0.01) > 1e-9)
+        throw new InvalidOperationException($"圓點間距應是 0.01，得到 {dotPlate.Square}");
+    var firstDot = dotPlate.Point(0);
+    var lastDot = dotPlate.Point(19);
+    if (firstDot != (0, 0.03, 0) || dotPlate.Point(4) != (0.04, 0.03, 0) || dotPlate.Point(5) != (0, 0.02, 0) || lastDot != (0.04, 0, 0))
+        throw new InvalidOperationException($"圓點應從 (0,0.03,0) 到 (0.04,0,0)，得到 {firstDot} {dotPlate.Point(4)} {dotPlate.Point(5)} {lastDot}");
+    try
+    {
+        CalibPlate.ParseDots("r 2\nc 2\n0 0 0.1\n");
+        throw new InvalidOperationException("標記數和列乘行不合時不該被接受");
+    }
+    catch (ArgumentException)
+    {
+    }
+    var dark = CalibPlate.ParseDots("r 2\nc 2\np dark\n0 1 0.1\n1 1 0.1\n0 0 0.1\n1 0 0.1\n");
+    if (dark.Polarity != "dark" || dark.Point(0) != (0, 1, 0) || Math.Abs(dark.Square - 1) > 1e-9)
+        throw new InvalidOperationException($"暗標記應從 (0,1,0) 起、間距 1，得到 {dark.Polarity} {dark.Point(0)} {dark.Square}");
 
     var block = new byte[64 * 64];
     for (int row = 16; row < 48; row++)

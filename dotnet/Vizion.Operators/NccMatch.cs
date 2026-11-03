@@ -2,7 +2,9 @@ namespace Vizion;
 
 /// <summary>
 /// 簡化的正規相關。教導框中心是原點。
-/// 先在高斯金字塔的粗圖上搜尋角度和位置，再回到原圖用分數曲面的拋物線修列和行。
+/// 先在高斯金字塔的粗圖上搜尋角度和位置，再回到原圖。
+/// 分數用 Keys 三次內插。平坦的峰留在取樣點上。接著沿灰階梯度做 Lucas-Kanade。
+/// 分數沒有變好就不採用。Lucas-Kanade 不改角度。
 /// 這不是 find_ncc_model，也不使用 visdev_match.pyd。分數是灰階的相關係數。
 /// ignoreGlobalPolarity 為真時取絕對值，黑白對調仍算對上。
 /// </summary>
@@ -83,7 +85,10 @@ public static partial class Operators
             var posed = SnapNcc(hit, full, ignoreGlobalPolarity);
             posed = PolishNccAngle(posed, full, ignoreGlobalPolarity);
             posed = SnapNcc(posed, full, ignoreGlobalPolarity);
-            posed = ParabolicNcc(posed, full, ignoreGlobalPolarity);
+            posed = InterpolateNcc(posed, full, ignoreGlobalPolarity);
+            var fitted = LucasKanade(posed, full, ignoreGlobalPolarity);
+            if (fitted.Score + 1e-4 >= posed.Score)
+                posed = fitted;
             posed = posed with { Angle = WrapAngle(posed.Angle) };
             if (posed.Score >= minScore)
                 refined.Add(posed);
@@ -266,37 +271,230 @@ public static partial class Operators
         return sum / 5.0;
     }
 
-    static NccHit ParabolicNcc(NccHit hit, NccLevel field, bool absolute)
+    static NccHit InterpolateNcc(NccHit hit, NccLevel field, bool absolute)
     {
         double row = hit.Row;
         double col = hit.Column;
         double angle = hit.Angle;
         double step = 0.8 * Math.PI / 180.0;
-        const double spacing = 0.5;
-        for (int pass = 0; pass < 2; pass++)
-        {
-            RotateNcc(field.Points, angle, out float[] rx, out float[] ry, out float[] val);
-            double center = Correlate(field.Gray, field.Width, field.Height, rx, ry, val, col, row, absolute);
-            double At(double c, double r, float[] px, float[] py, float[] pv) =>
-                Correlate(field.Gray, field.Width, field.Height, px, py, pv, c, r, absolute);
-            double dRow = Parabola(At(col, row - spacing, rx, ry, val), center, At(col, row + spacing, rx, ry, val));
-            double dCol = Parabola(At(col - spacing, row, rx, ry, val), center, At(col + spacing, row, rx, ry, val));
-            RotateNcc(field.Points, angle - step, out float[] rx0, out float[] ry0, out float[] val0);
-            RotateNcc(field.Points, angle + step, out float[] rx1, out float[] ry1, out float[] val1);
-            double dAngle = Parabola(
-                Correlate(field.Gray, field.Width, field.Height, rx0, ry0, val0, col, row, absolute),
-                center,
-                Correlate(field.Gray, field.Width, field.Height, rx1, ry1, val1, col, row, absolute));
-            row += dRow * spacing;
-            col += dCol * spacing;
-            angle += dAngle * step;
-            step *= 0.5;
-        }
+        row = AxisPeak(field, absolute, angle, col, row, alongRow: true, spacing: 1);
+        col = AxisPeak(field, absolute, angle, col, row, alongRow: false, spacing: 1);
+        angle = AxisPeak(field, absolute, angle, col, row, alongRow: true, spacing: step, angleAxis: true);
         RotateNcc(field.Points, angle, out float[] fx, out float[] fy, out float[] fv);
         double score = Correlate(field.Gray, field.Width, field.Height, fx, fy, fv, col, row, absolute);
         if (score + 1e-4 < hit.Score)
             return hit;
         return new NccHit(row, col, angle, score);
+    }
+
+    static double AxisPeak(NccLevel field, bool absolute, double angle, double column, double row, bool alongRow, double spacing, bool angleAxis = false)
+    {
+        double[] At(double origin)
+        {
+            var samples = new double[5];
+            for (int index = 0; index < 5; index++)
+            {
+                double delta = (index - 2) * spacing;
+                double sampleRow = row;
+                double sampleCol = column;
+                double sampleAngle = angle;
+                if (angleAxis)
+                    sampleAngle = origin + delta;
+                else if (alongRow)
+                    sampleRow = origin + delta;
+                else
+                    sampleCol = origin + delta;
+                RotateNcc(field.Points, sampleAngle, out float[] rx, out float[] ry, out float[] val);
+                samples[index] = Correlate(field.Gray, field.Width, field.Height, rx, ry, val, sampleCol, sampleRow, absolute);
+            }
+            return samples;
+        }
+        double center = angleAxis ? angle : alongRow ? row : column;
+        double[] window = At(center);
+        double offset = KeysPeak(window);
+        if (Math.Abs(offset) > 1)
+        {
+            center += offset < 0 ? -spacing : spacing;
+            offset = KeysPeak(At(center));
+            if (offset < -1)
+                offset = -1;
+            if (offset > 1)
+                offset = 1;
+        }
+        return center + offset * spacing;
+    }
+
+    static double KeysWeight(double distance)
+    {
+        double span = Math.Abs(distance);
+        if (span < 1)
+            return ((1.5 * span - 2.5) * span * span) + 1;
+        if (span < 2)
+            return ((-0.5 * span + 2.5) * span - 4) * span + 2;
+        return 0;
+    }
+
+    /// <summary>五個相鄰分數上的 Keys 三次峰。索引 2 是目前的取樣點。平坦就留在原點。</summary>
+    static double KeysPeak(double[] samples)
+    {
+        double peak = samples[0];
+        double lowest = samples[0];
+        for (int index = 1; index < samples.Length; index++)
+        {
+            if (samples[index] > peak)
+                peak = samples[index];
+            if (samples[index] < lowest)
+                lowest = samples[index];
+        }
+        if (peak <= 0 || peak - lowest < 1e-4)
+            return 0;
+        int best = 2;
+        double bestDist = 99;
+        bool found = false;
+        for (int index = 0; index < samples.Length; index++)
+        {
+            if (samples[index] < peak - 1e-5)
+                continue;
+            double dist = Math.Abs(index - 2);
+            if (!found || dist < bestDist || (dist == bestDist && index < best))
+            {
+                found = true;
+                best = index;
+                bestDist = dist;
+            }
+        }
+        if (best == 0 || best == samples.Length - 1)
+            return best - 2;
+        double center = samples[best];
+        if (Math.Min(center - samples[best - 1], center - samples[best + 1]) < 2e-3)
+            return best - 2;
+        double bestPos = best;
+        double bestValue = -1e9;
+        for (double position = best - 1; position <= best + 1.0 + 1e-9; position += 0.01)
+        {
+            double value = 0;
+            for (int index = 0; index < samples.Length; index++)
+                value += KeysWeight(position - index) * samples[index];
+            if (value > bestValue + 1e-8)
+            {
+                bestValue = value;
+                bestPos = position;
+            }
+        }
+        return bestPos - 2.0;
+    }
+
+    /// <summary>沿灰階梯度修列和行。角度不動。候選的分數變差就退回半步，十次都沒有更好就停。</summary>
+    static NccHit LucasKanade(NccHit hit, NccLevel field, bool absolute)
+    {
+        NccPoint[] points = field.Points;
+        int step = Math.Max(1, (int)Math.Ceiling(points.Length / 500.0));
+        int count = 0;
+        for (int i = 0; i < points.Length; i += step)
+            count++;
+        var offsetCol = new float[count];
+        var offsetRow = new float[count];
+        var template = new float[count];
+        double cosine = Math.Cos(hit.Angle);
+        double sine = Math.Sin(hit.Angle);
+        int written = 0;
+        for (int i = 0; i < points.Length; i += step)
+        {
+            offsetCol[written] = (float)(points[i].X * cosine + points[i].Y * sine);
+            offsetRow[written] = (float)(-points[i].X * sine + points[i].Y * cosine);
+            template[written] = points[i].Value;
+            written++;
+        }
+        RotateNcc(points, hit.Angle, out float[] allX, out float[] allY, out float[] allValue);
+        double row = hit.Row;
+        double col = hit.Column;
+        double best = hit.Score;
+        var image = new double[count];
+        var slopeCol = new double[count];
+        var slopeRow = new double[count];
+        var reference = new double[count];
+        for (int turn = 0; turn < 10; turn++)
+        {
+            int kept = 0;
+            for (int i = 0; i < count; i++)
+            {
+                double x = col + offsetCol[i];
+                double y = row + offsetRow[i];
+                if (!Sample(field.Gray, field.Width, field.Height, x, y, out float center))
+                    continue;
+                if (!Sample(field.Gray, field.Width, field.Height, x + 0.5, y, out float right))
+                    continue;
+                if (!Sample(field.Gray, field.Width, field.Height, x - 0.5, y, out float left))
+                    continue;
+                if (!Sample(field.Gray, field.Width, field.Height, x, y + 0.5, out float down))
+                    continue;
+                if (!Sample(field.Gray, field.Width, field.Height, x, y - 0.5, out float up))
+                    continue;
+                reference[kept] = template[i];
+                image[kept] = center;
+                slopeCol[kept] = right - left;
+                slopeRow[kept] = down - up;
+                kept++;
+            }
+            if (kept < 16)
+                break;
+            double meanRef = 0, meanImage = 0, meanCol = 0, meanRow = 0;
+            for (int i = 0; i < kept; i++)
+            {
+                meanRef += reference[i];
+                meanImage += image[i];
+                meanCol += slopeCol[i];
+                meanRow += slopeRow[i];
+            }
+            meanRef /= kept;
+            meanImage /= kept;
+            meanCol /= kept;
+            meanRow /= kept;
+            double a00 = 0, a01 = 0, a11 = 0, b0 = 0, b1 = 0;
+            for (int i = 0; i < kept; i++)
+            {
+                double residual = (reference[i] - meanRef) - (image[i] - meanImage);
+                double jacCol = slopeCol[i] - meanCol;
+                double jacRow = slopeRow[i] - meanRow;
+                a00 += jacCol * jacCol;
+                a01 += jacCol * jacRow;
+                a11 += jacRow * jacRow;
+                b0 += jacCol * residual;
+                b1 += jacRow * residual;
+            }
+            if (!SolveTranslation(a00, a01, a11, b0, b1, out double dCol, out double dRow))
+                break;
+            bool accepted = false;
+            double nextRow = row;
+            double nextCol = col;
+            for (double scale = 1; scale >= 0.1 - 1e-12; scale *= 0.5)
+            {
+                double stepCol = dCol * scale;
+                double stepRow = dRow * scale;
+                if (stepCol < -0.6) stepCol = -0.6;
+                if (stepCol > 0.6) stepCol = 0.6;
+                if (stepRow < -0.6) stepRow = -0.6;
+                if (stepRow > 0.6) stepRow = 0.6;
+                double candCol = col + stepCol;
+                double candRow = row + stepRow;
+                double cand = Correlate(field.Gray, field.Width, field.Height, allX, allY, allValue, candCol, candRow, absolute);
+                if (cand + 1e-6 >= best)
+                {
+                    nextRow = candRow;
+                    nextCol = candCol;
+                    best = cand;
+                    accepted = true;
+                    break;
+                }
+            }
+            if (!accepted || Math.Abs(nextRow - row) + Math.Abs(nextCol - col) < 1e-3)
+                break;
+            row = nextRow;
+            col = nextCol;
+        }
+        if (Math.Abs(row - hit.Row) + Math.Abs(col - hit.Column) <= 1e-3)
+            return hit;
+        return new NccHit(row, col, hit.Angle, best);
     }
 
     static double Correlate(float[] gray, int width, int height, float[] x, float[] y, float[] value, double column, double row, bool absolute = false)

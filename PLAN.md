@@ -1,8 +1,10 @@
 # VisDev 1.1
 
-C# 正規相關已經能用。`Operators.FindNcc` 用 `shape_template.png` 和 `shapes_scene.png`，教導框 15 到 164。先在高斯金字塔的粗圖做灰階相關，再回到原圖。分數平頂取中心，再用拋物線修列、行和角度。4 個姿態和 Python 差在 1 像素、1.5 度以內。`ignoreGlobalPolarity` 為真時，黑白對調仍算對上；沒開則不算。不改 `find_ncc_model`，也不改 `.pyd`。
+矩形圓點板的 C# 參考已經能讀描述文字。`CalibPlate.ParseDots` 讀 `samples/calplate_4x5.cpd`：4 列、5 行、20 個標記、間距 0.01 公尺、亮標記。第一點是 (0, 0.03, 0)，最後一點是 (0.04, 0, 0)，和 Python 一樣按 Y 由大到小、X 由小到大排。尋找標記那一行略過，不做對位。不估計相機的九個參數。棋盤 `'5,7,10'` 仍是 5 列、7 行、邊長 10、35 個角點，物點從 (0,0,0) 到 (60,40,0)。`Parse` 仍不把路徑當成棋盤。
 
-形狀比對的 C# 仍先在粗圖搜尋，再沿邊緣法線做最小二乘。那 4 個和 Python 差在 1.5 像素、1 度以內。`inspect_locate.viz` 的分數仍高於 0.9。棋盤 `'5,7,10'` 仍是 5 列、7 行、邊長 10、35 個角點。次像素邊緣仍是行 15.5。找線、找圓的飛點仍拉不走。Visual Studio 開 `dotnet/Vizion.Display.sln`，起始專案 `Vizion.Operators.Check`，按 F5。說明在 `dotnet/README.md`。
+C# 正規相關先用 Keys 三次內插修列、行和角度。平坦的峰留在取樣點上。接著沿灰階梯度做 Lucas-Kanade，只修列和行。分數沒有變好就不留下。`shapes_scene.png` 的 4 個姿態仍和 Python 差在 1 像素、1.5 度以內。`ignoreGlobalPolarity` 為真時黑白對調仍算對上。不改 `find_ncc_model`，也不改 `.pyd`。
+
+形狀比對的 C# 仍先在粗圖搜尋，再沿邊緣法線做最小二乘。那 4 個和 Python 差在 1.5 像素、1 度以內。`inspect_locate.viz` 的分數仍高於 0.9。次像素邊緣仍是行 15.5。找線、找圓的飛點仍拉不走。Visual Studio 開 `dotnet/Vizion.Display.sln`，起始專案 `Vizion.Operators.Check`，按 F5。說明在 `dotnet/README.md`。
 
 最近開過的程式沒有做。孔距不做。
 
@@ -10,7 +12,7 @@ Windows 仍用 `app/engine/visdev_match.pyd`。開相機仍先問 DirectShow，�
 
 ## 下一項
 
-C# 正規相關的列、行再沿灰階梯度做一次 Lucas-Kanade，對齊 Python `least_squares` 的那一步。現在的拋物線已經把 4 個姿態收到 1 像素以內。這一步只在分數沒有變差時才留下。不改 `find_ncc_model` 的結果，也不改 `.pyd`。
+C# 形狀比對的列、行、角度內插也改用同一套 Keys 三次。平坦的峰留在取樣點上。只在分數沒有變差時才取代現在的拋物線，沿邊緣法線的最小二乘仍接在後面。不改 `visdev_match.pyd`，`inspect_locate.viz` 的分數仍要高於 0.9。
 
 先不要做這些：最近開過的程式、孔和孔的間距、六角形標定板的尋找標記對位、更多 Modbus 功能碼、不合格圖的上一張下一張、編輯器局部更新、公差列再改版。`'5,7,10'` 和矩形圓點板維持可用。
 
