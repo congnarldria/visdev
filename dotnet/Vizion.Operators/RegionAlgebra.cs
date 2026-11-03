@@ -281,45 +281,57 @@ public static partial class Operators
 
     public static Region Complement(IReadOnlyList<Region> regions) => Invert(Union(regions));
 
+    /// <summary>矩形膨脹。直接改行程，不把區域畫成遮罩。偶數寬高會加 1。</summary>
     public static Region DilateRectangle(Region region, int width, int height) =>
         Morphology(new[] { region }, width, height, "dilate");
 
     public static Region DilateRectangle(IReadOnlyList<Region> regions, int width, int height) =>
         Morphology(regions, width, height, "dilate");
 
+    /// <summary>矩形侵蝕。直接改行程，不把區域畫成遮罩。偶數寬高會加 1。</summary>
     public static Region ErodeRectangle(Region region, int width, int height) =>
         Morphology(new[] { region }, width, height, "erode");
 
     public static Region ErodeRectangle(IReadOnlyList<Region> regions, int width, int height) =>
         Morphology(regions, width, height, "erode");
 
+    /// <summary>矩形開運算。先侵蝕再膨脹，兩步都在行程上做。</summary>
     public static Region OpenRectangle(Region region, int width, int height) =>
-        Morphology(new[] { region }, width, height, "open");
+        DilateRectangle(ErodeRectangle(region, width, height), width, height);
 
     public static Region OpenRectangle(IReadOnlyList<Region> regions, int width, int height) =>
-        Morphology(regions, width, height, "open");
+        DilateRectangle(ErodeRectangle(regions, width, height), width, height);
 
+    /// <summary>矩形閉運算。先膨脹再侵蝕，兩步都在行程上做。</summary>
     public static Region CloseRectangle(Region region, int width, int height) =>
-        Morphology(new[] { region }, width, height, "close");
+        ErodeRectangle(DilateRectangle(region, width, height), width, height);
 
     public static Region CloseRectangle(IReadOnlyList<Region> regions, int width, int height) =>
-        Morphology(regions, width, height, "close");
+        ErodeRectangle(DilateRectangle(regions, width, height), width, height);
 
+    /// <summary>圓形膨脹。結構元素是實心圓，運算在行程上做。</summary>
     public static Region DilateCircle(Region region, double radius) => Circle(new[] { region }, radius, "dilate");
 
     public static Region DilateCircle(IReadOnlyList<Region> regions, double radius) => Circle(regions, radius, "dilate");
 
+    /// <summary>圓形侵蝕。結構元素是實心圓，運算在行程上做。</summary>
     public static Region ErodeCircle(Region region, double radius) => Circle(new[] { region }, radius, "erode");
 
     public static Region ErodeCircle(IReadOnlyList<Region> regions, double radius) => Circle(regions, radius, "erode");
 
-    public static Region OpenCircle(Region region, double radius) => Circle(new[] { region }, radius, "open");
+    /// <summary>圓形開運算。先侵蝕再膨脹，兩步都在行程上做。</summary>
+    public static Region OpenCircle(Region region, double radius) =>
+        DilateCircle(ErodeCircle(region, radius), radius);
 
-    public static Region OpenCircle(IReadOnlyList<Region> regions, double radius) => Circle(regions, radius, "open");
+    public static Region OpenCircle(IReadOnlyList<Region> regions, double radius) =>
+        DilateCircle(ErodeCircle(regions, radius), radius);
 
-    public static Region CloseCircle(Region region, double radius) => Circle(new[] { region }, radius, "close");
+    /// <summary>圓形閉運算。先膨脹再侵蝕，兩步都在行程上做。</summary>
+    public static Region CloseCircle(Region region, double radius) =>
+        ErodeCircle(DilateCircle(region, radius), radius);
 
-    public static Region CloseCircle(IReadOnlyList<Region> regions, double radius) => Circle(regions, radius, "close");
+    public static Region CloseCircle(IReadOnlyList<Region> regions, double radius) =>
+        ErodeCircle(DilateCircle(regions, radius), radius);
 
     public static Region Boundary(Region region, string kind) => BoundaryOf(new[] { region }, kind);
 
@@ -687,6 +699,36 @@ public static partial class Operators
         return FromRuns(region.Width, region.Height, runs);
     }
 
+    static bool TryNativeRuns(List<Run> source, int width, int height, int kernelWidth, int kernelHeight, bool dilate, out Region region)
+    {
+        int count = source.Count;
+        var rows = new int[count];
+        var columns = new int[count];
+        var lengths = new int[count];
+        for (int index = 0; index < count; index++)
+        {
+            rows[index] = source[index].Row;
+            columns[index] = source[index].Start;
+            lengths[index] = source[index].End - source[index].Start + 1;
+        }
+        return NativeCore.TryRegionRect(rows, columns, lengths, width, height, kernelWidth, kernelHeight, dilate, out region);
+    }
+
+    static bool TryNativeDisk(List<Run> source, int width, int height, double radius, bool dilate, out Region region)
+    {
+        int count = source.Count;
+        var rows = new int[count];
+        var columns = new int[count];
+        var lengths = new int[count];
+        for (int index = 0; index < count; index++)
+        {
+            rows[index] = source[index].Row;
+            columns[index] = source[index].Start;
+            lengths[index] = source[index].End - source[index].Start + 1;
+        }
+        return NativeCore.TryRegionDisk(rows, columns, lengths, width, height, radius, dilate, out region);
+    }
+
     static Region Morphology(IReadOnlyList<Region> regions, int width, int height, string mode)
     {
         if (regions == null || regions.Count == 0)
@@ -696,12 +738,12 @@ public static partial class Operators
         int radiusColumn = wide / 2;
         int radiusRow = high / 2;
         var source = RunsOf(Union(regions));
+        if (TryNativeRuns(source, regions[0].Width, regions[0].Height, wide, high, mode == "dilate", out Region nativeRect))
+            return nativeRect;
         List<Run> result = mode switch
         {
             "dilate" => Dilate(source, regions[0].Width, regions[0].Height, radiusColumn, radiusRow),
             "erode" => Erode(source, regions[0].Width, regions[0].Height, radiusColumn, radiusRow),
-            "open" => Dilate(Erode(source, regions[0].Width, regions[0].Height, radiusColumn, radiusRow), regions[0].Width, regions[0].Height, radiusColumn, radiusRow),
-            "close" => Erode(Dilate(source, regions[0].Width, regions[0].Height, radiusColumn, radiusRow), regions[0].Width, regions[0].Height, radiusColumn, radiusRow),
             _ => throw new ArgumentException(mode),
         };
         return FromRuns(regions[0].Width, regions[0].Height, result);
@@ -717,12 +759,12 @@ public static partial class Operators
         int width = regions[0].Width;
         int height = regions[0].Height;
         var source = RunsOf(regions.Count == 1 ? regions[0] : Union(regions));
+        if (TryNativeDisk(source, width, height, radius, mode == "dilate", out Region nativeDisk))
+            return nativeDisk;
         List<Run> result = mode switch
         {
             "dilate" => DilateOffsets(source, offsets, width, height),
             "erode" => ErodeOffsets(source, offsets, width, height),
-            "open" => DilateOffsets(ErodeOffsets(source, offsets, width, height), offsets, width, height),
-            "close" => ErodeOffsets(DilateOffsets(source, offsets, width, height), offsets, width, height),
             _ => throw new ArgumentException(mode),
         };
         return FromRuns(width, height, result);

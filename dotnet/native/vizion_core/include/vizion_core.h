@@ -55,6 +55,26 @@ VIZION_EXPORT int VIZION_CALL vizion_bounds(
 
 VIZION_EXPORT int VIZION_CALL vizion_region_selftest(void);
 
+/* 灰階矩形原點是 k/2，不把偶數補成奇數。dilate 非 0 表示膨脹，圖外膨脹當 0、侵蝕當 255。 */
+VIZION_EXPORT int VIZION_CALL vizion_gray_rect(
+    const uint8_t* src, uint8_t* dst, int width, int height, int mask_height, int mask_width, int dilate);
+
+VIZION_EXPORT int VIZION_CALL vizion_gray_ellipse(
+    const uint8_t* src, uint8_t* dst, int width, int height, int radius, int dilate);
+
+/* 區域矩形偶數寬高會加 1。out 傳 NULL 時只回傳段數。 */
+VIZION_EXPORT int VIZION_CALL vizion_region_rect(
+    const int* rows, const int* columns, const int* lengths, int count,
+    int width, int height, int kernel_width, int kernel_height, int dilate,
+    int* out_rows, int* out_columns, int* out_lengths, int capacity, int* written);
+
+VIZION_EXPORT int VIZION_CALL vizion_region_disk(
+    const int* rows, const int* columns, const int* lengths, int count,
+    int width, int height, double radius, int dilate,
+    int* out_rows, int* out_columns, int* out_lengths, int capacity, int* written);
+
+VIZION_EXPORT int VIZION_CALL vizion_morph_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

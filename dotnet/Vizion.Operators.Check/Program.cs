@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--morph")
+{
+    MorphNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--connection")
 {
     ConnectionNativeCheck();
@@ -865,6 +871,101 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void MorphNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var speck = new byte[7 * 7];
+    for (int row = 1; row <= 3; row++)
+        for (int column = 1; column <= 3; column++)
+            speck[row * 7 + column] = 180;
+    speck[3 * 7 + 3] = 200;
+    speck[5 * 7 + 5] = 200;
+    var eroded = Operators.GrayErosion(ImageBuffer.Gray(7, 7, speck), 3, 3);
+    var dilated = Operators.GrayDilation(ImageBuffer.Gray(7, 7, speck), 3, 3);
+    if (eroded.Pixels[2 * 7 + 2] != 180 || eroded.Pixels[3 * 7 + 3] != 0)
+        throw new InvalidOperationException("灰階 3x3 侵蝕和 Python 不同");
+    if (dilated.Pixels[0] != 180 || dilated.Pixels[4 * 7 + 4] != 200 || dilated.Pixels[6 * 7 + 6] != 200 || dilated.Pixels[5] != 0)
+        throw new InvalidOperationException("灰階 3x3 膨脹和 Python 不同");
+    var opened = Operators.GrayOpenRectangle(ImageBuffer.Gray(7, 7, speck), 3, 3);
+    if (opened.Pixels[3 * 7 + 3] != 180 || opened.Pixels[5 * 7 + 5] != 0 || opened.Pixels[0] != 0)
+        throw new InvalidOperationException("灰階開運算應先侵蝕再膨脹");
+    var even = new byte[16];
+    even[1 * 4 + 1] = 200;
+    even[2 * 4 + 2] = 50;
+    var evenDilated = Operators.GrayDilation(ImageBuffer.Gray(4, 4, even), 2, 2);
+    if (evenDilated.Pixels[1 * 4 + 1] != 200 || evenDilated.Pixels[1 * 4 + 2] != 200 || evenDilated.Pixels[2 * 4 + 3] != 50 || evenDilated.Pixels[3 * 4 + 3] != 50)
+        throw new InvalidOperationException("偶數 2x2 膨脹和 OpenCV 不同");
+    var dot = new byte[25];
+    dot[12] = 255;
+    var round = Operators.GrayDilationCircle(ImageBuffer.Gray(5, 5, dot), 2);
+    if (round.Pixels[0] != 0 || round.Pixels[2] != 255 || round.Pixels[5] != 255 || round.Pixels[6] != 255 || round.Pixels[1] != 0)
+        throw new InvalidOperationException("半徑 2 的圓形膨脹和 OpenCV 橢圓不同");
+    CompareGray(speck, 7, 7, 3, 4, 2);
+
+    var block = new Region(9, 9, new[] { 3, 4, 5 }, new[] { 3, 3, 3 }, new[] { 3, 3, 3 });
+    SameRegion(Operators.ErodeRectangle(block, 3, 3), new Region(9, 9, new[] { 4 }, new[] { 4 }, new[] { 1 }), "區域侵蝕");
+    SameRegion(Operators.DilateRectangle(block, 2, 2), new Region(9, 9, new[] { 2, 3, 4, 5, 6 }, new[] { 2, 2, 2, 2, 2 }, new[] { 5, 5, 5, 5, 5 }), "偶數矩形膨脹");
+    SameRegion(Operators.OpenRectangle(block, 3, 3), block, "區域開運算");
+    SameRegion(Operators.DilateCircle(block, 1), new Region(9, 9, new[] { 2, 3, 4, 5, 6 }, new[] { 3, 2, 2, 2, 3 }, new[] { 3, 5, 5, 5, 3 }), "圓形膨脹");
+    SameRegion(Operators.OpenCircle(block, 1), Operators.DilateCircle(Operators.ErodeCircle(block, 1), 1), "圓形開運算");
+    CompareRegion(block, 4, 5, 2.5);
+
+    var bench = new byte[1920 * 1080];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)((i * 17) & 255);
+    var benchImage = ImageBuffer.Gray(1920, 1080, bench);
+    Operators.GrayErosion(benchImage, 9, 9);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 4; i++)
+        Operators.GrayErosion(benchImage, 9, 9);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    Operators.GrayErosion(benchImage, 9, 9);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.GrayErosion(benchImage, 9, 9);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("型態學原生檢查通過");
+    Console.WriteLine($"1920x1080 的 9x9 侵蝕共 4 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void CompareGray(byte[] pixels, int width, int height, int maskHeight, int maskWidth, int radius)
+{
+    bool previous = NativeCore.UseNative;
+    var image = ImageBuffer.Gray(width, height, pixels);
+    NativeCore.UseNative = false;
+    var managed = Operators.GrayErosion(image, maskHeight, maskWidth);
+    var managedCircle = Operators.GrayDilationCircle(image, radius);
+    NativeCore.UseNative = true;
+    var native = Operators.GrayErosion(image, maskHeight, maskWidth);
+    var nativeCircle = Operators.GrayDilationCircle(image, radius);
+    NativeCore.UseNative = previous;
+    if (!managed.Pixels.AsSpan().SequenceEqual(native.Pixels) || !managedCircle.Pixels.AsSpan().SequenceEqual(nativeCircle.Pixels))
+        throw new InvalidOperationException("灰階型態學和 C# 後備不同");
+}
+
+static void CompareRegion(Region region, int width, int height, double radius)
+{
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managed = Operators.ErodeRectangle(region, width, height);
+    var managedDisk = Operators.DilateCircle(region, radius);
+    var managedOpen = Operators.OpenRectangle(region, width, height);
+    NativeCore.UseNative = true;
+    var native = Operators.ErodeRectangle(region, width, height);
+    var nativeDisk = Operators.DilateCircle(region, radius);
+    var nativeOpen = Operators.OpenRectangle(region, width, height);
+    NativeCore.UseNative = previous;
+    SameRegion(native, managed, "矩形侵蝕後備");
+    SameRegion(nativeDisk, managedDisk, "圓形膨脹後備");
+    SameRegion(nativeOpen, managedOpen, "開運算後備");
 }
 
 static void ConnectionNativeCheck()

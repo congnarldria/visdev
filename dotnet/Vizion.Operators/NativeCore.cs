@@ -138,6 +138,23 @@ public static class NativeCore
         int[] rows, int[] columns, int[] lengths, int count,
         out int row1, out int column1, out int row2, out int column2);
 
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_rect(byte[] source, byte[] destination, int width, int height, int maskHeight, int maskWidth, int dilate);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_ellipse(byte[] source, byte[] destination, int width, int height, int radius, int dilate);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_region_rect(
+        int[] rows, int[] columns, int[] lengths, int count, int width, int height,
+        int kernelWidth, int kernelHeight, int dilate,
+        int[]? outRows, int[]? outColumns, int[]? outLengths, int capacity, out int written);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_region_disk(
+        int[] rows, int[] columns, int[] lengths, int count, int width, int height, double radius, int dilate,
+        int[]? outRows, int[]? outColumns, int[]? outLengths, int capacity, out int written);
+
     public static bool TryConnection(Region region, out Region[] objects)
     {
         objects = Array.Empty<Region>();
@@ -192,6 +209,92 @@ public static class NativeCore
         try
         {
             return vizion_area_center(region.Rows, region.Columns, region.Lengths, region.Rows.Length, out area, out row, out column) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryGrayRect(byte[] source, int width, int height, int maskHeight, int maskWidth, bool dilate, byte[] destination)
+    {
+        if (!IsLoaded || !UseNative)
+            return false;
+        try
+        {
+            return vizion_gray_rect(source, destination, width, height, maskHeight, maskWidth, dilate ? 1 : 0) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryGrayEllipse(byte[] source, int width, int height, int radius, bool dilate, byte[] destination)
+    {
+        if (!IsLoaded || !UseNative)
+            return false;
+        try
+        {
+            return vizion_gray_ellipse(source, destination, width, height, radius, dilate ? 1 : 0) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryRegionRect(int[] rows, int[] columns, int[] lengths, int width, int height, int kernelWidth, int kernelHeight, bool dilate, out Region region)
+    {
+        return TryRegion(true, rows, columns, lengths, width, height, kernelWidth, kernelHeight, 0, dilate, out region);
+    }
+
+    public static bool TryRegionDisk(int[] rows, int[] columns, int[] lengths, int width, int height, double radius, bool dilate, out Region region)
+    {
+        return TryRegion(false, rows, columns, lengths, width, height, 0, 0, radius, dilate, out region);
+    }
+
+    static bool TryRegion(bool rectangle, int[] rows, int[] columns, int[] lengths, int width, int height, int kernelWidth, int kernelHeight, double radius, bool dilate, out Region region)
+    {
+        region = new Region(width, height, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<int>());
+        if (!IsLoaded || !UseNative)
+            return false;
+        try
+        {
+            int count;
+            int code = rectangle
+                ? vizion_region_rect(rows, columns, lengths, rows.Length, width, height, kernelWidth, kernelHeight, dilate ? 1 : 0, null, null, null, 0, out count)
+                : vizion_region_disk(rows, columns, lengths, rows.Length, width, height, radius, dilate ? 1 : 0, null, null, null, 0, out count);
+            if (code != 0)
+                return false;
+            if (count == 0)
+                return true;
+            var outRows = new int[count];
+            var outColumns = new int[count];
+            var outLengths = new int[count];
+            int written;
+            code = rectangle
+                ? vizion_region_rect(rows, columns, lengths, rows.Length, width, height, kernelWidth, kernelHeight, dilate ? 1 : 0, outRows, outColumns, outLengths, count, out written)
+                : vizion_region_disk(rows, columns, lengths, rows.Length, width, height, radius, dilate ? 1 : 0, outRows, outColumns, outLengths, count, out written);
+            if (code != 0 || written != count)
+                return false;
+            region = new Region(width, height, outRows, outColumns, outLengths);
+            return true;
         }
         catch (DllNotFoundException)
         {
