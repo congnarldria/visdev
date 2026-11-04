@@ -36,4 +36,7 @@ sealed class OperatorParam
     public string Name { get; set; } = "";
     public string Role { get; set; } = "";
     public string Desc { get; set; } = "";
+    public string? Default { get; set; }
+    public List<string> Choices { get; set; } = [];
+    public string Browse { get; set; } = "";
 }

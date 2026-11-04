@@ -196,8 +196,8 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
       </Grid.ColumnDefinitions>
 
       <DockPanel Grid.Column="0" Background="{StaticResource PanelBackground}">
-        <TextBlock DockPanel.Dock="Top" Margin="8,6" Foreground="{StaticResource Muted}" Text="程式"/>
-        <TextBox x:Name="ProgramText" Margin="8,0,8,8" AcceptsReturn="True" AcceptsTab="True" FontFamily="Consolas"
+        <TextBlock DockPanel.Dock="Top" Margin="8,6" Foreground="{StaticResource Muted}" Text="程式　點算子名稱開啟參數"/>
+        <TextBox x:Name="ProgramText" Margin="8,0,8,8" AcceptsReturn="True" AcceptsTab="True" FontFamily="Consolas" PreviewMouseLeftButtonUp="ProgramText_MouseUp"
                  Text="* 程式編輯、斷點和執行之後做&#x0a;"/>
       </DockPanel>
       <GridSplitter Grid.Column="1" Width="4" Background="{StaticResource Line}" HorizontalAlignment="Stretch"/>

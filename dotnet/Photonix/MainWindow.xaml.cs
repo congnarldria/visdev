@@ -13,6 +13,7 @@ namespace Photonix;
 public partial class MainWindow : Window
 {
     readonly OperatorDoc[] Catalog;
+    readonly OperatorMemory Memory;
 
     ImageBuffer? PictureData;
     ImageFrame? Frame;
@@ -35,6 +36,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         Catalog = OperatorCatalog.Load();
+        Memory = OperatorMemory.Load();
         ApplyFilter();
         BuildOperatorMenu();
         if (Catalog.Length > 0)
@@ -299,6 +301,14 @@ public partial class MainWindow : Window
     void BuildOperatorMenu()
     {
         OpMenu.Items.Clear();
+        var recent = Memory.Recent.Where(name => Catalog.Any(op => op.Name == name)).Take(8).ToList();
+        if (recent.Count > 0)
+        {
+            var recentMenu = new MenuItem { Header = "最近" };
+            foreach (string name in recent)
+                recentMenu.Items.Add(OperatorMenuItem(Catalog.First(op => op.Name == name)));
+            OpMenu.Items.Add(recentMenu);
+        }
         MenuItem? groupItem = null;
         string? group = null;
         foreach (OperatorDoc op in Catalog)
@@ -309,10 +319,15 @@ public partial class MainWindow : Window
                 groupItem = new MenuItem { Header = group };
                 OpMenu.Items.Add(groupItem);
             }
-            var item = new MenuItem { Header = op.Name, ToolTip = op.Short, Tag = op };
-            item.Click += OperatorMenu_Click;
-            groupItem!.Items.Add(item);
+            groupItem!.Items.Add(OperatorMenuItem(op));
         }
+    }
+
+    MenuItem OperatorMenuItem(OperatorDoc op)
+    {
+        var item = new MenuItem { Header = op.Name, ToolTip = op.Short, Tag = op };
+        item.Click += OperatorMenu_Click;
+        return item;
     }
 
     void OperatorMenu_Click(object sender, RoutedEventArgs e)
@@ -325,6 +340,69 @@ public partial class MainWindow : Window
         OperatorList.ScrollIntoView(op);
         ShowTab("ops");
         ShowHelp(op);
+        OpenParameterDialog(op, null, null);
+    }
+
+    void ProgramText_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (ProgramText.SelectionLength != 0)
+            return;
+        string text = ProgramText.Text ?? "";
+        int pos = Math.Clamp(ProgramText.SelectionStart, 0, text.Length);
+        int lineStart = pos == 0 ? 0 : text.LastIndexOf('\n', pos - 1) + 1;
+        int lineEnd = text.IndexOf('\n', pos);
+        if (lineEnd < 0)
+            lineEnd = text.Length;
+        string line = text[lineStart..lineEnd].TrimEnd('\r');
+        ParsedCall? parsed = OperatorCall.ParseLine(line);
+        if (parsed == null)
+            return;
+        int nameAt = line.IndexOf(parsed.Value.Name, StringComparison.Ordinal);
+        if (nameAt < 0)
+            return;
+        int col = pos - lineStart;
+        if (col < nameAt || col > nameAt + parsed.Value.Name.Length)
+            return;
+        OperatorDoc? op = FindOperator(parsed.Value.Name);
+        if (op == null)
+            return;
+        int lineIndex = text[..lineStart].Count(ch => ch == '\n');
+        OpenParameterDialog(op, lineIndex, parsed.Value.Args);
+    }
+
+    void OpenParameterDialog(OperatorDoc op, int? lineIndex, string[]? preset)
+    {
+        bool editing = lineIndex != null;
+        Memory.Fields.TryGetValue(op.Name, out Dictionary<string, string>? saved);
+        string[] values = OperatorCall.DialogValues(op, preset, editing, saved);
+        var dialog = new OperatorDialog(op, values, editing) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Values == null)
+            return;
+        string call = OperatorCall.FormatCall(op.Name, dialog.Values);
+        Memory.Remember(op, dialog.Values);
+        Memory.Save();
+        if (editing)
+        {
+            (string text, int caret) = OperatorCall.ReplaceLine(ProgramText.Text, lineIndex!.Value, call);
+            ProgramText.Text = text;
+            ProgramText.SelectionStart = caret;
+            ProgramText.SelectionLength = 0;
+            Log("已改第 " + (lineIndex.Value + 1) + " 行");
+        }
+        else
+            InsertAtCursor(Commented(op, call));
+        BuildOperatorMenu();
+        ProgramText.Focus();
+    }
+
+    OperatorDoc? FindOperator(string token)
+    {
+        string lower = token.ToLowerInvariant();
+        return Catalog.FirstOrDefault(op =>
+        {
+            string name = op.Name.ToLowerInvariant();
+            return name == lower || name == "vizion." + lower;
+        });
     }
 
     void OperatorList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -396,14 +474,18 @@ public partial class MainWindow : Window
         Margin = new Thickness(0, 4, 0, 2),
     };
 
-    void InsertExample(OperatorDoc op)
+    void InsertExample(OperatorDoc op) => InsertAtCursor(Commented(op, op.Example ?? ""));
+
+    static string Commented(OperatorDoc op, string call)
     {
-        string text = op.Example ?? "";
-        if (!string.IsNullOrWhiteSpace(op.Note))
-        {
-            string comment = string.Join("\n", op.Note.Replace("\r\n", "\n").Split('\n').Select(line => "* " + line));
-            text = comment + "\n" + text;
-        }
+        if (string.IsNullOrWhiteSpace(op.Note))
+            return call;
+        string comment = string.Join("\n", op.Note.Replace("\r\n", "\n").Split('\n').Select(line => "* " + line));
+        return comment + "\n" + call;
+    }
+
+    void InsertAtCursor(string text)
+    {
         string value = ProgramText.Text ?? "";
         int pos = Math.Clamp(ProgramText.SelectionStart, 0, value.Length);
         int start = value.Length == 0 || pos == 0 ? 0 : value.LastIndexOf('\n', pos - 1) + 1;
@@ -411,7 +493,7 @@ public partial class MainWindow : Window
         ProgramText.SelectionStart = start + text.Length + 1;
         ProgramText.SelectionLength = 0;
         ProgramText.Focus();
-        Log("已插入 " + op.Name);
+        Log("已插入 " + text.Split('\n')[^1]);
     }
 
     void ClearLog_Click(object sender, RoutedEventArgs e) => LogBox.Clear();
