@@ -291,11 +291,37 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
 
       <DockPanel Grid.Column="4" Background="{StaticResource PanelBackground}">
         <TextBlock DockPanel.Dock="Top" Margin="8,6,8,4" Foreground="{StaticResource Muted}" Text="變數　點圖像變數可預覽"/>
-        <TextBlock DockPanel.Dock="Top" Margin="8,4,8,2" Text="圖像"/>
-        <ListBox x:Name="IconicList" DockPanel.Dock="Top" Height="120" Margin="8,0,8,8"/>
+        <TextBlock x:Name="IconicTitle" DockPanel.Dock="Top" Margin="8,4,8,2" Text="圖像"/>
+        <TextBlock x:Name="IconicEmpty" DockPanel.Dock="Top" Margin="8,0,8,4" Foreground="{StaticResource Muted}" Text="還沒有圖像變數"/>
+        <ListBox x:Name="IconicList" DockPanel.Dock="Top" Height="150" Margin="8,0,8,8" SelectionChanged="IconicList_SelectionChanged">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <DockPanel>
+                <Image Width="42" Height="42" Margin="0,2,6,2" Stretch="Uniform" Source="{Binding Thumb}"/>
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                  <TextBlock Text="{Binding Info}" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
+                </StackPanel>
+              </DockPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
         <TextBlock DockPanel.Dock="Top" Margin="8,0,8,2" Text="控制"/>
-        <ListBox x:Name="ControlList" DockPanel.Dock="Top" Height="120" Margin="8,0,8,8"/>
-        <TextBlock Margin="8,0,8,8" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Text="選一個變數查看完整內容。"/>
+        <TextBlock x:Name="ControlEmpty" DockPanel.Dock="Top" Margin="8,0,8,4" Foreground="{StaticResource Muted}" Text="還沒有控制變數"/>
+        <ListBox x:Name="ControlList" DockPanel.Dock="Top" Height="120" Margin="8,0,8,8" SelectionChanged="ControlList_SelectionChanged">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0" Foreground="{StaticResource Muted}" Text="{Binding Info}"/>
+                <StackPanel>
+                  <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                  <TextBlock Text="{Binding Kind}" Foreground="{StaticResource Muted}"/>
+                </StackPanel>
+              </DockPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock x:Name="VarDetail" Margin="8,0,8,8" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Text="選一個變數查看完整內容。"/>
       </DockPanel>
     </Grid>
   </DockPanel>

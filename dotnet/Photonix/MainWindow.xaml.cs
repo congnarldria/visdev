@@ -511,6 +511,7 @@ public partial class MainWindow : Window
         StatusLine.Text = "已重設";
         Log("已重設");
         RefreshRails();
+        RefreshVars();
         Present();
     }
 
@@ -567,6 +568,174 @@ public partial class MainWindow : Window
         if (PictureData != null)
             Present();
         RefreshRails();
+        RefreshVars();
+    }
+
+    bool SuppressVars;
+
+    void RefreshVars()
+    {
+        string? iconicName = (IconicList.SelectedItem as VarRow)?.Name;
+        string? controlName = (ControlList.SelectedItem as VarRow)?.Name;
+        var iconic = new List<VarRow>();
+        var control = new List<VarRow>();
+        foreach (VarText item in ProgramVars.Describe(Engine.Vars))
+        {
+            var row = new VarRow
+            {
+                Name = item.Name,
+                Kind = item.Kind,
+                Info = item.Info,
+                Full = item.Full,
+                Iconic = item.Iconic,
+                Thumb = item.Iconic ? ThumbOf(Engine.Vars[item.Name]) : null,
+            };
+            if (item.Iconic)
+                iconic.Add(row);
+            else
+                control.Add(row);
+        }
+        SuppressVars = true;
+        IconicList.ItemsSource = iconic;
+        ControlList.ItemsSource = control;
+        IconicEmpty.Visibility = iconic.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ControlEmpty.Visibility = control.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        IconicTitle.Text = iconic.Count == 0 ? "圖像" : "圖像  " + iconic.Count;
+        IconicList.SelectedItem = iconic.Find(row => row.Name == iconicName);
+        ControlList.SelectedItem = control.Find(row => row.Name == controlName);
+        SuppressVars = false;
+        if (ControlList.SelectedItem is VarRow picked)
+            ShowControl(picked);
+    }
+
+    void IconicList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SuppressVars || IconicList.SelectedItem is not VarRow row)
+            return;
+        ControlList.SelectedItem = null;
+        PreviewIconic(row);
+    }
+
+    void ControlList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SuppressVars || ControlList.SelectedItem is not VarRow row)
+            return;
+        IconicList.SelectedItem = null;
+        ShowControl(row);
+    }
+
+    void ShowControl(VarRow row) => VarDetail.Text = row.Name + "  " + row.Kind + "\n" + row.Full;
+
+    void PreviewIconic(VarRow row)
+    {
+        if (!Engine.Vars.TryGetValue(row.Name, out object? value))
+            return;
+        switch (value)
+        {
+            case ImageBuffer image:
+                ShowRunImage(image);
+                Shapes = [];
+                break;
+            case Region region:
+                EnsureBackdrop(region.Width, region.Height);
+                Shapes = Operators.Overlays(region);
+                break;
+            case Region[] regions:
+                if (regions.Length > 0)
+                    EnsureBackdrop(regions[0].Width, regions[0].Height);
+                Shapes = Operators.Overlays(regions);
+                break;
+            case EdgePoint[][] edges:
+                Shapes = EdgeOverlays(edges);
+                break;
+            default:
+                return;
+        }
+        EmptyHint.Visibility = Visibility.Collapsed;
+        Fit();
+        StatusLine.Text = "預覽 " + row.Name + " · 再執行會回到程式畫面";
+        VarDetail.Text = row.Name + "  " + row.Kind + "\n" + row.Info;
+    }
+
+    void EnsureBackdrop(int width, int height)
+    {
+        if (PictureData != null && PictureData.Width == width && PictureData.Height == height)
+            return;
+        var blank = new byte[width * height];
+        ShowRunImage(ImageBuffer.Gray(width, height, blank));
+    }
+
+    void ShowRunImage(ImageBuffer image)
+    {
+        PictureData = image;
+        Frame = ImageFrame.Create(image.Width, image.Height, image.Pixels, image.Channels == 1 ? PixelLayout.Gray : PixelLayout.Bgr);
+    }
+
+    static Vizion.Overlay[] EdgeOverlays(EdgePoint[][] edges)
+    {
+        var overlays = new List<Vizion.Overlay>();
+        foreach (EdgePoint[] chain in edges)
+        {
+            if (chain.Length < 2)
+                continue;
+            overlays.Add(Vizion.Overlay.Polyline(chain.Select(point => point.Row).ToArray(), chain.Select(point => point.Column).ToArray(), 0xFF00E05A));
+        }
+        return overlays.ToArray();
+    }
+
+    static BitmapSource? ThumbOf(object value)
+    {
+        BitmapSource? source = value switch
+        {
+            ImageBuffer image => ImageThumb(image),
+            Region region => RegionThumb(region),
+            Region[] regions => regions.Length == 0 ? null : RegionThumb(Operators.Union(regions)),
+            _ => null,
+        };
+        source?.Freeze();
+        return source;
+    }
+
+    static BitmapSource ImageThumb(ImageBuffer image)
+    {
+        const int edge = 48;
+        double scale = Math.Min(1, edge / (double)Math.Max(image.Width, image.Height));
+        int width = Math.Max(1, (int)Math.Round(image.Width * scale));
+        int height = Math.Max(1, (int)Math.Round(image.Height * scale));
+        int channels = image.Channels;
+        var pixels = new byte[width * height * channels];
+        for (int y = 0; y < height; y++)
+        {
+            int srcRow = Math.Min(image.Height - 1, (int)(y / scale));
+            for (int x = 0; x < width; x++)
+            {
+                int srcCol = Math.Min(image.Width - 1, (int)(x / scale));
+                int from = (srcRow * image.Width + srcCol) * channels;
+                int to = (y * width + x) * channels;
+                for (int c = 0; c < channels; c++)
+                    pixels[to + c] = image.Pixels[from + c];
+            }
+        }
+        PixelFormat format = channels == 1 ? PixelFormats.Gray8 : PixelFormats.Bgr24;
+        return BitmapSource.Create(width, height, 96, 96, format, null, pixels, width * channels);
+    }
+
+    static BitmapSource RegionThumb(Region region)
+    {
+        const int edge = 48;
+        double scale = Math.Min((double)edge / region.Width, (double)edge / region.Height);
+        int width = Math.Max(1, (int)Math.Round(region.Width * scale));
+        int height = Math.Max(1, (int)Math.Round(region.Height * scale));
+        var pixels = new byte[width * height];
+        for (int i = 0; i < region.Rows.Length; i++)
+        {
+            int y = Math.Clamp((int)(region.Rows[i] * scale), 0, height - 1);
+            int x0 = Math.Clamp((int)(region.Columns[i] * scale), 0, width);
+            int x1 = Math.Clamp((int)((region.Columns[i] + region.Lengths[i]) * scale), 0, width);
+            for (int x = x0; x < x1; x++)
+                pixels[y * width + x] = 255;
+        }
+        return BitmapSource.Create(width, height, 96, 96, PixelFormats.Gray8, null, pixels, width);
     }
 
     string[] SourceLines() => (ProgramText.Text ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
@@ -1064,4 +1233,13 @@ public partial class MainWindow : Window
         LogBox.ScrollToEnd();
     }
 
+    sealed class VarRow
+    {
+        public string Name { get; init; } = "";
+        public string Kind { get; init; } = "";
+        public string Info { get; init; } = "";
+        public string Full { get; init; } = "";
+        public bool Iconic { get; init; }
+        public ImageSource? Thumb { get; init; }
+    }
 }
