@@ -45,6 +45,13 @@ public partial class MainWindow : Window
     readonly ProgramRun Engine = new();
     bool Running;
 
+    readonly List<string> RunNotes = [];
+    readonly List<Problem> Problems = [];
+    bool ShowErrors = true;
+    bool ShowWarnings = true;
+    bool ShowMessages = true;
+    bool SuppressProblemJump;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -62,6 +69,7 @@ public partial class MainWindow : Window
             RefreshRails();
         };
         RefreshRails();
+        RefreshProblems();
         ApplyFilter();
         BuildOperatorMenu();
         if (Catalog.Length > 0)
@@ -436,6 +444,7 @@ public partial class MainWindow : Window
     {
         RefreshRails();
         UpdateSense(false);
+        RefreshProblems();
     }
 
     void ToggleBreakpoint(int line)
@@ -503,6 +512,7 @@ public partial class MainWindow : Window
     void Reset_Click(object sender, RoutedEventArgs e)
     {
         Engine.Reset();
+        RunNotes.Clear();
         Running = false;
         BtnRun.IsEnabled = true;
         Shapes = [];
@@ -511,7 +521,7 @@ public partial class MainWindow : Window
         StatusLine.Text = "已重設";
         Log("已重設");
         RefreshRails();
-        RefreshVars();
+        RefreshProblems();
         Present();
     }
 
@@ -569,6 +579,100 @@ public partial class MainWindow : Window
             Present();
         RefreshRails();
         RefreshVars();
+        if (halt == Halt.Done)
+            RunNotes.Add("執行完成（" + Engine.Steps + " 步）");
+        else if (halt == Halt.Breakpoint)
+            RunNotes.Add("中斷點 第 " + Engine.Pc + " 行");
+        else if (halt == Halt.Stopped)
+            RunNotes.Add("已停止");
+        RefreshProblems();
+        if (halt == Halt.Error)
+            ShowRunError(Engine.Error ?? "發生錯誤", Engine.ErrorLine);
+    }
+
+    void RefreshProblems()
+    {
+        if (Catalog == null)
+            return;
+        var found = ProgramProblems.Collect(
+            ProgramText.Text ?? "",
+            string.IsNullOrWhiteSpace(ProgramName.Text) ? "程式" : ProgramName.Text.Trim(),
+            Catalog,
+            Engine.Error,
+            Engine.ErrorLine,
+            RunNotes);
+        Problems.Clear();
+        Problems.AddRange(found);
+        int errors = Problems.Count(item => item.Sev == "error");
+        int warnings = Problems.Count(item => item.Sev == "warning");
+        int messages = Problems.Count(item => item.Sev == "message");
+        FilterErrors.Content = "錯誤 " + errors;
+        FilterWarnings.Content = "警告 " + warnings;
+        FilterMessages.Content = "訊息 " + messages;
+        StatusErrors.Content = "錯誤 " + errors;
+        StatusWarnings.Content = "警告 " + warnings;
+        StatusMessages.Content = "訊息 " + messages;
+        TabProblems.Content = Problems.Count == 0 ? "錯誤清單" : "錯誤清單 " + Problems.Count;
+        PaintFilter(FilterErrors, ShowErrors);
+        PaintFilter(FilterWarnings, ShowWarnings);
+        PaintFilter(FilterMessages, ShowMessages);
+        SuppressProblemJump = true;
+        ProblemGrid.ItemsSource = Problems.Where(item =>
+            item.Sev == "error" && ShowErrors
+            || item.Sev == "warning" && ShowWarnings
+            || item.Sev == "message" && ShowMessages).ToList();
+        SuppressProblemJump = false;
+    }
+
+    void Filter_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not string tag)
+            return;
+        if (tag == "error")
+            ShowErrors = !ShowErrors;
+        else if (tag == "warning")
+            ShowWarnings = !ShowWarnings;
+        else if (tag == "message")
+            ShowMessages = !ShowMessages;
+        RefreshProblems();
+    }
+
+    void StatusProblems_Click(object sender, RoutedEventArgs e) => ShowTab("problems");
+
+    void ProblemGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SuppressProblemJump || ProblemGrid.SelectedItem is not Problem problem || problem.Line <= 0)
+            return;
+        GoToLine(problem.Line);
+    }
+
+    void GoToLine(int line)
+    {
+        string text = ProgramText.Text ?? "";
+        int index = 0;
+        for (int i = 1; i < line && index < text.Length; i++)
+        {
+            int newline = text.IndexOf('\n', index);
+            if (newline < 0)
+                break;
+            index = newline + 1;
+        }
+        ProgramText.Focus();
+        ProgramText.Select(Math.Min(index, text.Length), 0);
+        RevealLine(line);
+    }
+
+    void ShowRunError(string text, int line)
+    {
+        string where = line > 0 ? "第 " + line + " 行。" : "";
+        MessageBox.Show(this, text + "\n\n" + where + "已經算出的圖和變數還留著", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+    }
+
+    static void PaintFilter(Button button, bool on)
+    {
+        button.Background = on
+            ? new SolidColorBrush(Color.FromRgb(0x3D, 0x8B, 0xFD))
+            : new SolidColorBrush(Color.FromRgb(0x21, 0x26, 0x2D));
     }
 
     bool SuppressVars;

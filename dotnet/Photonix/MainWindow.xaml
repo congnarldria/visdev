@@ -113,7 +113,9 @@
     <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="8,4">
       <DockPanel>
         <Button DockPanel.Dock="Right" Content="回復版面" Click="NotYet_Click"/>
-        <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0" Foreground="{StaticResource Muted}" Text="錯誤 0　警告 0　訊息 0"/>
+        <Button x:Name="StatusErrors" DockPanel.Dock="Right" Content="錯誤 0" Click="StatusProblems_Click" Tag="error"/>
+        <Button x:Name="StatusWarnings" DockPanel.Dock="Right" Content="警告 0" Click="StatusProblems_Click" Tag="warning"/>
+        <Button x:Name="StatusMessages" DockPanel.Dock="Right" Content="訊息 0" Click="StatusProblems_Click" Tag="message"/>
         <TextBlock x:Name="StatusZoom" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0" Foreground="{StaticResource Muted}" Text="100%"/>
         <TextBlock x:Name="StatusPix" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0" Foreground="{StaticResource Muted}" Text="Row —   Column —"/>
         <TextBlock VerticalAlignment="Center" Text="就緒"/>
@@ -169,17 +171,19 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
           </DockPanel>
           <DockPanel x:Name="PageProblems" Visibility="Collapsed" Margin="8">
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-              <Button Content="錯誤 0" Click="NotYet_Click"/>
-              <Button Content="警告 0" Click="NotYet_Click"/>
-              <Button Content="訊息 0" Click="NotYet_Click"/>
+              <Button x:Name="FilterErrors" Content="錯誤 0" Click="Filter_Click" Tag="error"/>
+              <Button x:Name="FilterWarnings" Content="警告 0" Click="Filter_Click" Tag="warning"/>
+              <Button x:Name="FilterMessages" Content="訊息 0" Click="Filter_Click" Tag="message"/>
             </StackPanel>
-            <DataGrid AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" Background="#0E1116" Foreground="{StaticResource Ink}" BorderBrush="{StaticResource Line}">
+            <DataGrid x:Name="ProblemGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column"
+                      Background="#0E1116" Foreground="{StaticResource Ink}" BorderBrush="{StaticResource Line}"
+                      SelectionChanged="ProblemGrid_SelectionChanged">
               <DataGrid.Columns>
-                <DataGridTextColumn Header="嚴重性" Width="80"/>
-                <DataGridTextColumn Header="代碼" Width="80"/>
-                <DataGridTextColumn Header="說明" Width="*"/>
-                <DataGridTextColumn Header="檔案" Width="120"/>
-                <DataGridTextColumn Header="行" Width="50"/>
+                <DataGridTextColumn Header="嚴重性" Binding="{Binding Severity}" Width="80"/>
+                <DataGridTextColumn Header="代碼" Binding="{Binding Code}" Width="80"/>
+                <DataGridTextColumn Header="說明" Binding="{Binding Text}" Width="*"/>
+                <DataGridTextColumn Header="檔案" Binding="{Binding File}" Width="140"/>
+                <DataGridTextColumn Header="行" Binding="{Binding LineText}" Width="50"/>
               </DataGrid.Columns>
             </DataGrid>
           </DockPanel>
