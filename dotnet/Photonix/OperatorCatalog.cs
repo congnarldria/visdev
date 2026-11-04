@@ -28,6 +28,7 @@ sealed class OperatorDoc
     public string Prototype { get; set; } = "";
     public string Example { get; set; } = "";
     public string Note { get; set; } = "";
+    public int Order { get; set; }
     public List<OperatorParam> Params { get; set; } = [];
 }
 

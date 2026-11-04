@@ -1,6 +1,7 @@
 <Window x:Class="Photonix.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Photonix"
         Title="Photonix"
         Width="1280"
         Height="800"
@@ -46,14 +47,14 @@
         <MenuItem Header="載入影像" Click="LoadImage_Click"/>
       </MenuItem>
       <MenuItem Header="編輯">
-        <MenuItem Header="復原" Click="NotYet_Click"/>
-        <MenuItem Header="重做" Click="NotYet_Click"/>
+        <MenuItem Header="復原" InputGestureText="Ctrl+Z" Click="Undo_Click"/>
+        <MenuItem Header="重做" InputGestureText="Ctrl+Y" Click="Redo_Click"/>
         <Separator/>
-        <MenuItem Header="剪下" Click="NotYet_Click"/>
-        <MenuItem Header="複製" Click="NotYet_Click"/>
-        <MenuItem Header="貼上" Click="NotYet_Click"/>
+        <MenuItem Header="剪下" InputGestureText="Ctrl+X" Click="Cut_Click"/>
+        <MenuItem Header="複製" InputGestureText="Ctrl+C" Click="Copy_Click"/>
+        <MenuItem Header="貼上" InputGestureText="Ctrl+V" Click="Paste_Click"/>
         <Separator/>
-        <MenuItem Header="全選" Click="NotYet_Click"/>
+        <MenuItem Header="全選" InputGestureText="Ctrl+A" Click="SelectAll_Click"/>
       </MenuItem>
       <MenuItem Header="檢視">
         <MenuItem Header="程式" Click="NotYet_Click"/>
@@ -197,8 +198,38 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
 
       <DockPanel Grid.Column="0" Background="{StaticResource PanelBackground}">
         <TextBlock DockPanel.Dock="Top" Margin="8,6" Foreground="{StaticResource Muted}" Text="程式　點算子名稱開啟參數"/>
-        <TextBox x:Name="ProgramText" Margin="8,0,8,8" AcceptsReturn="True" AcceptsTab="True" FontFamily="Consolas" PreviewMouseLeftButtonUp="ProgramText_MouseUp"
-                 Text="* 程式編輯、斷點和執行之後做&#x0a;"/>
+        <Grid Margin="8,0,8,8">
+          <Border Background="#0E1116" BorderBrush="{StaticResource Line}" BorderThickness="1"/>
+          <local:ProgramHighlightView x:Name="ProgramHighlight" IsHitTestVisible="False"/>
+          <TextBox x:Name="ProgramText" AcceptsReturn="True" AcceptsTab="True" FontFamily="Consolas" FontSize="13"
+                   Background="Transparent" Foreground="Transparent" CaretBrush="{StaticResource Ink}" SelectionBrush="#663D8BFD"
+                   BorderBrush="Transparent" Padding="4,2"
+                   PreviewMouseLeftButtonUp="ProgramText_MouseUp" PreviewKeyDown="ProgramText_PreviewKeyDown"
+                   TextChanged="ProgramText_TextChanged" SelectionChanged="ProgramText_SelectionChanged"
+                   Text="* 程式編輯、斷點和執行之後做&#x0a;"/>
+          <Popup x:Name="SensePopup" PlacementTarget="{Binding ElementName=ProgramText}" Placement="Relative" AllowsTransparency="True" StaysOpen="True" Focusable="False">
+            <Border Background="#1C2128" BorderBrush="{StaticResource Line}" BorderThickness="1" MaxWidth="460" Padding="4">
+              <DockPanel>
+                <TextBlock x:Name="SenseSig" DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="4,2"/>
+                <TextBlock DockPanel.Dock="Bottom" Margin="4,4,4,2" Foreground="{StaticResource Muted}" Text="Tab 帶入　↑↓ 選擇　Esc 關閉"/>
+                <ListBox x:Name="SenseList" MaxHeight="180" Focusable="False" IsTabStop="False" BorderThickness="0" PreviewMouseLeftButtonDown="SenseList_MouseDown">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel Margin="2,1">
+                        <TextBlock>
+                          <Run Text="{Binding Kind}" Foreground="{StaticResource Muted}"/>
+                          <Run Text=" "/>
+                          <Run Text="{Binding Label}" FontWeight="Bold"/>
+                        </TextBlock>
+                        <TextBlock Text="{Binding Detail}" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </DockPanel>
+            </Border>
+          </Popup>
+        </Grid>
       </DockPanel>
       <GridSplitter Grid.Column="1" Width="4" Background="{StaticResource Line}" HorizontalAlignment="Stretch"/>
 

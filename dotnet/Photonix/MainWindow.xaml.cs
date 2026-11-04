@@ -32,11 +32,18 @@ public partial class MainWindow : Window
     GfxMode Mode = GfxMode.Select;
     readonly Brush ModeOff = new SolidColorBrush(Color.FromRgb(0x21, 0x26, 0x2D));
 
+    int SenseIndex;
+    int SenseTokenStart;
+    bool SenseForce;
+    string SenseLabel = "";
+    List<SenseItem> SenseItems = [];
+
     public MainWindow()
     {
         InitializeComponent();
         Catalog = OperatorCatalog.Load();
         Memory = OperatorMemory.Load();
+        ProgramHighlight.Attach(ProgramText, Catalog.Select(op => op.Name));
         ApplyFilter();
         BuildOperatorMenu();
         if (Catalog.Length > 0)
@@ -367,7 +374,161 @@ public partial class MainWindow : Window
         if (op == null)
             return;
         int lineIndex = text[..lineStart].Count(ch => ch == '\n');
+        CloseSense();
         OpenParameterDialog(op, lineIndex, parsed.Value.Args);
+    }
+
+    void Undo_Click(object sender, RoutedEventArgs e)
+    {
+        ProgramText.Focus();
+        ProgramText.Undo();
+    }
+
+    void Redo_Click(object sender, RoutedEventArgs e)
+    {
+        ProgramText.Focus();
+        ProgramText.Redo();
+    }
+
+    void Cut_Click(object sender, RoutedEventArgs e)
+    {
+        ProgramText.Focus();
+        ProgramText.Cut();
+    }
+
+    void Copy_Click(object sender, RoutedEventArgs e)
+    {
+        ProgramText.Focus();
+        ProgramText.Copy();
+    }
+
+    void Paste_Click(object sender, RoutedEventArgs e)
+    {
+        ProgramText.Focus();
+        ProgramText.Paste();
+    }
+
+    void SelectAll_Click(object sender, RoutedEventArgs e)
+    {
+        ProgramText.Focus();
+        ProgramText.SelectAll();
+    }
+
+    void ProgramText_TextChanged(object sender, TextChangedEventArgs e) => UpdateSense(false);
+
+    void ProgramText_SelectionChanged(object sender, RoutedEventArgs e) => UpdateSense(false);
+
+    void ProgramText_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Space && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            SenseForce = true;
+            UpdateSense(true);
+            e.Handled = true;
+            return;
+        }
+        if (!SensePopup.IsOpen)
+            return;
+        if (e.Key == Key.Down)
+        {
+            MoveSense(1);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Up)
+        {
+            MoveSense(-1);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Tab)
+        {
+            AcceptSense();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CloseSense();
+            e.Handled = true;
+        }
+    }
+
+    void UpdateSense(bool force)
+    {
+        if (!IsLoaded)
+            return;
+        string text = ProgramText.Text ?? "";
+        int start = ProgramText.SelectionStart;
+        int end = start + ProgramText.SelectionLength;
+        SenseChunk? chunk = ProgramSyntax.Chunk(text, start, end);
+        if (chunk == null)
+        {
+            CloseSense();
+            return;
+        }
+        var built = ProgramSyntax.Suggest(chunk.Value, Catalog, text, force || SenseForce);
+        SenseForce = false;
+        if (built.Items.Count == 0)
+        {
+            CloseSense();
+            return;
+        }
+        int keep = built.Items.ToList().FindIndex(item => item.Label == SenseLabel);
+        SenseItems = built.Items.ToList();
+        SenseIndex = keep >= 0 ? keep : 0;
+        SenseLabel = SenseItems[SenseIndex].Label;
+        SenseTokenStart = chunk.Value.TokenStart;
+        SenseSig.Text = built.Signature;
+        SenseSig.Visibility = built.Signature.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        SenseList.ItemsSource = SenseItems;
+        SenseList.SelectedIndex = SenseIndex;
+        Rect caret = ProgramText.GetRectFromCharacterIndex(start);
+        SensePopup.HorizontalOffset = caret.X;
+        SensePopup.VerticalOffset = caret.Bottom;
+        SensePopup.IsOpen = true;
+    }
+
+    void MoveSense(int step)
+    {
+        if (SenseItems.Count == 0)
+            return;
+        SenseIndex = (SenseIndex + step + SenseItems.Count) % SenseItems.Count;
+        SenseLabel = SenseItems[SenseIndex].Label;
+        SenseList.SelectedIndex = SenseIndex;
+        SenseList.ScrollIntoView(SenseItems[SenseIndex]);
+    }
+
+    void AcceptSense()
+    {
+        if (SenseIndex < 0 || SenseIndex >= SenseItems.Count)
+            return;
+        SenseItem item = SenseItems[SenseIndex];
+        int end = ProgramText.SelectionStart;
+        int start = Math.Clamp(SenseTokenStart, 0, end);
+        ProgramText.Select(start, end - start);
+        ProgramText.SelectedText = item.Insert;
+        int caret = start + (item.Caret ?? item.Insert.Length);
+        ProgramText.Select(caret, 0);
+        SenseLabel = "";
+        CloseSense();
+        UpdateSense(false);
+    }
+
+    void SenseList_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source)
+            return;
+        if (ItemsControl.ContainerFromElement(SenseList, source) is not ListBoxItem { Content: SenseItem item })
+            return;
+        SenseIndex = SenseItems.IndexOf(item);
+        SenseLabel = item.Label;
+        AcceptSense();
+        e.Handled = true;
+    }
+
+    void CloseSense()
+    {
+        SenseItems = [];
+        SensePopup.IsOpen = false;
+        SenseLabel = "";
     }
 
     void OpenParameterDialog(OperatorDoc op, int? lineIndex, string[]? preset)
@@ -383,10 +544,7 @@ public partial class MainWindow : Window
         Memory.Save();
         if (editing)
         {
-            (string text, int caret) = OperatorCall.ReplaceLine(ProgramText.Text, lineIndex!.Value, call);
-            ProgramText.Text = text;
-            ProgramText.SelectionStart = caret;
-            ProgramText.SelectionLength = 0;
+            ReplaceProgramLine(lineIndex!.Value, call);
             Log("已改第 " + (lineIndex.Value + 1) + " 行");
         }
         else
@@ -484,14 +642,37 @@ public partial class MainWindow : Window
         return comment + "\n" + call;
     }
 
+    void ReplaceProgramLine(int lineIndex, string call)
+    {
+        string text = ProgramText.Text ?? "";
+        int start = 0;
+        for (int i = 0; i < lineIndex; i++)
+        {
+            int newline = text.IndexOf('\n', start);
+            if (newline < 0)
+                return;
+            start = newline + 1;
+        }
+        int end = text.IndexOf('\n', start);
+        if (end < 0)
+            end = text.Length;
+        string current = text[start..end].TrimEnd('\r');
+        int indent = 0;
+        while (indent < current.Length && char.IsWhiteSpace(current[indent]))
+            indent++;
+        ProgramText.Select(start, end - start);
+        ProgramText.SelectedText = current[..indent] + call;
+    }
+
     void InsertAtCursor(string text)
     {
         string value = ProgramText.Text ?? "";
         int pos = Math.Clamp(ProgramText.SelectionStart, 0, value.Length);
         int start = value.Length == 0 || pos == 0 ? 0 : value.LastIndexOf('\n', pos - 1) + 1;
-        ProgramText.Text = value[..start] + text + "\n" + value[start..];
-        ProgramText.SelectionStart = start + text.Length + 1;
-        ProgramText.SelectionLength = 0;
+        string insert = text + "\n";
+        ProgramText.Select(start, 0);
+        ProgramText.SelectedText = insert;
+        ProgramText.Select(start + insert.Length, 0);
         ProgramText.Focus();
         Log("已插入 " + text.Split('\n')[^1]);
     }
