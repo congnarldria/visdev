@@ -68,18 +68,33 @@ public static partial class Operators
 
         var refined = new List<ShapeHit>();
         var full = levels[0];
+        var modelX = new float[model.Length];
+        var modelY = new float[model.Length];
+        var modelGx = new float[model.Length];
+        var modelGy = new float[model.Length];
+        for (int i = 0; i < model.Length; i++)
+        {
+            modelX[i] = model[i].X;
+            modelY[i] = model[i].Y;
+            modelGx[i] = model[i].Gx;
+            modelGy[i] = model[i].Gy;
+        }
         foreach (var hit in kept)
         {
             if (hit.Score < minScore)
                 continue;
-            var posed = SnapHalfPixel(hit, model, full, minContrast);
-            posed = PolishAngle(posed, model, full, minContrast);
-            posed = SnapHalfPixel(posed, model, full, minContrast);
-            posed = Parabolic(posed, model, full, minContrast);
-            var fitted = LeastSquares(posed, model, full, minContrast);
-            if (fitted.Score + 1e-4 < posed.Score)
-                fitted = posed;
-            fitted = fitted with { Angle = WrapAngle(fitted.Angle) };
+            ShapeHit fitted;
+            if (!NativeCore.TryShapePose(modelX, modelY, modelGx, modelGy, full.Gx, full.Gy, full.Mag, full.Width, full.Height, full.Scale, hit, minContrast, out fitted))
+            {
+                var posed = SnapHalfPixel(hit, model, full, minContrast);
+                posed = PolishAngle(posed, model, full, minContrast);
+                posed = SnapHalfPixel(posed, model, full, minContrast);
+                posed = Parabolic(posed, model, full, minContrast);
+                fitted = LeastSquares(posed, model, full, minContrast);
+                if (fitted.Score + 1e-4 < posed.Score)
+                    fitted = posed;
+                fitted = fitted with { Angle = WrapAngle(fitted.Angle) };
+            }
             if (fitted.Score >= minScore * 0.9)
                 refined.Add(fitted);
         }

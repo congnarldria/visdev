@@ -89,5 +89,11 @@ int main(void)
         return 1;
     }
     printf("擬合自我檢查通過\n");
+    code = vizion_pose_selftest();
+    if (code != 0) {
+        fprintf(stderr, "姿態自我檢查失敗 %d\n", code);
+        return 1;
+    }
+    printf("姿態自我檢查通過\n");
     return 0;
 }

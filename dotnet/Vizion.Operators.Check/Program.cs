@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--pose")
+{
+    PoseNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--fit")
 {
     FitNativeCheck();
@@ -937,6 +943,68 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void PoseNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var block = new byte[64 * 64];
+    for (int row = 16; row < 48; row++)
+        for (int col = 16; col < 48; col++)
+            block[row * 64 + col] = 255;
+    var shifted = new byte[96 * 96];
+    for (int row = 36; row < 68; row++)
+        for (int col = 31; col < 63; col++)
+            shifted[row * 96 + col] = 255;
+    var scene = ImageBuffer.Gray(96, 96, shifted);
+    var template = ImageBuffer.Gray(64, 64, block);
+    bool previous = NativeCore.UseNative;
+    var nativeHits = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    NativeCore.UseNative = false;
+    var managedHits = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    NativeCore.UseNative = true;
+    if (nativeHits.Length != managedHits.Length || nativeHits.Length < 1)
+        throw new InvalidOperationException($"形狀命中 {nativeHits.Length} 個，C# {managedHits.Length} 個");
+    for (int i = 0; i < managedHits.Length; i++)
+    {
+        if (Math.Abs(nativeHits[i].Row - managedHits[i].Row) > 1e-6
+            || Math.Abs(nativeHits[i].Column - managedHits[i].Column) > 1e-6
+            || Math.Abs(nativeHits[i].Angle - managedHits[i].Angle) > 1e-6
+            || Math.Abs(nativeHits[i].Score - managedHits[i].Score) > 1e-6)
+            throw new InvalidOperationException($"姿態和 C# 不同：{nativeHits[i].Row},{nativeHits[i].Column} 角度 {nativeHits[i].Angle} 分 {nativeHits[i].Score}");
+    }
+    var best = nativeHits.OrderByDescending(hit => hit.Score).First();
+    double dRow = best.Row - 51.5;
+    double dCol = best.Column - 46.5;
+    if (dRow * dRow + dCol * dCol > 0.45 * 0.45)
+        throw new InvalidOperationException($"方塊中心應在 51.5,46.5 的 0.45 內，得到 {best.Row},{best.Column}");
+    var benchScene = new byte[192 * 192];
+    var benchTemplate = new byte[96 * 96];
+    for (int row = 20; row <= 75; row++)
+        for (int col = 20; col <= 75; col++)
+            benchTemplate[row * 96 + col] = 255;
+    for (int row = 60; row <= 115; row++)
+        for (int col = 70; col <= 125; col++)
+            benchScene[row * 192 + col] = 255;
+    var benchSceneImage = ImageBuffer.Gray(192, 192, benchScene);
+    var benchTemplateImage = ImageBuffer.Gray(96, 96, benchTemplate);
+    Operators.FindShape(benchSceneImage, benchTemplateImage, 20, 20, 75, 75);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 6; i++)
+        Operators.FindShape(benchSceneImage, benchTemplateImage, 20, 20, 75, 75);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.FindShape(benchSceneImage, benchTemplateImage, 20, 20, 75, 75);
+    watch.Restart();
+    for (int i = 0; i < 6; i++)
+        Operators.FindShape(benchSceneImage, benchTemplateImage, 20, 20, 75, 75);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("姿態原生檢查通過");
+    Console.WriteLine($"192 場景找方塊共 6 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
 }
 
 static void FitNativeCheck()

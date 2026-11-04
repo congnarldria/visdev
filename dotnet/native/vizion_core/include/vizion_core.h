@@ -174,6 +174,15 @@ VIZION_EXPORT int VIZION_CALL vizion_fit_circle(
 
 VIZION_EXPORT int VIZION_CALL vizion_fit_selftest(void);
 
+/* 形狀命中之後的半像素、角度、拋物線和最小二乘。分數仍走既有的 SIMD 取樣。 */
+VIZION_EXPORT int VIZION_CALL vizion_shape_pose(
+    const float* model_x, const float* model_y, const float* model_gx, const float* model_gy, int model_count,
+    const float* gx, const float* gy, const float* mag, int width, int height, int scale,
+    double row, double column, double angle, double score, double min_contrast,
+    double* out_row, double* out_column, double* out_angle, double* out_score);
+
+VIZION_EXPORT int VIZION_CALL vizion_pose_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

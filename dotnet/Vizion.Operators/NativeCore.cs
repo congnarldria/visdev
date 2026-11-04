@@ -188,6 +188,33 @@ public static class NativeCore
         }
     }
 
+    public static bool TryShapePose(
+        float[] modelX, float[] modelY, float[] modelGx, float[] modelGy,
+        float[] gx, float[] gy, float[] magnitude, int width, int height, int scale,
+        ShapeHit hit, double minContrast, out ShapeHit posed)
+    {
+        posed = hit;
+        if (!IsLoaded || !UseNative || modelX.Length == 0)
+            return false;
+        try
+        {
+            int code = vizion_shape_pose(modelX, modelY, modelGx, modelGy, modelX.Length, gx, gy, magnitude, width, height, scale, hit.Row, hit.Column, hit.Angle, hit.Score, minContrast, out double row, out double column, out double angle, out double score);
+            if (code != 0)
+                return false;
+            posed = new ShapeHit(row, column, angle, score);
+            return true;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TryShapeScore(
         float[] gx, float[] gy, float[] mag, int width, int height, double column, double row,
         float[] mx, float[] my, float[] mgx, float[] mgy, double minContrast, out double score)
@@ -579,6 +606,13 @@ public static class NativeCore
         double sigma, double threshold, int transition,
         double[]? rows, double[]? columns, double[]? amplitudes, double[]? distances,
         int capacity, out int written);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_shape_pose(
+        float[] modelX, float[] modelY, float[] modelGx, float[] modelGy, int modelCount,
+        float[] gx, float[] gy, float[] magnitude, int width, int height, int scale,
+        double row, double column, double angle, double score, double minContrast,
+        out double outRow, out double outColumn, out double outAngle, out double outScore);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern double vizion_shape_score(
