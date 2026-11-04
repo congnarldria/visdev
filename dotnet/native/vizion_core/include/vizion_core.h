@@ -220,6 +220,16 @@ VIZION_EXPORT int VIZION_CALL vizion_roberts(const uint8_t* src, uint8_t* dst, i
 VIZION_EXPORT int VIZION_CALL vizion_binomial(const uint8_t* src, uint8_t* dst, int width, int height, int mask_width, int mask_height);
 VIZION_EXPORT int VIZION_CALL vizion_paint_selftest(void);
 
+/* 羅盤邊緣、兩個方向圖的角度、局部中距。wave：0 正弦、1 餘弦、2 正切。 */
+VIZION_EXPORT int VIZION_CALL vizion_kirsch(const uint8_t* src, uint8_t* dst, int width, int height);
+VIZION_EXPORT int VIZION_CALL vizion_frei(const uint8_t* src, uint8_t* dst, int width, int height);
+VIZION_EXPORT int VIZION_CALL vizion_robinson_amp(const uint8_t* src, uint8_t* dst, int width, int height);
+VIZION_EXPORT int VIZION_CALL vizion_robinson_dir(const uint8_t* src, uint8_t* dst, int width, int height);
+VIZION_EXPORT int VIZION_CALL vizion_atan2_gray(const uint8_t* vertical, const uint8_t* horizontal, uint8_t* dst, int count);
+VIZION_EXPORT int VIZION_CALL vizion_midrange(const uint8_t* src, uint8_t* dst, int width, int height, int mask_width, int mask_height);
+VIZION_EXPORT int VIZION_CALL vizion_wave(const uint8_t* src, uint8_t* dst, int count, int op);
+VIZION_EXPORT int VIZION_CALL vizion_compass_selftest(void);
+
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
     const uint8_t* gray, int width,

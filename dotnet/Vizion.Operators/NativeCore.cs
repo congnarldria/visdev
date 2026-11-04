@@ -643,6 +643,28 @@ public static class NativeCore
     public static bool TryRoberts(byte[] source, byte[] destination, int width, int height, bool sumAbs) =>
         Ready(source, destination, width * height) && Call(() => vizion_roberts(source, destination, width, height, sumAbs ? 1 : 0));
 
+    public static bool TryKirsch(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_kirsch(source, destination, width, height));
+
+    public static bool TryFrei(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_frei(source, destination, width, height));
+
+    public static bool TryRobinsonAmp(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_robinson_amp(source, destination, width, height));
+
+    public static bool TryRobinsonDir(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_robinson_dir(source, destination, width, height));
+
+    public static bool TryAtan2Gray(byte[] vertical, byte[] horizontal, byte[] destination, int count) =>
+        IsLoaded && UseNative && count >= 1 && vertical.Length >= count && horizontal.Length >= count && destination.Length >= count
+        && Call(() => vizion_atan2_gray(vertical, horizontal, destination, count));
+
+    public static bool TryMidrange(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
+        Ready(source, destination, width * height) && Call(() => vizion_midrange(source, destination, width, height, maskWidth, maskHeight));
+
+    public static bool TryWave(byte[] source, byte[] destination, int count, int op) =>
+        Ready(source, destination, count) && Call(() => vizion_wave(source, destination, count, op));
+
     public static bool TryBinomial(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
         Ready(source, destination, width * height) && Call(() => vizion_binomial(source, destination, width, height, maskWidth, maskHeight));
 
@@ -968,6 +990,27 @@ public static class NativeCore
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_binomial(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_kirsch(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_frei(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_robinson_amp(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_robinson_dir(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_atan2_gray(byte[] vertical, byte[] horizontal, byte[] destination, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_midrange(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_wave(byte[] source, byte[] destination, int count, int op);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);

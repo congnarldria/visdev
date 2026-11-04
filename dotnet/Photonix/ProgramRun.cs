@@ -542,6 +542,66 @@ sealed class ProgramRun
                 Set(args[1], binomial);
                 Image = binomial;
                 return;
+            case "kirsch_amp":
+                Need(args, 2);
+                var kirsch = Operators.KirschAmp(ImageOf(args[0]));
+                Set(args[1], kirsch);
+                Image = kirsch;
+                return;
+            case "frei_amp":
+                Need(args, 2);
+                var frei = Operators.FreiAmp(ImageOf(args[0]));
+                Set(args[1], frei);
+                Image = frei;
+                return;
+            case "robinson_amp":
+                Need(args, 2);
+                var robinsonAmp = Operators.RobinsonAmp(ImageOf(args[0]));
+                Set(args[1], robinsonAmp);
+                Image = robinsonAmp;
+                return;
+            case "robinson_dir":
+                Need(args, 2);
+                var robinsonDir = Operators.RobinsonDir(ImageOf(args[0]));
+                Set(args[1], robinsonDir);
+                Image = robinsonDir;
+                return;
+            case "atan2_image":
+                Need(args, 3);
+                var aimed = Operators.Atan2Image(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], aimed);
+                Image = aimed;
+                return;
+            case "midrange_image":
+                Need(args, 4);
+                var midrange = Operators.MidrangeImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], midrange);
+                Image = midrange;
+                return;
+            case "sin_image":
+                Need(args, 2);
+                var sined = Operators.SinImage(ImageOf(args[0]));
+                Set(args[1], sined);
+                Image = sined;
+                return;
+            case "cos_image":
+                Need(args, 2);
+                var cosined = Operators.CosImage(ImageOf(args[0]));
+                Set(args[1], cosined);
+                Image = cosined;
+                return;
+            case "tan_image":
+                Need(args, 2);
+                var taned = Operators.TanImage(ImageOf(args[0]));
+                Set(args[1], taned);
+                Image = taned;
+                return;
+            case "smooth_image":
+                Need(args, 2);
+                var smoothed = Operators.SmoothImage(ImageOf(args[0]), args.Length > 2 ? Word(args[2]) : "mean", args.Length > 3 ? IntOf(args[3]) : 3);
+                Set(args[1], smoothed);
+                Image = smoothed;
+                return;
             case "reduce_domain":
                 Need(args, 3);
                 var reduced = Operators.ReduceDomain(ImageOf(args[0]), RegionOf(args[1]));
