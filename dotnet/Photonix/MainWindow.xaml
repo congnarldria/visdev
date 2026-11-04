@@ -71,7 +71,7 @@
         <MenuItem Header="全部釘選" Click="NotYet_Click"/>
       </MenuItem>
       <MenuItem Header="執行">
-        <MenuItem Header="執行" Click="NotYet_Click"/>
+        <MenuItem Header="執行" Click="Run_Click"/>
         <MenuItem Header="單步" Click="NotYet_Click"/>
         <MenuItem Header="停止" Click="NotYet_Click"/>
         <MenuItem Header="重設" Click="NotYet_Click"/>
@@ -105,7 +105,7 @@
         <CheckBox Content="追蹤" VerticalAlignment="Center" Margin="8,0,8,0" Foreground="{StaticResource Ink}" IsEnabled="False"/>
         <Button Content="重設" Click="NotYet_Click"/>
         <Button Content="單步" Click="NotYet_Click"/>
-        <Button Content="執行" Click="NotYet_Click"/>
+        <Button Content="執行" Click="Run_Click"/>
         <Button Content="停止" Click="NotYet_Click"/>
       </DockPanel>
     </Border>
@@ -199,6 +199,13 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
       <DockPanel Grid.Column="0" Background="{StaticResource PanelBackground}">
         <TextBlock DockPanel.Dock="Top" Margin="8,6" Foreground="{StaticResource Muted}" Text="程式　點算子名稱開啟參數"/>
         <Grid Margin="8,0,8,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="64"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="92"/>
+          </Grid.ColumnDefinitions>
+          <local:ProgramRail x:Name="LineGutter" Grid.Column="0" Kind="Gutter" ToolTip="點行號設斷點。拖綠色箭頭改下一行。"/>
+          <Grid Grid.Column="1">
           <Border Background="#0E1116" BorderBrush="{StaticResource Line}" BorderThickness="1"/>
           <local:ProgramHighlightView x:Name="ProgramHighlight" IsHitTestVisible="False"/>
           <TextBox x:Name="ProgramText" AcceptsReturn="True" AcceptsTab="True" FontFamily="Consolas" FontSize="13"
@@ -229,6 +236,8 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
               </DockPanel>
             </Border>
           </Popup>
+          </Grid>
+          <local:ProgramRail x:Name="TimeRail" Grid.Column="2" Kind="Times" ToolTip="每一行這次花的時間"/>
         </Grid>
       </DockPanel>
       <GridSplitter Grid.Column="1" Width="4" Background="{StaticResource Line}" HorizontalAlignment="Stretch"/>

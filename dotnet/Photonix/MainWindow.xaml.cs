@@ -38,12 +38,28 @@ public partial class MainWindow : Window
     string SenseLabel = "";
     List<SenseItem> SenseItems = [];
 
+    int NextLine = 1;
+    int BreakSkip;
+    readonly HashSet<int> Breakpoints = [];
+    readonly Dictionary<int, (double Ms, int Count)> LineTimes = [];
+
     public MainWindow()
     {
         InitializeComponent();
         Catalog = OperatorCatalog.Load();
         Memory = OperatorMemory.Load();
         ProgramHighlight.Attach(ProgramText, Catalog.Select(op => op.Name));
+        LineGutter.Attach(ProgramText);
+        TimeRail.Attach(ProgramText);
+        LineGutter.LineClick += (_, line) => ToggleBreakpoint(line);
+        LineGutter.ArrowMoved += (_, line) =>
+        {
+            NextLine = line;
+            BreakSkip = 0;
+            StatusLine.Text = "下一行是第 " + line + " 行";
+            RefreshRails();
+        };
+        RefreshRails();
         ApplyFilter();
         BuildOperatorMenu();
         if (Catalog.Length > 0)
@@ -414,7 +430,84 @@ public partial class MainWindow : Window
         ProgramText.SelectAll();
     }
 
-    void ProgramText_TextChanged(object sender, TextChangedEventArgs e) => UpdateSense(false);
+    void ProgramText_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        RefreshRails();
+        UpdateSense(false);
+    }
+
+    void ToggleBreakpoint(int line)
+    {
+        if (!Breakpoints.Add(line))
+            Breakpoints.Remove(line);
+        RefreshRails();
+    }
+
+    void RefreshRails()
+    {
+        int count = ProgramCounter.LineCount(ProgramText.Text ?? "");
+        Breakpoints.RemoveWhere(line => line < 1 || line > count);
+        if (NextLine > count)
+            NextLine = count;
+        LineGutter.CurrentLine = NextLine;
+        LineGutter.Breakpoints = Breakpoints;
+        TimeRail.CurrentLine = NextLine;
+        TimeRail.Times = LineTimes;
+        ProgramHighlight.CurrentLine = NextLine;
+        LineGutter.InvalidateVisual();
+        TimeRail.InvalidateVisual();
+        ProgramHighlight.InvalidateVisual();
+    }
+
+    void Run_Click(object sender, RoutedEventArgs e) => RunToBreakpoint();
+
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            RunToBreakpoint();
+            e.Handled = true;
+            return;
+        }
+        base.OnPreviewKeyDown(e);
+    }
+
+    void RunToBreakpoint()
+    {
+        CloseSense();
+        int count = ProgramCounter.LineCount(ProgramText.Text ?? "");
+        int current = NextLine < 1 ? 1 : NextLine;
+        int stop = ProgramCounter.NextStop(current, count, Breakpoints, ref BreakSkip);
+        if (stop == 0)
+            StatusLine.Text = "沒有下一個斷點";
+        else
+        {
+            NextLine = stop;
+            StatusLine.Text = "停在第 " + stop + " 行";
+            RevealLine(stop);
+        }
+        RefreshRails();
+    }
+
+    void RevealLine(int line)
+    {
+        string text = ProgramText.Text ?? "";
+        int index = 0;
+        for (int i = 1; i < line; i++)
+        {
+            int newline = text.IndexOf('\n', index);
+            if (newline < 0)
+                return;
+            index = newline + 1;
+        }
+        Rect rect = ProgramText.GetRectFromCharacterIndex(Math.Min(index, text.Length));
+        if (ProgramText.Template.FindName("PART_ContentHost", ProgramText) is ScrollViewer scroll)
+        {
+            double view = scroll.ViewportHeight;
+            if (view > 0 && (rect.Y < 0 || rect.Bottom > view))
+                scroll.ScrollToVerticalOffset(Math.Max(0, scroll.VerticalOffset + rect.Y - (view - rect.Height) / 2));
+        }
+    }
 
     void ProgramText_SelectionChanged(object sender, RoutedEventArgs e) => UpdateSense(false);
 

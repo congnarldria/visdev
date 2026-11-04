@@ -36,6 +36,8 @@ sealed class ProgramHighlightView : FrameworkElement
             scroll.ScrollChanged += (_, _) => InvalidateVisual();
     }
 
+    public int CurrentLine { get; set; }
+
     protected override void OnRender(DrawingContext drawingContext)
     {
         if (Editor == null)
@@ -44,6 +46,7 @@ sealed class ProgramHighlightView : FrameworkElement
         double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         var typeface = new Typeface(Editor.FontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
         int index = 0;
+        int lineNo = 1;
         while (index <= text.Length)
         {
             int newline = text.IndexOf('\n', index);
@@ -52,6 +55,11 @@ sealed class ProgramHighlightView : FrameworkElement
             Rect rect = Editor.GetRectFromCharacterIndex(Math.Min(index, text.Length));
             double x = rect.X;
             double y = rect.Y;
+            if (lineNo == CurrentLine)
+            {
+                double height = rect.Height > 1 ? rect.Height : Editor.FontSize * 1.4;
+                drawingContext.DrawRectangle(CurrentFill, null, new Rect(0, y, ActualWidth, height));
+            }
             foreach (ProgramToken token in ProgramSyntax.Tokens(line, Operators))
             {
                 if (token.Text.Length == 0)
@@ -70,8 +78,11 @@ sealed class ProgramHighlightView : FrameworkElement
             if (newline < 0)
                 break;
             index = newline + 1;
+            lineNo++;
         }
     }
+
+    static readonly Brush CurrentFill = Freeze(Color.FromArgb(20, 0, 224, 90));
 
     static Brush Brush(ProgramTokenKind kind) => kind switch
     {
