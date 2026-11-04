@@ -869,6 +869,53 @@ public static class NativeCore
         IsLoaded && UseNative && real.Length >= width * height && dstReal.Length >= width * height
         && Call(() => vizion_complex_mask(real, imag, dstReal, dstImag, width, height, mode));
 
+    public static bool TryComplexTranslate(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, double row, double column) =>
+        IsLoaded && UseNative && real.Length >= width * height && dstReal.Length >= width * height
+        && Call(() => vizion_complex_translate(real, imag, dstReal, dstImag, width, height, row, column));
+
+    public static bool TryComplexNormalize(double[] real, double[] imag, double[] dstReal, double[] dstImag) =>
+        IsLoaded && UseNative && real.Length > 0 && dstReal.Length >= real.Length
+        && Call(() => vizion_complex_normalize(real, imag, dstReal, dstImag, real.Length));
+
+    public static bool TryComplexFreq(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, double radius, int high) =>
+        IsLoaded && UseNative && real.Length >= width * height && dstReal.Length >= width * height
+        && Call(() => vizion_complex_freq(real, imag, dstReal, dstImag, width, height, radius, high));
+
+    public static bool TryComplexFreqEnergy(double[] real, double[] imag, int width, int height, double radius, out double energy)
+    {
+        double local = 0;
+        if (!IsLoaded || !UseNative || real.Length < width * height
+            || !Call(() => vizion_complex_freq_energy(real, imag, width, height, radius, out local)))
+        {
+            energy = 0;
+            return false;
+        }
+        energy = local;
+        return true;
+    }
+
+    public static bool TryComplexView(double[] real, double[] imag, byte[] destination, int mode) =>
+        IsLoaded && UseNative && destination.Length >= real.Length
+        && Call(() => vizion_complex_view(real, imag, destination, real.Length, mode));
+
+    public static bool TryLocalPeak(byte[] gray, byte[] mask, int width, int height, double level, bool minima) =>
+        IsLoaded && UseNative && gray.Length >= width * height && mask.Length >= width * height
+        && Call(() => vizion_local_peak(gray, mask, width, height, level, minima ? 1 : 0));
+
+    public static bool TryCheckDiff(byte[] image, byte[] pattern, byte[] mask, double limit, int mode) =>
+        IsLoaded && UseNative && mask.Length >= image.Length && pattern.Length >= image.Length
+        && Call(() => vizion_check_diff(image, pattern, mask, image.Length, limit, mode));
+
+    public static bool TryZeroCross(byte[] gray, byte[] mask, int width, int height) =>
+        IsLoaded && UseNative && gray.Length >= width * height && mask.Length >= width * height
+        && Call(() => vizion_zero_cross(gray, mask, width, height));
+
+    public static bool TryFastThreshold(byte[] gray, byte[] mask, int width, int height, int low, int high, int minimum) =>
+        IsLoaded && UseNative && gray.Length >= width * height && mask.Length >= width * height
+        && Call(() => vizion_fast_threshold(gray, mask, width, height, low, high, minimum));
+
     public static bool TryComplexEnergy(double[] real, double[] imag, out double energy)
     {
         double local = 0;
@@ -1420,6 +1467,36 @@ public static class NativeCore
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_complex_energy(double[] real, double[] imag, int count, out double energy);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_translate(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, double row, double column);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_normalize(double[] real, double[] imag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_freq(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, double radius, int high);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_freq_energy(
+        double[] real, double[] imag, int width, int height, double radius, out double energy);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_view(double[] real, double[] imag, byte[] destination, int count, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_local_peak(byte[] gray, byte[] mask, int width, int height, double level, int minima);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_check_diff(byte[] image, byte[] pattern, byte[] mask, int count, double limit, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_zero_cross(byte[] gray, byte[] mask, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_fast_threshold(byte[] gray, byte[] mask, int width, int height, int low, int high, int minimum);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);

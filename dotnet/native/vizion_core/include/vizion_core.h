@@ -383,6 +383,37 @@ VIZION_EXPORT int VIZION_CALL vizion_complex_mask(
 VIZION_EXPORT int VIZION_CALL vizion_complex_energy(const double* real, const double* imag, int count, double* energy);
 VIZION_EXPORT int VIZION_CALL vizion_spectrum_selftest(void);
 
+/* 用相位把影像平移。整數位移時，超出的部分從對面捲回來。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_translate(
+    const double* real, const double* imag, double* dst_real, double* dst_imag,
+    int width, int height, double row, double column);
+/* 不是 0 的頻率除以自己的絕對值，只留相位。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_normalize(
+    const double* real, const double* imag, double* dst_real, double* dst_imag, int count);
+/* high 為 0 時留下距離不大於半徑的頻率，為 1 時去掉那些。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_freq(
+    const double* real, const double* imag, double* dst_real, double* dst_imag,
+    int width, int height, double radius, int high);
+/* 半徑內的絕對值平方加總後，除以整張的點數。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_freq_energy(
+    const double* real, const double* imag, int width, int height, double radius, double* energy);
+/* mode：0 實部、1 虛部、2 絕對值、3 log。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_view(
+    const double* real, const double* imag, uint8_t* dst, int count, int mode);
+
+/* 3×3 裡比周圍高或比周圍暗。minima 為 1 時找極小。 */
+VIZION_EXPORT int VIZION_CALL vizion_local_peak(
+    const uint8_t* gray, uint8_t* mask, int width, int height, double level, int minima);
+/* 灰階差超過門檻。mode：0 絕對差、1 比參考亮、2 比參考暗。 */
+VIZION_EXPORT int VIZION_CALL vizion_check_diff(
+    const uint8_t* image, const uint8_t* pattern, uint8_t* mask, int count, double limit, int mode);
+/* 灰階 128 當作 0。相鄰一正一負時，留下離 0 較近的那一側。 */
+VIZION_EXPORT int VIZION_CALL vizion_zero_cross(const uint8_t* gray, uint8_t* mask, int width, int height);
+/* 同一列上比 MinSize 短的連續亮段丟掉。 */
+VIZION_EXPORT int VIZION_CALL vizion_fast_threshold(
+    const uint8_t* gray, uint8_t* mask, int width, int height, int low, int high, int minimum);
+VIZION_EXPORT int VIZION_CALL vizion_segment_selftest(void);
+
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
     const uint8_t* gray, int width,

@@ -977,6 +977,62 @@ sealed class ProgramRun
                 var spectrumEnergy = Operators.FftEnergy(ComplexOf(args[0]));
                 Set(args[1], spectrumEnergy);
                 return;
+            case "translate_fft":
+                Need(args, 4);
+                var phaseShift = Operators.TranslateFft(ComplexOf(args[0]), Num(args[1]), Num(args[2]));
+                Set(args[3], phaseShift);
+                return;
+            case "normalize_fft":
+                Need(args, 2);
+                var unitSpectrum = Operators.NormalizeFft(ComplexOf(args[0]));
+                Set(args[1], unitSpectrum);
+                return;
+            case "freq_filter":
+                Need(args, 4);
+                var bandSpectrum = Operators.FreqFilter(ComplexOf(args[0]), Word(args[1]), Num(args[2]));
+                Set(args[3], bandSpectrum);
+                return;
+            case "freq_energy":
+                Need(args, 3);
+                var radiusEnergy = Operators.FreqEnergy(ComplexOf(args[0]), Num(args[1]));
+                Set(args[2], radiusEnergy);
+                return;
+            case "complex_to_image":
+                Need(args, 2);
+                var viewedPlane = Operators.ComplexToImage(ComplexOf(args[1]), args.Length > 2 ? Word(args[2]) : "abs");
+                Set(args[0], viewedPlane);
+                Image = viewedPlane;
+                return;
+            case "local_max":
+                Need(args, 2);
+                var localPeaks = Operators.LocalMax(ImageOf(args[0]), args.Length > 2 ? Num(args[2]) : 0);
+                Set(args[1], localPeaks);
+                Show(localPeaks);
+                return;
+            case "local_min":
+                Need(args, 2);
+                var localValleys = Operators.LocalMin(ImageOf(args[0]), args.Length > 2 ? Num(args[2]) : 255);
+                Set(args[1], localValleys);
+                Show(localValleys);
+                return;
+            case "check_difference":
+                Need(args, 5);
+                var differMask = Operators.CheckDifference(ImageOf(args[0]), ImageOf(args[1]), Word(args[3]), Num(args[4]));
+                Set(args[2], differMask);
+                Show(differMask);
+                return;
+            case "zero_crossing":
+                Need(args, 2);
+                var crossMarks = Operators.ZeroCrossing(ImageOf(args[0]));
+                Set(args[1], crossMarks);
+                Show(crossMarks);
+                return;
+            case "fast_threshold":
+                Need(args, 5);
+                var longRuns = Operators.FastThreshold(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), IntOf(args[4]));
+                Set(args[1], longRuns);
+                Show(longRuns);
+                return;
             case "select_grayvalues_from_channels":
                 Need(args, 3);
                 var channelPick = Operators.SelectGrayvalues(ImageOf(args[0]), ImageOf(args[1]));

@@ -2,10 +2,10 @@
 
 目錄共 1195 個，和 `dotnet/Photonix/operators.json` 同一份。Python 引擎裡每個都有函式。
 這裡的「還沒實作」是指 Photonix 執行到該行會停下來，訊息是「還沒接上這個算子」。
-已接上的 139 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
+已接上的 149 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
 `tuple_is_serializable` 是在問 tuple 能不能序列化，不是序列埠，所以留在 Tuple。
 
-還沒接上、且與硬體無關：1029 個。排除的硬體算子：27 個。
+還沒接上、且與硬體無關：1019 個。排除的硬體算子：27 個。
 
 ## 數量
 
@@ -13,9 +13,9 @@
 | --- | ---: |
 | 檔案 | 20 |
 | 系統 | 4 |
-| 灰階與濾波 | 19 |
+| 灰階與濾波 | 14 |
 | 幾何 | 57 |
-| 分割 | 26 |
+| 分割 | 21 |
 | 形態學 | 47 |
 | 區域 | 211 |
 | 特徵 | 100 |
@@ -31,7 +31,7 @@
 | 顯示 | 10 |
 | 矩陣 | 65 |
 | Tuple | 148 |
-| 合計 | 1029 |
+| 合計 | 1019 |
 
 ## 已接上，不列入
 
@@ -156,6 +156,16 @@
 - Vizion.div_fft
 - Vizion.mask_fft
 - Vizion.fft_energy
+- Vizion.translate_fft
+- Vizion.normalize_fft
+- Vizion.freq_filter
+- Vizion.freq_energy
+- Vizion.complex_to_image
+- Vizion.local_max
+- Vizion.local_min
+- Vizion.check_difference
+- Vizion.zero_crossing
+- Vizion.fast_threshold
 - Vizion.read_image
 - Vizion.gauss_image
 - Vizion.mean_image
@@ -242,7 +252,7 @@
 - Vizion.get_system_time
 - Vizion.get_system_info
 
-### 灰階與濾波（19）
+### 灰階與濾波（14）
 
 - Vizion.append_channel
 - Vizion.trans_to_rgb
@@ -257,11 +267,6 @@
 - Vizion.fft_image_inv
 - Vizion.phase_correlation
 - Vizion.align_translation
-- Vizion.complex_to_image
-- Vizion.translate_fft
-- Vizion.freq_filter
-- Vizion.freq_energy
-- Vizion.normalize_fft
 - Vizion.locate_template
 
 ### 幾何（57）
@@ -324,7 +329,7 @@
 - Vizion.polar_trans_region
 - Vizion.polar_trans_region_inv
 
-### 分割（26）
+### 分割（21）
 
 - Vizion.binary_threshold
 - Vizion.sauvola
@@ -332,16 +337,11 @@
 - Vizion.opencv_connection
 - Vizion.select_obj
 - Vizion.histo_to_thresh
-- Vizion.local_max
-- Vizion.local_min
 - Vizion.plateaus
-- Vizion.check_difference
 - Vizion.dots_image
 - Vizion.char_threshold
 - Vizion.auto_threshold
-- Vizion.zero_crossing
 - Vizion.dual_threshold
-- Vizion.fast_threshold
 - Vizion.bin_threshold
 - Vizion.local_threshold
 - Vizion.dyn_threshold
