@@ -317,6 +317,42 @@ VIZION_EXPORT int VIZION_CALL vizion_edge_enhance(
     double sigma, double factor, double threshold, double limit, const uint8_t* domain);
 VIZION_EXPORT int VIZION_CALL vizion_grade_selftest(void);
 
+/* 細高斯減粗高斯，太小的起伏不加，再加回亮度。定義域外保持原像素。 */
+VIZION_EXPORT int VIZION_CALL vizion_edge_band(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels,
+    double sigma_fine, double sigma_coarse, double factor, double threshold, const uint8_t* domain);
+/* 原圖減模糊的差，乘上梯度佔 Level 的比例，再加回亮度。定義域外保持原像素。 */
+VIZION_EXPORT int VIZION_CALL vizion_edge_masked(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels,
+    double sigma, double factor, double level, const uint8_t* domain);
+/* 梯度小的地方改用高斯，梯度達到 Level 就留原圖。定義域外保持原像素。 */
+VIZION_EXPORT int VIZION_CALL vizion_edge_preserve(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels,
+    double sigma, double level, const uint8_t* domain);
+/* 四鄰域 Perona-Malik 或拋物線傳導。最外一圈不動。彩色先轉成亮度。mode：0 perona-malik、1 parabolic。 */
+VIZION_EXPORT int VIZION_CALL vizion_anisotropic(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels,
+    int mode, double contrast, double theta, int iterations);
+/* 沿著拉普拉斯或梯度方向的二階導數把邊緣變陡。完全平的地方不變。mode：0 laplace、1 canny。 */
+VIZION_EXPORT int VIZION_CALL vizion_shock(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels,
+    double theta, int iterations, int mode, double sigma);
+/* 用影像自己的亮度當引導。平坦處變成局部平均，階梯邊緣的兩邊不會被拉到中間。 */
+VIZION_EXPORT int VIZION_CALL vizion_guided(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels, int radius, double eps);
+/* Frangi 用 Hessian 兩個特徵值把細線加強，方塊內部接近 0。dark 為 1 時加強暗線。 */
+VIZION_EXPORT int VIZION_CALL vizion_frangi(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels,
+    double sigma, double sigma_max, int dark);
+/* 切成格子各自等化，相鄰格子再混起來。彩色只處理亮度。 */
+VIZION_EXPORT int VIZION_CALL vizion_clahe(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels, double clip, int tiles);
+/* 樣板或核放在左上角，其餘補 0，做循環相關或循環卷積，再截到 0 到 255。correlation 為 1 是相關。 */
+VIZION_EXPORT int VIZION_CALL vizion_circular(
+    const uint8_t* image, const uint8_t* kernel, uint8_t* dst,
+    int width, int height, int kernel_width, int kernel_height, int correlation);
+VIZION_EXPORT int VIZION_CALL vizion_shade_selftest(void);
+
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
     const uint8_t* gray, int width,

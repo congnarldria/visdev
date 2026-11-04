@@ -2,10 +2,10 @@
 
 目錄共 1195 個，和 `dotnet/Photonix/operators.json` 同一份。Python 引擎裡每個都有函式。
 這裡的「還沒實作」是指 Photonix 執行到該行會停下來，訊息是「還沒接上這個算子」。
-已接上的 118 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
+已接上的 128 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
 `tuple_is_serializable` 是在問 tuple 能不能序列化，不是序列埠，所以留在 Tuple。
 
-還沒接上、且與硬體無關：1050 個。排除的硬體算子：27 個。
+還沒接上、且與硬體無關：1040 個。排除的硬體算子：27 個。
 
 ## 數量
 
@@ -13,7 +13,7 @@
 | --- | ---: |
 | 檔案 | 20 |
 | 系統 | 4 |
-| 灰階與濾波 | 40 |
+| 灰階與濾波 | 30 |
 | 幾何 | 57 |
 | 分割 | 26 |
 | 形態學 | 47 |
@@ -31,7 +31,7 @@
 | 顯示 | 10 |
 | 矩陣 | 65 |
 | Tuple | 148 |
-| 合計 | 1050 |
+| 合計 | 1040 |
 
 ## 已接上，不列入
 
@@ -135,6 +135,16 @@
 - Vizion.diff_amount
 - Vizion.edge_residual
 - Vizion.edge_enhance
+- Vizion.edge_band
+- Vizion.edge_masked
+- Vizion.edge_preserve
+- Vizion.anisotropic_diffusion
+- Vizion.shock_filter
+- Vizion.guided_filter
+- Vizion.frangi
+- Vizion.emphasize_clahe
+- Vizion.correlation_image
+- Vizion.convol_fft
 - Vizion.read_image
 - Vizion.gauss_image
 - Vizion.mean_image
@@ -221,18 +231,14 @@
 - Vizion.get_system_time
 - Vizion.get_system_info
 
-### 灰階與濾波（40）
+### 灰階與濾波（30）
 
-- Vizion.guided_filter
-- Vizion.emphasize_clahe
 - Vizion.append_channel
 - Vizion.trans_to_rgb
 - Vizion.cfa_to_rgb
 - Vizion.harmonic_interpolation
 - Vizion.bilateral_filter
 - Vizion.optical_flow_mg
-- Vizion.anisotropic_diffusion
-- Vizion.shock_filter
 - Vizion.add_noise_white
 - Vizion.isotropic_diffusion
 - Vizion.add_noise_salt_pepper
@@ -252,17 +258,11 @@
 - Vizion.fft_energy
 - Vizion.div_fft
 - Vizion.complex_to_image
-- Vizion.convol_fft
 - Vizion.translate_fft
 - Vizion.freq_filter
 - Vizion.freq_energy
 - Vizion.normalize_fft
 - Vizion.locate_template
-- Vizion.correlation_image
-- Vizion.edge_band
-- Vizion.edge_masked
-- Vizion.edge_preserve
-- Vizion.frangi
 
 ### 幾何（57）
 

@@ -841,6 +841,86 @@ sealed class ProgramRun
                 Set(args[1], edgeRemain);
                 Image = edgeRemain;
                 return;
+            case "edge_band":
+                Need(args, 2);
+                var bandBoost = Operators.EdgeBand(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Num(args[2]) : 0.8,
+                    args.Length > 3 ? Num(args[3]) : 2.4,
+                    args.Length > 4 ? Num(args[4]) : 1,
+                    args.Length > 5 ? Num(args[5]) : 2);
+                Set(args[1], bandBoost);
+                Image = bandBoost;
+                return;
+            case "edge_masked":
+                Need(args, 2);
+                var maskedEdge = Operators.EdgeMasked(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Num(args[2]) : 1.2,
+                    args.Length > 3 ? Num(args[3]) : 1,
+                    args.Length > 4 ? Num(args[4]) : 30);
+                Set(args[1], maskedEdge);
+                Image = maskedEdge;
+                return;
+            case "edge_preserve":
+                Need(args, 2);
+                var preservedFlat = Operators.EdgePreserve(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Num(args[2]) : 1.2,
+                    args.Length > 3 ? Num(args[3]) : 30);
+                Set(args[1], preservedFlat);
+                Image = preservedFlat;
+                return;
+            case "anisotropic_diffusion":
+                Need(args, 6);
+                var anisoGray = Operators.Anisotropic(
+                    ImageOf(args[0]), Word(args[2]), Num(args[3]), Num(args[4]), IntOf(args[5]));
+                Set(args[1], anisoGray);
+                Image = anisoGray;
+                return;
+            case "shock_filter":
+                Need(args, 6);
+                var shocked = Operators.ShockFilter(
+                    ImageOf(args[0]), Num(args[2]), IntOf(args[3]), Word(args[4]), Num(args[5]));
+                Set(args[1], shocked);
+                Image = shocked;
+                return;
+            case "guided_filter":
+                Need(args, 2);
+                var guidedOut = Operators.GuidedFilter(
+                    ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 8, args.Length > 3 ? Num(args[3]) : 800);
+                Set(args[1], guidedOut);
+                Image = guidedOut;
+                return;
+            case "frangi":
+                Need(args, 2);
+                var vesselMap = Operators.Frangi(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Num(args[2]) : 1,
+                    args.Length > 3 ? Num(args[3]) : 1,
+                    args.Length > 4 ? Word(args[4]) : "dark");
+                Set(args[1], vesselMap);
+                Image = vesselMap;
+                return;
+            case "emphasize_clahe":
+                Need(args, 2);
+                var claheOut = Operators.EmphasizeClahe(
+                    ImageOf(args[0]), args.Length > 2 ? Num(args[2]) : 8, args.Length > 3 ? IntOf(args[3]) : 8);
+                Set(args[1], claheOut);
+                Image = claheOut;
+                return;
+            case "correlation_image":
+                Need(args, 3);
+                var scoreImage = Operators.CorrelationImage(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], scoreImage);
+                Image = scoreImage;
+                return;
+            case "convol_fft":
+                Need(args, 3);
+                var fftConvol = Operators.ConvolFft(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], fftConvol);
+                Image = fftConvol;
+                return;
             case "select_grayvalues_from_channels":
                 Need(args, 3);
                 var channelPick = Operators.SelectGrayvalues(ImageOf(args[0]), ImageOf(args[1]));

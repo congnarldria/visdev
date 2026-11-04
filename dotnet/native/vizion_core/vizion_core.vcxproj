@@ -197,6 +197,9 @@
     <ClCompile Include="src\grade_sse2.c">
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
+    <ClCompile Include="src\shade.c">
+      <AdditionalOptions Condition="'$(Platform)'=='Win32'">/arch:IA32 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
     <ClCompile Include="src\intensity.c">
       <AdditionalOptions Condition="'$(Platform)'=='Win32'">/arch:IA32 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>

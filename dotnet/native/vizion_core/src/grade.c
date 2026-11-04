@@ -21,7 +21,7 @@ static int grade_bankers(double value)
     return (base & 1) ? base + 1 : base;
 }
 
-static uint8_t grade_round_d(double value)
+uint8_t grade_round_d(double value)
 {
     int whole;
     double frac;
@@ -36,7 +36,7 @@ static uint8_t grade_round_d(double value)
     return rounded > 255 ? (uint8_t)255 : (uint8_t)rounded;
 }
 
-static uint8_t grade_round(float value)
+uint8_t grade_round(float value)
 {
     return grade_round_d((double)value);
 }
@@ -71,7 +71,7 @@ static void grade_conv_1d(const float* src, int length, int stride, float* dst, 
     }
 }
 
-static int grade_sep(const float* src, float* dst, int width, int height, const float* across, int across_n, const float* along, int along_n, int use_sse)
+int grade_sep(const float* src, float* dst, int width, int height, const float* across, int across_n, const float* along, int along_n, int use_sse)
 {
     float* horizontal;
     float* column;
@@ -102,7 +102,7 @@ static int grade_sep(const float* src, float* dst, int width, int height, const 
     return 0;
 }
 
-static void grade_gauss_kernel(double sigma, int ksize, float* kernel)
+void grade_gauss_kernel(double sigma, int ksize, float* kernel)
 {
     double scale = -0.5 / (sigma * sigma);
     double half = (ksize - 1) * 0.5;
@@ -118,7 +118,7 @@ static void grade_gauss_kernel(double sigma, int ksize, float* kernel)
         kernel[i] = (float)(raw[i] / sum);
 }
 
-static int grade_blur_side(double sigma)
+int grade_blur_side(double sigma)
 {
     int side;
     if (!(sigma > 0.0))
@@ -131,7 +131,7 @@ static int grade_blur_side(double sigma)
     return side;
 }
 
-static int grade_deriv_kernels(double sigma, float* smooth, float* first, float* second, int* count)
+int grade_deriv_kernels(double sigma, float* smooth, float* first, float* second, int* count)
 {
     int radius;
     int i;
@@ -480,7 +480,7 @@ static int grade_sat(int value)
     return value;
 }
 
-static void grade_bgr_ycrcb(uint8_t b, uint8_t g, uint8_t r, int* y, int* cr, int* cb)
+void grade_bgr_ycrcb(uint8_t b, uint8_t g, uint8_t r, int* y, int* cr, int* cb)
 {
     int yy = grade_descale((int)b * 1868 + (int)g * 9617 + (int)r * 4899, 14);
     *y = yy;
@@ -488,14 +488,14 @@ static void grade_bgr_ycrcb(uint8_t b, uint8_t g, uint8_t r, int* y, int* cr, in
     *cb = grade_sat(grade_descale(((int)b - yy) * 9241 + (128 << 14), 14));
 }
 
-static void grade_ycrcb_bgr(int y, int cr, int cb, uint8_t* b, uint8_t* g, uint8_t* r)
+void grade_ycrcb_bgr(int y, int cr, int cb, uint8_t* b, uint8_t* g, uint8_t* r)
 {
     *b = (uint8_t)grade_sat(y + grade_descale((cb - 128) * 29049, 14));
     *g = (uint8_t)grade_sat(y + grade_descale((cb - 128) * -5636 + (cr - 128) * -11698, 14));
     *r = (uint8_t)grade_sat(y + grade_descale((cr - 128) * 22987, 14));
 }
 
-static float grade_boost(float sample, float blurred, double factor, double threshold, double limit)
+float grade_boost(float sample, float blurred, double factor, double threshold, double limit)
 {
     float boost = sample - blurred;
     if (threshold > 0.0 && !(fabs((double)boost) >= threshold))

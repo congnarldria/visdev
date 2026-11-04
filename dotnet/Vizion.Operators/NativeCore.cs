@@ -784,6 +784,55 @@ public static class NativeCore
         IsLoaded && UseNative && channels is 1 or 3
         && Call(() => vizion_edge_enhance(source, destination, width, height, channels, sigma, factor, threshold, limit, domain));
 
+    public static bool TryEdgeBand(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigmaFine, double sigmaCoarse, double factor, double threshold, byte[]? domain) =>
+        IsLoaded && UseNative && channels is 1 or 3
+        && Call(() => vizion_edge_band(source, destination, width, height, channels, sigmaFine, sigmaCoarse, factor, threshold, domain));
+
+    public static bool TryEdgeMasked(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double factor, double level, byte[]? domain) =>
+        IsLoaded && UseNative && channels is 1 or 3
+        && Call(() => vizion_edge_masked(source, destination, width, height, channels, sigma, factor, level, domain));
+
+    public static bool TryEdgePreserve(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double level, byte[]? domain) =>
+        IsLoaded && UseNative && channels is 1 or 3
+        && Call(() => vizion_edge_preserve(source, destination, width, height, channels, sigma, level, domain));
+
+    public static bool TryAnisotropic(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        int mode, double contrast, double theta, int iterations) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height
+        && Call(() => vizion_anisotropic(source, destination, width, height, channels, mode, contrast, theta, iterations));
+
+    public static bool TryShock(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double theta, int iterations, int mode, double sigma) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height
+        && Call(() => vizion_shock(source, destination, width, height, channels, theta, iterations, mode, sigma));
+
+    public static bool TryGuided(byte[] source, byte[] destination, int width, int height, int channels, int radius, double eps) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height * channels
+        && Call(() => vizion_guided(source, destination, width, height, channels, radius, eps));
+
+    public static bool TryFrangi(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double sigmaMax, int dark) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height
+        && Call(() => vizion_frangi(source, destination, width, height, channels, sigma, sigmaMax, dark));
+
+    public static bool TryClahe(byte[] source, byte[] destination, int width, int height, int channels, double clip, int tiles) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height * channels
+        && Call(() => vizion_clahe(source, destination, width, height, channels, clip, tiles));
+
+    public static bool TryCircular(
+        byte[] image, byte[] kernel, byte[] destination, int width, int height, int kernelWidth, int kernelHeight, int correlation) =>
+        IsLoaded && UseNative && destination.Length >= width * height
+        && Call(() => vizion_circular(image, kernel, destination, width, height, kernelWidth, kernelHeight, correlation));
+
     public static bool TrySurfaceQuad(
         byte[] destination, int width, int height,
         double alpha, double beta, double gamma, double delta, double epsilon, double zeta,
@@ -1238,6 +1287,49 @@ public static class NativeCore
     static extern int vizion_edge_enhance(
         byte[] source, byte[] destination, int width, int height, int channels,
         double sigma, double factor, double threshold, double limit, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_edge_band(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigmaFine, double sigmaCoarse, double factor, double threshold, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_edge_masked(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double factor, double level, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_edge_preserve(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double level, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_anisotropic(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        int mode, double contrast, double theta, int iterations);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_shock(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double theta, int iterations, int mode, double sigma);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_guided(
+        byte[] source, byte[] destination, int width, int height, int channels, int radius, double eps);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_frangi(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double sigmaMax, int dark);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_clahe(
+        byte[] source, byte[] destination, int width, int height, int channels, double clip, int tiles);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_circular(
+        byte[] image, byte[] kernel, byte[] destination,
+        int width, int height, int kernelWidth, int kernelHeight, int correlation);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);
