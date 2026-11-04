@@ -833,6 +833,60 @@ public static class NativeCore
         IsLoaded && UseNative && destination.Length >= width * height
         && Call(() => vizion_circular(image, kernel, destination, width, height, kernelWidth, kernelHeight, correlation));
 
+    public static bool TryComplexFill(double[] real, double[] imag, double re, double im) =>
+        IsLoaded && UseNative && real.Length > 0 && imag.Length >= real.Length
+        && Call(() => vizion_complex_fill(real, imag, real.Length, re, im));
+
+    public static bool TryComplexScale(double[] real, double[] imag, double[] dstReal, double[] dstImag, double factor) =>
+        IsLoaded && UseNative && dstReal.Length >= real.Length && dstImag.Length >= real.Length
+        && Call(() => vizion_complex_scale(real, imag, dstReal, dstImag, real.Length, factor));
+
+    public static bool TryComplexConj(double[] real, double[] imag, double[] dstReal, double[] dstImag) =>
+        IsLoaded && UseNative && dstReal.Length >= real.Length && dstImag.Length >= real.Length
+        && Call(() => vizion_complex_conj(real, imag, dstReal, dstImag, real.Length));
+
+    public static bool TryComplexAdd(double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag) =>
+        ComplexPair(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag)
+        && Call(() => vizion_complex_add(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag, leftReal.Length));
+
+    public static bool TryComplexSub(double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag) =>
+        ComplexPair(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag)
+        && Call(() => vizion_complex_sub(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag, leftReal.Length));
+
+    public static bool TryComplexMul(double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag) =>
+        ComplexPair(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag)
+        && Call(() => vizion_complex_mul(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag, leftReal.Length));
+
+    public static bool TryComplexDiv(double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag) =>
+        ComplexPair(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag)
+        && Call(() => vizion_complex_div(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag, leftReal.Length));
+
+    public static bool TryComplexShift(double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, int center) =>
+        IsLoaded && UseNative && real.Length >= width * height && dstReal.Length >= width * height
+        && Call(() => vizion_complex_shift(real, imag, dstReal, dstImag, width, height, center));
+
+    public static bool TryComplexMask(double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, int mode) =>
+        IsLoaded && UseNative && real.Length >= width * height && dstReal.Length >= width * height
+        && Call(() => vizion_complex_mask(real, imag, dstReal, dstImag, width, height, mode));
+
+    public static bool TryComplexEnergy(double[] real, double[] imag, out double energy)
+    {
+        double local = 0;
+        if (!IsLoaded || !UseNative || real.Length < 1 || imag.Length < real.Length
+            || !Call(() => vizion_complex_energy(real, imag, real.Length, out local)))
+        {
+            energy = 0;
+            return false;
+        }
+        energy = local;
+        return true;
+    }
+
+    static bool ComplexPair(double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag) =>
+        IsLoaded && UseNative && leftReal.Length > 0
+        && leftImag.Length >= leftReal.Length && rightReal.Length >= leftReal.Length && rightImag.Length >= leftReal.Length
+        && dstReal.Length >= leftReal.Length && dstImag.Length >= leftReal.Length;
+
     public static bool TrySurfaceQuad(
         byte[] destination, int width, int height,
         double alpha, double beta, double gamma, double delta, double epsilon, double zeta,
@@ -1330,6 +1384,42 @@ public static class NativeCore
     static extern int vizion_circular(
         byte[] image, byte[] kernel, byte[] destination,
         int width, int height, int kernelWidth, int kernelHeight, int correlation);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_fill(double[] real, double[] imag, int count, double re, double im);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_scale(double[] real, double[] imag, double[] dstReal, double[] dstImag, int count, double factor);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_conj(double[] real, double[] imag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_add(
+        double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_sub(
+        double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_mul(
+        double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_div(
+        double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_shift(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, int center);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_mask(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_energy(double[] real, double[] imag, int count, out double energy);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);

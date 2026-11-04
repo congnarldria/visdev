@@ -921,6 +921,62 @@ sealed class ProgramRun
                 Set(args[2], fftConvol);
                 Image = fftConvol;
                 return;
+            case "gen_complex_const":
+                Need(args, 5);
+                var madeSpectrum = Operators.GenComplexConst(Num(args[0]), Num(args[1]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[4], madeSpectrum);
+                return;
+            case "get_complex":
+                Need(args, 5);
+                Operators.GetComplex(ComplexOf(args[0]), Num(args[1]), Num(args[2]), out double readReal, out double readImag);
+                Set(args[3], readReal);
+                Set(args[4], readImag);
+                return;
+            case "fftshift":
+                Need(args, 2);
+                var shiftedSpectrum = Operators.FftShift(ComplexOf(args[0]), args.Length > 2 ? Word(args[1]) : "center");
+                Set(args.Length > 2 ? args[2] : args[1], shiftedSpectrum);
+                return;
+            case "scale_fft":
+                Need(args, 3);
+                var scaledSpectrum = Operators.ScaleFft(ComplexOf(args[0]), Num(args[1]));
+                Set(args[2], scaledSpectrum);
+                return;
+            case "conj_fft":
+                Need(args, 2);
+                var conjugated = Operators.ConjFft(ComplexOf(args[0]));
+                Set(args[1], conjugated);
+                return;
+            case "add_fft":
+                Need(args, 3);
+                var summedSpectrum = Operators.AddFft(ComplexOf(args[0]), ComplexOf(args[1]));
+                Set(args[2], summedSpectrum);
+                return;
+            case "sub_fft":
+                Need(args, 3);
+                var diffSpectrum = Operators.SubFft(ComplexOf(args[0]), ComplexOf(args[1]));
+                Set(args[2], diffSpectrum);
+                return;
+            case "mult_fft":
+                Need(args, 3);
+                var productSpectrum = Operators.MultFft(ComplexOf(args[0]), ComplexOf(args[1]));
+                Set(args[2], productSpectrum);
+                return;
+            case "div_fft":
+                Need(args, 3);
+                var quotientSpectrum = Operators.DivFft(ComplexOf(args[0]), ComplexOf(args[1]));
+                Set(args[2], quotientSpectrum);
+                return;
+            case "mask_fft":
+                Need(args, 2);
+                var maskedSpectrum = Operators.MaskFft(ComplexOf(args[0]), args.Length > 2 ? Word(args[1]) : "dc");
+                Set(args.Length > 2 ? args[2] : args[1], maskedSpectrum);
+                return;
+            case "fft_energy":
+                Need(args, 2);
+                var spectrumEnergy = Operators.FftEnergy(ComplexOf(args[0]));
+                Set(args[1], spectrumEnergy);
+                return;
             case "select_grayvalues_from_channels":
                 Need(args, 3);
                 var channelPick = Operators.SelectGrayvalues(ImageOf(args[0]), ImageOf(args[1]));
@@ -1043,6 +1099,13 @@ sealed class ProgramRun
         if (Eval(token) is ImageBuffer image)
             return image;
         throw new InvalidOperationException(token + " 必須是影像");
+    }
+
+    ComplexBuffer ComplexOf(string token)
+    {
+        if (Eval(token) is ComplexBuffer spectrum)
+            return spectrum;
+        throw new InvalidOperationException(token + " 必須是複數影像");
     }
 
     Region RegionOf(string token)

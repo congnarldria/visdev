@@ -353,6 +353,36 @@ VIZION_EXPORT int VIZION_CALL vizion_circular(
     int width, int height, int kernel_width, int kernel_height, int correlation);
 VIZION_EXPORT int VIZION_CALL vizion_shade_selftest(void);
 
+/* 整張填同一個複數。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_fill(double* real, double* imag, int count, double re, double im);
+/* 每個頻率乘上同一個實數。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_scale(const double* real, const double* imag, double* dst_real, double* dst_imag, int count, double factor);
+/* 虛部變號。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_conj(const double* real, const double* imag, double* dst_real, double* dst_imag, int count);
+/* 逐點相加、相減、相乘。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_add(
+    const double* left_real, const double* left_imag, const double* right_real, const double* right_imag,
+    double* dst_real, double* dst_imag, int count);
+VIZION_EXPORT int VIZION_CALL vizion_complex_sub(
+    const double* left_real, const double* left_imag, const double* right_real, const double* right_imag,
+    double* dst_real, double* dst_imag, int count);
+VIZION_EXPORT int VIZION_CALL vizion_complex_mul(
+    const double* left_real, const double* left_imag, const double* right_real, const double* right_imag,
+    double* dst_real, double* dst_imag, int count);
+/* 絕對值不大於 1e-12 的除數，那個頻率的商是 0。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_div(
+    const double* left_real, const double* left_imag, const double* right_real, const double* right_imag,
+    double* dst_real, double* dst_imag, int count);
+/* center 為 1 時低頻搬到中央，為 0 時搬回角落。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_shift(
+    const double* real, const double* imag, double* dst_real, double* dst_imag, int width, int height, int center);
+/* mode：0 只留直流、1 清掉直流、2 只留實部、3 只留虛部。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_mask(
+    const double* real, const double* imag, double* dst_real, double* dst_imag, int width, int height, int mode);
+/* 所有頻率絕對值平方的平均。 */
+VIZION_EXPORT int VIZION_CALL vizion_complex_energy(const double* real, const double* imag, int count, double* energy);
+VIZION_EXPORT int VIZION_CALL vizion_spectrum_selftest(void);
+
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
     const uint8_t* gray, int width,
