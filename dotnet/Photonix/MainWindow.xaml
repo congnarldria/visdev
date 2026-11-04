@@ -38,13 +38,15 @@
       <MenuItem Header="檔案">
         <MenuItem Header="新增" InputGestureText="Ctrl+N" Click="NewProgram_Click"/>
         <MenuItem Header="專案" Click="Project_Click"/>
-        <MenuItem Header="範本一覽" Click="NotYet_Click"/>
+        <MenuItem x:Name="TemplateMenu" Header="範本"/>
+        <MenuItem Header="範本一覽" Click="TemplateList_Click"/>
         <MenuItem Header="開啟" InputGestureText="Ctrl+O" Click="OpenProgram_Click"/>
         <MenuItem Header="儲存" InputGestureText="Ctrl+S" Click="SaveProgram_Click"/>
         <MenuItem Header="另存新檔" Click="SaveProgramAs_Click"/>
         <MenuItem Header="匯出 C#" Click="NotYet_Click"/>
         <Separator/>
         <MenuItem Header="載入影像" Click="LoadImage_Click"/>
+        <MenuItem x:Name="SampleMenu" Header="範例"/>
       </MenuItem>
       <MenuItem Header="編輯">
         <MenuItem Header="復原" InputGestureText="Ctrl+Z" Click="Undo_Click"/>
@@ -99,7 +101,7 @@
         <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0" Text="Photonix"/>
         <TextBlock VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,6,0" Text="程式"/>
         <TextBox x:Name="ProgramName" Width="180" Margin="0,0,8,0" Text="blob_inspect.hdv" TextChanged="ProgramName_TextChanged"/>
-        <Button Content="範例" Click="NotYet_Click"/>
+        <Button x:Name="BtnSamples" Content="範例" Click="Samples_Click"/>
         <Button Content="開啟" Click="OpenProgram_Click"/>
         <Button x:Name="BtnSave" Content="儲存" Click="SaveProgram_Click"/>
         <CheckBox x:Name="TraceBox" Content="追蹤" VerticalAlignment="Center" Margin="8,0,8,0" Foreground="{StaticResource Ink}"/>

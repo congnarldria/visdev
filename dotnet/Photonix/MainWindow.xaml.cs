@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -88,6 +89,8 @@ public partial class MainWindow : Window
         }
         ShowTab("ops");
         ApplyMode(GfxMode.Select);
+        BuildTemplateMenu();
+        SampleMenu.SubmenuOpened += (_, _) => FillProgramMenu(SampleMenu.Items, includeWorkspace: false);
         Log("Photonix 已開啟。版面對齊網頁版，底層是 Vizion.Operators。");
         if (NativeCore.IsLoaded)
             Log("已載入 C 核心：" + NativeCore.LoadDetail);
@@ -300,6 +303,115 @@ public partial class MainWindow : Window
             "關於 Photonix",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
+    }
+
+    void BuildTemplateMenu()
+    {
+        TemplateMenu.Items.Clear();
+        foreach (TemplateEntry entry in ProgramLibrary.Templates)
+        {
+            var item = new MenuItem { Header = entry.Title };
+            item.Click += (_, _) => OpenTemplate(entry);
+            TemplateMenu.Items.Add(item);
+        }
+    }
+
+    void TemplateList_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new TemplateDialog { Owner = this };
+        dialog.Confirm = () => ConfirmDiscard(dialog);
+        dialog.Opened = entry => OpenTemplate(entry, confirm: false);
+        dialog.ShowDialog();
+    }
+
+    void Samples_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu
+        {
+            PlacementTarget = BtnSamples,
+            Placement = PlacementMode.Bottom,
+            Background = (Brush)FindResource("PanelBackground"),
+            Foreground = (Brush)FindResource("Ink"),
+        };
+        FillProgramMenu(menu.Items, includeWorkspace: true);
+        menu.IsOpen = true;
+    }
+
+    void FillProgramMenu(ItemCollection items, bool includeWorkspace)
+    {
+        items.Clear();
+        string? repo = ProjectStore.FindRepoRoot();
+        if (repo == null)
+        {
+            items.Add(new MenuItem { Header = "找不到 samples", IsEnabled = false });
+            return;
+        }
+        if (includeWorkspace)
+            items.Add(new MenuItem { Header = "範例", IsEnabled = false });
+        AddProgramItems(items, ProgramLibrary.Samples(repo));
+        if (!includeWorkspace)
+            return;
+        items.Add(new Separator());
+        items.Add(new MenuItem { Header = "已儲存", IsEnabled = false });
+        AddProgramItems(items, ProgramLibrary.Workspace(repo));
+    }
+
+    void AddProgramItems(ItemCollection items, IReadOnlyList<ProgramEntry> programs)
+    {
+        if (programs.Count == 0)
+        {
+            items.Add(new MenuItem { Header = "沒有程式", IsEnabled = false });
+            return;
+        }
+        foreach (ProgramEntry entry in programs)
+        {
+            var item = new MenuItem
+            {
+                Header = new TextBlock { Text = entry.Title },
+                ToolTip = entry.Name,
+            };
+            item.Click += (_, _) => OpenLibrary(entry, null, confirm: true);
+            items.Add(item);
+        }
+    }
+
+    void OpenTemplate(TemplateEntry entry, bool confirm = true)
+    {
+        string? repo = ProjectStore.FindRepoRoot();
+        if (repo == null)
+        {
+            StatusLine.Text = "找不到 samples";
+            Log(StatusLine.Text);
+            return;
+        }
+        string path = Path.Combine(repo, "samples", entry.File);
+        if (!File.Exists(path))
+        {
+            StatusLine.Text = "找不到程式";
+            Log(StatusLine.Text);
+            return;
+        }
+        OpenLibrary(new ProgramEntry(entry.File, entry.Title, path, "samples"), entry.Expect, confirm);
+    }
+
+    void OpenLibrary(ProgramEntry entry, string? expect, bool confirm)
+    {
+        if (confirm && !ConfirmDiscard())
+            return;
+        try
+        {
+            string source = File.ReadAllText(entry.Path);
+            CurrentProject = null;
+            CurrentProjectFolder = null;
+            Engine.ProjectFolder = null;
+            string? path = entry.Kind == "workspace" ? entry.Path : null;
+            LoadSource(source, entry.Name, path, true, null, expect ?? "已開啟 " + entry.Name);
+        }
+        catch (Exception ex)
+        {
+            StatusLine.Text = "開啟失敗：" + ex.Message;
+            Log(StatusLine.Text);
+        }
     }
 
     void NotYet_Click(object sender, RoutedEventArgs e)
@@ -864,7 +976,7 @@ public partial class MainWindow : Window
             return;
         }
         var dialog = new ProjectDialog(repo, CurrentProject) { Owner = this };
-        dialog.ConfirmDiscard = ConfirmDiscard;
+        dialog.ConfirmDiscard = () => ConfirmDiscard();
         dialog.Source = () => ProgramText.Text ?? "";
         dialog.ProgramName = () => ProgramName.Text;
         dialog.Noted = text =>
@@ -1013,7 +1125,7 @@ public partial class MainWindow : Window
         }
     }
 
-    void LoadSource(string source, string name, string? path, bool clean, IReadOnlyList<string>? skipped)
+    void LoadSource(string source, string name, string? path, bool clean, IReadOnlyList<string>? skipped, string? note = null)
     {
         source = ProgramFile.Normalize(source);
         SavedText = clean ? source : "";
@@ -1037,24 +1149,24 @@ public partial class MainWindow : Window
         UpdateDirty();
         if (skipped != null && skipped.Count > 0)
         {
-            string note = skipped.Count > 4
+            string skippedNote = skipped.Count > 4
                 ? "已開啟 " + name + "。" + skipped.Count + " 個有密碼的程序沒有打開"
                 : "已開啟。有密碼的程序沒有打開：" + string.Join("、", skipped);
-            StatusLine.Text = note;
-            Log(note);
+            StatusLine.Text = skippedNote;
+            Log(skippedNote);
         }
         else
         {
-            StatusLine.Text = path == null ? "新程式" : "已開啟 " + name;
+            StatusLine.Text = note ?? (path == null ? "新程式" : "已開啟 " + name);
             Log(StatusLine.Text);
         }
     }
 
-    bool ConfirmDiscard()
+    bool ConfirmDiscard(Window? owner = null)
     {
         if (!IsDirty())
             return true;
-        return MessageBox.Show(this, "程式還沒存。要放棄這些修改嗎？", "Photonix", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        return MessageBox.Show(owner ?? this, "程式還沒存。要放棄這些修改嗎？", "Photonix", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
     }
 
     bool IsDirty() => ProgramFile.Normalize(ProgramText.Text) != ProgramFile.Normalize(SavedText);
