@@ -690,6 +690,30 @@ public static class NativeCore
     public static bool TryEntropy(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
         Ready(source, destination, width * height) && Call(() => vizion_entropy(source, destination, width, height, maskWidth, maskHeight));
 
+    public static bool TryRankDisk(byte[] source, byte[] destination, int width, int height, int radius, int rank) =>
+        Ready(source, destination, width * height) && Call(() => vizion_rank_disk(source, destination, width, height, radius, rank));
+
+    public static bool TryGrayInside(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_gray_inside(source, destination, width, height));
+
+    public static bool TryEqualizeRect(byte[] source, byte[] destination, int width, int height, int channels, int top, int left, int bottom, int right) =>
+        IsLoaded && UseNative && Call(() => vizion_equalize_rect(source, destination, width, height, channels, top, left, bottom, right));
+
+    public static bool TryRegionMean(byte[] gray, byte[] destination, int width, int[] rows, int[] columns, int[] lengths) =>
+        IsLoaded && UseNative && width >= 1 && gray.Length >= width && destination.Length >= gray.Length
+        && Call(() => vizion_region_mean(gray, destination, width, rows, columns, lengths, rows.Length));
+
+    public static bool TrySurface(byte[] destination, int width, int height, double alpha, double beta, double gamma, double row, double column) =>
+        IsLoaded && UseNative && width >= 1 && height >= 1 && destination.Length >= width * height
+        && Call(() => vizion_surface(destination, width, height, alpha, beta, gamma, row, column));
+
+    public static bool TrySurfaceQuad(
+        byte[] destination, int width, int height,
+        double alpha, double beta, double gamma, double delta, double epsilon, double zeta,
+        double row, double column) =>
+        IsLoaded && UseNative && width >= 1 && height >= 1 && destination.Length >= width * height
+        && Call(() => vizion_surface_quad(destination, width, height, alpha, beta, gamma, delta, epsilon, zeta, row, column));
+
     public static bool TryBinomial(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
         Ready(source, destination, width * height) && Call(() => vizion_binomial(source, destination, width, height, maskWidth, maskHeight));
 
@@ -1061,6 +1085,31 @@ public static class NativeCore
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_entropy(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_rank_disk(byte[] source, byte[] destination, int width, int height, int radius, int rank);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_inside(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_equalize_rect(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        int top, int left, int bottom, int right);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_region_mean(
+        byte[] gray, byte[] destination, int width, int[] rows, int[] columns, int[] lengths, int runs);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_surface(
+        byte[] destination, int width, int height, double alpha, double beta, double gamma, double row, double column);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_surface_quad(
+        byte[] destination, int width, int height,
+        double alpha, double beta, double gamma, double delta, double epsilon, double zeta,
+        double row, double column);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);

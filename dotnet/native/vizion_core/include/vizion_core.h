@@ -248,6 +248,23 @@ VIZION_EXPORT int VIZION_CALL vizion_pyramid(const uint8_t* src, uint8_t* dst, i
 VIZION_EXPORT int VIZION_CALL vizion_entropy(const uint8_t* src, uint8_t* dst, int width, int height, int mask_width, int mask_height);
 VIZION_EXPORT int VIZION_CALL vizion_stage_selftest(void);
 
+/* 圓形排序半徑 1 到 5，邊界重複邊緣。灰階內部是八鄰域最低瓶頸。矩形等化含邊界。 */
+VIZION_EXPORT int VIZION_CALL vizion_rank_disk(const uint8_t* src, uint8_t* dst, int width, int height, int radius, int rank);
+VIZION_EXPORT int VIZION_CALL vizion_gray_inside(const uint8_t* src, uint8_t* dst, int width, int height);
+VIZION_EXPORT int VIZION_CALL vizion_equalize_rect(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels,
+    int top, int left, int bottom, int right);
+VIZION_EXPORT int VIZION_CALL vizion_region_mean(
+    const uint8_t* gray, uint8_t* dst, int width,
+    const int* rows, const int* columns, const int* lengths, int runs);
+VIZION_EXPORT int VIZION_CALL vizion_surface(
+    uint8_t* dst, int width, int height, double alpha, double beta, double gamma, double row, double column);
+VIZION_EXPORT int VIZION_CALL vizion_surface_quad(
+    uint8_t* dst, int width, int height,
+    double alpha, double beta, double gamma, double delta, double epsilon, double zeta,
+    double row, double column);
+VIZION_EXPORT int VIZION_CALL vizion_inside_selftest(void);
+
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
     const uint8_t* gray, int width,

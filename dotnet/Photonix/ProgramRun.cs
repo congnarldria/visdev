@@ -662,6 +662,66 @@ sealed class ProgramRun
                 Set(args[1], entropy);
                 Image = entropy;
                 return;
+            case "set_grayval":
+                Need(args, 5);
+                var edited = Operators.SetGrayval(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), IntOf(args[4]));
+                Set(args[1], edited);
+                Image = edited;
+                return;
+            case "get_image_type":
+                Need(args, 2);
+                Set(args[1], Operators.ImageType(ImageOf(args[0])));
+                return;
+            case "channels_to_image":
+                Need(args, 4);
+                var bundled = Operators.ChannelsToImage(ImageOf(args[0]), ImageOf(args[1]), ImageOf(args[2]));
+                Set(args[3], bundled);
+                Image = bundled;
+                return;
+            case "expand_domain_gray":
+                Need(args, 4);
+                var widened = Operators.ExpandDomainGray(ImageOf(args[0]), IntOf(args[2]), Num(args[3]));
+                Set(args[1], widened);
+                Image = widened;
+                return;
+            case "equ_histo_image_rect":
+                Need(args, 6);
+                var rectEqu = Operators.EquHistoImageRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), IntOf(args[4]), IntOf(args[5]));
+                Set(args[1], rectEqu);
+                Image = rectEqu;
+                return;
+            case "gray_inside":
+                Need(args, 2);
+                var inside = Operators.GrayInside(ImageOf(args[0]));
+                Set(args[1], inside);
+                Image = inside;
+                return;
+            case "rank_image":
+                Need(args, 2);
+                var diskRank = Operators.RankImage(ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 1, args.Length > 3 ? IntOf(args[3]) : 0);
+                Set(args[1], diskRank);
+                Image = diskRank;
+                return;
+            case "gen_image_surface_first_order":
+                Need(args, 9);
+                var surface = Operators.SurfaceFirst(Word(args[1]), Num(args[2]), Num(args[3]), Num(args[4]), Num(args[5]), Num(args[6]), IntOf(args[7]), IntOf(args[8]));
+                Set(args[0], surface);
+                Image = surface;
+                return;
+            case "gen_image_surface_second_order":
+                Need(args, 12);
+                var curved = Operators.SurfaceSecond(
+                    Word(args[1]), Num(args[2]), Num(args[3]), Num(args[4]), Num(args[5]), Num(args[6]), Num(args[7]),
+                    Num(args[8]), Num(args[9]), IntOf(args[10]), IntOf(args[11]));
+                Set(args[0], curved);
+                Image = curved;
+                return;
+            case "region_to_mean":
+                Need(args, 3);
+                var averaged = Operators.RegionToMean(ImageOf(args[0]), RegionsOf(args[1]));
+                Set(args[2], averaged);
+                Image = averaged;
+                return;
             case "reduce_domain":
                 Need(args, 3);
                 var reduced = Operators.ReduceDomain(ImageOf(args[0]), RegionOf(args[1]));
@@ -805,6 +865,16 @@ sealed class ProgramRun
         if (Eval(token) is double[] table)
             return table;
         throw new InvalidOperationException("Lut 要 256 個數，對應灰階 0 到 255");
+    }
+
+    IReadOnlyList<Region> RegionsOf(string token)
+    {
+        object value = Eval(token);
+        if (value is Region region)
+            return new[] { region };
+        if (value is Region[] many)
+            return many;
+        throw new InvalidOperationException(token + " 必須是區域");
     }
 
     ImageBuffer ConvolOf(string[] args)
