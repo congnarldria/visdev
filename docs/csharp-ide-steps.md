@@ -96,4 +96,4 @@ Photonix 用 WPF、`net10.0-windows`，版面對齊 `app/static/index.html` 的�
 
 ## 24. 說明與關於
 
-使用說明，以及關於 Photonix。
+已完成。說明選單的使用說明寫出執行、版面、圖形視窗、範本、產線明細和存檔。關於寫出 Photonix 和選單。兩個視窗都不擋住主視窗。

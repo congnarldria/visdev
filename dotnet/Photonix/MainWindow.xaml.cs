@@ -390,15 +390,9 @@ public partial class MainWindow : Window
         Log("已存畫面 " + dialog.FileName + "，含底圖和疊加。");
     }
 
-    void About_Click(object sender, RoutedEventArgs e)
-    {
-        MessageBox.Show(
-            this,
-            "Photonix\n視覺開發環境。底層呼叫 Vizion.Operators。",
-            "關於 Photonix",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
-    }
+    void Help_Click(object sender, RoutedEventArgs e) => HelpWindow.ShowGuide(this);
+
+    void About_Click(object sender, RoutedEventArgs e) => HelpWindow.ShowAbout(this);
 
     void BuildTemplateMenu()
     {

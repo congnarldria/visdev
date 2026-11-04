@@ -93,7 +93,7 @@
       </MenuItem>
       <MenuItem x:Name="OpMenu" Header="運算子"/>
       <MenuItem Header="說明">
-        <MenuItem Header="使用說明" Click="NotYet_Click"/>
+        <MenuItem Header="使用說明" Click="Help_Click"/>
         <MenuItem Header="關於 Photonix" Click="About_Click"/>
       </MenuItem>
     </Menu>
