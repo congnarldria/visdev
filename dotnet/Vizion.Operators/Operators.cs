@@ -64,14 +64,23 @@ public static partial class Operators
         if (minGray > maxGray)
             return new Region(image.Width, image.Height, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<int>());
         byte[] gray = image.GrayBytes();
+        if (!NativeCore.TryThreshold(gray, image.Width, image.Height, minGray, maxGray, out Region region))
+            region = ThresholdManaged(image.Width, image.Height, gray, minGray, maxGray);
+        if (image.Domain != null)
+            return Intersection(region, image.Domain);
+        return region;
+    }
+
+    static Region ThresholdManaged(int width, int height, byte[] gray, int minGray, int maxGray)
+    {
         var rows = new List<int>();
         var columns = new List<int>();
         var lengths = new List<int>();
-        for (int row = 0; row < image.Height; row++)
+        for (int row = 0; row < height; row++)
         {
-            int offset = row * image.Width;
+            int offset = row * width;
             int column = 0;
-            while (column < image.Width)
+            while (column < width)
             {
                 if (gray[offset + column] < minGray || gray[offset + column] > maxGray)
                 {
@@ -80,17 +89,14 @@ public static partial class Operators
                 }
                 int start = column;
                 column++;
-                while (column < image.Width && gray[offset + column] >= minGray && gray[offset + column] <= maxGray)
+                while (column < width && gray[offset + column] >= minGray && gray[offset + column] <= maxGray)
                     column++;
                 rows.Add(row);
                 columns.Add(start);
                 lengths.Add(column - start);
             }
         }
-        var region = new Region(image.Width, image.Height, rows.ToArray(), columns.ToArray(), lengths.ToArray());
-        if (image.Domain != null)
-            return Intersection(region, image.Domain);
-        return region;
+        return new Region(width, height, rows.ToArray(), columns.ToArray(), lengths.ToArray());
     }
 
     /// <summary>八連通。距離小於 2 不合併斜角以外的空隙。物件依掃描遇到的第一個像素排序。</summary>
@@ -103,6 +109,16 @@ public static partial class Operators
         int count = region.Rows.Length;
         if (count == 0)
             return Array.Empty<Region>();
+        if (!NativeCore.TryConnection(region, out Region[] objects))
+            objects = ConnectEight(region);
+        if (distance < 2 || objects.Length < 2)
+            return objects;
+        return MergeWithin(objects, distance);
+    }
+
+    static Region[] ConnectEight(Region region)
+    {
+        int count = region.Rows.Length;
         var order = new int[count];
         for (int i = 0; i < count; i++)
             order[i] = i;
@@ -206,9 +222,7 @@ public static partial class Operators
             }
             objects[objectIndex] = new Region(region.Width, region.Height, rows, columns, lengths);
         }
-        if (distance < 2 || objects.Length < 2)
-            return objects;
-        return MergeWithin(objects, distance);
+        return objects;
     }
 
     public readonly struct AreaCenter
@@ -264,6 +278,8 @@ public static partial class Operators
 
     static AreaCenter CenterOf(Region region)
     {
+        if (NativeCore.TryAreaCenter(region, out int nativeArea, out double nativeRow, out double nativeColumn))
+            return new AreaCenter(nativeArea, nativeRow, nativeColumn);
         long area = 0;
         double rowMoment = 0;
         double columnMoment = 0;

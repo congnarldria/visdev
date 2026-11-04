@@ -14,6 +14,22 @@ public static partial class Operators
         int width = image.Width;
         int height = image.Height;
         var result = new byte[source.Length];
+        if (NativeCore.UseNative && NativeCore.IsLoaded)
+        {
+            var mapX = new double[source.Length];
+            var mapY = new double[source.Length];
+            for (int row = 0; row < height; row++)
+            {
+                for (int column = 0; column < width; column++)
+                {
+                    Distort(camera, column, row, out double sourceColumn, out double sourceRow);
+                    mapX[row * width + column] = sourceColumn;
+                    mapY[row * width + column] = sourceRow;
+                }
+            }
+            if (NativeCore.TryRemap(source, width, height, mapX, mapY, result))
+                return ImageBuffer.Gray(width, height, result);
+        }
         for (int row = 0; row < height; row++)
         {
             for (int column = 0; column < width; column++)

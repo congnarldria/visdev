@@ -68,18 +68,33 @@ public static partial class Operators
 
         var refined = new List<ShapeHit>();
         var full = levels[0];
+        var modelX = new float[model.Length];
+        var modelY = new float[model.Length];
+        var modelGx = new float[model.Length];
+        var modelGy = new float[model.Length];
+        for (int i = 0; i < model.Length; i++)
+        {
+            modelX[i] = model[i].X;
+            modelY[i] = model[i].Y;
+            modelGx[i] = model[i].Gx;
+            modelGy[i] = model[i].Gy;
+        }
         foreach (var hit in kept)
         {
             if (hit.Score < minScore)
                 continue;
-            var posed = SnapHalfPixel(hit, model, full, minContrast);
-            posed = PolishAngle(posed, model, full, minContrast);
-            posed = SnapHalfPixel(posed, model, full, minContrast);
-            posed = Parabolic(posed, model, full, minContrast);
-            var fitted = LeastSquares(posed, model, full, minContrast);
-            if (fitted.Score + 1e-4 < posed.Score)
-                fitted = posed;
-            fitted = fitted with { Angle = WrapAngle(fitted.Angle) };
+            ShapeHit fitted;
+            if (!NativeCore.TryShapePose(modelX, modelY, modelGx, modelGy, full.Gx, full.Gy, full.Mag, full.Width, full.Height, full.Scale, hit, minContrast, out fitted))
+            {
+                var posed = SnapHalfPixel(hit, model, full, minContrast);
+                posed = PolishAngle(posed, model, full, minContrast);
+                posed = SnapHalfPixel(posed, model, full, minContrast);
+                posed = Parabolic(posed, model, full, minContrast);
+                fitted = LeastSquares(posed, model, full, minContrast);
+                if (fitted.Score + 1e-4 < posed.Score)
+                    fitted = posed;
+                fitted = fitted with { Angle = WrapAngle(fitted.Angle) };
+            }
             if (fitted.Score >= minScore * 0.9)
                 refined.Add(fitted);
         }
@@ -114,6 +129,9 @@ public static partial class Operators
     {
         destWidth = (width + 1) / 2;
         destHeight = (height + 1) / 2;
+        destination = new byte[destWidth * destHeight];
+        if (NativeCore.TryPyrDown(source, width, height, destination))
+            return;
         int[] kernel = { 1, 4, 6, 4, 1 };
         var horizontal = new int[width * height];
         for (int row = 0; row < height; row++)
@@ -127,7 +145,6 @@ public static partial class Operators
                 horizontal[rowOffset + col] = sum;
             }
         }
-        destination = new byte[destWidth * destHeight];
         for (int row = 0; row < destHeight; row++)
         {
             int sourceRow = row * 2;
@@ -531,6 +548,8 @@ public static partial class Operators
         double column, double row,
         float[] mx, float[] my, float[] mgx, float[] mgy, double minContrast)
     {
+        if (NativeCore.TryShapeScore(gx, gy, mag, width, height, column, row, mx, my, mgx, mgy, minContrast, out double nativeScore))
+            return nativeScore;
         double sum = 0;
         int count = mx.Length;
         for (int i = 0; i < count; i++)
@@ -566,6 +585,8 @@ public static partial class Operators
         gx = new float[width * height];
         gy = new float[width * height];
         mag = new float[width * height];
+        if (NativeCore.TrySobel(gray, width, height, gx, gy, mag))
+            return;
         for (int row = 0; row < height; row++)
         {
             for (int col = 0; col < width; col++)

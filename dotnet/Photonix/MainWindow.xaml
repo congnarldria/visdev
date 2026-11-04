@@ -1,0 +1,367 @@
+<Window x:Class="Photonix.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Photonix"
+        xmlns:dock="https://github.com/Dirkster99/AvalonDock"
+        xmlns:dockTheme="clr-namespace:AvalonDock.Themes;assembly=AvalonDock.Themes.VS2013"
+        Title="Photonix"
+        Width="1280"
+        Height="800"
+        MinWidth="960"
+        MinHeight="600"
+        Background="{StaticResource WindowBackground}"
+        Foreground="{StaticResource Ink}">
+  <Window.Resources>
+    <Style TargetType="Button">
+      <Setter Property="Background" Value="#21262D"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="Padding" Value="8,3"/>
+      <Setter Property="Margin" Value="0,0,4,0"/>
+    </Style>
+    <Style TargetType="Menu">
+      <Setter Property="Background" Value="{StaticResource PanelBackground}"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+    </Style>
+    <Style TargetType="TextBox">
+      <Setter Property="Background" Value="#0E1116"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="Padding" Value="4,2"/>
+    </Style>
+    <Style TargetType="ListBox">
+      <Setter Property="Background" Value="#0E1116"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+    </Style>
+  </Window.Resources>
+  <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="檔案">
+        <MenuItem Header="新增" InputGestureText="Ctrl+N" Click="NewProgram_Click"/>
+        <MenuItem Header="專案" Click="Project_Click"/>
+        <MenuItem x:Name="TemplateMenu" Header="範本"/>
+        <MenuItem Header="範本一覽" Click="TemplateList_Click"/>
+        <MenuItem Header="開啟" InputGestureText="Ctrl+O" Click="OpenProgram_Click"/>
+        <MenuItem Header="儲存" InputGestureText="Ctrl+S" Click="SaveProgram_Click"/>
+        <MenuItem Header="另存新檔" Click="SaveProgramAs_Click"/>
+        <MenuItem Header="匯出 C#" Click="ExportCs_Click"/>
+        <Separator/>
+        <MenuItem Header="載入影像" Click="LoadImage_Click"/>
+        <MenuItem x:Name="SampleMenu" Header="範例"/>
+      </MenuItem>
+      <MenuItem Header="編輯">
+        <MenuItem Header="復原" InputGestureText="Ctrl+Z" Click="Undo_Click"/>
+        <MenuItem Header="重做" InputGestureText="Ctrl+Y" Click="Redo_Click"/>
+        <Separator/>
+        <MenuItem Header="剪下" InputGestureText="Ctrl+X" Click="Cut_Click"/>
+        <MenuItem Header="複製" InputGestureText="Ctrl+C" Click="Copy_Click"/>
+        <MenuItem Header="貼上" InputGestureText="Ctrl+V" Click="Paste_Click"/>
+        <Separator/>
+        <MenuItem Header="全選" InputGestureText="Ctrl+A" Click="SelectAll_Click"/>
+      </MenuItem>
+      <MenuItem Header="檢視">
+        <MenuItem x:Name="ViewProgram" Header="程式" IsCheckable="True" IsChecked="True" Tag="program" Click="ViewPane_Click"/>
+        <MenuItem x:Name="ViewGfx" Header="圖形視窗" IsCheckable="True" IsChecked="True" Tag="gfx" Click="ViewPane_Click"/>
+        <MenuItem x:Name="ViewVars" Header="變數" IsCheckable="True" IsChecked="True" Tag="vars" Click="ViewPane_Click"/>
+        <MenuItem x:Name="ViewOps" Header="算子" IsCheckable="True" IsChecked="True" Tag="bottom" Click="ViewPane_Click"/>
+        <Separator/>
+        <MenuItem Header="符合視窗" Click="Fit_Click"/>
+        <MenuItem Header="原始像素 1:1" Click="OneToOne_Click"/>
+        <MenuItem Header="放大" Click="ZoomIn_Click"/>
+        <MenuItem Header="縮小" Click="ZoomOut_Click"/>
+        <Separator/>
+        <MenuItem Header="追蹤" Click="Trace_Click"/>
+        <MenuItem Header="全部釘選" Click="PinAll_Click"/>
+      </MenuItem>
+      <MenuItem Header="執行">
+        <MenuItem Header="執行" InputGestureText="F5" Click="Run_Click"/>
+        <MenuItem Header="單步" InputGestureText="F6" Click="Step_Click"/>
+        <MenuItem Header="停止" Click="Stop_Click"/>
+        <MenuItem Header="重設" InputGestureText="F7" Click="Reset_Click"/>
+      </MenuItem>
+      <MenuItem Header="工具">
+        <MenuItem Header="二值化" Click="Threshold_Click"/>
+        <MenuItem Header="次像素" Click="Subpix_Click"/>
+        <MenuItem Header="特徵" Click="Features_Click"/>
+        <MenuItem Header="OCR" Click="Ocr_Click"/>
+        <MenuItem Header="connection" Click="Connection_Click"/>
+      </MenuItem>
+      <MenuItem Header="視窗">
+        <MenuItem Header="回復版面" Click="ResetLayout_Click"/>
+        <MenuItem Header="拉出圖形視窗" Click="FloatGfx_Click"/>
+      </MenuItem>
+      <MenuItem x:Name="OpMenu" Header="運算子"/>
+      <MenuItem Header="說明">
+        <MenuItem Header="使用說明" Click="Help_Click"/>
+        <MenuItem Header="關於 Photonix" Click="About_Click"/>
+      </MenuItem>
+    </Menu>
+
+    <Border DockPanel.Dock="Top" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,6">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0" Text="Photonix"/>
+        <TextBlock VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,6,0" Text="程式"/>
+        <TextBox x:Name="ProgramName" Width="180" Margin="0,0,8,0" Text="blob_inspect.hdv" TextChanged="ProgramName_TextChanged"/>
+        <Button x:Name="BtnSamples" Content="範例" Click="Samples_Click"/>
+        <Button Content="開啟" Click="OpenProgram_Click"/>
+        <Button x:Name="BtnSave" Content="儲存" Click="SaveProgram_Click"/>
+        <CheckBox x:Name="TraceBox" Content="追蹤" VerticalAlignment="Center" Margin="8,0,8,0" Foreground="{StaticResource Ink}"/>
+        <Button Content="重設" Click="Reset_Click"/>
+        <Button Content="單步" Click="Step_Click"/>
+        <Button x:Name="BtnRun" Content="執行" Click="Run_Click"/>
+        <Button Content="停止" Click="Stop_Click"/>
+      </DockPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="8,4">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="回復版面" Click="ResetLayout_Click"/>
+        <Button x:Name="StatusErrors" DockPanel.Dock="Right" Content="錯誤 0" Click="StatusProblems_Click" Tag="error"/>
+        <Button x:Name="StatusWarnings" DockPanel.Dock="Right" Content="警告 0" Click="StatusProblems_Click" Tag="warning"/>
+        <Button x:Name="StatusMessages" DockPanel.Dock="Right" Content="訊息 0" Click="StatusProblems_Click" Tag="message"/>
+        <TextBlock x:Name="StatusZoom" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0" Foreground="{StaticResource Muted}" Text="100%"/>
+        <TextBlock x:Name="StatusPix" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0" Foreground="{StaticResource Muted}" Text="Row —   Column —"/>
+        <TextBlock VerticalAlignment="Center" Text="就緒"/>
+        <Button x:Name="BtnLastNg" Content="看不合格圖" Visibility="Collapsed" Margin="12,0,0,0" Click="LastNg_Click"/>
+        <Button x:Name="BtnLineStats" Content="統計" Visibility="Collapsed" Margin="8,0,0,0" Click="LineStats_Click"/>
+        <Button x:Name="BtnLineCsv" Content="看明細" Visibility="Collapsed" Margin="8,0,0,0" Click="LineCsv_Click"/>
+        <TextBlock x:Name="StatusLine" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="{StaticResource Muted}"/>
+      </DockPanel>
+    </Border>
+
+    <dock:DockingManager x:Name="Dock" LayoutChanged="Dock_LayoutChanged">
+      <dock:DockingManager.Theme>
+        <dockTheme:Vs2013DarkTheme/>
+      </dock:DockingManager.Theme>
+      <dock:LayoutRoot>
+        <dock:LayoutPanel Orientation="Vertical">
+          <dock:LayoutPanel Orientation="Horizontal">
+            <dock:LayoutAnchorablePane DockWidth="2*">
+              <dock:LayoutAnchorable ContentId="program" Title="程式" CanClose="False" CanHide="True" CanAutoHide="True" CanFloat="True">
+                <DockPanel x:Name="ProgramPane" Background="{StaticResource PanelBackground}">
+        <TextBlock DockPanel.Dock="Top" Margin="8,6" Foreground="{StaticResource Muted}" Text="程式　點算子名稱開啟參數"/>
+        <Grid Margin="8,0,8,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="64"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="92"/>
+          </Grid.ColumnDefinitions>
+          <local:ProgramRail x:Name="LineGutter" Grid.Column="0" Kind="Gutter" ToolTip="點行號設斷點。拖綠色箭頭改下一行。"/>
+          <Grid Grid.Column="1">
+          <Border Background="#0E1116" BorderBrush="{StaticResource Line}" BorderThickness="1"/>
+          <local:ProgramHighlightView x:Name="ProgramHighlight" IsHitTestVisible="False"/>
+          <TextBox x:Name="ProgramText" AcceptsReturn="True" AcceptsTab="True" FontFamily="Consolas" FontSize="13"
+                   Background="Transparent" Foreground="Transparent" CaretBrush="{StaticResource Ink}" SelectionBrush="#663D8BFD"
+                   BorderBrush="Transparent" Padding="4,2"
+                   PreviewMouseLeftButtonUp="ProgramText_MouseUp" PreviewKeyDown="ProgramText_PreviewKeyDown"
+                   TextChanged="ProgramText_TextChanged" SelectionChanged="ProgramText_SelectionChanged"
+                   Text="* 程式編輯、斷點和執行之後做&#x0a;"/>
+          <Popup x:Name="SensePopup" PlacementTarget="{Binding ElementName=ProgramText}" Placement="Relative" AllowsTransparency="True" StaysOpen="True" Focusable="False">
+            <Border Background="#1C2128" BorderBrush="{StaticResource Line}" BorderThickness="1" MaxWidth="460" Padding="4">
+              <DockPanel>
+                <TextBlock x:Name="SenseSig" DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="4,2"/>
+                <TextBlock DockPanel.Dock="Bottom" Margin="4,4,4,2" Foreground="{StaticResource Muted}" Text="Tab 帶入　↑↓ 選擇　Esc 關閉"/>
+                <ListBox x:Name="SenseList" MaxHeight="180" Focusable="False" IsTabStop="False" BorderThickness="0" PreviewMouseLeftButtonDown="SenseList_MouseDown">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel Margin="2,1">
+                        <TextBlock>
+                          <Run Text="{Binding Kind}" Foreground="{StaticResource Muted}"/>
+                          <Run Text=" "/>
+                          <Run Text="{Binding Label}" FontWeight="Bold"/>
+                        </TextBlock>
+                        <TextBlock Text="{Binding Detail}" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </DockPanel>
+            </Border>
+          </Popup>
+          </Grid>
+          <local:ProgramRail x:Name="TimeRail" Grid.Column="2" Kind="Times" ToolTip="每一行這次花的時間"/>
+        </Grid>
+      </DockPanel>
+              </dock:LayoutAnchorable>
+            </dock:LayoutAnchorablePane>
+            <dock:LayoutAnchorablePane DockWidth="3*">
+              <dock:LayoutAnchorable ContentId="gfx" Title="圖形視窗" CanClose="False" CanHide="True" CanAutoHide="True" CanFloat="True">
+                <DockPanel x:Name="GfxPane">
+        <Border DockPanel.Dock="Top" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,4">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,8,0" Text="圖形視窗"/>
+            <TextBlock x:Name="ZoomText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Text="100%"/>
+            <WrapPanel>
+              <Button x:Name="ModeSelect" Content="點選" Click="Mode_Click" Tag="select" ToolTip="點一下讀出那個像素"/>
+              <Button x:Name="ModePan" Content="手抓" Click="Mode_Click" Tag="pan" ToolTip="拖曳移動畫面"/>
+              <Button x:Name="ModeZoom" Content="放大" Click="Mode_Click" Tag="zoom" ToolTip="拉一個範圍放大。點一下也會放大"/>
+              <Button x:Name="DrawLine" Content="線" Tag="line" Visibility="Collapsed" Click="DrawTool_Click" ToolTip="在圖上拖一條線。起點到終點的方向會保留"/>
+              <Button x:Name="DrawRect" Content="框選" Tag="rect" Visibility="Collapsed" Click="DrawTool_Click" ToolTip="在圖上拖矩形，填進開啟中的算子參數"/>
+              <Button x:Name="DrawCircle" Content="圓" Tag="circle" Visibility="Collapsed" Click="DrawTool_Click" ToolTip="在圖上拖圓"/>
+              <Button x:Name="DrawEllipse" Content="橢圓" Tag="ellipse" Visibility="Collapsed" Click="DrawTool_Click" ToolTip="在圖上拖橢圓"/>
+              <Button Content="符合" Click="Fit_Click"/>
+              <Button Content="1:1" Click="OneToOne_Click"/>
+              <Button Content="−" Click="ZoomOut_Click"/>
+              <Button Content="+" Click="ZoomIn_Click"/>
+              <Button Content="載入影像" Click="LoadImage_Click"/>
+              <Button Content="拉出" Click="FloatGfx_Click" ToolTip="把圖形視窗拉成獨立視窗"/>
+              <Button Content="存畫面" Click="SaveView_Click" ToolTip="把底圖、區域、輪廓和十字存成一張圖"/>
+              <TextBlock VerticalAlignment="Center" Margin="6,0,4,0" Foreground="{StaticResource Muted}" Text="線寬"/>
+              <TextBox x:Name="ContourWidth" Width="36" Text="2" ToolTip="輪廓和十字的線寬，1 到 10" TextChanged="ContourWidth_TextChanged" LostFocus="ContourWidth_LostFocus"/>
+              <Button Content="二值化" Click="Threshold_Click" ToolTip="開啟二值化視窗，不擋住主視窗"/>
+              <Button Content="特徵" Click="Features_Click" ToolTip="開啟特徵視窗，不擋住主視窗。先點選區域，再勾選要看的數值"/>
+              <Button Content="OCR" Click="Ocr_Click" ToolTip="讀出這張圖上的全部文字"/>
+              <ComboBox x:Name="OcrMethod" Width="132" ToolTip="選擇 OCR 引擎。自動只用已安裝的本機通用引擎。雲端引擎會把影像送到該服務。"/>
+              <Button Content="connection" Click="Connection_Click" ToolTip="依連通距離和面積下限做 connection，每個物件一種顏色"/>
+              <TextBlock VerticalAlignment="Center" Margin="6,0,4,0" Foreground="{StaticResource Muted}" Text="距離"/>
+              <TextBox x:Name="ConnDist" Width="44" Text="1" ToolTip="1 是八連通。調大就把最近像素距離在這個值以內的物件併成一個"/>
+              <TextBlock VerticalAlignment="Center" Margin="6,0,4,0" Foreground="{StaticResource Muted}" Text="下限"/>
+              <TextBox x:Name="ConnMin" Width="44" Text="1" ToolTip="連通物件的最小面積"/>
+            </WrapPanel>
+          </DockPanel>
+        </Border>
+        <Border x:Name="TolBar" DockPanel.Dock="Top" Visibility="Collapsed" Background="#1C2128" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,4">
+          <WrapPanel x:Name="TolItems"/>
+        </Border>
+        <Border x:Name="ShapeConfirm" DockPanel.Dock="Bottom" Visibility="Collapsed" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="8,6">
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Content="取消" Margin="8,0,0,0" Click="ShapeCancel_Click"/>
+            <Button DockPanel.Dock="Right" Content="確認填入" Click="ShapeApply_Click"/>
+            <TextBlock x:Name="ShapeConfirmText" VerticalAlignment="Center" TextWrapping="Wrap"/>
+          </DockPanel>
+        </Border>
+        <Grid x:Name="Stage" ClipToBounds="True" Background="#0E1116" AllowDrop="True"
+              DragOver="Stage_DragOver" Drop="Stage_Drop"
+              MouseLeftButtonDown="Stage_MouseDown" MouseRightButtonDown="Stage_MouseRightDown" MouseMove="Stage_MouseMove"
+              MouseLeftButtonUp="Stage_MouseUp" MouseLeave="Stage_MouseLeave"
+              PreviewMouseWheel="Stage_MouseWheel" SizeChanged="Stage_SizeChanged">
+          <Canvas IsHitTestVisible="False">
+            <Image x:Name="Picture" Stretch="None" Visibility="Collapsed"/>
+          </Canvas>
+          <Canvas x:Name="Overlay" IsHitTestVisible="False">
+            <Line x:Name="CrossV" Stroke="#59FFFFFF" StrokeThickness="1" Visibility="Collapsed"/>
+            <Line x:Name="CrossH" Stroke="#59FFFFFF" StrokeThickness="1" Visibility="Collapsed"/>
+            <Rectangle x:Name="ZoomRect" Stroke="#FFE14A" Fill="#1FFFE14A" StrokeThickness="1" Visibility="Collapsed"/>
+            <Line x:Name="DraftLine" Stroke="#FFE14A" StrokeThickness="2" StrokeDashArray="3 2" Visibility="Collapsed"/>
+            <Rectangle x:Name="DraftRect" Stroke="#FFE14A" StrokeThickness="2" StrokeDashArray="3 2" Fill="Transparent" Visibility="Collapsed"/>
+            <Ellipse x:Name="DraftEllipse" Stroke="#FFE14A" StrokeThickness="2" StrokeDashArray="3 2" Fill="Transparent" Visibility="Collapsed"/>
+            <Border x:Name="Probe" Visibility="Collapsed" Background="#F014171C" BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="6,3">
+              <TextBlock x:Name="ProbeText" Foreground="{StaticResource Ink}"/>
+            </Border>
+          </Canvas>
+          <TextBlock x:Name="EmptyHint" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" TextAlignment="Center"
+                     Text="把 PNG 拖進來，或按載入影像。&#x0a;點選、手抓、拉框放大。滾輪以游標為中心縮放。"/>
+        </Grid>
+      </DockPanel>
+              </dock:LayoutAnchorable>
+            </dock:LayoutAnchorablePane>
+            <dock:LayoutAnchorablePane DockWidth="220">
+              <dock:LayoutAnchorable ContentId="vars" Title="變數" CanClose="False" CanHide="True" CanAutoHide="True" CanFloat="True">
+                <DockPanel x:Name="VarsPane" Background="{StaticResource PanelBackground}">
+        <TextBlock DockPanel.Dock="Top" Margin="8,6,8,4" Foreground="{StaticResource Muted}" Text="變數　點圖像變數可預覽"/>
+        <TextBlock x:Name="IconicTitle" DockPanel.Dock="Top" Margin="8,4,8,2" Text="圖像"/>
+        <TextBlock x:Name="IconicEmpty" DockPanel.Dock="Top" Margin="8,0,8,4" Foreground="{StaticResource Muted}" Text="還沒有圖像變數"/>
+        <ListBox x:Name="IconicList" DockPanel.Dock="Top" Height="150" Margin="8,0,8,8" SelectionChanged="IconicList_SelectionChanged">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <DockPanel>
+                <Image Width="42" Height="42" Margin="0,2,6,2" Stretch="Uniform" Source="{Binding Thumb}"/>
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                  <TextBlock Text="{Binding Info}" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
+                </StackPanel>
+              </DockPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock DockPanel.Dock="Top" Margin="8,0,8,2" Text="控制"/>
+        <TextBlock x:Name="ControlEmpty" DockPanel.Dock="Top" Margin="8,0,8,4" Foreground="{StaticResource Muted}" Text="還沒有控制變數"/>
+        <ListBox x:Name="ControlList" DockPanel.Dock="Top" Height="120" Margin="8,0,8,8" SelectionChanged="ControlList_SelectionChanged">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0" Foreground="{StaticResource Muted}" Text="{Binding Info}"/>
+                <StackPanel>
+                  <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                  <TextBlock Text="{Binding Kind}" Foreground="{StaticResource Muted}"/>
+                </StackPanel>
+              </DockPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock x:Name="VarDetail" Margin="8,0,8,8" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Text="選一個變數查看完整內容。"/>
+      </DockPanel>
+              </dock:LayoutAnchorable>
+            </dock:LayoutAnchorablePane>
+          </dock:LayoutPanel>
+          <dock:LayoutAnchorablePane DockHeight="220">
+            <dock:LayoutAnchorable ContentId="ops" Title="算子" CanClose="False" CanHide="True" CanAutoHide="True" CanFloat="True">
+              <DockPanel x:Name="PageOps" Background="{StaticResource PanelBackground}">
+                <TextBox x:Name="OperatorSearch" DockPanel.Dock="Top" Margin="8,8,8,4" Width="240" HorizontalAlignment="Left" TextChanged="OperatorSearch_TextChanged" ToolTip="搜尋算子，例如 threshold"/>
+                <ListBox x:Name="OperatorList" DockPanel.Dock="Left" Width="230" Margin="8,0,8,8" SelectionChanged="OperatorList_SelectionChanged" MouseDoubleClick="OperatorList_MouseDoubleClick">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel Margin="0,1">
+                    <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Short}" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+              <ListBox.GroupStyle>
+                <GroupStyle>
+                  <GroupStyle.HeaderTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding Name}" Margin="2,8,2,2" Foreground="{StaticResource Muted}"/>
+                    </DataTemplate>
+                  </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+              </ListBox.GroupStyle>
+            </ListBox>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,8,8">
+              <StackPanel x:Name="OperatorHelp">
+                <TextBlock Foreground="{StaticResource Muted}" TextWrapping="Wrap" Text="點一個算子看用途和原理。雙擊把範例插進程式。"/>
+              </StackPanel>
+            </ScrollViewer>
+              </DockPanel>
+            </dock:LayoutAnchorable>
+            <dock:LayoutAnchorable ContentId="syntax" Title="語法" CanClose="False" CanHide="True" CanAutoHide="True" CanFloat="True">
+              <TextBox x:Name="PageSyntax" Margin="8" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto">
+            <TextBox.Text>程式一行一個敘述。算子名稱不分大小寫，變數名稱則要完全一致。運算式 T[1] 的索引從 1 開始。tuple_select 這類算子的索引從 0 開始。
+ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
+行尾的 \ 表示這一行還沒結束。路徑寫 C:/data/a.png。
+= 是比較，:= 才是指定。# 和 &lt;&gt; 都是不等於。if 的條件若是 tuple，必須每一個元素都成立才會進去。</TextBox.Text>
+          </TextBox>
+            </dock:LayoutAnchorable>
+            <dock:LayoutAnchorable ContentId="log" Title="輸出" CanClose="False" CanHide="True" CanAutoHide="True" CanFloat="True">
+              <DockPanel x:Name="PageLog">
+            <Button DockPanel.Dock="Top" HorizontalAlignment="Left" Margin="8,0,8,4" Content="清除" Click="ClearLog_Click"/>
+            <TextBox x:Name="LogBox" Margin="8,0,8,8" IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" FontFamily="Consolas"/>
+          </DockPanel>
+            </dock:LayoutAnchorable>
+            <dock:LayoutAnchorable ContentId="problems" Title="錯誤清單" CanClose="False" CanHide="True" CanAutoHide="True" CanFloat="True">
+              <DockPanel x:Name="PageProblems" Margin="8">
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+              <Button x:Name="FilterErrors" Content="錯誤 0" Click="Filter_Click" Tag="error"/>
+              <Button x:Name="FilterWarnings" Content="警告 0" Click="Filter_Click" Tag="warning"/>
+              <Button x:Name="FilterMessages" Content="訊息 0" Click="Filter_Click" Tag="message"/>
+            </StackPanel>
+            <DataGrid x:Name="ProblemGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column"
+                      Background="#0E1116" Foreground="{StaticResource Ink}" BorderBrush="{StaticResource Line}"
+                      SelectionChanged="ProblemGrid_SelectionChanged">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="嚴重性" Binding="{Binding Severity}" Width="80"/>
+                <DataGridTextColumn Header="代碼" Binding="{Binding Code}" Width="80"/>
+                <DataGridTextColumn Header="說明" Binding="{Binding Text}" Width="*"/>
+                <DataGridTextColumn Header="檔案" Binding="{Binding File}" Width="140"/>
+                <DataGridTextColumn Header="行" Binding="{Binding LineText}" Width="50"/>
+              </DataGrid.Columns>
+            </DataGrid>
+          </DockPanel>
+            </dock:LayoutAnchorable>
+          </dock:LayoutAnchorablePane>
+        </dock:LayoutPanel>
+      </dock:LayoutRoot>
+    </dock:DockingManager>
+  </DockPanel>
+</Window>

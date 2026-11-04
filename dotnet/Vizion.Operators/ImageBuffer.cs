@@ -67,6 +67,8 @@ public sealed class ImageBuffer
         if (Channels == 1)
             return Pixels;
         var gray = new byte[Width * Height];
+        if (NativeCore.TryBgrGray(Pixels, gray.Length, gray))
+            return gray;
         for (int i = 0, p = 0; i < gray.Length; i++, p += 3)
             gray[i] = (byte)GrayConvert.Bgr(Pixels[p], Pixels[p + 1], Pixels[p + 2]);
         return gray;

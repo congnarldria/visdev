@@ -499,6 +499,8 @@ public static partial class Operators
 
     static double Correlate(float[] gray, int width, int height, float[] x, float[] y, float[] value, double column, double row, bool absolute = false)
     {
+        if (NativeCore.TryNcc(gray, width, height, x, y, value, column, row, absolute, out double nativeScore))
+            return nativeScore;
         int n = x.Length;
         int minCount = Math.Max(16, (int)(n * 0.65));
         double sumS = 0, sumT = 0, sumSS = 0, sumTT = 0, sumST = 0;

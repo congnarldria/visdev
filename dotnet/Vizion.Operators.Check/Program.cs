@@ -2,6 +2,96 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--pose")
+{
+    PoseNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--fit")
+{
+    FitNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--link")
+{
+    LinkNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--rotate")
+{
+    RotateNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--intensity")
+{
+    IntensityNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--gray")
+{
+    GrayNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--pyr")
+{
+    PyrNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--sobel")
+{
+    SobelNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--edge")
+{
+    EdgeNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--measure")
+{
+    MeasureNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--match")
+{
+    MatchNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--filter")
+{
+    FilterNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--morph")
+{
+    MorphNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--connection")
+{
+    ConnectionNativeCheck();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--threshold")
+{
+    ThresholdNativeCheck();
+    return;
+}
+
 if (args.Length >= 2 && args[0] == "--compare")
 {
     SelfTest();
@@ -853,6 +943,1356 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void PoseNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var block = new byte[64 * 64];
+    for (int row = 16; row < 48; row++)
+        for (int col = 16; col < 48; col++)
+            block[row * 64 + col] = 255;
+    var shifted = new byte[96 * 96];
+    for (int row = 36; row < 68; row++)
+        for (int col = 31; col < 63; col++)
+            shifted[row * 96 + col] = 255;
+    var scene = ImageBuffer.Gray(96, 96, shifted);
+    var template = ImageBuffer.Gray(64, 64, block);
+    bool previous = NativeCore.UseNative;
+    var nativeHits = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    NativeCore.UseNative = false;
+    var managedHits = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    NativeCore.UseNative = true;
+    if (nativeHits.Length != managedHits.Length || nativeHits.Length < 1)
+        throw new InvalidOperationException($"形狀命中 {nativeHits.Length} 個，C# {managedHits.Length} 個");
+    for (int i = 0; i < managedHits.Length; i++)
+    {
+        if (Math.Abs(nativeHits[i].Row - managedHits[i].Row) > 1e-6
+            || Math.Abs(nativeHits[i].Column - managedHits[i].Column) > 1e-6
+            || Math.Abs(nativeHits[i].Angle - managedHits[i].Angle) > 1e-6
+            || Math.Abs(nativeHits[i].Score - managedHits[i].Score) > 1e-6)
+            throw new InvalidOperationException($"姿態和 C# 不同：{nativeHits[i].Row},{nativeHits[i].Column} 角度 {nativeHits[i].Angle} 分 {nativeHits[i].Score}");
+    }
+    var best = nativeHits.OrderByDescending(hit => hit.Score).First();
+    double dRow = best.Row - 51.5;
+    double dCol = best.Column - 46.5;
+    if (dRow * dRow + dCol * dCol > 0.45 * 0.45)
+        throw new InvalidOperationException($"方塊中心應在 51.5,46.5 的 0.45 內，得到 {best.Row},{best.Column}");
+    var benchScene = new byte[192 * 192];
+    var benchTemplate = new byte[96 * 96];
+    for (int row = 20; row <= 75; row++)
+        for (int col = 20; col <= 75; col++)
+            benchTemplate[row * 96 + col] = 255;
+    for (int row = 60; row <= 115; row++)
+        for (int col = 70; col <= 125; col++)
+            benchScene[row * 192 + col] = 255;
+    var benchSceneImage = ImageBuffer.Gray(192, 192, benchScene);
+    var benchTemplateImage = ImageBuffer.Gray(96, 96, benchTemplate);
+    Operators.FindShape(benchSceneImage, benchTemplateImage, 20, 20, 75, 75);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 6; i++)
+        Operators.FindShape(benchSceneImage, benchTemplateImage, 20, 20, 75, 75);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.FindShape(benchSceneImage, benchTemplateImage, 20, 20, 75, 75);
+    watch.Restart();
+    for (int i = 0; i < 6; i++)
+        Operators.FindShape(benchSceneImage, benchTemplateImage, 20, 20, 75, 75);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("姿態原生檢查通過");
+    Console.WriteLine($"192 場景找方塊共 6 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void FitNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var straight = Operators.FitLine(new (double Row, double Col)[]
+    {
+        (0, 0), (0, 10), (8, 15), (0, 20), (0, 30),
+    });
+    bool At(double row, double col, double wantRow, double wantCol) =>
+        Math.Abs(row - wantRow) < 1e-6 && Math.Abs(col - wantCol) < 1e-6;
+    bool lineEnds =
+        (At(straight.RowBegin, straight.ColBegin, 0, 0) && At(straight.RowEnd, straight.ColEnd, 0, 30))
+        || (At(straight.RowBegin, straight.ColBegin, 0, 30) && At(straight.RowEnd, straight.ColEnd, 0, 0));
+    if (!lineEnds)
+        throw new InvalidOperationException($"飛點不該把直線拉走，得到 ({straight.RowBegin},{straight.ColBegin})-({straight.RowEnd},{straight.ColEnd})");
+    var circle = Operators.FitCircle(new (double Row, double Col)[]
+    {
+        (50, 100), (60, 97.3205080757), (67.3205080757, 90), (70, 80),
+        (67.3205080757, 70), (60, 62.6794919243), (50, 60), (40, 62.6794919243),
+        (32.6794919243, 70), (30, 80), (32.6794919243, 90), (40, 97.3205080757),
+        (50, 108),
+    });
+    if (Math.Abs(circle.Row - 50) > 1e-6 || Math.Abs(circle.Column - 80) > 1e-6 || Math.Abs(circle.Radius - 20) > 1e-6)
+        throw new InvalidOperationException($"飛點不該把圓拉走，得到列 {circle.Row} 行 {circle.Column} 半徑 {circle.Radius}");
+    var noisyLine = new (double Row, double Col)[240];
+    for (int i = 0; i < noisyLine.Length; i++)
+        noisyLine[i] = (i * 0.5, 3 + i * 0.25);
+    noisyLine[10] = (80, -40);
+    noisyLine[90] = (-30, 200);
+    var noisyCircle = new (double Row, double Col)[360];
+    for (int i = 0; i < noisyCircle.Length; i++)
+    {
+        double angle = i * Math.PI / 180.0;
+        noisyCircle[i] = (40 + 25 * Math.Sin(angle), 70 + 25 * Math.Cos(angle));
+    }
+    noisyCircle[4] = (400, 400);
+    noisyCircle[200] = (-80, 10);
+    bool previous = NativeCore.UseNative;
+    var nativeLine = Operators.FitLine(noisyLine);
+    var nativeCircle = Operators.FitCircle(noisyCircle);
+    NativeCore.UseNative = false;
+    var managedLine = Operators.FitLine(noisyLine);
+    var managedCircle = Operators.FitCircle(noisyCircle);
+    NativeCore.UseNative = true;
+    if (Math.Abs(nativeLine.RowBegin - managedLine.RowBegin) > 1e-9 || Math.Abs(nativeLine.ColBegin - managedLine.ColBegin) > 1e-9
+        || Math.Abs(nativeLine.RowEnd - managedLine.RowEnd) > 1e-9 || Math.Abs(nativeLine.ColEnd - managedLine.ColEnd) > 1e-9)
+        throw new InvalidOperationException("直線和 C# 後備不同");
+    if (Math.Abs(nativeCircle.Row - managedCircle.Row) > 1e-9 || Math.Abs(nativeCircle.Column - managedCircle.Column) > 1e-9
+        || Math.Abs(nativeCircle.Radius - managedCircle.Radius) > 1e-9)
+        throw new InvalidOperationException($"圓和 C# 後備不同：{nativeCircle.Row} {nativeCircle.Column} {nativeCircle.Radius}");
+    var benchLine = new (double Row, double Col)[4000];
+    var benchCircle = new (double Row, double Col)[4000];
+    for (int i = 0; i < benchLine.Length; i++)
+    {
+        benchLine[i] = (i * 0.2, 10 + i * 0.05 + (i % 17 == 0 ? 30 : 0));
+        double angle = i * 0.01;
+        benchCircle[i] = (100 + 40 * Math.Sin(angle), 50 + 40 * Math.Cos(angle) + (i % 23 == 0 ? 80 : 0));
+    }
+    Operators.FitLine(benchLine);
+    Operators.FitCircle(benchCircle);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 30; i++)
+    {
+        Operators.FitLine(benchLine);
+        Operators.FitCircle(benchCircle);
+    }
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.FitLine(benchLine);
+    Operators.FitCircle(benchCircle);
+    watch.Restart();
+    for (int i = 0; i < 30; i++)
+    {
+        Operators.FitLine(benchLine);
+        Operators.FitCircle(benchCircle);
+    }
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("擬合原生檢查通過");
+    Console.WriteLine($"4000 點直線加圓共 30 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void LinkNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var step = new byte[24 * 32];
+    for (int row = 0; row < 24; row++)
+        for (int col = 16; col < 32; col++)
+            step[row * 32 + col] = 255;
+    var edges = Operators.EdgesSubPix(ImageBuffer.Gray(32, 24, step), 1, 20, 40);
+    if (edges.Length != 1 || edges[0].Length != 24)
+        throw new InvalidOperationException($"階躍應是 1 條 24 點的邊緣，得到 {edges.Length} 條");
+    foreach (var point in edges[0])
+    {
+        if (Math.Abs(point.Column - 15.5) > 1e-3)
+            throw new InvalidOperationException($"邊緣應在行 15.5，得到 {point.Column}");
+    }
+    if (Math.Abs(edges[0][0].Row) > 1e-3 || Math.Abs(edges[0][^1].Row - 23) > 1e-3)
+        throw new InvalidOperationException($"邊緣應從列 0 到列 23，得到 {edges[0][0].Row} 到 {edges[0][^1].Row}");
+    var slanted = new byte[36 * 48];
+    for (int row = 0; row < 36; row++)
+        for (int col = 0; col < 48; col++)
+            slanted[row * 48 + col] = (byte)(col > row + 8 ? 200 : 20);
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedSlant = Operators.EdgesSubPix(ImageBuffer.Gray(48, 36, slanted), 1.2, 15, 30);
+    NativeCore.UseNative = true;
+    var nativeSlant = Operators.EdgesSubPix(ImageBuffer.Gray(48, 36, slanted), 1.2, 15, 30);
+    ExpectChains(nativeSlant, managedSlant, "斜向");
+    var grid = new byte[480 * 360];
+    for (int row = 0; row < 360; row++)
+        for (int col = 0; col < 480; col++)
+            grid[row * 480 + col] = (byte)(((row / 6) + (col / 6)) % 2 == 0 ? 0 : 255);
+    var gridImage = ImageBuffer.Gray(480, 360, grid);
+    var nativeGrid = Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    NativeCore.UseNative = false;
+    var managedGrid = Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    NativeCore.UseNative = true;
+    ExpectChains(nativeGrid, managedGrid, "格子");
+    Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 4; i++)
+        Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.EdgesSubPix(gridImage, 1, 20, 40);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("串鏈原生檢查通過");
+    Console.WriteLine($"480×360 格子邊緣共 4 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void ExpectChains(EdgePoint[][] actual, EdgePoint[][] expected, string label)
+{
+    if (actual.Length != expected.Length)
+        throw new InvalidOperationException($"{label} 邊緣 {actual.Length} 條，C# {expected.Length} 條");
+    for (int chain = 0; chain < expected.Length; chain++)
+    {
+        if (actual[chain].Length != expected[chain].Length)
+            throw new InvalidOperationException($"{label} 第 {chain} 條點數 {actual[chain].Length}，C# {expected[chain].Length}");
+        for (int point = 0; point < expected[chain].Length; point++)
+        {
+            if (Math.Abs(actual[chain][point].Row - expected[chain][point].Row) > 1e-4
+                || Math.Abs(actual[chain][point].Column - expected[chain][point].Column) > 1e-4)
+                throw new InvalidOperationException($"{label} 第 {chain} 條第 {point} 點不同");
+        }
+    }
+}
+
+static void RotateNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var turnedBand = new byte[40 * 40];
+    for (int row = 16; row <= 23; row++)
+        for (int column = 0; column < 40; column++)
+            turnedBand[row * 40 + column] = 255;
+    var band = ImageBuffer.Gray(40, 40, turnedBand);
+    bool previous = NativeCore.UseNative;
+    var nativeBand = Operators.RotateNearest(band, 90);
+    NativeCore.UseNative = false;
+    var managedBand = Operators.RotateNearest(band, 90);
+    NativeCore.UseNative = true;
+    ExpectSameImage(nativeBand, managedBand, "轉 90 度");
+    var turnedWidth = Operators.MeasureWidth(nativeBand, 20);
+    if (Math.Abs(turnedWidth.Width - 8) > 1e-6)
+        throw new InvalidOperationException($"轉正後的寬度應是 8，得到 {turnedWidth.Width}");
+    var pattern = new byte[37 * 29];
+    for (int i = 0; i < pattern.Length; i++)
+        pattern[i] = (byte)((i * 13 + 4) & 255);
+    var picture = ImageBuffer.Gray(37, 29, pattern);
+    ExpectSameImage(Operators.RotateNearest(picture, 0), picture, "轉 0 度");
+    var nativeTilt = Operators.RotateNearest(picture, 17);
+    NativeCore.UseNative = false;
+    var managedTilt = Operators.RotateNearest(picture, 17);
+    NativeCore.UseNative = true;
+    ExpectSameImage(nativeTilt, managedTilt, "轉 17 度");
+    double[] angles = { -20, 0.1, 1, 15, 33, 45, 73, 180 };
+    foreach (double angle in angles)
+    {
+        var nativeAngle = Operators.RotateNearest(picture, angle);
+        NativeCore.UseNative = false;
+        var managedAngle = Operators.RotateNearest(picture, angle);
+        NativeCore.UseNative = true;
+        ExpectSameImage(nativeAngle, managedAngle, "轉 " + angle + " 度");
+    }
+    var wide = new byte[640 * 480];
+    for (int i = 0; i < wide.Length; i++)
+        wide[i] = (byte)((i * 3) & 255);
+    var wideImage = ImageBuffer.Gray(640, 480, wide);
+    var nativeWide = Operators.RotateNearest(wideImage, 45);
+    NativeCore.UseNative = false;
+    var managedWide = Operators.RotateNearest(wideImage, 45);
+    NativeCore.UseNative = true;
+    ExpectSameImage(nativeWide, managedWide, "640×480 轉 45 度");
+    var bench = new byte[960 * 540];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)(i & 255);
+    var benchImage = ImageBuffer.Gray(960, 540, bench);
+    Operators.RotateNearest(benchImage, 17);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 6; i++)
+        Operators.RotateNearest(benchImage, 17);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.RotateNearest(benchImage, 17);
+    watch.Restart();
+    for (int i = 0; i < 6; i++)
+        Operators.RotateNearest(benchImage, 17);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("旋轉原生檢查通過");
+    Console.WriteLine($"960×540 旋轉 17 度共 6 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void ExpectSameImage(ImageBuffer actual, ImageBuffer expected, string label)
+{
+    if (actual.Pixels.Length != expected.Pixels.Length)
+        throw new InvalidOperationException($"{label} 的長度不同");
+    for (int i = 0; i < actual.Pixels.Length; i++)
+    {
+        if (actual.Pixels[i] != expected.Pixels[i])
+            throw new InvalidOperationException($"{label} 像素 {i} 原生 {actual.Pixels[i]}，C# {expected.Pixels[i]}");
+    }
+}
+
+static void IntensityNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var three = new byte[] { 1, 2, 3 };
+    var shortRun = new Region(3, 1, new[] { 0 }, new[] { 0 }, new[] { 3 });
+    var empty = new Region(3, 1, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<int>());
+    bool previous = NativeCore.UseNative;
+    var nativeThree = Operators.IntensityOf(shortRun, ImageBuffer.Gray(3, 1, three));
+    var nativeEmpty = Operators.IntensityOf(empty, ImageBuffer.Gray(3, 1, three));
+    NativeCore.UseNative = false;
+    var managedThree = Operators.IntensityOf(shortRun, ImageBuffer.Gray(3, 1, three));
+    var managedEmpty = Operators.IntensityOf(empty, ImageBuffer.Gray(3, 1, three));
+    NativeCore.UseNative = true;
+    ExpectIntensity(nativeThree[0], managedThree[0], "1,2,3");
+    ExpectIntensity(nativeEmpty[0], managedEmpty[0], "空區域");
+    if (Math.Abs(nativeThree[0].Mean - 2) > 1e-12 || Math.Abs(nativeThree[0].Deviation - Math.Sqrt(2.0 / 3.0)) > 1e-12)
+        throw new InvalidOperationException($"1,2,3 的平均應是 2，得到 {nativeThree[0].Mean} / {nativeThree[0].Deviation}");
+    var wide = new byte[960 * 540];
+    for (int i = 0; i < wide.Length; i++)
+        wide[i] = (byte)((i * 13 + 7) & 255);
+    var rows = new int[540];
+    var columns = new int[540];
+    var lengths = new int[540];
+    for (int row = 0; row < 540; row++)
+    {
+        rows[row] = row;
+        columns[row] = row % 7;
+        lengths[row] = 960 - columns[row];
+    }
+    var region = new Region(960, 540, rows, columns, lengths);
+    var image = ImageBuffer.Gray(960, 540, wide);
+    var nativeWide = Operators.IntensityOf(region, image);
+    NativeCore.UseNative = false;
+    var managedWide = Operators.IntensityOf(region, image);
+    NativeCore.UseNative = previous;
+    ExpectIntensity(nativeWide[0], managedWide[0], "大圖");
+    NativeCore.UseNative = true;
+    Operators.IntensityOf(region, image);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 20; i++)
+        Operators.IntensityOf(region, image);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.IntensityOf(region, image);
+    watch.Restart();
+    for (int i = 0; i < 20; i++)
+        Operators.IntensityOf(region, image);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("亮度原生檢查通過");
+    Console.WriteLine($"960×540 區域統計共 20 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void ExpectIntensity(Intensity actual, Intensity expected, string label)
+{
+    if (Math.Abs(actual.Mean - expected.Mean) > 1e-9 || Math.Abs(actual.Deviation - expected.Deviation) > 1e-9)
+        throw new InvalidOperationException($"{label} 平均 {actual.Mean} / {actual.Deviation}，C# {expected.Mean} / {expected.Deviation}");
+}
+
+static void GrayNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    byte[] locked =
+    {
+        10, 20, 30,
+        255, 128, 0,
+        1, 2, 3,
+        0, 0, 255,
+        68, 0, 153
+    };
+    int[] expect = { 22, 104, 2, 76, 53 };
+    var native = new byte[5];
+    if (!NativeCore.TryBgrGray(locked, 5, native))
+        throw new InvalidOperationException("轉灰階沒有走到 C 核心");
+    for (int i = 0; i < 5; i++)
+    {
+        int managed = GrayConvert.Bgr(locked[i * 3], locked[i * 3 + 1], locked[i * 3 + 2]);
+        if (native[i] != expect[i] || native[i] != managed)
+            throw new InvalidOperationException($"灰階 {i} 應是 {expect[i]}，得到 {native[i]}");
+    }
+    var pattern = new byte[17 * 3];
+    for (int i = 0; i < pattern.Length; i++)
+        pattern[i] = (byte)((i * 17 + 9) & 255);
+    ExpectGray(pattern, 17);
+    var wide = new byte[1920 * 1080 * 3];
+    for (int i = 0; i < wide.Length; i++)
+        wide[i] = (byte)((i * 13) & 255);
+    var nativeWide = new byte[1920 * 1080];
+    var managedWide = new byte[1920 * 1080];
+    if (!NativeCore.TryBgrGray(wide, nativeWide.Length, nativeWide))
+        throw new InvalidOperationException("轉灰階沒有走到 C 核心");
+    GrayFill(wide, managedWide);
+    for (int i = 0; i < nativeWide.Length; i++)
+    {
+        if (nativeWide[i] != managedWide[i])
+            throw new InvalidOperationException($"大圖灰階 {i} 原生 {nativeWide[i]}，C# {managedWide[i]}");
+    }
+    var color = ImageBuffer.Bgr(5, 1, locked);
+    bool previous = NativeCore.UseNative;
+    var fromImage = color.GrayBytes();
+    NativeCore.UseNative = false;
+    var managedImage = color.GrayBytes();
+    NativeCore.UseNative = previous;
+    for (int i = 0; i < fromImage.Length; i++)
+    {
+        if (fromImage[i] != managedImage[i])
+            throw new InvalidOperationException($"GrayBytes {i} 原生 {fromImage[i]}，C# {managedImage[i]}");
+    }
+    NativeCore.TryBgrGray(wide, nativeWide.Length, nativeWide);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 8; i++)
+        NativeCore.TryBgrGray(wide, nativeWide.Length, nativeWide);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    GrayFill(wide, managedWide);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        GrayFill(wide, managedWide);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    Console.WriteLine("灰階原生檢查通過");
+    Console.WriteLine($"1920×1080 彩色轉灰階共 8 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void ExpectGray(byte[] bgr, int count)
+{
+    var native = new byte[count];
+    var managed = new byte[count];
+    if (!NativeCore.TryBgrGray(bgr, count, native))
+        throw new InvalidOperationException("轉灰階沒有走到 C 核心");
+    GrayFill(bgr, managed);
+    for (int i = 0; i < count; i++)
+    {
+        if (native[i] != managed[i])
+            throw new InvalidOperationException($"灰階像素 {i} 原生 {native[i]}，C# {managed[i]}");
+    }
+}
+
+static void GrayFill(byte[] bgr, byte[] gray)
+{
+    for (int i = 0, pixel = 0; i < gray.Length; i++, pixel += 3)
+        gray[i] = (byte)GrayConvert.Bgr(bgr[pixel], bgr[pixel + 1], bgr[pixel + 2]);
+}
+
+static void PyrNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    ExpectPyr(new byte[] { 200 }, 1, 1);
+    ExpectPyr(new byte[] { 1, 2, 3, 4, 5, 6 }, 2, 3);
+    var pattern = new byte[40 * 21];
+    for (int i = 0; i < pattern.Length; i++)
+        pattern[i] = (byte)((i * 13 + 5) & 255);
+    ExpectPyr(pattern, 40, 21);
+    var odd = new byte[17 * 9];
+    for (int i = 0; i < odd.Length; i++)
+        odd[i] = (byte)(255 - (i & 255));
+    ExpectPyr(odd, 17, 9);
+    var block = new byte[64 * 64];
+    for (int row = 16; row < 48; row++)
+        for (int col = 16; col < 48; col++)
+            block[row * 64 + col] = 255;
+    var shifted = new byte[96 * 96];
+    for (int row = 36; row < 68; row++)
+        for (int col = 31; col < 63; col++)
+            shifted[row * 96 + col] = 255;
+    var scene = ImageBuffer.Gray(96, 96, shifted);
+    var template = ImageBuffer.Gray(64, 64, block);
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    var managedNcc = Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    NativeCore.UseNative = true;
+    var nativeShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    var nativeNcc = Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    if (nativeShape.Length != managedShape.Length || nativeShape.Length < 1)
+        throw new InvalidOperationException($"形狀命中 {nativeShape.Length} 個，C# {managedShape.Length} 個");
+    for (int i = 0; i < managedShape.Length; i++)
+    {
+        if (Math.Abs(nativeShape[i].Row - managedShape[i].Row) > 1e-6
+            || Math.Abs(nativeShape[i].Column - managedShape[i].Column) > 1e-6
+            || Math.Abs(nativeShape[i].Angle - managedShape[i].Angle) > 1e-6
+            || Math.Abs(nativeShape[i].Score - managedShape[i].Score) > 1e-6)
+            throw new InvalidOperationException($"形狀分數和 C# 不同 {nativeShape[i].Score} / {managedShape[i].Score}");
+    }
+    if (nativeNcc.Length != managedNcc.Length || nativeNcc.Length < 1)
+        throw new InvalidOperationException($"正規相關命中 {nativeNcc.Length} 個，C# {managedNcc.Length} 個");
+    for (int i = 0; i < managedNcc.Length; i++)
+    {
+        if (Math.Abs(nativeNcc[i].Row - managedNcc[i].Row) > 1e-6
+            || Math.Abs(nativeNcc[i].Column - managedNcc[i].Column) > 1e-6
+            || Math.Abs(nativeNcc[i].Angle - managedNcc[i].Angle) > 1e-6
+            || Math.Abs(nativeNcc[i].Score - managedNcc[i].Score) > 1e-6)
+            throw new InvalidOperationException($"正規相關和 C# 不同 {nativeNcc[i].Score} / {managedNcc[i].Score}");
+    }
+    var bench = new byte[960 * 540];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)((i * 19) & 255);
+    var nativeDown = new byte[480 * 270];
+    var managedDown = new byte[480 * 270];
+    if (!NativeCore.TryPyrDown(bench, 960, 540, nativeDown))
+        throw new InvalidOperationException("金字塔沒有走到 C 核心");
+    PyrFill(bench, 960, 540, managedDown);
+    for (int i = 0; i < nativeDown.Length; i++)
+    {
+        if (nativeDown[i] != managedDown[i])
+            throw new InvalidOperationException($"大圖縮小像素 {i} 原生 {nativeDown[i]}，C# {managedDown[i]}");
+    }
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 12; i++)
+        NativeCore.TryPyrDown(bench, 960, 540, nativeDown);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    PyrFill(bench, 960, 540, managedDown);
+    watch.Restart();
+    for (int i = 0; i < 12; i++)
+        PyrFill(bench, 960, 540, managedDown);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("金字塔原生檢查通過");
+    Console.WriteLine($"960×540 縮小共 12 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void ExpectPyr(byte[] source, int width, int height)
+{
+    int destWidth = (width + 1) / 2;
+    int destHeight = (height + 1) / 2;
+    var native = new byte[destWidth * destHeight];
+    var managed = new byte[destWidth * destHeight];
+    if (!NativeCore.TryPyrDown(source, width, height, native))
+        throw new InvalidOperationException("金字塔沒有走到 C 核心");
+    PyrFill(source, width, height, managed);
+    for (int i = 0; i < native.Length; i++)
+    {
+        if (native[i] != managed[i])
+            throw new InvalidOperationException($"{width}×{height} 縮小像素 {i} 原生 {native[i]}，C# {managed[i]}");
+    }
+}
+
+static int PyrReflect(int position, int length)
+{
+    if ((uint)position < (uint)length)
+        return position;
+    if (length == 1)
+        return 0;
+    do
+    {
+        if (position < 0)
+            position = -position - 1;
+        else
+            position = length - 1 - (position - length);
+    }
+    while ((uint)position >= (uint)length);
+    return position;
+}
+
+static void PyrFill(byte[] source, int width, int height, byte[] destination)
+{
+    int destWidth = (width + 1) / 2;
+    int destHeight = (height + 1) / 2;
+    int[] kernel = { 1, 4, 6, 4, 1 };
+    var horizontal = new int[width * height];
+    for (int row = 0; row < height; row++)
+    {
+        int rowOffset = row * width;
+        for (int col = 0; col < width; col++)
+        {
+            int sum = 0;
+            for (int tap = -2; tap <= 2; tap++)
+                sum += kernel[tap + 2] * source[rowOffset + PyrReflect(col + tap, width)];
+            horizontal[rowOffset + col] = sum;
+        }
+    }
+    for (int row = 0; row < destHeight; row++)
+    {
+        int sourceRow = row * 2;
+        for (int col = 0; col < destWidth; col++)
+        {
+            int sourceCol = col * 2;
+            int sum = 0;
+            for (int tap = -2; tap <= 2; tap++)
+            {
+                int rr = PyrReflect(sourceRow + tap, height);
+                sum += kernel[tap + 2] * horizontal[rr * width + sourceCol];
+            }
+            int value = (sum + 128) / 256;
+            if (value < 0)
+                value = 0;
+            if (value > 255)
+                value = 255;
+            destination[row * destWidth + col] = (byte)value;
+        }
+    }
+}
+
+static void SobelNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var pattern = new byte[18 * 11];
+    for (int i = 0; i < pattern.Length; i++)
+        pattern[i] = (byte)((i * 17 + 3) & 255);
+    var nativeGx = new float[pattern.Length];
+    var nativeGy = new float[pattern.Length];
+    var nativeMag = new float[pattern.Length];
+    if (!NativeCore.TrySobel(pattern, 18, 11, nativeGx, nativeGy, nativeMag))
+        throw new InvalidOperationException("Sobel 沒有走到 C 核心");
+    var gx = new float[pattern.Length];
+    var gy = new float[pattern.Length];
+    var mag = new float[pattern.Length];
+    SobelFill(pattern, 18, 11, gx, gy, mag);
+    for (int i = 0; i < pattern.Length; i++)
+    {
+        if (nativeGx[i] != gx[i] || nativeGy[i] != gy[i] || nativeMag[i] != mag[i])
+            throw new InvalidOperationException($"梯度像素 {i} 和 C# 不同：{nativeGx[i]} / {gx[i]}");
+    }
+    var block = new byte[64 * 64];
+    for (int row = 16; row < 48; row++)
+        for (int col = 16; col < 48; col++)
+            block[row * 64 + col] = 255;
+    var shifted = new byte[96 * 96];
+    for (int row = 36; row < 68; row++)
+        for (int col = 31; col < 63; col++)
+            shifted[row * 96 + col] = 255;
+    var scene = ImageBuffer.Gray(96, 96, shifted);
+    var template = ImageBuffer.Gray(64, 64, block);
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    NativeCore.UseNative = true;
+    var nativeShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    if (nativeShape.Length != managedShape.Length || nativeShape.Length < 1)
+        throw new InvalidOperationException($"形狀命中 {nativeShape.Length} 個，C# {managedShape.Length} 個");
+    for (int i = 0; i < managedShape.Length; i++)
+    {
+        if (Math.Abs(nativeShape[i].Row - managedShape[i].Row) > 1e-6
+            || Math.Abs(nativeShape[i].Column - managedShape[i].Column) > 1e-6
+            || Math.Abs(nativeShape[i].Angle - managedShape[i].Angle) > 1e-6
+            || Math.Abs(nativeShape[i].Score - managedShape[i].Score) > 1e-6)
+            throw new InvalidOperationException($"形狀分數和 C# 不同 {nativeShape[i].Score} / {managedShape[i].Score}");
+    }
+    var bench = new byte[960 * 540];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)((i * 13) & 255);
+    var benchGx = new float[bench.Length];
+    var benchGy = new float[bench.Length];
+    var benchMag = new float[bench.Length];
+    var managedGx = new float[bench.Length];
+    var managedGy = new float[bench.Length];
+    var managedMag = new float[bench.Length];
+    NativeCore.TrySobel(bench, 960, 540, benchGx, benchGy, benchMag);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 8; i++)
+        NativeCore.TrySobel(bench, 960, 540, benchGx, benchGy, benchMag);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    SobelFill(bench, 960, 540, managedGx, managedGy, managedMag);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        SobelFill(bench, 960, 540, managedGx, managedGy, managedMag);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    if (benchGx[960 * 20 + 30] != managedGx[960 * 20 + 30] || benchMag[960 * 200 + 400] != managedMag[960 * 200 + 400])
+        throw new InvalidOperationException("大圖梯度和 C# 不同");
+    Console.WriteLine("梯度原生檢查通過");
+    Console.WriteLine($"960×540 Sobel 共 8 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static int SobelReflect(int position, int length)
+{
+    if ((uint)position < (uint)length)
+        return position;
+    if (length == 1)
+        return 0;
+    do
+    {
+        if (position < 0)
+            position = -position - 1;
+        else
+            position = length - 1 - (position - length);
+    }
+    while ((uint)position >= (uint)length);
+    return position;
+}
+
+static void SobelFill(byte[] gray, int width, int height, float[] gx, float[] gy, float[] magnitude)
+{
+    float At(int y, int x) => gray[SobelReflect(y, height) * width + SobelReflect(x, width)];
+    for (int row = 0; row < height; row++)
+    {
+        for (int col = 0; col < width; col++)
+        {
+            float dx =
+                -At(row - 1, col - 1) + At(row - 1, col + 1)
+                - 2 * At(row, col - 1) + 2 * At(row, col + 1)
+                - At(row + 1, col - 1) + At(row + 1, col + 1);
+            float dy =
+                -At(row - 1, col - 1) - 2 * At(row - 1, col) - At(row - 1, col + 1)
+                + At(row + 1, col - 1) + 2 * At(row + 1, col) + At(row + 1, col + 1);
+            int index = row * width + col;
+            gx[index] = dx;
+            gy[index] = dy;
+            magnitude[index] = (float)Math.Sqrt(dx * dx + dy * dy);
+        }
+    }
+}
+
+static void EdgeNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var step = new byte[24 * 32];
+    for (int row = 0; row < 24; row++)
+        for (int col = 16; col < 32; col++)
+            step[row * 32 + col] = 255;
+    var edges = Operators.EdgesSubPix(ImageBuffer.Gray(32, 24, step), 1, 20, 40);
+    if (edges.Length != 1 || edges[0].Length != 24)
+        throw new InvalidOperationException($"階躍應是 1 條 24 點的邊緣，得到 {edges.Length} 條");
+    foreach (var point in edges[0])
+    {
+        if (Math.Abs(point.Column - 15.5) > 1e-3)
+            throw new InvalidOperationException($"邊緣應在行 15.5，得到 {point.Column}");
+    }
+    if (Math.Abs(edges[0][0].Row) > 1e-3 || Math.Abs(edges[0][^1].Row - 23) > 1e-3)
+        throw new InvalidOperationException($"邊緣應從列 0 到列 23，得到 {edges[0][0].Row} 到 {edges[0][^1].Row}");
+    var distortedDot = new byte[41 * 41];
+    distortedDot[20 * 41 + 35] = 255;
+    var camera = new Intrinsics(40, 40, 20, 20, -0.5);
+    var undistorted = Operators.Undistort(ImageBuffer.Gray(41, 41, distortedDot), camera);
+    if (undistorted.Pixels[20 * 41 + 36] != 184)
+        throw new InvalidOperationException($"去畸變後行 36 應是 184，得到 {undistorted.Pixels[20 * 41 + 36]}");
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedEdges = Operators.EdgesSubPix(ImageBuffer.Gray(32, 24, step), 1, 20, 40);
+    var managedImage = Operators.Undistort(ImageBuffer.Gray(41, 41, distortedDot), camera);
+    NativeCore.UseNative = true;
+    if (managedEdges.Length != edges.Length || managedEdges[0].Length != edges[0].Length)
+        throw new InvalidOperationException("次像素邊緣和 C# 後備的點數不同");
+    for (int i = 0; i < edges[0].Length; i++)
+    {
+        if (Math.Abs(edges[0][i].Row - managedEdges[0][i].Row) > 1e-4 || Math.Abs(edges[0][i].Column - managedEdges[0][i].Column) > 1e-4)
+            throw new InvalidOperationException($"次像素點和 C# 不同：{edges[0][i].Row},{edges[0][i].Column}");
+    }
+    for (int i = 0; i < undistorted.Pixels.Length; i++)
+    {
+        if (undistorted.Pixels[i] != managedImage.Pixels[i])
+            throw new InvalidOperationException($"去畸變像素 {i} 原生 {undistorted.Pixels[i]}，C# {managedImage.Pixels[i]}");
+    }
+    var slanted = new byte[36 * 48];
+    for (int row = 0; row < 36; row++)
+        for (int col = 0; col < 48; col++)
+            slanted[row * 48 + col] = (byte)(col > row + 8 ? 200 : 20);
+    NativeCore.UseNative = false;
+    var managedSlant = Operators.EdgesSubPix(ImageBuffer.Gray(48, 36, slanted), 1.2, 15, 30);
+    NativeCore.UseNative = true;
+    var nativeSlant = Operators.EdgesSubPix(ImageBuffer.Gray(48, 36, slanted), 1.2, 15, 30);
+    if (nativeSlant.Length != managedSlant.Length)
+        throw new InvalidOperationException($"斜向邊緣 {nativeSlant.Length} 條，C# {managedSlant.Length} 條");
+    for (int chain = 0; chain < managedSlant.Length; chain++)
+    {
+        if (nativeSlant[chain].Length != managedSlant[chain].Length)
+            throw new InvalidOperationException($"斜向第 {chain} 條點數不同");
+        for (int i = 0; i < managedSlant[chain].Length; i++)
+        {
+            if (Math.Abs(nativeSlant[chain][i].Row - managedSlant[chain][i].Row) > 1e-3
+                || Math.Abs(nativeSlant[chain][i].Column - managedSlant[chain][i].Column) > 1e-3)
+                throw new InvalidOperationException($"斜向點和 C# 不同：{nativeSlant[chain][i].Row},{nativeSlant[chain][i].Column}");
+        }
+    }
+    var bench = new byte[480 * 360];
+    for (int row = 0; row < 360; row++)
+        for (int col = 160; col < 480; col++)
+            bench[row * 480 + col] = 220;
+    var benchImage = ImageBuffer.Gray(480, 360, bench);
+    Operators.EdgesSubPix(benchImage, 1, 20, 40);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 8; i++)
+        Operators.EdgesSubPix(benchImage, 1, 20, 40);
+    watch.Stop();
+    double nativeEdge = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.EdgesSubPix(benchImage, 1, 20, 40);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        Operators.EdgesSubPix(benchImage, 1, 20, 40);
+    watch.Stop();
+    double managedEdge = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = true;
+    var wide = new byte[640 * 480];
+    for (int i = 0; i < wide.Length; i++)
+        wide[i] = (byte)(i % 17);
+    var wideImage = ImageBuffer.Gray(640, 480, wide);
+    var wideCamera = new Intrinsics(600, 600, 320, 240, -0.2);
+    var nativeWide = Operators.Undistort(wideImage, wideCamera);
+    NativeCore.UseNative = false;
+    var managedWide = Operators.Undistort(wideImage, wideCamera);
+    NativeCore.UseNative = true;
+    for (int i = 0; i < nativeWide.Pixels.Length; i++)
+    {
+        if (nativeWide.Pixels[i] != managedWide.Pixels[i])
+            throw new InvalidOperationException($"大圖去畸變像素 {i} 原生 {nativeWide.Pixels[i]}，C# {managedWide.Pixels[i]}");
+    }
+    Operators.Undistort(wideImage, wideCamera);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        Operators.Undistort(wideImage, wideCamera);
+    watch.Stop();
+    double nativeRemap = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.Undistort(wideImage, wideCamera);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        Operators.Undistort(wideImage, wideCamera);
+    watch.Stop();
+    double managedRemap = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("邊緣原生檢查通過");
+    Console.WriteLine($"480×360 次像素邊緣 8 次：原生 {nativeEdge:0.0} ms，C# {managedEdge:0.0} ms，加速 {managedEdge / nativeEdge:0.0} 倍");
+    Console.WriteLine($"640×480 去畸變取樣 8 次：原生 {nativeRemap:0.0} ms，C# {managedRemap:0.0} ms，加速 {managedRemap / nativeRemap:0.0} 倍");
+}
+
+static void MeasureNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var bar = new byte[32 * 64];
+    for (int row = 0; row < 32; row++)
+        for (int column = 16; column < 48; column++)
+            bar[row * 64 + column] = 255;
+    var width = Operators.MeasureWidth(ImageBuffer.Gray(64, 32, bar), 16);
+    if (Math.Abs(width.Left - 15.5) > 1e-6 || Math.Abs(width.Right - 47.5) > 1e-6 || Math.Abs(width.Width - 32) > 1e-6)
+        throw new InvalidOperationException($"亮條應是 15.5 到 47.5，得到 {width.Left} {width.Right}");
+    var edges = Operators.MeasureScan(ImageBuffer.Gray(64, 32, bar), 16, 0, 16, 63, 0, 20, "all");
+    if (edges.Length != 2 || Math.Abs(edges[0].Column - 15.5) > 1e-6 || Math.Abs(edges[0].Amplitude - 255) > 1e-6
+        || Math.Abs(edges[1].Column - 47.5) > 1e-6 || Math.Abs(edges[1].Amplitude + 255) > 1e-6)
+        throw new InvalidOperationException("水平掃描和 Python 不同");
+    var soft = Operators.MeasureScan(ImageBuffer.Gray(64, 32, bar), 16, 0, 16, 63, 1, 10, "positive");
+    if (soft.Length != 1 || Math.Abs(soft[0].Column - 15.5) > 1e-6 || Math.Abs(soft[0].Amplitude - 95.851631) > 1e-4)
+        throw new InvalidOperationException($"平滑後的邊緣應是 95.851631，得到 {soft[0].Amplitude}");
+    var diagonal = new byte[40 * 40];
+    for (int row = 0; row < 40; row++)
+        for (int column = 20; column < 40; column++)
+            diagonal[row * 40 + column] = 180;
+    var crossed = Operators.MeasureScan(ImageBuffer.Gray(40, 40, diagonal), 5, 5, 34, 34, 0.8, 15, "由暗到亮");
+    if (crossed.Length != 1 || Math.Abs(crossed[0].Row - 19.5) > 1e-4 || Math.Abs(crossed[0].Column - 19.5) > 1e-4
+        || Math.Abs(crossed[0].Distance - 20.506097) > 1e-4)
+        throw new InvalidOperationException($"斜向邊緣應在 19.5，得到 {crossed[0].Row} {crossed[0].Column}");
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managed = Operators.MeasureScan(ImageBuffer.Gray(40, 40, diagonal), 5, 5, 34, 34, 0.8, 15, "positive");
+    var managedBar = Operators.MeasureWidth(ImageBuffer.Gray(64, 32, bar), 16);
+    NativeCore.UseNative = true;
+    if (Math.Abs(managedBar.Left - width.Left) > 1e-9 || Math.Abs(managed[0].Amplitude - crossed[0].Amplitude) > 1e-6)
+        throw new InvalidOperationException("量測和 C# 後備不同");
+    var bench = new byte[960 * 540];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)(i % 960 < 400 ? 30 : 200);
+    var benchImage = ImageBuffer.Gray(960, 540, bench);
+    for (int i = 0; i < 2; i++)
+        Operators.MeasureScan(benchImage, 40, 0, 40, 959, 0.6, 20, "all");
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 20; i++)
+        Operators.MeasureScan(benchImage, 40, 0, 40, 959, 0.6, 20, "all");
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    for (int i = 0; i < 2; i++)
+        Operators.MeasureScan(benchImage, 40, 0, 40, 959, 0.6, 20, "all");
+    watch.Restart();
+    for (int i = 0; i < 20; i++)
+        Operators.MeasureScan(benchImage, 40, 0, 40, 959, 0.6, 20, "all");
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("量測原生檢查通過");
+    Console.WriteLine($"960 像素掃描線共 20 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void MatchNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var block = new byte[64 * 64];
+    for (int row = 16; row < 48; row++)
+        for (int col = 16; col < 48; col++)
+            block[row * 64 + col] = 255;
+    var shifted = new byte[96 * 96];
+    for (int row = 36; row < 68; row++)
+        for (int col = 31; col < 63; col++)
+            shifted[row * 96 + col] = 255;
+    var scene = ImageBuffer.Gray(96, 96, shifted);
+    var template = ImageBuffer.Gray(64, 64, block);
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    var managedNcc = Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    NativeCore.UseNative = true;
+    var nativeShape = Operators.FindShape(scene, template, 8, 8, 55, 55);
+    var nativeNcc = Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    if (nativeShape.Length != managedShape.Length || nativeShape.Length < 1)
+        throw new InvalidOperationException($"形狀命中 {nativeShape.Length} 個，C# {managedShape.Length} 個");
+    for (int i = 0; i < managedShape.Length; i++)
+    {
+        if (Math.Abs(nativeShape[i].Row - managedShape[i].Row) > 1e-6
+            || Math.Abs(nativeShape[i].Column - managedShape[i].Column) > 1e-6
+            || Math.Abs(nativeShape[i].Angle - managedShape[i].Angle) > 1e-6
+            || Math.Abs(nativeShape[i].Score - managedShape[i].Score) > 1e-6)
+            throw new InvalidOperationException($"形狀分數和 C# 不同 {nativeShape[i].Score} / {managedShape[i].Score}");
+    }
+    if (nativeNcc.Length != managedNcc.Length || nativeNcc.Length < 1)
+        throw new InvalidOperationException($"正規相關命中 {nativeNcc.Length} 個，C# {managedNcc.Length} 個");
+    for (int i = 0; i < managedNcc.Length; i++)
+    {
+        if (Math.Abs(nativeNcc[i].Row - managedNcc[i].Row) > 1e-6
+            || Math.Abs(nativeNcc[i].Column - managedNcc[i].Column) > 1e-6
+            || Math.Abs(nativeNcc[i].Angle - managedNcc[i].Angle) > 1e-6
+            || Math.Abs(nativeNcc[i].Score - managedNcc[i].Score) > 1e-6)
+            throw new InvalidOperationException($"正規相關和 C# 不同 {nativeNcc[i].Score} / {managedNcc[i].Score}");
+    }
+    for (int i = 0; i < 2; i++)
+        Operators.FindShape(scene, template, 8, 8, 55, 55);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 4; i++)
+        Operators.FindShape(scene, template, 8, 8, 55, 55);
+    watch.Stop();
+    double nativeShapeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    for (int i = 0; i < 2; i++)
+        Operators.FindShape(scene, template, 8, 8, 55, 55);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.FindShape(scene, template, 8, 8, 55, 55);
+    watch.Stop();
+    double managedShapeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = true;
+    for (int i = 0; i < 2; i++)
+        Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    watch.Stop();
+    double nativeNccMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    for (int i = 0; i < 2; i++)
+        Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.FindNcc(scene, template, 8, 8, 55, 55);
+    watch.Stop();
+    double managedNccMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("比對分數原生檢查通過");
+    Console.WriteLine($"方塊形狀搜尋 4 次：原生 {nativeShapeMs:0.0} ms，C# {managedShapeMs:0.0} ms，加速 {managedShapeMs / nativeShapeMs:0.0} 倍");
+    Console.WriteLine($"方塊正規相關 4 次：原生 {nativeNccMs:0.0} ms，C# {managedNccMs:0.0} ms，加速 {managedNccMs / nativeNccMs:0.0} 倍");
+}
+
+static void FilterNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var grid = new byte[16];
+    for (int i = 0; i < grid.Length; i++)
+        grid[i] = (byte)i;
+    var mean3 = Operators.MeanImage(ImageBuffer.Gray(4, 4, grid), 3, 3);
+    byte[] expect3 = { 3, 4, 5, 5, 5, 5, 6, 6, 9, 9, 10, 10, 10, 10, 11, 12 };
+    if (!mean3.Pixels.AsSpan().SequenceEqual(expect3))
+        throw new InvalidOperationException("3x3 平均和 OpenCV 不同");
+    var mean2 = Operators.MeanImage(ImageBuffer.Gray(4, 4, grid), 2, 2);
+    byte[] expect2 = { 3, 3, 4, 5, 3, 3, 4, 5, 7, 7, 8, 9, 11, 11, 12, 13 };
+    if (!mean2.Pixels.AsSpan().SequenceEqual(expect2))
+        throw new InvalidOperationException("2x2 平均和 OpenCV 不同");
+    var spike = new byte[49];
+    spike[24] = 255;
+    var blurred = Operators.GaussImage(ImageBuffer.Gray(7, 7, spike), 5);
+    if (blurred.Pixels[24] != 36 || blurred.Pixels[16] != 16 || blurred.Pixels[9] != 4 || blurred.Pixels[10] != 6 || blurred.Pixels[0] != 0)
+        throw new InvalidOperationException("5x5 高斯和 OpenCV 不同");
+    var color = new byte[12];
+    for (int i = 0; i < color.Length; i++)
+        color[i] = (byte)(i * 20);
+    CompareFilter(color, 2, 2, 3, 1, 3);
+    var random = new byte[48 * 36];
+    for (int i = 0; i < random.Length; i++)
+        random[i] = (byte)((i * 17) & 255);
+    CompareFilter(random, 48, 36, 1, 5, 7);
+
+    var bench = new byte[1920 * 1080];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)((i * 17) & 255);
+    var benchImage = ImageBuffer.Gray(1920, 1080, bench);
+    Operators.MeanImage(benchImage, 9, 9);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 4; i++)
+        Operators.MeanImage(benchImage, 9, 9);
+    watch.Stop();
+    double nativeMean = watch.Elapsed.TotalMilliseconds;
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    Operators.MeanImage(benchImage, 9, 9);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.MeanImage(benchImage, 9, 9);
+    watch.Stop();
+    double managedMean = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = true;
+    Operators.GaussImage(benchImage, 5);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.GaussImage(benchImage, 5);
+    watch.Stop();
+    double nativeGauss = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.GaussImage(benchImage, 5);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.GaussImage(benchImage, 5);
+    watch.Stop();
+    double managedGauss = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("濾波原生檢查通過");
+    Console.WriteLine($"1920x1080 的 9x9 平均共 4 次：原生 {nativeMean:0.0} ms，C# {managedMean:0.0} ms，加速 {managedMean / nativeMean:0.0} 倍");
+    Console.WriteLine($"1920x1080 的 5x5 高斯共 4 次：原生 {nativeGauss:0.0} ms，C# {managedGauss:0.0} ms，加速 {managedGauss / nativeGauss:0.0} 倍");
+}
+
+static void CompareFilter(byte[] pixels, int width, int height, int channels, int mask, int gauss)
+{
+    bool previous = NativeCore.UseNative;
+    ImageBuffer image = channels == 1 ? ImageBuffer.Gray(width, height, pixels) : ImageBuffer.Bgr(width, height, pixels);
+    NativeCore.UseNative = false;
+    var managedMean = Operators.MeanImage(image, mask, mask + 1);
+    var managedGauss = Operators.GaussImage(image, gauss);
+    NativeCore.UseNative = true;
+    var nativeMean = Operators.MeanImage(image, mask, mask + 1);
+    var nativeGauss = Operators.GaussImage(image, gauss);
+    NativeCore.UseNative = previous;
+    if (!managedMean.Pixels.AsSpan().SequenceEqual(nativeMean.Pixels) || !managedGauss.Pixels.AsSpan().SequenceEqual(nativeGauss.Pixels))
+        throw new InvalidOperationException("濾波和 C# 後備不同");
+}
+
+static void MorphNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var speck = new byte[7 * 7];
+    for (int row = 1; row <= 3; row++)
+        for (int column = 1; column <= 3; column++)
+            speck[row * 7 + column] = 180;
+    speck[3 * 7 + 3] = 200;
+    speck[5 * 7 + 5] = 200;
+    var eroded = Operators.GrayErosion(ImageBuffer.Gray(7, 7, speck), 3, 3);
+    var dilated = Operators.GrayDilation(ImageBuffer.Gray(7, 7, speck), 3, 3);
+    if (eroded.Pixels[2 * 7 + 2] != 180 || eroded.Pixels[3 * 7 + 3] != 0)
+        throw new InvalidOperationException("灰階 3x3 侵蝕和 Python 不同");
+    if (dilated.Pixels[0] != 180 || dilated.Pixels[4 * 7 + 4] != 200 || dilated.Pixels[6 * 7 + 6] != 200 || dilated.Pixels[5] != 0)
+        throw new InvalidOperationException("灰階 3x3 膨脹和 Python 不同");
+    var opened = Operators.GrayOpenRectangle(ImageBuffer.Gray(7, 7, speck), 3, 3);
+    if (opened.Pixels[3 * 7 + 3] != 180 || opened.Pixels[5 * 7 + 5] != 0 || opened.Pixels[0] != 0)
+        throw new InvalidOperationException("灰階開運算應先侵蝕再膨脹");
+    var even = new byte[16];
+    even[1 * 4 + 1] = 200;
+    even[2 * 4 + 2] = 50;
+    var evenDilated = Operators.GrayDilation(ImageBuffer.Gray(4, 4, even), 2, 2);
+    if (evenDilated.Pixels[1 * 4 + 1] != 200 || evenDilated.Pixels[1 * 4 + 2] != 200 || evenDilated.Pixels[2 * 4 + 3] != 50 || evenDilated.Pixels[3 * 4 + 3] != 50)
+        throw new InvalidOperationException("偶數 2x2 膨脹和 OpenCV 不同");
+    var dot = new byte[25];
+    dot[12] = 255;
+    var round = Operators.GrayDilationCircle(ImageBuffer.Gray(5, 5, dot), 2);
+    if (round.Pixels[0] != 0 || round.Pixels[2] != 255 || round.Pixels[5] != 255 || round.Pixels[6] != 255 || round.Pixels[1] != 0)
+        throw new InvalidOperationException("半徑 2 的圓形膨脹和 OpenCV 橢圓不同");
+    CompareGray(speck, 7, 7, 3, 4, 2);
+
+    var block = new Region(9, 9, new[] { 3, 4, 5 }, new[] { 3, 3, 3 }, new[] { 3, 3, 3 });
+    SameRegion(Operators.ErodeRectangle(block, 3, 3), new Region(9, 9, new[] { 4 }, new[] { 4 }, new[] { 1 }), "區域侵蝕");
+    SameRegion(Operators.DilateRectangle(block, 2, 2), new Region(9, 9, new[] { 2, 3, 4, 5, 6 }, new[] { 2, 2, 2, 2, 2 }, new[] { 5, 5, 5, 5, 5 }), "偶數矩形膨脹");
+    SameRegion(Operators.OpenRectangle(block, 3, 3), block, "區域開運算");
+    SameRegion(Operators.DilateCircle(block, 1), new Region(9, 9, new[] { 2, 3, 4, 5, 6 }, new[] { 3, 2, 2, 2, 3 }, new[] { 3, 5, 5, 5, 3 }), "圓形膨脹");
+    SameRegion(Operators.OpenCircle(block, 1), Operators.DilateCircle(Operators.ErodeCircle(block, 1), 1), "圓形開運算");
+    CompareRegion(block, 4, 5, 2.5);
+
+    var bench = new byte[1920 * 1080];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = (byte)((i * 17) & 255);
+    var benchImage = ImageBuffer.Gray(1920, 1080, bench);
+    Operators.GrayErosion(benchImage, 9, 9);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 4; i++)
+        Operators.GrayErosion(benchImage, 9, 9);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    Operators.GrayErosion(benchImage, 9, 9);
+    watch.Restart();
+    for (int i = 0; i < 4; i++)
+        Operators.GrayErosion(benchImage, 9, 9);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("型態學原生檢查通過");
+    Console.WriteLine($"1920x1080 的 9x9 侵蝕共 4 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
+}
+
+static void CompareGray(byte[] pixels, int width, int height, int maskHeight, int maskWidth, int radius)
+{
+    bool previous = NativeCore.UseNative;
+    var image = ImageBuffer.Gray(width, height, pixels);
+    NativeCore.UseNative = false;
+    var managed = Operators.GrayErosion(image, maskHeight, maskWidth);
+    var managedCircle = Operators.GrayDilationCircle(image, radius);
+    NativeCore.UseNative = true;
+    var native = Operators.GrayErosion(image, maskHeight, maskWidth);
+    var nativeCircle = Operators.GrayDilationCircle(image, radius);
+    NativeCore.UseNative = previous;
+    if (!managed.Pixels.AsSpan().SequenceEqual(native.Pixels) || !managedCircle.Pixels.AsSpan().SequenceEqual(nativeCircle.Pixels))
+        throw new InvalidOperationException("灰階型態學和 C# 後備不同");
+}
+
+static void CompareRegion(Region region, int width, int height, double radius)
+{
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managed = Operators.ErodeRectangle(region, width, height);
+    var managedDisk = Operators.DilateCircle(region, radius);
+    var managedOpen = Operators.OpenRectangle(region, width, height);
+    NativeCore.UseNative = true;
+    var native = Operators.ErodeRectangle(region, width, height);
+    var nativeDisk = Operators.DilateCircle(region, radius);
+    var nativeOpen = Operators.OpenRectangle(region, width, height);
+    NativeCore.UseNative = previous;
+    SameRegion(native, managed, "矩形侵蝕後備");
+    SameRegion(nativeDisk, managedDisk, "圓形膨脹後備");
+    SameRegion(nativeOpen, managedOpen, "開運算後備");
+}
+
+static void ConnectionNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    CompareConnection(new Region(8, 8, new[] { 0, 1 }, new[] { 0, 1 }, new[] { 1, 1 }), 1, "斜角");
+    CompareConnection(new Region(8, 8, new[] { 0, 1 }, new[] { 0, 2 }, new[] { 1, 1 }), 1, "隔開");
+    CompareConnection(new Region(10, 8, new[] { 1, 2, 3 }, new[] { 2, 2, 2 }, new[] { 4, 4, 4 }), 1, "方塊");
+    CompareConnection(new Region(6, 6, new[] { 1, 0 }, new[] { 0, 0 }, new[] { 1, 1 }), 1, "未排序");
+    var apart = new Region(4, 30, new[] { 0, 0 }, new[] { 0, 8 }, new[] { 1, 1 });
+    CompareConnection(apart, 1, "同一列");
+    CompareConnection(apart, 20, "距離合併");
+    var block = new Region(10, 8, new[] { 1, 2, 3 }, new[] { 2, 2, 2 }, new[] { 4, 4, 4 });
+    CompareFeatures(block, "方塊");
+    var center = Operators.AreaCenterOf(block)[0];
+    var box = Operators.Bounds(block)[0];
+    if (center.Area != 12 || Math.Abs(center.Row - 2) > 1e-9 || Math.Abs(center.Column - 3.5) > 1e-9)
+        throw new InvalidOperationException($"方塊中心不對 {center.Area} {center.Row} {center.Column}");
+    if (box.Row1 != 1 || box.Column1 != 2 || box.Row2 != 3 || box.Column2 != 5)
+        throw new InvalidOperationException("方塊外接框不對");
+
+    var rows = new List<int>();
+    var columns = new List<int>();
+    var lengths = new List<int>();
+    for (int row = 0; row < 400; row++)
+    {
+        for (int column = 0; column < 400; column++)
+        {
+            if (((row * 3 + column) & 3) != 0)
+                continue;
+            rows.Add(row);
+            columns.Add(column);
+            lengths.Add(1);
+        }
+    }
+    var scattered = new Region(400, 400, rows.ToArray(), columns.ToArray(), lengths.ToArray());
+    CompareConnection(scattered, 1, "散點");
+    CompareFeatures(scattered, "散點");
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = true;
+    Operators.Connection(scattered);
+    Operators.AreaCenterOf(scattered);
+    Operators.Bounds(scattered);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 8; i++)
+        Operators.Connection(scattered);
+    watch.Stop();
+    double nativeConnection = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.Connection(scattered);
+    watch.Restart();
+    for (int i = 0; i < 8; i++)
+        Operators.Connection(scattered);
+    watch.Stop();
+    double managedConnection = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = true;
+    watch.Restart();
+    for (int i = 0; i < 20; i++)
+    {
+        Operators.AreaCenterOf(scattered);
+        Operators.Bounds(scattered);
+    }
+    watch.Stop();
+    double nativeFeatures = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    watch.Restart();
+    for (int i = 0; i < 20; i++)
+    {
+        Operators.AreaCenterOf(scattered);
+        Operators.Bounds(scattered);
+    }
+    watch.Stop();
+    double managedFeatures = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("連通與區域特徵檢查通過");
+    Console.WriteLine($"散點 {rows.Count} 段共 8 次：原生 {nativeConnection:0.0} ms，C# {managedConnection:0.0} ms，加速 {managedConnection / nativeConnection:0.0} 倍");
+    Console.WriteLine($"面積與外接框 20 次：原生 {nativeFeatures:0.0} ms，C# {managedFeatures:0.0} ms，加速 {managedFeatures / nativeFeatures:0.0} 倍");
+}
+
+static void CompareConnection(Region region, double distance, string label)
+{
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managed = Operators.Connection(region, distance);
+    NativeCore.UseNative = true;
+    var native = Operators.Connection(region, distance);
+    NativeCore.UseNative = previous;
+    if (native.Length != managed.Length)
+        throw new InvalidOperationException($"{label} 連通 {native.Length} 個，C# {managed.Length} 個");
+    for (int i = 0; i < managed.Length; i++)
+        SameRegion(native[i], managed[i], label + " " + i);
+}
+
+static void CompareFeatures(Region region, string label)
+{
+    bool previous = NativeCore.UseNative;
+    NativeCore.UseNative = false;
+    var managedCenter = Operators.AreaCenterOf(region);
+    var managedBounds = Operators.Bounds(region);
+    NativeCore.UseNative = true;
+    var nativeCenter = Operators.AreaCenterOf(region);
+    var nativeBounds = Operators.Bounds(region);
+    NativeCore.UseNative = previous;
+    if (nativeCenter.Length != managedCenter.Length || nativeBounds.Length != managedBounds.Length)
+        throw new InvalidOperationException(label + " 特徵個數不同");
+    for (int i = 0; i < managedCenter.Length; i++)
+    {
+        if (nativeCenter[i].Area != managedCenter[i].Area
+            || Math.Abs(nativeCenter[i].Row - managedCenter[i].Row) > 1e-9
+            || Math.Abs(nativeCenter[i].Column - managedCenter[i].Column) > 1e-9)
+            throw new InvalidOperationException(label + " 面積或中心不同");
+    }
+    for (int i = 0; i < managedBounds.Length; i++)
+    {
+        if (nativeBounds[i].Row1 != managedBounds[i].Row1 || nativeBounds[i].Column1 != managedBounds[i].Column1
+            || nativeBounds[i].Row2 != managedBounds[i].Row2 || nativeBounds[i].Column2 != managedBounds[i].Column2)
+            throw new InvalidOperationException(label + " 外接框不同");
+    }
+}
+
+static void ThresholdNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var pixels = new byte[48 * 6];
+    for (int i = 0; i < pixels.Length; i++)
+        pixels[i] = (byte)(i % 5 == 0 ? 0 : (i % 17 == 0 ? 128 : 255));
+    pixels[31] = 180;
+    pixels[32] = 180;
+    pixels[33] = 10;
+    SameRegion(Operators.Threshold(ImageBuffer.Gray(48, 6, pixels), 100, 255), ReferenceThreshold(pixels, 48, 6, 100, 255), "48x6");
+    SameRegion(Operators.Threshold(ImageBuffer.Gray(48, 6, pixels), -3, 400), ReferenceThreshold(pixels, 48, 6, -3, 400), "超出範圍");
+    SameRegion(Operators.Threshold(ImageBuffer.Gray(48, 6, pixels), 9, 4), ReferenceThreshold(pixels, 48, 6, 9, 4), "空門檻");
+    var wide = new byte[33];
+    for (int i = 0; i < wide.Length; i++)
+        wide[i] = (byte)(i >= 30 ? 200 : 0);
+    SameRegion(Operators.Threshold(ImageBuffer.Gray(33, 1, wide), 128, 255), ReferenceThreshold(wide, 33, 1, 128, 255), "跨 32");
+    var image = ImageBuffer.Gray(48, 6, pixels);
+    var domain = Operators.Rectangle(image, 1, 2, 4, 40);
+    var reduced = Operators.ReduceDomain(image, domain);
+    SameRegion(Operators.Threshold(reduced, 100, 255), Operators.Intersection(ReferenceThreshold(pixels, 48, 6, 100, 255), domain), "定義域");
+
+    const int benchWidth = 1920;
+    const int benchHeight = 1080;
+    var bench = new byte[benchWidth * benchHeight];
+    for (int i = 0; i < bench.Length; i++)
+        bench[i] = 30;
+    for (int row = 120; row < 460; row++)
+    {
+        int offset = row * benchWidth;
+        for (int column = 240; column < 1100; column++)
+            bench[offset + column] = 180;
+    }
+    var benchImage = ImageBuffer.Gray(benchWidth, benchHeight, bench);
+    SameRegion(Operators.Threshold(benchImage, 40, 200), ReferenceThreshold(bench, benchWidth, benchHeight, 40, 200), "1080p");
+    Operators.Threshold(benchImage, 40, 200);
+    ReferenceThreshold(bench, benchWidth, benchHeight, 40, 200);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 20; i++)
+        Operators.Threshold(benchImage, 40, 200);
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    watch.Restart();
+    for (int i = 0; i < 20; i++)
+        ReferenceThreshold(bench, benchWidth, benchHeight, 40, 200);
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    string kind = (NativeCore.CpuFlags & 4) != 0 ? "AVX2" : (NativeCore.CpuFlags & 8) != 0 ? "SSE2" : "純 C";
+    double ratio = managedMs / nativeMs;
+    Console.WriteLine("閾值原生檢查通過");
+    Console.WriteLine($"1920x1080 共 20 次：原生 {kind} {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {ratio:0.0} 倍");
+}
+
+static Region ReferenceThreshold(byte[] gray, int width, int height, int minGray, int maxGray)
+{
+    if (minGray > maxGray)
+        return new Region(width, height, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<int>());
+    var rows = new List<int>();
+    var columns = new List<int>();
+    var lengths = new List<int>();
+    for (int row = 0; row < height; row++)
+    {
+        int offset = row * width;
+        int column = 0;
+        while (column < width)
+        {
+            if (gray[offset + column] < minGray || gray[offset + column] > maxGray)
+            {
+                column++;
+                continue;
+            }
+            int start = column;
+            column++;
+            while (column < width && gray[offset + column] >= minGray && gray[offset + column] <= maxGray)
+                column++;
+            rows.Add(row);
+            columns.Add(start);
+            lengths.Add(column - start);
+        }
+    }
+    return new Region(width, height, rows.ToArray(), columns.ToArray(), lengths.ToArray());
+}
+
+static void SameRegion(Region actual, Region expect, string label)
+{
+    if (actual.Rows.Length != expect.Rows.Length)
+        throw new InvalidOperationException($"{label} 行程 {actual.Rows.Length}，參考 {expect.Rows.Length}");
+    for (int i = 0; i < expect.Rows.Length; i++)
+    {
+        if (actual.Rows[i] != expect.Rows[i] || actual.Columns[i] != expect.Columns[i] || actual.Lengths[i] != expect.Lengths[i])
+            throw new InvalidOperationException($"{label} 第 {i} 段");
+    }
 }
 
 static void ExpectSameRuns(Region region, int[][]? expected, string label)

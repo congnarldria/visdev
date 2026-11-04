@@ -2,51 +2,88 @@ namespace Vizion;
 
 public static partial class Operators
 {
-    /// <summary>灰階矩形開運算。先取遮罩裡最暗的，再取最亮的。比遮罩小的亮點會消失。</summary>
+    /// <summary>灰階矩形侵蝕。每個像素換成遮罩裡最暗的值。原點在 k/2，偶數不補成奇數。圖外當成 255。</summary>
+    public static ImageBuffer GrayErosion(ImageBuffer image, int maskHeight, int maskWidth)
+    {
+        if (maskHeight < 1 || maskWidth < 1)
+            throw new ArgumentOutOfRangeException(nameof(maskHeight), "遮罩至少要 1x1");
+        return ApplyRectangle(image, maskHeight, maskWidth, dark: true);
+    }
+
+    /// <summary>灰階矩形膨脹。每個像素換成遮罩裡最亮的值。原點在 k/2。圖外當成 0。</summary>
+    public static ImageBuffer GrayDilation(ImageBuffer image, int maskHeight, int maskWidth)
+    {
+        if (maskHeight < 1 || maskWidth < 1)
+            throw new ArgumentOutOfRangeException(nameof(maskWidth), "遮罩至少要 1x1");
+        return ApplyRectangle(image, maskHeight, maskWidth, dark: false);
+    }
+
+    /// <summary>灰階圓形侵蝕。半徑 1 是十字。圖外當成 255。</summary>
+    public static ImageBuffer GrayErosionCircle(ImageBuffer image, int radius) =>
+        ApplyCircle(image, radius, dark: true);
+
+    /// <summary>灰階圓形膨脹。半徑 1 是十字。圖外當成 0。</summary>
+    public static ImageBuffer GrayDilationCircle(ImageBuffer image, int radius) =>
+        ApplyCircle(image, radius, dark: false);
+
+    /// <summary>灰階矩形開運算。先侵蝕再膨脹。比遮罩小的亮點會消失。</summary>
     public static ImageBuffer GrayOpenRectangle(ImageBuffer image, int maskHeight, int maskWidth) =>
-        GrayRectangle(image, maskHeight, maskWidth, erodeFirst: true);
+        GrayDilation(GrayErosion(image, maskHeight, maskWidth), maskHeight, maskWidth);
 
-    /// <summary>灰階矩形閉運算。先取遮罩裡最亮的，再取最暗的。比遮罩小的暗點會補上。</summary>
+    /// <summary>灰階矩形閉運算。先膨脹再侵蝕。比遮罩小的暗點會補上。</summary>
     public static ImageBuffer GrayCloseRectangle(ImageBuffer image, int maskHeight, int maskWidth) =>
-        GrayRectangle(image, maskHeight, maskWidth, erodeFirst: false);
+        GrayErosion(GrayDilation(image, maskHeight, maskWidth), maskHeight, maskWidth);
 
-    /// <summary>灰階圓形開運算。半徑 1 是十字。比圓小的亮點會消失。</summary>
+    /// <summary>灰階圓形開運算。先用圓侵蝕再膨脹。比圓小的亮點會消失。</summary>
     public static ImageBuffer GrayOpenCircle(ImageBuffer image, int radius) =>
-        GrayCircle(image, radius, erodeFirst: true);
+        GrayDilationCircle(GrayErosionCircle(image, radius), radius);
 
-    /// <summary>灰階圓形閉運算。半徑 1 是十字。比圓小的暗點會補上。</summary>
+    /// <summary>灰階圓形閉運算。先用圓膨脹再侵蝕。比圓小的暗點會補上。</summary>
     public static ImageBuffer GrayCloseCircle(ImageBuffer image, int radius) =>
-        GrayCircle(image, radius, erodeFirst: false);
+        GrayErosionCircle(GrayDilationCircle(image, radius), radius);
 
-    static ImageBuffer GrayCircle(ImageBuffer image, int radius, bool erodeFirst)
+    static ImageBuffer ApplyCircle(ImageBuffer image, int radius, bool dark)
     {
         if (image == null)
             throw new ArgumentNullException(nameof(image));
         if (radius < 0)
             throw new ArgumentOutOfRangeException(nameof(radius), "半徑不能是負的");
-        var offsets = EllipseOffsets(radius);
-        byte[] source = image.GrayBytes();
-        byte[] middle = FilterOffsets(source, image.Width, image.Height, offsets, dark: erodeFirst);
-        byte[] result = FilterOffsets(middle, image.Width, image.Height, offsets, dark: !erodeFirst);
+        byte[] gray = image.GrayBytes();
+        var native = new byte[gray.Length];
+        if (NativeCore.TryGrayEllipse(gray, image.Width, image.Height, radius, !dark, native))
+            return ImageBuffer.Gray(image.Width, image.Height, native);
+        byte[] result = FilterOffsets(gray, image.Width, image.Height, EllipseOffsets(radius), dark);
+        return ImageBuffer.Gray(image.Width, image.Height, result);
+    }
+
+    static ImageBuffer ApplyRectangle(ImageBuffer image, int maskHeight, int maskWidth, bool dark)
+    {
+        if (image == null)
+            throw new ArgumentNullException(nameof(image));
+        byte[] gray = image.GrayBytes();
+        var native = new byte[gray.Length];
+        if (NativeCore.TryGrayRect(gray, image.Width, image.Height, maskHeight, maskWidth, !dark, native))
+            return ImageBuffer.Gray(image.Width, image.Height, native);
+        byte[] result = Filter(gray, image.Width, image.Height, maskHeight, maskWidth, dark);
         return ImageBuffer.Gray(image.Width, image.Height, result);
     }
 
     static List<(int Row, int Column)> EllipseOffsets(int radius)
     {
+        int size = radius * 2 + 1;
+        int center = radius;
+        double inverse = center == 0 ? 0 : 1.0 / (center * center);
         var offsets = new List<(int Row, int Column)>();
-        if (radius == 0)
+        for (int row = 0; row < size; row++)
         {
-            offsets.Add((0, 0));
-            return offsets;
-        }
-        double limit = radius * radius;
-        for (int row = -radius; row <= radius; row++)
-        {
-            for (int column = -radius; column <= radius; column++)
-            {
-                if (row * row + column * column <= limit)
-                    offsets.Add((row, column));
-            }
+            int dy = row - center;
+            if (Math.Abs(dy) > center)
+                continue;
+            int reach = center == 0 ? 0 : (int)Math.Round(center * Math.Sqrt(Math.Max(0, 1.0 - dy * dy * inverse)), MidpointRounding.AwayFromZero);
+            int start = Math.Max(center - reach, 0);
+            int end = Math.Min(center + reach + 1, size);
+            for (int column = start; column < end; column++)
+                offsets.Add((row - center, column - center));
         }
         return offsets;
     }
@@ -82,22 +119,10 @@ public static partial class Operators
         return result;
     }
 
-    static ImageBuffer GrayRectangle(ImageBuffer image, int maskHeight, int maskWidth, bool erodeFirst)
-    {
-        if (image == null)
-            throw new ArgumentNullException(nameof(image));
-        if (maskHeight < 1 || maskWidth < 1)
-            throw new ArgumentOutOfRangeException(nameof(maskHeight), "遮罩至少要 1x1");
-        byte[] source = image.GrayBytes();
-        byte[] middle = Filter(source, image.Width, image.Height, maskHeight, maskWidth, dark: erodeFirst);
-        byte[] result = Filter(middle, image.Width, image.Height, maskHeight, maskWidth, dark: !erodeFirst);
-        return ImageBuffer.Gray(image.Width, image.Height, result);
-    }
-
     static byte[] Filter(byte[] source, int width, int height, int maskHeight, int maskWidth, bool dark)
     {
-        int anchorRow = (maskHeight - 1) / 2;
-        int anchorColumn = (maskWidth - 1) / 2;
+        int anchorRow = maskHeight / 2;
+        int anchorColumn = maskWidth / 2;
         var result = new byte[source.Length];
         for (int row = 0; row < height; row++)
         {
