@@ -29,6 +29,25 @@ public static partial class Operators
         return new RegionShape(circularity, rectangularity, phi, Math.Sqrt(2 * major), Math.Sqrt(2 * minor));
     }
 
+    /// <summary>外框。最後一點回到起點。列、行和輪廓相同。</summary>
+    public static EdgePoint[] OuterPoints(Region region)
+    {
+        if (region == null)
+            throw new ArgumentNullException(nameof(region));
+        List<(int X, int Y)> points = OuterContour(region);
+        var outline = new EdgePoint[points.Count];
+        for (int i = 0; i < points.Count; i++)
+            outline[i] = new EdgePoint(points[i].Y, points[i].X);
+        return outline;
+    }
+
+    public static double BoundaryLength(Region region)
+    {
+        if (region == null)
+            throw new ArgumentNullException(nameof(region));
+        return ContourLength(OuterContour(region));
+    }
+
     static void Moments(Region region, out double cx, out double cy, out double mu20, out double mu02, out double mu11, out double mass)
     {
         double m10 = 0;

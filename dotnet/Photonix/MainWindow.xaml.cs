@@ -61,6 +61,8 @@ public partial class MainWindow : Window
     GraphicsWindow? GfxFloat;
     ThresholdWindow? ThresholdFloat;
     SubpixWindow? SubpixFloat;
+    FeatureWindow? FeatureFloat;
+    FeatureHit? PickedFeature;
     OperatorDialog? ParamDialog;
     readonly Dictionary<string, object> DockPanes = new(StringComparer.Ordinal);
     string DefaultLayout = "";
@@ -305,7 +307,13 @@ public partial class MainWindow : Window
                 ZoomAt(at.X, at.Y, 1.4);
         }
         else if (!moved && Mode == GfxMode.Select)
-            StatusLine.Text = $"點選  Row {row:0.0}   Column {col:0.0}";
+        {
+            PickedFeature = FeaturePick.Find(Engine.Vars, col, row, Zoom);
+            StatusLine.Text = PickedFeature is FeatureHit picked
+                ? (picked.Kind == "xld" ? "已點選輪廓 " : "已點選區域 ") + picked.Name + " #" + (picked.Index + 1)
+                : $"點選  Row {row:0.0}   Column {col:0.0}";
+            Present();
+        }
         UpdateProbe(at);
     }
 
@@ -787,6 +795,39 @@ public partial class MainWindow : Window
         StatusLine.Text = "次像素視窗已打開";
         Log(StatusLine.Text);
     }
+
+    void Features_Click(object sender, RoutedEventArgs e)
+    {
+        if (FeatureFloat != null)
+        {
+            FeatureFloat.Activate();
+            ShowFeature();
+            return;
+        }
+        var window = new FeatureWindow { Owner = this };
+        window.PickChanged = hit =>
+        {
+            PickedFeature = hit;
+            StatusLine.Text = hit is FeatureHit picked
+                ? (picked.Kind == "xld" ? "已點選輪廓 " : "已點選區域 ") + picked.Name + " #" + (picked.Index + 1)
+                : "沒有點到區域或輪廓";
+            Log(StatusLine.Text);
+            Present();
+        };
+        window.RequestPaint = () => Present();
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(FeatureFloat, window))
+                FeatureFloat = null;
+        };
+        FeatureFloat = window;
+        window.Show();
+        ShowFeature();
+        StatusLine.Text = "特徵視窗已打開";
+        Log(StatusLine.Text);
+    }
+
+    void ShowFeature() => FeatureFloat?.Show(PictureData, Scene(), Engine.Vars, PickedFeature);
 
     void NotYet_Click(object sender, RoutedEventArgs e)
     {
@@ -2324,6 +2365,7 @@ public partial class MainWindow : Window
             UpdateDraft();
             ThresholdFloat?.ShowImage(PictureData, ProgramText.Text);
             SubpixFloat?.ShowImage(PictureData, ProgramText.Text);
+            ShowFeature();
             return;
         }
         int viewW = (int)Math.Round(Stage.ActualWidth);
@@ -2348,9 +2390,10 @@ public partial class MainWindow : Window
         UpdateDraft();
         ThresholdFloat?.ShowImage(PictureData, ProgramText.Text);
         SubpixFloat?.ShowImage(PictureData, ProgramText.Text);
+        ShowFeature();
     }
 
-    Overlay[] Painted()
+    Overlay[] Scene()
     {
         if (Shapes.Length == 0)
             return Shapes;
@@ -2363,6 +2406,18 @@ public partial class MainWindow : Window
                 : item;
         }
         return painted;
+    }
+
+    Overlay[] Painted()
+    {
+        Overlay[] scene = Scene();
+        Overlay[] extra = FeatureFloat?.MainOverlays(Zoom) ?? [];
+        if (extra.Length == 0)
+            return scene;
+        var all = new Overlay[scene.Length + extra.Length];
+        Array.Copy(scene, all, scene.Length);
+        Array.Copy(extra, 0, all, scene.Length, extra.Length);
+        return all;
     }
 
     (double col, double row) ImagePoint(Point screen) => ((screen.X - CamX) / Zoom, (screen.Y - CamY) / Zoom);
