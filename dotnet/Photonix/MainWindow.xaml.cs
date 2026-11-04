@@ -59,6 +59,7 @@ public partial class MainWindow : Window
     readonly ProgramRun Engine = new();
     bool Running;
     GraphicsWindow? GfxFloat;
+    ThresholdWindow? ThresholdFloat;
     OperatorDialog? ParamDialog;
     readonly Dictionary<string, object> DockPanes = new(StringComparer.Ordinal);
     string DefaultLayout = "";
@@ -727,6 +728,35 @@ public partial class MainWindow : Window
     };
 
     void NotifyFloat() => GfxFloat?.UpdateView(PictureData, Frame, Painted());
+
+    void Threshold_Click(object sender, RoutedEventArgs e)
+    {
+        if (ThresholdFloat != null)
+        {
+            ThresholdFloat.Activate();
+            ThresholdFloat.ShowImage(PictureData, ProgramText.Text);
+            return;
+        }
+        var window = new ThresholdWindow { Owner = this };
+        window.Source = () => ProgramText.Text ?? "";
+        window.ApplySource = text =>
+        {
+            ApplyingTolerance = true;
+            ProgramText.Text = text;
+            ApplyingTolerance = false;
+        };
+        window.RequestRun = () => Run_Click(this, new RoutedEventArgs());
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(ThresholdFloat, window))
+                ThresholdFloat = null;
+        };
+        ThresholdFloat = window;
+        window.Show();
+        window.ShowImage(PictureData, ProgramText.Text);
+        StatusLine.Text = "二值化視窗已打開";
+        Log(StatusLine.Text);
+    }
 
     void NotYet_Click(object sender, RoutedEventArgs e)
     {
@@ -2259,6 +2289,7 @@ public partial class MainWindow : Window
         if (PictureData == null || Frame == null)
         {
             UpdateDraft();
+            ThresholdFloat?.ShowImage(PictureData, ProgramText.Text);
             return;
         }
         int viewW = (int)Math.Round(Stage.ActualWidth);
@@ -2281,6 +2312,7 @@ public partial class MainWindow : Window
         Picture.Source = source;
         Picture.Visibility = Visibility.Visible;
         UpdateDraft();
+        ThresholdFloat?.ShowImage(PictureData, ProgramText.Text);
     }
 
     Overlay[] Painted()

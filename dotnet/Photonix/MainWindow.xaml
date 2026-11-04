@@ -81,7 +81,7 @@
         <MenuItem Header="重設" InputGestureText="F7" Click="Reset_Click"/>
       </MenuItem>
       <MenuItem Header="工具">
-        <MenuItem Header="二值化" Click="NotYet_Click"/>
+        <MenuItem Header="二值化" Click="Threshold_Click"/>
         <MenuItem Header="次像素" Click="NotYet_Click"/>
         <MenuItem Header="特徵" Click="NotYet_Click"/>
         <MenuItem Header="OCR" Click="NotYet_Click"/>
@@ -206,7 +206,7 @@
               <Button Content="存畫面" Click="SaveView_Click" ToolTip="把底圖、區域、輪廓和十字存成一張圖"/>
               <TextBlock VerticalAlignment="Center" Margin="6,0,4,0" Foreground="{StaticResource Muted}" Text="線寬"/>
               <TextBox x:Name="ContourWidth" Width="36" Text="2" ToolTip="輪廓和十字的線寬，1 到 10" TextChanged="ContourWidth_TextChanged" LostFocus="ContourWidth_LostFocus"/>
-              <Button Content="二值化" Click="NotYet_Click"/>
+              <Button Content="二值化" Click="Threshold_Click" ToolTip="開啟二值化視窗，不擋住主視窗"/>
               <Button Content="特徵" Click="NotYet_Click"/>
               <Button Content="OCR" Click="NotYet_Click"/>
               <Button Content="connection" Click="NotYet_Click"/>
