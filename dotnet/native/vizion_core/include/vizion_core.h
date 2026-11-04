@@ -220,7 +220,7 @@ VIZION_EXPORT int VIZION_CALL vizion_roberts(const uint8_t* src, uint8_t* dst, i
 VIZION_EXPORT int VIZION_CALL vizion_binomial(const uint8_t* src, uint8_t* dst, int width, int height, int mask_width, int mask_height);
 VIZION_EXPORT int VIZION_CALL vizion_paint_selftest(void);
 
-/* 羅盤邊緣、兩個方向圖的角度、局部中距。wave：0 正弦、1 餘弦、2 正切。 */
+/* 羅盤邊緣、兩個方向圖的角度、局部中距。wave：0 正弦、1 餘弦、2 正切、3 反正弦、4 反餘弦、5 反正切。 */
 VIZION_EXPORT int VIZION_CALL vizion_kirsch(const uint8_t* src, uint8_t* dst, int width, int height);
 VIZION_EXPORT int VIZION_CALL vizion_frei(const uint8_t* src, uint8_t* dst, int width, int height);
 VIZION_EXPORT int VIZION_CALL vizion_robinson_amp(const uint8_t* src, uint8_t* dst, int width, int height);
@@ -229,6 +229,24 @@ VIZION_EXPORT int VIZION_CALL vizion_atan2_gray(const uint8_t* vertical, const u
 VIZION_EXPORT int VIZION_CALL vizion_midrange(const uint8_t* src, uint8_t* dst, int width, int height, int mask_width, int mask_height);
 VIZION_EXPORT int VIZION_CALL vizion_wave(const uint8_t* src, uint8_t* dst, int count, int op);
 VIZION_EXPORT int VIZION_CALL vizion_compass_selftest(void);
+
+/* 斜坡、左右或上下拼接、卷積、帶通、加邊、金字塔。金字塔 mode：0 高斯、1 隔點、2 最小、3 最大。
+   卷積 border：0 重複邊緣、1 循環、2 REFLECT_101。係數和接近 0 時結果加 128。 */
+VIZION_EXPORT int VIZION_CALL vizion_gray_ramp(
+    uint8_t* dst, int width, int height, double alpha, double beta, double gamma, double row, double column);
+VIZION_EXPORT int VIZION_CALL vizion_tile(
+    const uint8_t* left, int left_width, int left_height,
+    const uint8_t* right, int right_width, int right_height,
+    uint8_t* dst, int channels, int vertical);
+VIZION_EXPORT int VIZION_CALL vizion_convol(
+    const uint8_t* src, uint8_t* dst, int width, int height,
+    const float* kernel, int kernel_height, int kernel_width, int border);
+VIZION_EXPORT int VIZION_CALL vizion_bandpass(const uint8_t* src, uint8_t* dst, int width, int height, int inner, int outer);
+VIZION_EXPORT int VIZION_CALL vizion_make_border(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels, int border, int fill);
+VIZION_EXPORT int VIZION_CALL vizion_pyramid(const uint8_t* src, uint8_t* dst, int width, int height, int channels, int mode);
+VIZION_EXPORT int VIZION_CALL vizion_entropy(const uint8_t* src, uint8_t* dst, int width, int height, int mask_width, int mask_height);
+VIZION_EXPORT int VIZION_CALL vizion_stage_selftest(void);
 
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(

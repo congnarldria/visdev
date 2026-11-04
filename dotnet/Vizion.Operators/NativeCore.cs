@@ -665,6 +665,31 @@ public static class NativeCore
     public static bool TryWave(byte[] source, byte[] destination, int count, int op) =>
         Ready(source, destination, count) && Call(() => vizion_wave(source, destination, count, op));
 
+    public static bool TryGrayRamp(byte[] destination, int width, int height, double alpha, double beta, double gamma, double row, double column) =>
+        IsLoaded && UseNative && width >= 1 && height >= 1 && destination.Length >= width * height
+        && Call(() => vizion_gray_ramp(destination, width, height, alpha, beta, gamma, row, column));
+
+    public static bool TryTile(byte[] left, int leftWidth, int leftHeight, byte[] right, int rightWidth, int rightHeight, byte[] destination, int channels, bool vertical) =>
+        IsLoaded && UseNative && channels is 1 or 3
+        && Call(() => vizion_tile(left, leftWidth, leftHeight, right, rightWidth, rightHeight, destination, channels, vertical ? 1 : 0));
+
+    public static bool TryConvol(byte[] source, byte[] destination, int width, int height, float[] kernel, int kernelHeight, int kernelWidth, int border) =>
+        Ready(source, destination, width * height) && kernel.Length >= kernelHeight * kernelWidth
+        && Call(() => vizion_convol(source, destination, width, height, kernel, kernelHeight, kernelWidth, border));
+
+    public static bool TryBandpass(byte[] source, byte[] destination, int width, int height, int inner, int outer) =>
+        Ready(source, destination, width * height) && Call(() => vizion_bandpass(source, destination, width, height, inner, outer));
+
+    public static bool TryMakeBorder(byte[] source, byte[] destination, int width, int height, int channels, int border, int fill) =>
+        IsLoaded && UseNative && width >= 1 && height >= 1
+        && Call(() => vizion_make_border(source, destination, width, height, channels, border, fill));
+
+    public static bool TryPyramid(byte[] source, byte[] destination, int width, int height, int channels, int mode) =>
+        IsLoaded && UseNative && Call(() => vizion_pyramid(source, destination, width, height, channels, mode));
+
+    public static bool TryEntropy(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
+        Ready(source, destination, width * height) && Call(() => vizion_entropy(source, destination, width, height, maskWidth, maskHeight));
+
     public static bool TryBinomial(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
         Ready(source, destination, width * height) && Call(() => vizion_binomial(source, destination, width, height, maskWidth, maskHeight));
 
@@ -1011,6 +1036,31 @@ public static class NativeCore
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_wave(byte[] source, byte[] destination, int count, int op);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_ramp(byte[] destination, int width, int height, double alpha, double beta, double gamma, double row, double column);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_tile(
+        byte[] left, int leftWidth, int leftHeight, byte[] right, int rightWidth, int rightHeight,
+        byte[] destination, int channels, int vertical);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_convol(
+        byte[] source, byte[] destination, int width, int height,
+        float[] kernel, int kernelHeight, int kernelWidth, int border);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_bandpass(byte[] source, byte[] destination, int width, int height, int inner, int outer);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_make_border(byte[] source, byte[] destination, int width, int height, int channels, int border, int fill);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_pyramid(byte[] source, byte[] destination, int width, int height, int channels, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_entropy(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);

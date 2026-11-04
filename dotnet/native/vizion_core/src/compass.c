@@ -309,22 +309,38 @@ int vizion_midrange(const uint8_t* src, uint8_t* dst, int width, int height, int
 int vizion_wave(const uint8_t* src, uint8_t* dst, int count, int op)
 {
     int index;
-    if (!src || !dst || count < 1 || op < 0 || op > 2)
+    if (!src || !dst || count < 1 || op < 0 || op > 5)
         return -1;
     for (index = 0; index < count; index++) {
-        double angle = (double)src[index];
+        double sample = (double)src[index];
         double waved;
+        double unit;
         if (op == 0)
-            waved = (sin(angle) + 1.0) * 127.5;
+            waved = (sin(sample) + 1.0) * 127.5;
         else if (op == 1)
-            waved = (cos(angle) + 1.0) * 127.5;
-        else {
-            waved = tan(angle);
+            waved = (cos(sample) + 1.0) * 127.5;
+        else if (op == 2) {
+            waved = tan(sample);
             if (waved < -16.0)
                 waved = -16.0;
             if (waved > 16.0)
                 waved = 16.0;
             waved = (waved + 16.0) / 32.0 * 255.0;
+        } else {
+            if (op == 5)
+                waved = atan((sample - 128.0) / 32.0);
+            else {
+                unit = (sample - 128.0) / 127.0;
+                if (unit < -1.0)
+                    unit = -1.0;
+                if (unit > 1.0)
+                    unit = 1.0;
+                waved = op == 3 ? asin(unit) : acos(unit);
+            }
+            if (op == 4)
+                waved = waved / 3.14159265358979323846 * 255.0;
+            else
+                waved = (waved + 3.14159265358979323846 / 2.0) / 3.14159265358979323846 * 255.0;
         }
         dst[index] = compass_round(waved);
     }
@@ -377,5 +393,18 @@ int vizion_compass_selftest(void)
         return 8;
     if (vizion_wave(wave_src, wave, 6, 2) != 0 || !compass_same(wave, tangent, 6))
         return 9;
+    {
+        static const uint8_t inverse_src[5] = { 0, 1, 128, 160, 255 };
+        static const uint8_t asin_expect[5] = { 0, 0, 128, 148, 255 };
+        static const uint8_t acos_expect[5] = { 255, 255, 128, 107, 0 };
+        static const uint8_t atan_expect[5] = { 20, 20, 128, 191, 235 };
+        uint8_t inverse[5];
+        if (vizion_wave(inverse_src, inverse, 5, 3) != 0 || !compass_same(inverse, asin_expect, 5))
+            return 10;
+        if (vizion_wave(inverse_src, inverse, 5, 4) != 0 || !compass_same(inverse, acos_expect, 5))
+            return 11;
+        if (vizion_wave(inverse_src, inverse, 5, 5) != 0 || !compass_same(inverse, atan_expect, 5))
+            return 12;
+    }
     return 0;
 }

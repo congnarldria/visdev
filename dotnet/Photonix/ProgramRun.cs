@@ -602,6 +602,66 @@ sealed class ProgramRun
                 Set(args[1], smoothed);
                 Image = smoothed;
                 return;
+            case "gen_image_gray_ramp":
+                Need(args, 8);
+                var ramp = Operators.GrayRamp(Num(args[1]), Num(args[2]), Num(args[3]), Num(args[4]), Num(args[5]), IntOf(args[6]), IntOf(args[7]));
+                Set(args[0], ramp);
+                Image = ramp;
+                return;
+            case "tile_images":
+                Need(args, 3);
+                var tiled = Operators.TileImages(ImageOf(args[0]), ImageOf(args[1]), args.Length > 3 ? Word(args[3]) : "horizontal");
+                Set(args[2], tiled);
+                Image = tiled;
+                return;
+            case "convol_image":
+                Need(args, 3);
+                var convolved = ConvolOf(args);
+                Set(args[1], convolved);
+                Image = convolved;
+                return;
+            case "asin_image":
+                Need(args, 2);
+                var asined = Operators.AsinImage(ImageOf(args[0]));
+                Set(args[1], asined);
+                Image = asined;
+                return;
+            case "acos_image":
+                Need(args, 2);
+                var acosed = Operators.AcosImage(ImageOf(args[0]));
+                Set(args[1], acosed);
+                Image = acosed;
+                return;
+            case "atan_image":
+                Need(args, 2);
+                var ataned = Operators.AtanImage(ImageOf(args[0]));
+                Set(args[1], ataned);
+                Image = ataned;
+                return;
+            case "bandpass_image":
+                Need(args, 4);
+                var band = Operators.BandpassImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], band);
+                Image = band;
+                return;
+            case "add_image_border":
+                Need(args, 3);
+                var framed = Operators.AddImageBorder(ImageOf(args[0]), IntOf(args[2]), args.Length > 3 ? IntOf(args[3]) : 0);
+                Set(args[1], framed);
+                Image = framed;
+                return;
+            case "gen_gauss_pyramid":
+                Need(args, 2);
+                var pyramid = Operators.GaussPyramid(ImageOf(args[0]), args.Length > 2 ? Word(args[2]) : "constant", args.Length > 3 ? Num(args[3]) : 0.5);
+                Set(args[1], pyramid);
+                Image = pyramid;
+                return;
+            case "entropy_image":
+                Need(args, 4);
+                var entropy = Operators.EntropyImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], entropy);
+                Image = entropy;
+                return;
             case "reduce_domain":
                 Need(args, 3);
                 var reduced = Operators.ReduceDomain(ImageOf(args[0]), RegionOf(args[1]));
@@ -745,6 +805,18 @@ sealed class ProgramRun
         if (Eval(token) is double[] table)
             return table;
         throw new InvalidOperationException("Lut 要 256 個數，對應灰階 0 到 255");
+    }
+
+    ImageBuffer ConvolOf(string[] args)
+    {
+        string kernel = args[2].Trim();
+        int width = args.Length > 3 ? IntOf(args[3]) : 0;
+        string margin = args.Length > 4 ? Word(args[4]) : "continued";
+        if (kernel.Length >= 2 && (kernel[0] == '\'' || kernel[0] == '"'))
+            return Operators.ConvolImage(ImageOf(args[0]), Word(kernel), null, width, margin);
+        if (IsName(kernel) && Vars.TryGetValue(kernel, out object? value) && value is double[] weights)
+            return Operators.ConvolImage(ImageOf(args[0]), null, weights, width, margin);
+        return Operators.ConvolImage(ImageOf(args[0]), Word(kernel), null, width, margin);
     }
 
     string Word(string token)

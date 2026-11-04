@@ -2,10 +2,10 @@
 
 目錄共 1195 個，和 `dotnet/Photonix/operators.json` 同一份。Python 引擎裡每個都有函式。
 這裡的「還沒實作」是指 Photonix 執行到該行會停下來，訊息是「還沒接上這個算子」。
-已接上的 78 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
+已接上的 88 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
 `tuple_is_serializable` 是在問 tuple 能不能序列化，不是序列埠，所以留在 Tuple。
 
-還沒接上、且與硬體無關：1090 個。排除的硬體算子：27 個。
+還沒接上、且與硬體無關：1080 個。排除的硬體算子：27 個。
 
 ## 數量
 
@@ -13,7 +13,7 @@
 | --- | ---: |
 | 檔案 | 20 |
 | 系統 | 4 |
-| 灰階與濾波 | 80 |
+| 灰階與濾波 | 70 |
 | 幾何 | 57 |
 | 分割 | 26 |
 | 形態學 | 47 |
@@ -31,7 +31,7 @@
 | 顯示 | 10 |
 | 矩陣 | 65 |
 | Tuple | 148 |
-| 合計 | 1090 |
+| 合計 | 1080 |
 
 ## 已接上，不列入
 
@@ -95,6 +95,16 @@
 - Vizion.cos_image
 - Vizion.tan_image
 - Vizion.smooth_image
+- Vizion.gen_image_gray_ramp
+- Vizion.tile_images
+- Vizion.convol_image
+- Vizion.asin_image
+- Vizion.acos_image
+- Vizion.atan_image
+- Vizion.bandpass_image
+- Vizion.add_image_border
+- Vizion.gen_gauss_pyramid
+- Vizion.entropy_image
 - Vizion.read_image
 - Vizion.gauss_image
 - Vizion.mean_image
@@ -181,31 +191,26 @@
 - Vizion.get_system_time
 - Vizion.get_system_info
 
-### 灰階與濾波（80）
+### 灰階與濾波（70）
 
 - Vizion.guided_filter
 - Vizion.emphasize_clahe
 - Vizion.append_channel
-- Vizion.gen_image_gray_ramp
 - Vizion.trans_to_rgb
 - Vizion.derivate_gauss
 - Vizion.texture_laws
 - Vizion.set_grayval
 - Vizion.cfa_to_rgb
-- Vizion.tile_images
 - Vizion.harmonic_interpolation
 - Vizion.bilateral_filter
-- Vizion.convol_image
 - Vizion.optical_flow_mg
 - Vizion.region_to_mean
 - Vizion.anisotropic_diffusion
-- Vizion.bandpass_image
 - Vizion.shock_filter
 - Vizion.add_noise_white
 - Vizion.isotropic_diffusion
 - Vizion.rank_image
 - Vizion.add_noise_salt_pepper
-- Vizion.gen_gauss_pyramid
 - Vizion.fft_image
 - Vizion.fft_image_inv
 - Vizion.get_complex
@@ -239,13 +244,8 @@
 - Vizion.enhance_hot
 - Vizion.diff_region
 - Vizion.diff_amount
-- Vizion.asin_image
-- Vizion.acos_image
-- Vizion.atan_image
-- Vizion.add_image_border
 - Vizion.gen_image_surface_first_order
 - Vizion.gen_image_surface_second_order
-- Vizion.entropy_image
 - Vizion.get_image_type
 - Vizion.gray_dilation
 - Vizion.gray_erosion
