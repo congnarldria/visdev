@@ -8,6 +8,8 @@
 
 void vizion_bits_sse2(const uint8_t* a, const uint8_t* b, uint8_t* dst, int count, int op);
 
+int vizion_gray_bitconst(const uint8_t* src, uint8_t* dst, int count, int op, int amount);
+
 static uint8_t map_trunc_f(float value)
 {
     if (!(value > 0.f))
@@ -272,5 +274,49 @@ int vizion_map_selftest(void)
         return 11;
     if (vizion_gray_pow(src, out, 8, 0.0) == 0)
         return 12;
+    if (vizion_gray_bitconst(src, out, 8, 1, 240) != 0 || out[3] != (81 & 240) || out[7] != (255 & 240))
+        return 13;
+    if (vizion_gray_bitconst(src, out, 8, 2, 3) != 0 || out[4] != (uint8_t)(128 << 3))
+        return 14;
+    if (vizion_gray_bitconst(src, out, 8, 3, 2) != 0 || out[5] != (uint8_t)(200 >> 2))
+        return 15;
+    if (vizion_gray_bitconst(src, out, 8, 4, 0) != 0 || out[0] != 0 || out[1] != 255)
+        return 16;
+    if (vizion_gray_bitconst(src, out, 8, 2, 8) != 0 || out[4] != 0)
+        return 17;
+    return 0;
+}
+
+int vizion_gray_bitconst(const uint8_t* src, uint8_t* dst, int count, int op, int amount)
+{
+    int index;
+    if (!src || !dst || count < 1 || op < 0 || op > 4)
+        return -1;
+    if (op == 1 && (amount < 0 || amount > 255))
+        return -1;
+    if ((op == 2 || op == 3) && amount < 0)
+        return -1;
+    if (op == 4 && (amount < 0 || amount > 7))
+        return -1;
+    for (index = 0; index < count; index++) {
+        uint8_t value = src[index];
+        switch (op) {
+        case 0:
+            dst[index] = (uint8_t)~value;
+            break;
+        case 1:
+            dst[index] = (uint8_t)(value & (uint8_t)amount);
+            break;
+        case 2:
+            dst[index] = amount >= 8 ? 0 : (uint8_t)(value << amount);
+            break;
+        case 3:
+            dst[index] = amount >= 8 ? 0 : (uint8_t)(value >> amount);
+            break;
+        default:
+            dst[index] = (value & (uint8_t)(1 << amount)) ? 255 : 0;
+            break;
+        }
+    }
     return 0;
 }

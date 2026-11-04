@@ -418,6 +418,70 @@ sealed class ProgramRun
                 Set(args[2], maskedXor);
                 Image = maskedXor;
                 return;
+            case "bit_not":
+                Need(args, 2);
+                var flipped = Operators.BitNot(ImageOf(args[0]));
+                Set(args[1], flipped);
+                Image = flipped;
+                return;
+            case "bit_mask":
+                Need(args, 3);
+                var masked = Operators.BitMask(ImageOf(args[0]), IntOf(args[2]));
+                Set(args[1], masked);
+                Image = masked;
+                return;
+            case "bit_slice":
+                Need(args, 3);
+                var sliced = Operators.BitSlice(ImageOf(args[0]), IntOf(args[2]));
+                Set(args[1], sliced);
+                Image = sliced;
+                return;
+            case "bit_lshift":
+                Need(args, 2);
+                var shiftedLeft = Operators.BitLShift(ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 1);
+                Set(args[1], shiftedLeft);
+                Image = shiftedLeft;
+                return;
+            case "bit_rshift":
+                Need(args, 2);
+                var shiftedRight = Operators.BitRShift(ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 1);
+                Set(args[1], shiftedRight);
+                Image = shiftedRight;
+                return;
+            case "highpass_image":
+                Need(args, 4);
+                var passed = Operators.HighpassImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], passed);
+                Image = passed;
+                return;
+            case "deviation_image":
+                Need(args, 4);
+                var deviated = Operators.DeviationImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], deviated);
+                Image = deviated;
+                return;
+            case "sigma_image":
+                Need(args, 4);
+                var sigma = Operators.SigmaImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], sigma);
+                Image = sigma;
+                return;
+            case "gray_range_rect":
+                Need(args, 4);
+                var spanned = Operators.GrayRangeRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], spanned);
+                Image = spanned;
+                return;
+            case "laplace":
+                Need(args, 2);
+                var laplacian = Operators.Laplace(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Word(args[2]) : "absolute",
+                    args.Length > 3 ? IntOf(args[3]) : 3,
+                    args.Length > 4 ? Word(args[4]) : "n_4");
+                Set(args[1], laplacian);
+                Image = laplacian;
+                return;
             case "reduce_domain":
                 Need(args, 3);
                 var reduced = Operators.ReduceDomain(ImageOf(args[0]), RegionOf(args[1]));

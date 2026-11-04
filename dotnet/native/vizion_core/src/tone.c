@@ -306,7 +306,7 @@ int vizion_rgb_convert(
     return 0;
 }
 
-static int tone_box_float(
+int vizion_box_float(
     const float* src, float* dst, int width, int height, int mask_width, int mask_height)
 {
     double* horizontal;
@@ -379,7 +379,7 @@ int vizion_illuminate(
     blur = work + count;
     for (index = 0; index < count; index++)
         work[index] = (domain && !domain[index]) ? fill : (float)src[index];
-    code = tone_box_float(work, blur, width, height, mask_width, mask_height);
+    code = vizion_box_float(work, blur, width, height, mask_width, mask_height);
     if (code != 0) {
         free(work);
         return code;

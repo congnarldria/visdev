@@ -193,7 +193,16 @@ VIZION_EXPORT int VIZION_CALL vizion_gray_gamma(
     double gamma, double offset, double threshold, double max_gray, int encode);
 VIZION_EXPORT int VIZION_CALL vizion_gray_range(const uint8_t* src, uint8_t* dst, int count, double low, double high);
 VIZION_EXPORT int VIZION_CALL vizion_gray_bits(const uint8_t* a, const uint8_t* b, uint8_t* dst, int count, int op);
+/* op：0 否定、1 遮罩、2 左移、3 右移、4 抽出一個位元。移 8 位以上變成 0。 */
+VIZION_EXPORT int VIZION_CALL vizion_gray_bitconst(const uint8_t* src, uint8_t* dst, int count, int op, int amount);
 VIZION_EXPORT int VIZION_CALL vizion_map_selftest(void);
+
+/* 高通用奇數遮罩。標準差允許偶數遮罩。灰階差的遮罩是高、寬。拉普拉斯 ksize 是 3、5 或 7。 */
+VIZION_EXPORT int VIZION_CALL vizion_highpass(const uint8_t* src, uint8_t* dst, int width, int height, int mask_width, int mask_height);
+VIZION_EXPORT int VIZION_CALL vizion_deviation(const uint8_t* src, uint8_t* dst, int width, int height, int mask_width, int mask_height);
+VIZION_EXPORT int VIZION_CALL vizion_gray_span(const uint8_t* src, uint8_t* dst, int width, int height, int mask_height, int mask_width);
+VIZION_EXPORT int VIZION_CALL vizion_laplace(const uint8_t* src, uint8_t* dst, int width, int height, int ksize, int eight, int absolute);
+VIZION_EXPORT int VIZION_CALL vizion_local_selftest(void);
 
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(

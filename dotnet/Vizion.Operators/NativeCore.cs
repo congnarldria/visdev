@@ -603,6 +603,25 @@ public static class NativeCore
     public static bool TryGrayRange(byte[] source, byte[] destination, int count, double low, double high) =>
         Ready(source, destination, count) && Call(() => vizion_gray_range(source, destination, count, low, high));
 
+    public static bool TryGrayBitConst(byte[] source, byte[] destination, int count, int op, int amount) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_bitconst(source, destination, count, op, amount));
+
+    public static bool TryHighpass(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
+        Ready(source, destination, width * height) && maskWidth >= 1 && maskHeight >= 1
+        && Call(() => vizion_highpass(source, destination, width, height, maskWidth, maskHeight));
+
+    public static bool TryDeviation(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
+        Ready(source, destination, width * height) && maskWidth >= 1 && maskHeight >= 1
+        && Call(() => vizion_deviation(source, destination, width, height, maskWidth, maskHeight));
+
+    public static bool TryGraySpan(byte[] source, byte[] destination, int width, int height, int maskHeight, int maskWidth) =>
+        Ready(source, destination, width * height) && maskWidth >= 1 && maskHeight >= 1
+        && Call(() => vizion_gray_span(source, destination, width, height, maskHeight, maskWidth));
+
+    public static bool TryLaplace(byte[] source, byte[] destination, int width, int height, int ksize, bool eight, bool absolute) =>
+        Ready(source, destination, width * height)
+        && Call(() => vizion_laplace(source, destination, width, height, ksize, eight ? 1 : 0, absolute ? 1 : 0));
+
     public static bool TryGrayBits(byte[] left, byte[]? right, byte[] destination, int count, int op)
     {
         if (!Ready(left, destination, count) || op < 0 || op > 3)
@@ -878,6 +897,21 @@ public static class NativeCore
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_gray_bits(byte[] left, byte[]? right, byte[] destination, int count, int op);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_bitconst(byte[] source, byte[] destination, int count, int op, int amount);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_highpass(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_deviation(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_span(byte[] source, byte[] destination, int width, int height, int maskHeight, int maskWidth);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_laplace(byte[] source, byte[] destination, int width, int height, int ksize, int eight, int absolute);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);
