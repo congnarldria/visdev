@@ -56,7 +56,7 @@ Photonix 用 WPF、`net10.0-windows`，版面對齊 `app/static/index.html` 的�
 
 ## 14. 匯出 C#
 
-把目前程式匯出成呼叫 `Vizion.Operators` 的 C#。
+已完成。檔案選單把目前程式匯出成呼叫 `Vizion.Operators` 的 C#。類別名稱取程式檔名。讀圖、二值化、連通、區域和顯示沿用網頁版能匯出的範圍，做不到的行會指出行號。
 
 ## 15. 版面
 

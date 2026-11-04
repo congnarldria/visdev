@@ -43,7 +43,7 @@
         <MenuItem Header="開啟" InputGestureText="Ctrl+O" Click="OpenProgram_Click"/>
         <MenuItem Header="儲存" InputGestureText="Ctrl+S" Click="SaveProgram_Click"/>
         <MenuItem Header="另存新檔" Click="SaveProgramAs_Click"/>
-        <MenuItem Header="匯出 C#" Click="NotYet_Click"/>
+        <MenuItem Header="匯出 C#" Click="ExportCs_Click"/>
         <Separator/>
         <MenuItem Header="載入影像" Click="LoadImage_Click"/>
         <MenuItem x:Name="SampleMenu" Header="範例"/>

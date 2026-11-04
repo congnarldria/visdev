@@ -1103,6 +1103,42 @@ public partial class MainWindow : Window
             CurrentPath = path;
     }
 
+    void ExportCs_Click(object sender, RoutedEventArgs e)
+    {
+        string className = CsharpExport.ClassName(ProgramName.Text);
+        string code;
+        try
+        {
+            code = CsharpExport.Export(ProgramText.Text, className, Catalog);
+        }
+        catch (Exception ex)
+        {
+            StatusLine.Text = ex.Message;
+            Log(ex.Message);
+            MessageBox.Show(this, ex.Message, "匯出 C#", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        var dialog = new SaveFileDialog
+        {
+            Title = "匯出 C#",
+            FileName = className + ".cs",
+            Filter = "C# (*.cs)|*.cs|所有檔案 (*.*)|*.*",
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+        try
+        {
+            File.WriteAllText(dialog.FileName, code, new UTF8Encoding(false));
+            StatusLine.Text = "已匯出 " + Path.GetFileName(dialog.FileName);
+            Log(StatusLine.Text);
+        }
+        catch (Exception ex)
+        {
+            StatusLine.Text = "匯出失敗：" + ex.Message;
+            Log(StatusLine.Text);
+        }
+    }
+
     bool WriteProgram(string path)
     {
         try
