@@ -89,6 +89,12 @@ int main(void)
         return 1;
     }
     printf("局部濾波自我檢查通過\n");
+    code = vizion_paint_selftest();
+    if (code != 0) {
+        fprintf(stderr, "塗灰自我檢查失敗 %d\n", code);
+        return 1;
+    }
+    printf("塗灰自我檢查通過\n");
     code = vizion_intensity_selftest();
     if (code != 0) {
         fprintf(stderr, "亮度自我檢查失敗 %d\n", code);

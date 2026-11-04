@@ -618,6 +618,34 @@ public static class NativeCore
         Ready(source, destination, width * height) && maskWidth >= 1 && maskHeight >= 1
         && Call(() => vizion_gray_span(source, destination, width, height, maskHeight, maskWidth));
 
+    public static bool TryFill(byte[] destination, int count, int value) =>
+        IsLoaded && UseNative && count >= 1 && destination.Length >= count && value >= 0 && value <= 255
+        && Call(() => vizion_fill(destination, count, value));
+
+    public static bool TryLut(byte[] source, byte[] destination, int count, byte[] table) =>
+        Ready(source, destination, count) && table.Length >= 256 && Call(() => vizion_lut(source, destination, count, table));
+
+    public static bool TryRgb3Gray(byte[] red, byte[] green, byte[] blue, byte[] gray, int count) =>
+        IsLoaded && UseNative && count >= 1 && red.Length >= count && green.Length >= count && blue.Length >= count && gray.Length >= count
+        && Call(() => vizion_rgb3_gray(red, green, blue, gray, count));
+
+    public static bool TryPaint(byte[] baseImage, byte[] source, byte[] destination, int width, int height, int baseChannels, int sourceChannels, byte[]? mask) =>
+        IsLoaded && UseNative && width >= 1 && height >= 1
+        && Call(() => vizion_paint(baseImage, source, destination, width, height, baseChannels, sourceChannels, mask));
+
+    public static bool TryRank(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight, int rank, int border) =>
+        Ready(source, destination, width * height)
+        && Call(() => vizion_rank(source, destination, width, height, maskWidth, maskHeight, rank, border));
+
+    public static bool TryPrewitt(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_prewitt(source, destination, width, height));
+
+    public static bool TryRoberts(byte[] source, byte[] destination, int width, int height, bool sumAbs) =>
+        Ready(source, destination, width * height) && Call(() => vizion_roberts(source, destination, width, height, sumAbs ? 1 : 0));
+
+    public static bool TryBinomial(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
+        Ready(source, destination, width * height) && Call(() => vizion_binomial(source, destination, width, height, maskWidth, maskHeight));
+
     public static bool TryLaplace(byte[] source, byte[] destination, int width, int height, int ksize, bool eight, bool absolute) =>
         Ready(source, destination, width * height)
         && Call(() => vizion_laplace(source, destination, width, height, ksize, eight ? 1 : 0, absolute ? 1 : 0));
@@ -912,6 +940,34 @@ public static class NativeCore
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_laplace(byte[] source, byte[] destination, int width, int height, int ksize, int eight, int absolute);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_fill(byte[] destination, int count, int value);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_lut(byte[] source, byte[] destination, int count, byte[] table);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_rgb3_gray(byte[] red, byte[] green, byte[] blue, byte[] gray, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_paint(
+        byte[] baseImage, byte[] source, byte[] destination,
+        int width, int height, int baseChannels, int sourceChannels, byte[]? mask);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_rank(
+        byte[] source, byte[] destination, int width, int height,
+        int maskWidth, int maskHeight, int rank, int border);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_prewitt(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_roberts(byte[] source, byte[] destination, int width, int height, int sumAbs);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_binomial(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);

@@ -482,6 +482,66 @@ sealed class ProgramRun
                 Set(args[1], laplacian);
                 Image = laplacian;
                 return;
+            case "lut_trans":
+                Need(args, 3);
+                var looked = Operators.LutTrans(ImageOf(args[0]), LutOf(args[2]));
+                Set(args[1], looked);
+                Image = looked;
+                return;
+            case "rgb3_to_gray":
+                Need(args, 4);
+                var weighted = Operators.Rgb3ToGray(ImageOf(args[0]), ImageOf(args[1]), ImageOf(args[2]));
+                Set(args[3], weighted);
+                Image = weighted;
+                return;
+            case "gen_image_proto":
+                Need(args, 3);
+                var cleared = Operators.GenImageProto(ImageOf(args[0]), Num(args[2]));
+                Set(args[1], cleared);
+                Image = cleared;
+                return;
+            case "paint_gray":
+                Need(args, 3);
+                var painted = Operators.PaintGray(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], painted);
+                Image = painted;
+                return;
+            case "overpaint_gray":
+                Need(args, 3);
+                var covered = Operators.OverpaintGray(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], covered);
+                Image = covered;
+                return;
+            case "rank_rect":
+                Need(args, 5);
+                var ranked = Operators.RankRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), IntOf(args[4]));
+                Set(args[1], ranked);
+                Image = ranked;
+                return;
+            case "median_rect":
+                Need(args, 4);
+                var medianRect = Operators.MedianRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), args.Length > 4 ? Word(args[4]) : "continued");
+                Set(args[1], medianRect);
+                Image = medianRect;
+                return;
+            case "prewitt_amp":
+                Need(args, 2);
+                var prewitt = Operators.PrewittAmp(ImageOf(args[0]));
+                Set(args[1], prewitt);
+                Image = prewitt;
+                return;
+            case "roberts":
+                Need(args, 2);
+                var robertsEdge = Operators.Roberts(ImageOf(args[0]), args.Length > 2 ? Word(args[2]) : "sum_sqrt");
+                Set(args[1], robertsEdge);
+                Image = robertsEdge;
+                return;
+            case "binomial_filter":
+                Need(args, 2);
+                var binomial = Operators.BinomialFilter(ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 3, args.Length > 3 ? IntOf(args[3]) : 3);
+                Set(args[1], binomial);
+                Image = binomial;
+                return;
             case "reduce_domain":
                 Need(args, 3);
                 var reduced = Operators.ReduceDomain(ImageOf(args[0]), RegionOf(args[1]));
@@ -619,6 +679,13 @@ sealed class ProgramRun
     }
 
     int IntOf(string token) => (int)Math.Round(Num(token));
+
+    double[] LutOf(string token)
+    {
+        if (Eval(token) is double[] table)
+            return table;
+        throw new InvalidOperationException("Lut 要 256 個數，對應灰階 0 到 255");
+    }
 
     string Word(string token)
     {

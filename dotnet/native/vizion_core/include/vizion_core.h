@@ -204,6 +204,22 @@ VIZION_EXPORT int VIZION_CALL vizion_gray_span(const uint8_t* src, uint8_t* dst,
 VIZION_EXPORT int VIZION_CALL vizion_laplace(const uint8_t* src, uint8_t* dst, int width, int height, int ksize, int eight, int absolute);
 VIZION_EXPORT int VIZION_CALL vizion_local_selftest(void);
 
+/* 填灰、查表、0.299/0.587/0.114 四捨五入。塗灰時 mask 為 0 的像素保留底圖，mask 可為 NULL。
+   rank 的 border：0 重複邊緣、1 REFLECT_101、2 循環。遮罩是 1 到 7 的奇數。 */
+VIZION_EXPORT int VIZION_CALL vizion_fill(uint8_t* dst, int count, int value);
+VIZION_EXPORT int VIZION_CALL vizion_lut(const uint8_t* src, uint8_t* dst, int count, const uint8_t* table);
+VIZION_EXPORT int VIZION_CALL vizion_rgb3_gray(const uint8_t* red, const uint8_t* green, const uint8_t* blue, uint8_t* gray, int count);
+VIZION_EXPORT int VIZION_CALL vizion_paint(
+    const uint8_t* base, const uint8_t* source, uint8_t* dst,
+    int width, int height, int base_channels, int source_channels, const uint8_t* mask);
+VIZION_EXPORT int VIZION_CALL vizion_rank(
+    const uint8_t* src, uint8_t* dst, int width, int height,
+    int mask_width, int mask_height, int rank, int border);
+VIZION_EXPORT int VIZION_CALL vizion_prewitt(const uint8_t* src, uint8_t* dst, int width, int height);
+VIZION_EXPORT int VIZION_CALL vizion_roberts(const uint8_t* src, uint8_t* dst, int width, int height, int sum_abs);
+VIZION_EXPORT int VIZION_CALL vizion_binomial(const uint8_t* src, uint8_t* dst, int width, int height, int mask_width, int mask_height);
+VIZION_EXPORT int VIZION_CALL vizion_paint_selftest(void);
+
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
     const uint8_t* gray, int width,

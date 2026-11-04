@@ -2,10 +2,10 @@
 
 目錄共 1195 個，和 `dotnet/Photonix/operators.json` 同一份。Python 引擎裡每個都有函式。
 這裡的「還沒實作」是指 Photonix 執行到該行會停下來，訊息是「還沒接上這個算子」。
-已接上的 58 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
+已接上的 68 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
 `tuple_is_serializable` 是在問 tuple 能不能序列化，不是序列埠，所以留在 Tuple。
 
-還沒接上、且與硬體無關：1110 個。排除的硬體算子：27 個。
+還沒接上、且與硬體無關：1100 個。排除的硬體算子：27 個。
 
 ## 數量
 
@@ -13,7 +13,7 @@
 | --- | ---: |
 | 檔案 | 20 |
 | 系統 | 4 |
-| 灰階與濾波 | 100 |
+| 灰階與濾波 | 90 |
 | 幾何 | 57 |
 | 分割 | 26 |
 | 形態學 | 47 |
@@ -31,7 +31,7 @@
 | 顯示 | 10 |
 | 矩陣 | 65 |
 | Tuple | 148 |
-| 合計 | 1110 |
+| 合計 | 1100 |
 
 ## 已接上，不列入
 
@@ -75,6 +75,16 @@
 - Vizion.sigma_image
 - Vizion.gray_range_rect
 - Vizion.laplace
+- Vizion.lut_trans
+- Vizion.rgb3_to_gray
+- Vizion.gen_image_proto
+- Vizion.paint_gray
+- Vizion.overpaint_gray
+- Vizion.rank_rect
+- Vizion.median_rect
+- Vizion.prewitt_amp
+- Vizion.roberts
+- Vizion.binomial_filter
 - Vizion.read_image
 - Vizion.gauss_image
 - Vizion.mean_image
@@ -161,19 +171,17 @@
 - Vizion.get_system_time
 - Vizion.get_system_info
 
-### 灰階與濾波（100）
+### 灰階與濾波（90）
 
 - Vizion.guided_filter
 - Vizion.emphasize_clahe
 - Vizion.append_channel
-- Vizion.gen_image_proto
 - Vizion.gen_image_gray_ramp
 - Vizion.trans_to_rgb
 - Vizion.derivate_gauss
 - Vizion.texture_laws
 - Vizion.set_grayval
 - Vizion.cfa_to_rgb
-- Vizion.rank_rect
 - Vizion.tile_images
 - Vizion.harmonic_interpolation
 - Vizion.bilateral_filter
@@ -181,24 +189,17 @@
 - Vizion.optical_flow_mg
 - Vizion.region_to_mean
 - Vizion.anisotropic_diffusion
-- Vizion.median_rect
 - Vizion.bandpass_image
 - Vizion.shock_filter
 - Vizion.add_noise_white
-- Vizion.paint_gray
-- Vizion.binomial_filter
 - Vizion.isotropic_diffusion
 - Vizion.rank_image
-- Vizion.overpaint_gray
 - Vizion.atan2_image
-- Vizion.prewitt_amp
 - Vizion.kirsch_amp
-- Vizion.roberts
 - Vizion.frei_amp
 - Vizion.robinson_amp
 - Vizion.robinson_dir
 - Vizion.add_noise_salt_pepper
-- Vizion.lut_trans
 - Vizion.gen_gauss_pyramid
 - Vizion.fft_image
 - Vizion.fft_image_inv
@@ -242,7 +243,6 @@
 - Vizion.add_image_border
 - Vizion.gen_image_surface_first_order
 - Vizion.gen_image_surface_second_order
-- Vizion.rgb3_to_gray
 - Vizion.entropy_image
 - Vizion.midrange_image
 - Vizion.smooth_image
