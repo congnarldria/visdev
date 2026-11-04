@@ -52,6 +52,10 @@ public partial class MainWindow : Window
 
     readonly ProgramRun Engine = new();
     bool Running;
+    GraphicsWindow? GfxFloat;
+    GridLength ProgramWidth = new(2, GridUnitType.Star);
+    GridLength GfxWidth = new(3, GridUnitType.Star);
+    GridLength VarsWidth = new(220);
 
     readonly List<string> RunNotes = [];
     readonly List<Problem> Problems = [];
@@ -413,6 +417,167 @@ public partial class MainWindow : Window
             Log(StatusLine.Text);
         }
     }
+
+    void ViewPane_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem item || item.Tag is not string tag)
+            return;
+        if (item.IsChecked == true)
+            ShowPane(tag);
+        else
+            HidePane(tag);
+    }
+
+    void Rail_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement item || item.Tag is not string tag)
+            return;
+        ShowPane(tag);
+        StatusLine.Text = "已釘選" + PaneTitle(tag);
+    }
+
+    void PinAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (ProgramPane.Visibility != Visibility.Visible)
+            ShowPane("program");
+        if (GfxPane.Visibility != Visibility.Visible)
+            ShowPane("gfx");
+        if (VarsPane.Visibility != Visibility.Visible)
+            ShowPane("vars");
+        if (OperatorHost.Visibility != Visibility.Visible)
+            ShowPane("bottom");
+        StatusLine.Text = "已全部釘選";
+        Log(StatusLine.Text);
+    }
+
+    void ResetLayout_Click(object sender, RoutedEventArgs e)
+    {
+        ProgramWidth = new GridLength(2, GridUnitType.Star);
+        GfxWidth = new GridLength(3, GridUnitType.Star);
+        VarsWidth = new GridLength(220);
+        ShowPane("program");
+        ShowPane("gfx");
+        ShowPane("vars");
+        ShowPane("bottom");
+        GfxFloat?.Close();
+        StatusLine.Text = "已回復版面";
+        Log(StatusLine.Text);
+    }
+
+    void FloatGfx_Click(object sender, RoutedEventArgs e)
+    {
+        if (GfxFloat != null)
+        {
+            GfxFloat.Activate();
+            NotifyFloat();
+            StatusLine.Text = "圖形視窗已拉出";
+            return;
+        }
+        var window = new GraphicsWindow { Owner = this };
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(GfxFloat, window))
+                GfxFloat = null;
+        };
+        GfxFloat = window;
+        window.Show();
+        NotifyFloat();
+        StatusLine.Text = "圖形視窗已拉出";
+        Log(StatusLine.Text);
+    }
+
+    void ShowPane(string tag)
+    {
+        switch (tag)
+        {
+            case "program":
+                ProgramPane.Visibility = Visibility.Visible;
+                ProgramEdge.Visibility = Visibility.Collapsed;
+                Workspace.ColumnDefinitions[0].Width = ProgramWidth;
+                ViewProgram.IsChecked = true;
+                break;
+            case "gfx":
+                GfxPane.Visibility = Visibility.Visible;
+                GfxEdge.Visibility = Visibility.Collapsed;
+                Workspace.ColumnDefinitions[2].Width = GfxWidth;
+                ViewGfx.IsChecked = true;
+                break;
+            case "vars":
+                VarsPane.Visibility = Visibility.Visible;
+                VarsEdge.Visibility = Visibility.Collapsed;
+                Workspace.ColumnDefinitions[4].Width = VarsWidth;
+                ViewVars.IsChecked = true;
+                break;
+            case "bottom":
+                OperatorHost.Visibility = Visibility.Visible;
+                OperatorHost.Height = 210;
+                OperatorRail.Visibility = Visibility.Collapsed;
+                ViewOps.IsChecked = true;
+                break;
+        }
+        SyncSplitters();
+    }
+
+    void HidePane(string tag)
+    {
+        switch (tag)
+        {
+            case "program":
+                if (ProgramPane.Visibility == Visibility.Visible)
+                    ProgramWidth = Workspace.ColumnDefinitions[0].Width;
+                ProgramPane.Visibility = Visibility.Collapsed;
+                ProgramEdge.Visibility = Visibility.Visible;
+                Workspace.ColumnDefinitions[0].Width = new GridLength(28);
+                ViewProgram.IsChecked = false;
+                break;
+            case "gfx":
+                if (GfxPane.Visibility == Visibility.Visible)
+                    GfxWidth = Workspace.ColumnDefinitions[2].Width;
+                GfxPane.Visibility = Visibility.Collapsed;
+                GfxEdge.Visibility = Visibility.Visible;
+                Workspace.ColumnDefinitions[2].Width = new GridLength(28);
+                ViewGfx.IsChecked = false;
+                break;
+            case "vars":
+                if (VarsPane.Visibility == Visibility.Visible)
+                    VarsWidth = Workspace.ColumnDefinitions[4].Width;
+                VarsPane.Visibility = Visibility.Collapsed;
+                VarsEdge.Visibility = Visibility.Visible;
+                Workspace.ColumnDefinitions[4].Width = new GridLength(28);
+                ViewVars.IsChecked = false;
+                break;
+            case "bottom":
+                OperatorHost.Visibility = Visibility.Collapsed;
+                OperatorRail.Visibility = Visibility.Visible;
+                ViewOps.IsChecked = false;
+                break;
+        }
+        SyncSplitters();
+        StatusLine.Text = "已隱藏" + PaneTitle(tag);
+    }
+
+    void SyncSplitters()
+    {
+        bool program = ProgramPane.Visibility == Visibility.Visible;
+        bool gfx = GfxPane.Visibility == Visibility.Visible;
+        bool vars = VarsPane.Visibility == Visibility.Visible;
+        bool programSplit = program && gfx;
+        bool varsSplit = gfx && vars;
+        ProgramSplit.Visibility = programSplit ? Visibility.Visible : Visibility.Collapsed;
+        VarsSplit.Visibility = varsSplit ? Visibility.Visible : Visibility.Collapsed;
+        Workspace.ColumnDefinitions[1].Width = programSplit ? new GridLength(4) : new GridLength(0);
+        Workspace.ColumnDefinitions[3].Width = varsSplit ? new GridLength(4) : new GridLength(0);
+    }
+
+    static string PaneTitle(string tag) => tag switch
+    {
+        "program" => "程式",
+        "gfx" => "圖形視窗",
+        "vars" => "變數",
+        _ => "算子",
+    };
+
+    void NotifyFloat() => GfxFloat?.UpdateView(PictureData, Frame, Painted());
 
     void NotYet_Click(object sender, RoutedEventArgs e)
     {
@@ -1179,6 +1344,7 @@ public partial class MainWindow : Window
         EmptyHint.Visibility = Visibility.Visible;
         Shapes = [];
         LineTimes.Clear();
+        NotifyFloat();
         RefreshRails();
         RefreshVars();
         RefreshProblems();
@@ -1633,6 +1799,7 @@ public partial class MainWindow : Window
 
     void Present()
     {
+        NotifyFloat();
         if (PictureData == null || Frame == null)
             return;
         int viewW = (int)Math.Round(Stage.ActualWidth);

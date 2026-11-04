@@ -59,10 +59,10 @@
         <MenuItem Header="全選" InputGestureText="Ctrl+A" Click="SelectAll_Click"/>
       </MenuItem>
       <MenuItem Header="檢視">
-        <MenuItem Header="程式" Click="NotYet_Click"/>
-        <MenuItem Header="圖形視窗" Click="NotYet_Click"/>
-        <MenuItem Header="變數" Click="NotYet_Click"/>
-        <MenuItem Header="算子" Click="NotYet_Click"/>
+        <MenuItem x:Name="ViewProgram" Header="程式" IsCheckable="True" IsChecked="True" Tag="program" Click="ViewPane_Click"/>
+        <MenuItem x:Name="ViewGfx" Header="圖形視窗" IsCheckable="True" IsChecked="True" Tag="gfx" Click="ViewPane_Click"/>
+        <MenuItem x:Name="ViewVars" Header="變數" IsCheckable="True" IsChecked="True" Tag="vars" Click="ViewPane_Click"/>
+        <MenuItem x:Name="ViewOps" Header="算子" IsCheckable="True" IsChecked="True" Tag="bottom" Click="ViewPane_Click"/>
         <Separator/>
         <MenuItem Header="符合視窗" Click="Fit_Click"/>
         <MenuItem Header="原始像素 1:1" Click="OneToOne_Click"/>
@@ -70,7 +70,7 @@
         <MenuItem Header="縮小" Click="ZoomOut_Click"/>
         <Separator/>
         <MenuItem Header="追蹤" Click="Trace_Click"/>
-        <MenuItem Header="全部釘選" Click="NotYet_Click"/>
+        <MenuItem Header="全部釘選" Click="PinAll_Click"/>
       </MenuItem>
       <MenuItem Header="執行">
         <MenuItem Header="執行" InputGestureText="F5" Click="Run_Click"/>
@@ -86,8 +86,8 @@
         <MenuItem Header="connection" Click="NotYet_Click"/>
       </MenuItem>
       <MenuItem Header="視窗">
-        <MenuItem Header="回復版面" Click="NotYet_Click"/>
-        <MenuItem Header="拉出圖形視窗" Click="NotYet_Click"/>
+        <MenuItem Header="回復版面" Click="ResetLayout_Click"/>
+        <MenuItem Header="拉出圖形視窗" Click="FloatGfx_Click"/>
       </MenuItem>
       <MenuItem x:Name="OpMenu" Header="運算子"/>
       <MenuItem Header="說明">
@@ -114,7 +114,7 @@
 
     <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="8,4">
       <DockPanel>
-        <Button DockPanel.Dock="Right" Content="回復版面" Click="NotYet_Click"/>
+        <Button DockPanel.Dock="Right" Content="回復版面" Click="ResetLayout_Click"/>
         <Button x:Name="StatusErrors" DockPanel.Dock="Right" Content="錯誤 0" Click="StatusProblems_Click" Tag="error"/>
         <Button x:Name="StatusWarnings" DockPanel.Dock="Right" Content="警告 0" Click="StatusProblems_Click" Tag="warning"/>
         <Button x:Name="StatusMessages" DockPanel.Dock="Right" Content="訊息 0" Click="StatusProblems_Click" Tag="message"/>
@@ -125,7 +125,7 @@
       </DockPanel>
     </Border>
 
-    <Border DockPanel.Dock="Bottom" Height="210" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+    <Border x:Name="OperatorHost" DockPanel.Dock="Bottom" Height="210" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
       <DockPanel>
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,6,8,4">
           <Button x:Name="TabOps" Content="算子" Click="ShowTab_Click" Tag="ops"/>
@@ -192,8 +192,11 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
         </Grid>
       </DockPanel>
     </Border>
+    <Border x:Name="OperatorRail" DockPanel.Dock="Bottom" Height="26" Visibility="Collapsed" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+      <Button Content="算子" HorizontalAlignment="Left" Margin="8,2" Click="Rail_Click" Tag="bottom" ToolTip="釘選"/>
+    </Border>
 
-    <Grid>
+    <Grid x:Name="Workspace">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="2*"/>
         <ColumnDefinition Width="4"/>
@@ -202,7 +205,7 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
         <ColumnDefinition Width="220"/>
       </Grid.ColumnDefinitions>
 
-      <DockPanel Grid.Column="0" Background="{StaticResource PanelBackground}">
+      <DockPanel x:Name="ProgramPane" Grid.Column="0" Background="{StaticResource PanelBackground}">
         <TextBlock DockPanel.Dock="Top" Margin="8,6" Foreground="{StaticResource Muted}" Text="程式　點算子名稱開啟參數"/>
         <Grid Margin="8,0,8,8">
           <Grid.ColumnDefinitions>
@@ -246,9 +249,10 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
           <local:ProgramRail x:Name="TimeRail" Grid.Column="2" Kind="Times" ToolTip="每一行這次花的時間"/>
         </Grid>
       </DockPanel>
-      <GridSplitter Grid.Column="1" Width="4" Background="{StaticResource Line}" HorizontalAlignment="Stretch"/>
+      <Button x:Name="ProgramEdge" Grid.Column="0" Visibility="Collapsed" Content="程式" Click="Rail_Click" Tag="program" ToolTip="釘選"/>
+      <GridSplitter x:Name="ProgramSplit" Grid.Column="1" Width="4" Background="{StaticResource Line}" HorizontalAlignment="Stretch"/>
 
-      <DockPanel Grid.Column="2">
+      <DockPanel x:Name="GfxPane" Grid.Column="2">
         <Border DockPanel.Dock="Top" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,4">
           <DockPanel>
             <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,8,0" Text="圖形視窗"/>
@@ -262,7 +266,7 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
               <Button Content="−" Click="ZoomOut_Click"/>
               <Button Content="+" Click="ZoomIn_Click"/>
               <Button Content="載入影像" Click="LoadImage_Click"/>
-              <Button Content="拉出" Click="NotYet_Click"/>
+              <Button Content="拉出" Click="FloatGfx_Click" ToolTip="把圖形視窗拉成獨立視窗"/>
               <Button Content="存畫面" Click="SaveView_Click" ToolTip="把底圖、區域、輪廓和十字存成一張圖"/>
               <TextBlock VerticalAlignment="Center" Margin="6,0,4,0" Foreground="{StaticResource Muted}" Text="線寬"/>
               <TextBox x:Name="ContourWidth" Width="36" Text="2" ToolTip="輪廓和十字的線寬，1 到 10" TextChanged="ContourWidth_TextChanged" LostFocus="ContourWidth_LostFocus"/>
@@ -293,9 +297,10 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
                      Text="把 PNG 拖進來，或按載入影像。&#x0a;點選、手抓、拉框放大。滾輪以游標為中心縮放。"/>
         </Grid>
       </DockPanel>
-      <GridSplitter Grid.Column="3" Width="4" Background="{StaticResource Line}" HorizontalAlignment="Stretch"/>
+      <Button x:Name="GfxEdge" Grid.Column="2" Visibility="Collapsed" Content="圖形" Click="Rail_Click" Tag="gfx" ToolTip="釘選圖形視窗"/>
+      <GridSplitter x:Name="VarsSplit" Grid.Column="3" Width="4" Background="{StaticResource Line}" HorizontalAlignment="Stretch"/>
 
-      <DockPanel Grid.Column="4" Background="{StaticResource PanelBackground}">
+      <DockPanel x:Name="VarsPane" Grid.Column="4" Background="{StaticResource PanelBackground}">
         <TextBlock DockPanel.Dock="Top" Margin="8,6,8,4" Foreground="{StaticResource Muted}" Text="變數　點圖像變數可預覽"/>
         <TextBlock x:Name="IconicTitle" DockPanel.Dock="Top" Margin="8,4,8,2" Text="圖像"/>
         <TextBlock x:Name="IconicEmpty" DockPanel.Dock="Top" Margin="8,0,8,4" Foreground="{StaticResource Muted}" Text="還沒有圖像變數"/>
@@ -329,6 +334,7 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
         </ListBox>
         <TextBlock x:Name="VarDetail" Margin="8,0,8,8" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Text="選一個變數查看完整內容。"/>
       </DockPanel>
+      <Button x:Name="VarsEdge" Grid.Column="4" Visibility="Collapsed" Content="變數" Click="Rail_Click" Tag="vars" ToolTip="釘選"/>
     </Grid>
   </DockPanel>
 </Window>
