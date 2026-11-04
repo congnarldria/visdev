@@ -232,6 +232,66 @@ sealed class ProgramRun
                 Set(args[1], smooth);
                 Image = smooth;
                 return;
+            case "rgb1_to_gray":
+                Need(args, 2);
+                var gray = Operators.Rgb1ToGray(ImageOf(args[0]));
+                Set(args[1], gray);
+                Image = gray;
+                return;
+            case "invert_image":
+                Need(args, 2);
+                var inverted = Operators.InvertImage(ImageOf(args[0]));
+                Set(args[1], inverted);
+                Image = inverted;
+                return;
+            case "scale_image":
+                Need(args, 4);
+                var scaled = Operators.ScaleImage(ImageOf(args[0]), Num(args[2]), Num(args[3]));
+                Set(args[1], scaled);
+                Image = scaled;
+                return;
+            case "median_image":
+                Need(args, 3);
+                var median = Operators.MedianImage(ImageOf(args[0]), IntOf(args[2]));
+                Set(args[1], median);
+                Image = median;
+                return;
+            case "add_image":
+                Need(args, 5);
+                var added = Operators.AddImage(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]), Num(args[4]));
+                Set(args[2], added);
+                Image = added;
+                return;
+            case "sub_image":
+                Need(args, 5);
+                var subtracted = Operators.SubImage(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]), Num(args[4]));
+                Set(args[2], subtracted);
+                Image = subtracted;
+                return;
+            case "mult_image":
+                Need(args, 5);
+                var multiplied = Operators.MultImage(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]), Num(args[4]));
+                Set(args[2], multiplied);
+                Image = multiplied;
+                return;
+            case "abs_diff_image":
+                Need(args, 4);
+                var difference = Operators.AbsDiffImage(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]));
+                Set(args[2], difference);
+                Image = difference;
+                return;
+            case "min_image":
+                Need(args, 3);
+                var darker = Operators.MinImage(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], darker);
+                Image = darker;
+                return;
+            case "max_image":
+                Need(args, 3);
+                var brighter = Operators.MaxImage(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], brighter);
+                Image = brighter;
+                return;
             case "reduce_domain":
                 Need(args, 3);
                 var reduced = Operators.ReduceDomain(ImageOf(args[0]), RegionOf(args[1]));

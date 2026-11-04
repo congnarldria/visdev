@@ -139,6 +139,18 @@ VIZION_EXPORT int VIZION_CALL vizion_bgr_gray(const uint8_t* bgr, int count, uin
 
 VIZION_EXPORT int VIZION_CALL vizion_bgr_selftest(void);
 
+/* 逐像素灰階。op：0 反相、1 乘加、2 相加、3 相減、4 相乘、5 絕對差、6 較小、7 較大。
+   先用 float 算，再截到 0..255，小數直接丟掉，和 NumPy 的 uint8 相同。b 在反相和乘加時可為 NULL。 */
+VIZION_EXPORT int VIZION_CALL vizion_gray_arith(
+    const uint8_t* a, const uint8_t* b, uint8_t* dst, int count,
+    int op, double mult, double add);
+
+/* 單通道中值。ksize 是正奇數。邊界重複邊緣像素，和 cv2.medianBlur 相同。 */
+VIZION_EXPORT int VIZION_CALL vizion_median_image(
+    const uint8_t* src, uint8_t* dst, int width, int height, int ksize);
+
+VIZION_EXPORT int VIZION_CALL vizion_arith_selftest(void);
+
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
     const uint8_t* gray, int width,

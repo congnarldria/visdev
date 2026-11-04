@@ -413,6 +413,48 @@ public static class NativeCore
         }
     }
 
+    public static bool TryGrayArith(byte[] left, byte[]? right, byte[] destination, int count, int op, double mult, double add)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || left.Length < count || destination.Length < count)
+            return false;
+        if (op != 0 && op != 1 && (right == null || right.Length < count))
+            return false;
+        try
+        {
+            return vizion_gray_arith(left, right, destination, count, op, mult, add) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryMedian(byte[] source, byte[] destination, int width, int height, int ksize)
+    {
+        if (!IsLoaded || !UseNative || width < 1 || height < 1 || ksize < 1 || (ksize & 1) == 0)
+            return false;
+        if (source.Length < width * height || destination.Length < width * height)
+            return false;
+        try
+        {
+            return vizion_median_image(source, destination, width, height, ksize) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TryPyrDown(byte[] source, int width, int height, byte[] destination)
     {
         int destWidth = (width + 1) / 2;
@@ -582,6 +624,12 @@ public static class NativeCore
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_bgr_gray(byte[] bgr, int count, byte[] gray);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_arith(byte[] left, byte[]? right, byte[] destination, int count, int op, double mult, double add);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_median_image(byte[] source, byte[] destination, int width, int height, int ksize);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);
