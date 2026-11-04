@@ -261,6 +261,10 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
               <Button x:Name="ModeSelect" Content="點選" Click="Mode_Click" Tag="select" ToolTip="點一下讀出那個像素"/>
               <Button x:Name="ModePan" Content="手抓" Click="Mode_Click" Tag="pan" ToolTip="拖曳移動畫面"/>
               <Button x:Name="ModeZoom" Content="放大" Click="Mode_Click" Tag="zoom" ToolTip="拉一個範圍放大。點一下也會放大"/>
+              <Button x:Name="DrawLine" Content="線" Tag="line" Visibility="Collapsed" Click="DrawTool_Click" ToolTip="在圖上拖一條線。起點到終點的方向會保留"/>
+              <Button x:Name="DrawRect" Content="框選" Tag="rect" Visibility="Collapsed" Click="DrawTool_Click" ToolTip="在圖上拖矩形，填進開啟中的算子參數"/>
+              <Button x:Name="DrawCircle" Content="圓" Tag="circle" Visibility="Collapsed" Click="DrawTool_Click" ToolTip="在圖上拖圓"/>
+              <Button x:Name="DrawEllipse" Content="橢圓" Tag="ellipse" Visibility="Collapsed" Click="DrawTool_Click" ToolTip="在圖上拖橢圓"/>
               <Button Content="符合" Click="Fit_Click"/>
               <Button Content="1:1" Click="OneToOne_Click"/>
               <Button Content="−" Click="ZoomOut_Click"/>
@@ -277,9 +281,16 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
             </WrapPanel>
           </DockPanel>
         </Border>
+        <Border x:Name="ShapeConfirm" DockPanel.Dock="Bottom" Visibility="Collapsed" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="8,6">
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Content="取消" Margin="8,0,0,0" Click="ShapeCancel_Click"/>
+            <Button DockPanel.Dock="Right" Content="確認填入" Click="ShapeApply_Click"/>
+            <TextBlock x:Name="ShapeConfirmText" VerticalAlignment="Center" TextWrapping="Wrap"/>
+          </DockPanel>
+        </Border>
         <Grid x:Name="Stage" ClipToBounds="True" Background="#0E1116" AllowDrop="True"
               DragOver="Stage_DragOver" Drop="Stage_Drop"
-              MouseLeftButtonDown="Stage_MouseDown" MouseMove="Stage_MouseMove"
+              MouseLeftButtonDown="Stage_MouseDown" MouseRightButtonDown="Stage_MouseRightDown" MouseMove="Stage_MouseMove"
               MouseLeftButtonUp="Stage_MouseUp" MouseLeave="Stage_MouseLeave"
               PreviewMouseWheel="Stage_MouseWheel" SizeChanged="Stage_SizeChanged">
           <Canvas IsHitTestVisible="False">
@@ -289,6 +300,9 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
             <Line x:Name="CrossV" Stroke="#59FFFFFF" StrokeThickness="1" Visibility="Collapsed"/>
             <Line x:Name="CrossH" Stroke="#59FFFFFF" StrokeThickness="1" Visibility="Collapsed"/>
             <Rectangle x:Name="ZoomRect" Stroke="#FFE14A" Fill="#1FFFE14A" StrokeThickness="1" Visibility="Collapsed"/>
+            <Line x:Name="DraftLine" Stroke="#FFE14A" StrokeThickness="2" StrokeDashArray="3 2" Visibility="Collapsed"/>
+            <Rectangle x:Name="DraftRect" Stroke="#FFE14A" StrokeThickness="2" StrokeDashArray="3 2" Fill="Transparent" Visibility="Collapsed"/>
+            <Ellipse x:Name="DraftEllipse" Stroke="#FFE14A" StrokeThickness="2" StrokeDashArray="3 2" Fill="Transparent" Visibility="Collapsed"/>
             <Border x:Name="Probe" Visibility="Collapsed" Background="#F014171C" BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="6,3">
               <TextBlock x:Name="ProbeText" Foreground="{StaticResource Ink}"/>
             </Border>

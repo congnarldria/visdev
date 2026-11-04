@@ -53,6 +53,15 @@ public partial class MainWindow : Window
     readonly ProgramRun Engine = new();
     bool Running;
     GraphicsWindow? GfxFloat;
+    OperatorDialog? ParamDialog;
+    string? DrawTool;
+    bool DrawDragging;
+    bool DrawReady;
+    bool HasDraft;
+    double DraftARow;
+    double DraftACol;
+    double DraftBRow;
+    double DraftBCol;
     GridLength ProgramWidth = new(2, GridUnitType.Star);
     GridLength GfxWidth = new(3, GridUnitType.Star);
     GridLength VarsWidth = new(220);
@@ -186,6 +195,21 @@ public partial class MainWindow : Window
 
     void Stage_MouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (DrawTool != null)
+        {
+            Point at = e.GetPosition(Stage);
+            Stage.CaptureMouse();
+            DrawDragging = true;
+            DrawReady = false;
+            HasDraft = true;
+            (DraftACol, DraftARow) = ImagePoint(at);
+            DraftBCol = DraftACol;
+            DraftBRow = DraftARow;
+            ShapeConfirm.Visibility = Visibility.Collapsed;
+            UpdateDraft();
+            e.Handled = true;
+            return;
+        }
         if (PictureData == null)
             return;
         Stage.CaptureMouse();
@@ -198,9 +222,32 @@ public partial class MainWindow : Window
             ShowZoomRect(DragStart, DragStart);
     }
 
+    void Stage_MouseRightDown(object sender, MouseButtonEventArgs e)
+    {
+        List<string> tools = CurrentDrawTools();
+        if (tools.Count == 0)
+            return;
+        var menu = new ContextMenu { PlacementTarget = Stage };
+        foreach (string tool in tools)
+        {
+            var item = new MenuItem { Header = ShapeGeometry.Title(tool), Tag = tool };
+            item.Click += (_, _) => BeginDraw(tool);
+            menu.Items.Add(item);
+        }
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
+
     void Stage_MouseMove(object sender, MouseEventArgs e)
     {
         Point at = e.GetPosition(Stage);
+        if (DrawDragging && HasDraft)
+        {
+            (DraftBCol, DraftBRow) = ImagePoint(at);
+            UpdateDraft();
+            UpdateProbe(at);
+            return;
+        }
         if (Dragging && PictureData != null && Mode == GfxMode.Pan)
             ApplyView(Zoom, DragCamX + at.X - DragStart.X, DragCamY + at.Y - DragStart.Y);
         else if (Dragging && Mode == GfxMode.Zoom)
@@ -210,6 +257,22 @@ public partial class MainWindow : Window
 
     void Stage_MouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (DrawDragging)
+        {
+            DrawDragging = false;
+            Stage.ReleaseMouseCapture();
+            Point end = e.GetPosition(Stage);
+            (DraftBCol, DraftBRow) = ImagePoint(end);
+            double dc = DraftBCol - DraftACol;
+            double dr = DraftBRow - DraftARow;
+            DrawReady = Math.Sqrt(dc * dc + dr * dr) >= 2 && ParamDialog != null;
+            UpdateDraft();
+            if (DrawReady)
+                ShowShapeConfirm();
+            else
+                ShapeConfirm.Visibility = Visibility.Collapsed;
+            return;
+        }
         if (!Dragging)
             return;
         Dragging = false;
@@ -1599,22 +1662,161 @@ public partial class MainWindow : Window
         bool editing = lineIndex != null;
         Memory.Fields.TryGetValue(op.Name, out Dictionary<string, string>? saved);
         string[] values = OperatorCall.DialogValues(op, preset, editing, saved);
+        OperatorDialog? previous = ParamDialog;
+        ParamDialog = null;
+        previous?.Close();
         var dialog = new OperatorDialog(op, values, editing) { Owner = this };
-        if (dialog.ShowDialog() != true || dialog.Values == null)
-            return;
-        string call = OperatorCall.FormatCall(op.Name, dialog.Values);
-        Memory.Remember(op, dialog.Values);
-        Memory.Save();
-        if (editing)
+        dialog.Accepted += result =>
         {
-            ReplaceProgramLine(lineIndex!.Value, call);
-            Log("已改第 " + (lineIndex.Value + 1) + " 行");
-        }
-        else
-            InsertAtCursor(Commented(op, call));
-        BuildOperatorMenu();
-        ProgramText.Focus();
+            string call = OperatorCall.FormatCall(op.Name, result);
+            Memory.Remember(op, result);
+            Memory.Save();
+            if (editing)
+            {
+                ReplaceProgramLine(lineIndex!.Value, call);
+                Log("已改第 " + (lineIndex.Value + 1) + " 行");
+            }
+            else
+                InsertAtCursor(Commented(op, call));
+            BuildOperatorMenu();
+            ProgramText.Focus();
+        };
+        dialog.Closed += (_, _) =>
+        {
+            if (!ReferenceEquals(ParamDialog, dialog))
+                return;
+            ParamDialog = null;
+            CancelDraw();
+            RefreshShapeTools();
+        };
+        ParamDialog = dialog;
+        dialog.Show();
+        RefreshShapeTools();
     }
+
+    void DrawTool_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is string tool)
+            BeginDraw(tool);
+    }
+
+    void BeginDraw(string tool)
+    {
+        if (ParamDialog == null || !CurrentDrawTools().Contains(tool))
+            return;
+        DrawTool = tool;
+        DrawDragging = false;
+        DrawReady = false;
+        HasDraft = false;
+        ShapeConfirm.Visibility = Visibility.Collapsed;
+        UpdateDraft();
+        RefreshShapeTools();
+        StatusLine.Text = ShapeGeometry.Title(tool) + "：在圖上拖曳，起點到終點的方向會保留";
+    }
+
+    void ShapeApply_Click(object sender, RoutedEventArgs e)
+    {
+        if (ParamDialog == null || DrawTool == null || !DrawReady)
+            return;
+        ParamDialog.ApplyShape(DrawTool, DraftARow, DraftACol, DraftBRow, DraftBCol);
+        StatusLine.Text = "已填入" + ShapeGeometry.Title(DrawTool);
+        CancelDraw();
+    }
+
+    void ShapeCancel_Click(object sender, RoutedEventArgs e) => CancelDraw();
+
+    void CancelDraw()
+    {
+        DrawTool = null;
+        DrawDragging = false;
+        DrawReady = false;
+        HasDraft = false;
+        if (ShapeConfirm != null)
+            ShapeConfirm.Visibility = Visibility.Collapsed;
+        UpdateDraft();
+        RefreshShapeTools();
+    }
+
+    void ShowShapeConfirm()
+    {
+        if (ParamDialog == null || DrawTool == null)
+            return;
+        ShapeConfirmText.Text = ParamDialog.ShapeText(DrawTool, DraftARow, DraftACol, DraftBRow, DraftBCol);
+        ShapeConfirm.Visibility = Visibility.Visible;
+    }
+
+    List<string> CurrentDrawTools() => ParamDialog == null ? [] : ShapeGeometry.Tools(ParamDialog.GeometryNames);
+
+    void RefreshShapeTools()
+    {
+        if (DrawLine == null)
+            return;
+        List<string> tools = CurrentDrawTools();
+        PaintDraw(DrawLine, "line", tools);
+        PaintDraw(DrawRect, "rect", tools);
+        PaintDraw(DrawCircle, "circle", tools);
+        PaintDraw(DrawEllipse, "ellipse", tools);
+        if (DrawTool != null && !tools.Contains(DrawTool))
+            CancelDraw();
+    }
+
+    void PaintDraw(Button button, string tool, List<string> tools)
+    {
+        button.Visibility = tools.Contains(tool) ? Visibility.Visible : Visibility.Collapsed;
+        button.Background = DrawTool == tool ? (Brush)FindResource("Accent") : ModeOff;
+    }
+
+    void UpdateDraft()
+    {
+        if (DraftLine == null)
+            return;
+        DraftLine.Visibility = Visibility.Collapsed;
+        DraftRect.Visibility = Visibility.Collapsed;
+        DraftEllipse.Visibility = Visibility.Collapsed;
+        if (!HasDraft || DrawTool == null)
+            return;
+        Point a = Screen(DraftACol, DraftARow);
+        Point b = Screen(DraftBCol, DraftBRow);
+        if (DrawTool == "line")
+        {
+            DraftLine.X1 = a.X;
+            DraftLine.Y1 = a.Y;
+            DraftLine.X2 = b.X;
+            DraftLine.Y2 = b.Y;
+            DraftLine.Visibility = Visibility.Visible;
+            return;
+        }
+        if (DrawTool == "circle")
+        {
+            double radius = Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y));
+            Canvas.SetLeft(DraftEllipse, a.X - radius);
+            Canvas.SetTop(DraftEllipse, a.Y - radius);
+            DraftEllipse.Width = radius * 2;
+            DraftEllipse.Height = radius * 2;
+            DraftEllipse.Visibility = Visibility.Visible;
+            return;
+        }
+        double left = Math.Min(a.X, b.X);
+        double top = Math.Min(a.Y, b.Y);
+        double width = Math.Abs(b.X - a.X);
+        double height = Math.Abs(b.Y - a.Y);
+        if (DrawTool == "ellipse")
+        {
+            Canvas.SetLeft(DraftEllipse, left);
+            Canvas.SetTop(DraftEllipse, top);
+            DraftEllipse.Width = Math.Max(1, width);
+            DraftEllipse.Height = Math.Max(1, height);
+            DraftEllipse.Visibility = Visibility.Visible;
+            return;
+        }
+        Canvas.SetLeft(DraftRect, left);
+        Canvas.SetTop(DraftRect, top);
+        DraftRect.Width = Math.Max(1, width);
+        DraftRect.Height = Math.Max(1, height);
+        DraftRect.Visibility = Visibility.Visible;
+    }
+
+    Point Screen(double col, double row) => new(CamX + col * Zoom, CamY + row * Zoom);
 
     OperatorDoc? FindOperator(string token)
     {
@@ -1801,11 +2003,17 @@ public partial class MainWindow : Window
     {
         NotifyFloat();
         if (PictureData == null || Frame == null)
+        {
+            UpdateDraft();
             return;
+        }
         int viewW = (int)Math.Round(Stage.ActualWidth);
         int viewH = (int)Math.Round(Stage.ActualHeight);
         if (viewW < 2 || viewH < 2)
+        {
+            UpdateDraft();
             return;
+        }
         var map = new ScreenMap(
             0, 0, viewW, viewH,
             (0 - CamY) / Zoom,
@@ -1818,6 +2026,7 @@ public partial class MainWindow : Window
         source.Freeze();
         Picture.Source = source;
         Picture.Visibility = Visibility.Visible;
+        UpdateDraft();
     }
 
     Overlay[] Painted()
