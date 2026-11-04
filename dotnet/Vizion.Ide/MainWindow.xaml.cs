@@ -30,7 +30,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         OperatorList.ItemsSource = Catalog;
-        Log("VisDev 已開啟。底層是 Vizion.Operators。");
+        ShowTab("ops");
+        Log("VisDev 已開啟。版面對齊網頁版，底層是 Vizion.Operators。");
         if (NativeCore.IsLoaded)
             Log("已載入 C 核心：" + NativeCore.LoadDetail);
         else
@@ -77,6 +78,36 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    void NotYet_Click(object sender, RoutedEventArgs e)
+    {
+        string name = sender is MenuItem menu ? menu.Header?.ToString() ?? ""
+            : sender is Button button ? button.Content?.ToString() ?? ""
+            : "";
+        Log(name + " 還沒做。步驟見 docs/csharp-ide-steps.md。");
+    }
+
+    void ShowTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is string tag)
+            ShowTab(tag);
+    }
+
+    void ShowTab(string tag)
+    {
+        PageOps.Visibility = tag == "ops" ? Visibility.Visible : Visibility.Collapsed;
+        PageSyntax.Visibility = tag == "syntax" ? Visibility.Visible : Visibility.Collapsed;
+        PageLog.Visibility = tag == "log" ? Visibility.Visible : Visibility.Collapsed;
+        PageProblems.Visibility = tag == "problems" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    void OperatorSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        string query = OperatorSearch.Text.Trim();
+        OperatorList.ItemsSource = string.IsNullOrEmpty(query)
+            ? Catalog
+            : Catalog.Where(item => item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
+    }
+
     void OperatorList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         ParameterPanel.Children.Clear();
@@ -97,6 +128,8 @@ public partial class MainWindow : Window
         Log("選了運算子 " + item.Name + "。參數先顯示，還沒執行。");
     }
 
+    void ClearLog_Click(object sender, RoutedEventArgs e) => LogBox.Clear();
+
     void Fit()
     {
         if (PictureData == null || Viewport.ActualWidth <= 1 || Viewport.ActualHeight <= 1)
@@ -113,7 +146,9 @@ public partial class MainWindow : Window
         Zoom = Math.Clamp(zoom, 0.05, 32);
         ImageScale.ScaleX = Zoom;
         ImageScale.ScaleY = Zoom;
-        ZoomText.Text = (Zoom * 100).ToString("0") + "%";
+        string percent = (Zoom * 100).ToString("0") + "%";
+        ZoomText.Text = percent;
+        StatusZoom.Text = percent;
     }
 
     void Log(string message)

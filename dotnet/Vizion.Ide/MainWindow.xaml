@@ -2,10 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="VisDev"
-        Width="1200"
-        Height="760"
-        MinWidth="880"
-        MinHeight="560"
+        Width="1280"
+        Height="800"
+        MinWidth="960"
+        MinHeight="600"
         Background="{StaticResource WindowBackground}"
         Foreground="{StaticResource Ink}">
   <Window.Resources>
@@ -13,8 +13,12 @@
       <Setter Property="Background" Value="#21262D"/>
       <Setter Property="Foreground" Value="{StaticResource Ink}"/>
       <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
-      <Setter Property="Padding" Value="10,4"/>
-      <Setter Property="Margin" Value="0,0,6,0"/>
+      <Setter Property="Padding" Value="8,3"/>
+      <Setter Property="Margin" Value="0,0,4,0"/>
+    </Style>
+    <Style TargetType="Menu">
+      <Setter Property="Background" Value="{StaticResource PanelBackground}"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
     </Style>
     <Style TargetType="TextBox">
       <Setter Property="Background" Value="#0E1116"/>
@@ -29,49 +33,204 @@
     </Style>
   </Window.Resources>
   <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="檔案">
+        <MenuItem Header="新增" Click="NotYet_Click"/>
+        <MenuItem Header="專案" Click="NotYet_Click"/>
+        <MenuItem Header="範本一覽" Click="NotYet_Click"/>
+        <MenuItem Header="開啟" Click="NotYet_Click"/>
+        <MenuItem Header="儲存" Click="NotYet_Click"/>
+        <MenuItem Header="另存新檔" Click="NotYet_Click"/>
+        <MenuItem Header="匯出 C#" Click="NotYet_Click"/>
+        <Separator/>
+        <MenuItem Header="載入影像" Click="LoadImage_Click"/>
+      </MenuItem>
+      <MenuItem Header="編輯">
+        <MenuItem Header="復原" Click="NotYet_Click"/>
+        <MenuItem Header="重做" Click="NotYet_Click"/>
+        <Separator/>
+        <MenuItem Header="剪下" Click="NotYet_Click"/>
+        <MenuItem Header="複製" Click="NotYet_Click"/>
+        <MenuItem Header="貼上" Click="NotYet_Click"/>
+        <Separator/>
+        <MenuItem Header="全選" Click="NotYet_Click"/>
+      </MenuItem>
+      <MenuItem Header="檢視">
+        <MenuItem Header="程式" Click="NotYet_Click"/>
+        <MenuItem Header="圖形視窗" Click="NotYet_Click"/>
+        <MenuItem Header="變數" Click="NotYet_Click"/>
+        <MenuItem Header="算子" Click="NotYet_Click"/>
+        <Separator/>
+        <MenuItem Header="符合視窗" Click="Fit_Click"/>
+        <MenuItem Header="原始像素 1:1" Click="OneToOne_Click"/>
+        <MenuItem Header="放大" Click="ZoomIn_Click"/>
+        <MenuItem Header="縮小" Click="ZoomOut_Click"/>
+        <Separator/>
+        <MenuItem Header="追蹤" Click="NotYet_Click"/>
+        <MenuItem Header="全部釘選" Click="NotYet_Click"/>
+      </MenuItem>
+      <MenuItem Header="執行">
+        <MenuItem Header="執行" Click="NotYet_Click"/>
+        <MenuItem Header="單步" Click="NotYet_Click"/>
+        <MenuItem Header="停止" Click="NotYet_Click"/>
+        <MenuItem Header="重設" Click="NotYet_Click"/>
+      </MenuItem>
+      <MenuItem Header="工具">
+        <MenuItem Header="二值化" Click="NotYet_Click"/>
+        <MenuItem Header="次像素" Click="NotYet_Click"/>
+        <MenuItem Header="特徵" Click="NotYet_Click"/>
+        <MenuItem Header="OCR" Click="NotYet_Click"/>
+        <MenuItem Header="connection" Click="NotYet_Click"/>
+      </MenuItem>
+      <MenuItem Header="視窗">
+        <MenuItem Header="回復版面" Click="NotYet_Click"/>
+        <MenuItem Header="拉出圖形視窗" Click="NotYet_Click"/>
+      </MenuItem>
+      <MenuItem Header="運算子"/>
+      <MenuItem Header="說明">
+        <MenuItem Header="使用說明" Click="NotYet_Click"/>
+        <MenuItem Header="關於 VisDev" Click="NotYet_Click"/>
+      </MenuItem>
+    </Menu>
+
     <Border DockPanel.Dock="Top" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,6">
       <DockPanel>
-        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,16,0" Text="VisDev"/>
-        <TextBlock x:Name="ZoomText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Text="100%"/>
-        <StackPanel Orientation="Horizontal">
-          <Button Content="載入影像" Click="LoadImage_Click"/>
-          <Button Content="符合" Click="Fit_Click"/>
-          <Button Content="1:1" Click="OneToOne_Click"/>
-          <Button Content="−" Click="ZoomOut_Click"/>
-          <Button Content="+" Click="ZoomIn_Click"/>
+        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0" Text="VisDev"/>
+        <TextBlock VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,6,0" Text="程式"/>
+        <TextBox x:Name="ProgramName" Width="180" Margin="0,0,8,0" Text="blob_inspect.hdv"/>
+        <Button Content="範例" Click="NotYet_Click"/>
+        <Button Content="開啟" Click="NotYet_Click"/>
+        <Button Content="儲存" Click="NotYet_Click"/>
+        <CheckBox Content="追蹤" VerticalAlignment="Center" Margin="8,0,8,0" Foreground="{StaticResource Ink}" IsEnabled="False"/>
+        <Button Content="重設" Click="NotYet_Click"/>
+        <Button Content="單步" Click="NotYet_Click"/>
+        <Button Content="執行" Click="NotYet_Click"/>
+        <Button Content="停止" Click="NotYet_Click"/>
+      </DockPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="8,4">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="回復版面" Click="NotYet_Click"/>
+        <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0" Foreground="{StaticResource Muted}" Text="錯誤 0　警告 0　訊息 0"/>
+        <TextBlock x:Name="StatusZoom" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0" Foreground="{StaticResource Muted}" Text="100%"/>
+        <TextBlock x:Name="StatusPix" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0" Foreground="{StaticResource Muted}" Text="Row —   Column —"/>
+        <TextBlock VerticalAlignment="Center" Text="就緒"/>
+        <TextBlock x:Name="StatusLine" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="{StaticResource Muted}"/>
+      </DockPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Height="210" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,6,8,4">
+          <Button x:Name="TabOps" Content="算子" Click="ShowTab_Click" Tag="ops"/>
+          <Button x:Name="TabSyntax" Content="語法" Click="ShowTab_Click" Tag="syntax"/>
+          <Button x:Name="TabLog" Content="輸出" Click="ShowTab_Click" Tag="log"/>
+          <Button x:Name="TabProblems" Content="錯誤清單" Click="ShowTab_Click" Tag="problems"/>
+          <TextBox x:Name="OperatorSearch" Width="180" Margin="12,0,0,0" TextChanged="OperatorSearch_TextChanged" ToolTip="搜尋算子"/>
         </StackPanel>
+        <Grid>
+          <DockPanel x:Name="PageOps">
+            <ListBox x:Name="OperatorList" DockPanel.Dock="Left" Width="180" Margin="8,0,8,8" DisplayMemberPath="Name" SelectionChanged="OperatorList_SelectionChanged"/>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,8,8">
+              <StackPanel x:Name="ParameterPanel">
+                <TextBlock Foreground="{StaticResource Muted}" TextWrapping="Wrap" Text="點一個算子，這裡會列出參數。這一步先不執行，也不會插進程式。"/>
+              </StackPanel>
+            </ScrollViewer>
+          </DockPanel>
+          <TextBox x:Name="PageSyntax" Visibility="Collapsed" Margin="8" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto">
+            <TextBox.Text>程式一行一個敘述。算子名稱不分大小寫，變數名稱則要完全一致。運算式 T[1] 的索引從 1 開始。tuple_select 這類算子的索引從 0 開始。
+ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
+行尾的 \ 表示這一行還沒結束。路徑寫 C:/data/a.png。
+= 是比較，:= 才是指定。# 和 &lt;&gt; 都是不等於。if 的條件若是 tuple，必須每一個元素都成立才會進去。</TextBox.Text>
+          </TextBox>
+          <DockPanel x:Name="PageLog" Visibility="Collapsed">
+            <Button DockPanel.Dock="Top" HorizontalAlignment="Left" Margin="8,0,8,4" Content="清除" Click="ClearLog_Click"/>
+            <TextBox x:Name="LogBox" Margin="8,0,8,8" IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" FontFamily="Consolas"/>
+          </DockPanel>
+          <DockPanel x:Name="PageProblems" Visibility="Collapsed" Margin="8">
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+              <Button Content="錯誤 0" Click="NotYet_Click"/>
+              <Button Content="警告 0" Click="NotYet_Click"/>
+              <Button Content="訊息 0" Click="NotYet_Click"/>
+            </StackPanel>
+            <DataGrid AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" Background="#0E1116" Foreground="{StaticResource Ink}" BorderBrush="{StaticResource Line}">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="嚴重性" Width="80"/>
+                <DataGridTextColumn Header="代碼" Width="80"/>
+                <DataGridTextColumn Header="說明" Width="*"/>
+                <DataGridTextColumn Header="檔案" Width="120"/>
+                <DataGridTextColumn Header="行" Width="50"/>
+              </DataGrid.Columns>
+            </DataGrid>
+          </DockPanel>
+        </Grid>
       </DockPanel>
     </Border>
 
-    <Border DockPanel.Dock="Bottom" Height="160" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
-      <DockPanel>
-        <TextBlock DockPanel.Dock="Top" Margin="8,6,8,4" Foreground="{StaticResource Muted}" Text="結果 / 日誌"/>
-        <TextBox x:Name="LogBox" Margin="8,0,8,8" IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" FontFamily="Consolas"/>
-      </DockPanel>
-    </Border>
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="2*"/>
+        <ColumnDefinition Width="4"/>
+        <ColumnDefinition Width="3*"/>
+        <ColumnDefinition Width="4"/>
+        <ColumnDefinition Width="220"/>
+      </Grid.ColumnDefinitions>
 
-    <Border DockPanel.Dock="Right" Width="320" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
-      <DockPanel>
-        <TextBlock DockPanel.Dock="Top" Margin="8,8,8,4" Foreground="{StaticResource Muted}" Text="運算子"/>
-        <ListBox x:Name="OperatorList" DockPanel.Dock="Top" Height="220" Margin="8,0,8,8" DisplayMemberPath="Name" SelectionChanged="OperatorList_SelectionChanged"/>
-        <TextBlock DockPanel.Dock="Top" Margin="8,0,8,4" Foreground="{StaticResource Muted}" Text="參數"/>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8,0,8,8">
-          <StackPanel x:Name="ParameterPanel">
-            <TextBlock Foreground="{StaticResource Muted}" TextWrapping="Wrap" Text="選一個運算子，這裡會列出參數。這一步先不執行。"/>
-          </StackPanel>
+      <DockPanel Grid.Column="0" Background="{StaticResource PanelBackground}">
+        <TextBlock DockPanel.Dock="Top" Margin="8,6" Foreground="{StaticResource Muted}" Text="程式"/>
+        <TextBox x:Name="ProgramText" Margin="8,0,8,8" AcceptsReturn="True" AcceptsTab="True" FontFamily="Consolas"
+                 Text="* 程式編輯、斷點和執行之後做&#x0a;"/>
+      </DockPanel>
+      <GridSplitter Grid.Column="1" Width="4" Background="{StaticResource Line}" HorizontalAlignment="Stretch"/>
+
+      <DockPanel Grid.Column="2">
+        <Border DockPanel.Dock="Top" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,4">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,8,0" Text="圖形視窗"/>
+            <TextBlock x:Name="ZoomText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Text="100%"/>
+            <WrapPanel>
+              <Button Content="點選" Click="NotYet_Click"/>
+              <Button Content="手抓" Click="NotYet_Click"/>
+              <Button Content="放大" Click="NotYet_Click"/>
+              <Button Content="符合" Click="Fit_Click"/>
+              <Button Content="1:1" Click="OneToOne_Click"/>
+              <Button Content="−" Click="ZoomOut_Click"/>
+              <Button Content="+" Click="ZoomIn_Click"/>
+              <Button Content="載入影像" Click="LoadImage_Click"/>
+              <Button Content="拉出" Click="NotYet_Click"/>
+              <Button Content="存畫面" Click="NotYet_Click"/>
+              <TextBlock VerticalAlignment="Center" Margin="6,0,4,0" Foreground="{StaticResource Muted}" Text="線寬"/>
+              <TextBox Width="36" Text="2" IsReadOnly="True"/>
+              <Button Content="二值化" Click="NotYet_Click"/>
+              <Button Content="特徵" Click="NotYet_Click"/>
+              <Button Content="OCR" Click="NotYet_Click"/>
+              <Button Content="connection" Click="NotYet_Click"/>
+            </WrapPanel>
+          </DockPanel>
+        </Border>
+        <ScrollViewer x:Name="Viewport" Background="#0E1116" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PreviewMouseWheel="Viewport_MouseWheel">
+          <Grid>
+            <TextBlock x:Name="EmptyHint" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" TextAlignment="Center"
+                       Text="載入一張 PNG，影像會顯示在這裡。&#x0a;滾輪或上方按鈕可以縮放。"/>
+            <Image x:Name="Picture" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Visibility="Collapsed">
+              <Image.LayoutTransform>
+                <ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/>
+              </Image.LayoutTransform>
+            </Image>
+          </Grid>
         </ScrollViewer>
       </DockPanel>
-    </Border>
+      <GridSplitter Grid.Column="3" Width="4" Background="{StaticResource Line}" HorizontalAlignment="Stretch"/>
 
-    <ScrollViewer x:Name="Viewport" Background="#0E1116" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PreviewMouseWheel="Viewport_MouseWheel">
-      <Grid>
-        <TextBlock x:Name="EmptyHint" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" TextAlignment="Center" Text="載入一張 PNG，影像會顯示在這裡。&#x0a;滾輪或右側按鈕可以縮放。"/>
-        <Image x:Name="Picture" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Visibility="Collapsed">
-          <Image.LayoutTransform>
-            <ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/>
-          </Image.LayoutTransform>
-        </Image>
-      </Grid>
-    </ScrollViewer>
+      <DockPanel Grid.Column="4" Background="{StaticResource PanelBackground}">
+        <TextBlock DockPanel.Dock="Top" Margin="8,6,8,4" Foreground="{StaticResource Muted}" Text="變數　點圖像變數可預覽"/>
+        <TextBlock DockPanel.Dock="Top" Margin="8,4,8,2" Text="圖像"/>
+        <ListBox x:Name="IconicList" DockPanel.Dock="Top" Height="120" Margin="8,0,8,8"/>
+        <TextBlock DockPanel.Dock="Top" Margin="8,0,8,2" Text="控制"/>
+        <ListBox x:Name="ControlList" DockPanel.Dock="Top" Height="120" Margin="8,0,8,8"/>
+        <TextBlock Margin="8,0,8,8" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Text="選一個變數查看完整內容。"/>
+      </DockPanel>
+    </Grid>
   </DockPanel>
 </Window>
