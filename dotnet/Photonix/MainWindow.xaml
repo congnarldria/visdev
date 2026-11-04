@@ -213,6 +213,9 @@
             </WrapPanel>
           </DockPanel>
         </Border>
+        <Border x:Name="TolBar" DockPanel.Dock="Top" Visibility="Collapsed" Background="#1C2128" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,4">
+          <WrapPanel x:Name="TolItems"/>
+        </Border>
         <Border x:Name="ShapeConfirm" DockPanel.Dock="Bottom" Visibility="Collapsed" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="8,6">
           <DockPanel>
             <Button DockPanel.Dock="Right" Content="取消" Margin="8,0,0,0" Click="ShapeCancel_Click"/>

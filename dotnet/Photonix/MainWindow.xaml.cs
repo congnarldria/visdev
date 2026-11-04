@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using AvalonDock.Layout;
 using AvalonDock.Serializer.Xml;
@@ -51,6 +52,9 @@ public partial class MainWindow : Window
 
     string? CurrentProject;
     string? CurrentProjectFolder;
+    string? SampleOrigin;
+    bool ApplyingTolerance;
+    string TolSignature = "";
 
     readonly ProgramRun Engine = new();
     bool Running;
@@ -109,6 +113,7 @@ public partial class MainWindow : Window
         ApplyMode(GfxMode.Select);
         BuildTemplateMenu();
         SampleMenu.SubmenuOpened += (_, _) => FillProgramMenu(SampleMenu.Items, includeWorkspace: false);
+        RefreshTolerances();
         Log("Photonix 已開啟。版面對齊網頁版，底層是 Vizion.Operators。");
         if (NativeCore.IsLoaded)
             Log("已載入 C 核心：" + NativeCore.LoadDetail);
@@ -472,12 +477,15 @@ public partial class MainWindow : Window
             return;
         try
         {
-            string source = File.ReadAllText(entry.Path);
+            string disk = File.ReadAllText(entry.Path);
+            string source = entry.Kind == "samples" ? ToleranceEdit.Restore(entry.Name, disk) : disk;
             CurrentProject = null;
             CurrentProjectFolder = null;
             Engine.ProjectFolder = null;
             string? path = entry.Kind == "workspace" ? entry.Path : null;
             LoadSource(source, entry.Name, path, true, null, expect ?? "已開啟 " + entry.Name);
+            if (entry.Kind == "samples")
+                SampleOrigin = entry.Path;
         }
         catch (Exception ex)
         {
@@ -867,6 +875,177 @@ public partial class MainWindow : Window
         UpdateSense(false);
         RefreshProblems();
         UpdateDirty();
+        RefreshTolerances();
+    }
+
+    void RefreshTolerances()
+    {
+        if (TolItems == null)
+            return;
+        if (ApplyingTolerance && TolBar.IsKeyboardFocusWithin)
+            return;
+        string source = ProgramText.Text ?? "";
+        string signature = ToleranceSignature(source);
+        List<ToleranceLimit> limits = ToleranceEdit.ReadLimits(source);
+        List<ToleranceExpect> expects = ToleranceEdit.ReadExpects(source);
+        bool teach = ToleranceEdit.ReadPointLists(source).Any(item => item.Name == "WantRow")
+            && ToleranceEdit.ReadPointLists(source).Any(item => item.Name == "WantCol");
+        if (limits.Count == 0 && expects.Count == 0 && !teach)
+        {
+            TolBar.Visibility = Visibility.Collapsed;
+            TolItems.Children.Clear();
+            TolSignature = "";
+            return;
+        }
+        TolBar.Visibility = Visibility.Visible;
+        if (signature == TolSignature)
+            return;
+        TolSignature = signature;
+        TolItems.Children.Clear();
+        string note = expects.Count > 0 && limits.Count == 0
+            ? "預期字會記在這台電腦，改完按執行"
+            : "公差會記在這台電腦，改完按執行";
+        TolItems.Children.Add(Note(note));
+        foreach (ToleranceLimit field in limits)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 12, 4) };
+            row.Children.Add(Note(field.Label));
+            row.Children.Add(TolBox(field.Min, "number", field.MinLine, field.MinName, field.Label + "下限"));
+            row.Children.Add(Note("到"));
+            row.Children.Add(TolBox(field.Max, "number", field.MaxLine, field.MaxName, field.Label + "上限"));
+            TolItems.Children.Add(row);
+        }
+        foreach (ToleranceExpect field in expects)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 12, 4) };
+            row.Children.Add(Note(field.Label));
+            TextBox box = TolBox(field.Value, "text", field.Line, field.Name, field.Label);
+            box.Width = 140;
+            row.Children.Add(box);
+            TolItems.Children.Add(row);
+        }
+        if (teach)
+            TolItems.Children.Add(TolButton("設為預期", "把這次量到的圓心寫進 WantRow、WantCol", (_, _) => TeachCenters()));
+        TolItems.Children.Add(TolButton("預設", "回到程式檔裡的數字", (_, _) => ResetTolerances()));
+    }
+
+    string ToleranceSignature(string source)
+    {
+        var limits = ToleranceEdit.ReadLimits(source).Select(field => field.Stem + "=" + field.Min + ".." + field.Max + "@" + field.MinLine);
+        var expects = ToleranceEdit.ReadExpects(source).Select(field => field.Value + "@" + field.Line);
+        bool teach = ToleranceEdit.ReadPointLists(source).Any(item => item.Name == "WantRow")
+            && ToleranceEdit.ReadPointLists(source).Any(item => item.Name == "WantCol");
+        return string.Join("|", limits) + "#" + string.Join("|", expects) + "#" + teach;
+    }
+
+    TextBlock Note(string text) => new()
+    {
+        Text = text,
+        Foreground = (Brush)FindResource("Muted"),
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(0, 0, 4, 0),
+    };
+
+    TextBox TolBox(string value, string kind, int line, string name, string tip)
+    {
+        var box = new TextBox
+        {
+            Text = value,
+            Width = 64,
+            Margin = new Thickness(0, 0, 4, 0),
+            ToolTip = tip,
+            Tag = new TolEdit(kind, line, name),
+        };
+        box.LostFocus += (_, _) => CommitTol(box);
+        box.KeyDown += (_, keyArgs) =>
+        {
+            if (keyArgs.Key != Key.Enter)
+                return;
+            CommitTol(box);
+            keyArgs.Handled = true;
+        };
+        return box;
+    }
+
+    Button TolButton(string text, string tip, RoutedEventHandler click)
+    {
+        var button = new Button { Content = text, Margin = new Thickness(0, 0, 8, 4), ToolTip = tip };
+        button.Click += click;
+        return button;
+    }
+
+    void CommitTol(TextBox box)
+    {
+        if (ApplyingTolerance || box.Tag is not TolEdit tag)
+            return;
+        string source = ProgramFile.Normalize(ProgramText.Text);
+        string next = tag.Kind == "text"
+            ? ToleranceEdit.ApplyExpect(source, tag.Line, box.Text)
+            : ToleranceEdit.ApplyLimit(source, tag.Line, tag.Name, box.Text.Trim());
+        if (next == source)
+        {
+            if (tag.Kind == "number" && !LooksNumber(box.Text.Trim()))
+            {
+                TolSignature = "";
+                RefreshTolerances();
+            }
+            return;
+        }
+        ApplyingTolerance = true;
+        ProgramText.Text = next;
+        ApplyingTolerance = false;
+        ToleranceEdit.Remember(ProgramName.Text, ProgramText.Text);
+        TolSignature = ToleranceSignature(ProgramText.Text ?? "");
+    }
+
+    static bool LooksNumber(string text) => Regex.IsMatch(text, @"^-?\d+(?:\.\d+)?$");
+
+    void TeachCenters()
+    {
+        if (Running)
+        {
+            StatusLine.Text = "執行中，先等這一輪結束";
+            return;
+        }
+        Engine.Vars.TryGetValue("Row", out object? row);
+        Engine.Vars.TryGetValue("Column", out object? column);
+        string? next = ToleranceEdit.ApplyPointLists(ProgramText.Text, ToleranceEdit.PointText(row), ToleranceEdit.PointText(column));
+        if (next == null)
+        {
+            StatusLine.Text = "先執行，才有圓心可以寫回";
+            return;
+        }
+        if (ProgramFile.Normalize(next) != ProgramFile.Normalize(ProgramText.Text))
+        {
+            ApplyingTolerance = true;
+            ProgramText.Text = next;
+            ApplyingTolerance = false;
+            ToleranceEdit.Remember(ProgramName.Text, ProgramText.Text);
+            TolSignature = ToleranceSignature(ProgramText.Text ?? "");
+        }
+        StatusLine.Text = "已把圓心寫進預期位置";
+        Log(StatusLine.Text);
+    }
+
+    void ResetTolerances()
+    {
+        bool expects = ToleranceEdit.ReadExpects(ProgramText.Text).Count > 0;
+        bool limits = ToleranceEdit.ReadLimits(ProgramText.Text).Count > 0;
+        ToleranceEdit.Clear(ProgramName.Text);
+        string? file = SampleOrigin ?? CurrentPath;
+        if (!string.IsNullOrEmpty(file) && File.Exists(file))
+        {
+            string disk = ProgramFile.Normalize(File.ReadAllText(file));
+            ApplyingTolerance = true;
+            ProgramText.Text = disk;
+            ApplyingTolerance = false;
+            SavedText = ProgramFile.Normalize(ProgramText.Text);
+            UpdateDirty();
+        }
+        TolSignature = "";
+        RefreshTolerances();
+        StatusLine.Text = expects && !limits ? "已恢復預設預期字" : "已恢復預設上下限";
+        Log(StatusLine.Text);
     }
 
     void ToggleBreakpoint(int line)
@@ -1464,6 +1643,8 @@ public partial class MainWindow : Window
 
     void LoadSource(string source, string name, string? path, bool clean, IReadOnlyList<string>? skipped, string? note = null)
     {
+        SampleOrigin = null;
+        TolSignature = "";
         source = ProgramFile.Normalize(source);
         SavedText = clean ? source : "";
         CurrentPath = path;
@@ -2202,6 +2383,8 @@ public partial class MainWindow : Window
     }
 
     enum GfxMode { Select, Pan, Zoom }
+
+    sealed record TolEdit(string Kind, int Line, string Name);
 
     void Log(string message)
     {
