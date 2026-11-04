@@ -26,6 +26,13 @@ public static partial class Operators
         new float[] { -2, -1, 0, -1, 0, 1, 0, 1, 2 },
     };
 
+    /// <summary>八個方向取最大，再除以 15。垂直或水平階梯的強度等於階梯高度，平坦處是 0。彩色先轉成亮度。</summary>
+    /// <remarks>Kirsch 邊緣強度</remarks>
+    /// <example>
+    /// <code>Vizion.kirsch_amp (Image, ImageEdgeAmp)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>Kirsch 邊緣強度。彩色先轉成亮度。</returns>
     public static ImageBuffer KirschAmp(ImageBuffer image) =>
         CompassGray(image, (source, destination) =>
         {
@@ -34,6 +41,13 @@ public static partial class Operators
             MaxKernel(source, destination, image.Width, image.Height, KirschKernels, 15.0, absolute: false);
         });
 
+    /// <summary>四個邊緣遮罩的能量。平坦是 0。高度 40 的垂直階梯是 49。彩色先轉成亮度。</summary>
+    /// <remarks>Frei-Chen 邊緣強度</remarks>
+    /// <example>
+    /// <code>Vizion.frei_amp (Image, ImageEdgeAmp)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>Frei-Chen 邊緣強度。彩色先轉成亮度。</returns>
     public static ImageBuffer FreiAmp(ImageBuffer image) =>
         CompassGray(image, (source, destination) =>
         {
@@ -42,6 +56,13 @@ public static partial class Operators
             FreiScalar(source, destination, image.Width, image.Height);
         });
 
+    /// <summary>八個方向取絕對值最大，不另外縮小。高度 40 的垂直階梯是 160。超過 255 會飽和。彩色先轉成亮度。</summary>
+    /// <remarks>Robinson 邊緣強度</remarks>
+    /// <example>
+    /// <code>Vizion.robinson_amp (Image, ImageEdgeAmp)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>Robinson 邊緣強度。彩色先轉成亮度。</returns>
     public static ImageBuffer RobinsonAmp(ImageBuffer image) =>
         CompassGray(image, (source, destination) =>
         {
@@ -50,6 +71,13 @@ public static partial class Operators
             MaxKernel(source, destination, image.Width, image.Height, RobinsonKernels, 1.0, absolute: true);
         });
 
+    /// <summary>和 sobel_dir 同一套：朝右是 128，正角度順時針。平坦時沒有方向，也記成朝右。要搭配 robinson_amp 才知道那裡有沒有邊緣。彩色先轉成亮度。</summary>
+    /// <remarks>Robinson 邊緣方向</remarks>
+    /// <example>
+    /// <code>Vizion.robinson_dir (Image, ImageDir)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>邊緣方向。朝右是 128。平坦也記成朝右。</returns>
     public static ImageBuffer RobinsonDir(ImageBuffer image) =>
         CompassGray(image, (source, destination) =>
         {
@@ -58,6 +86,14 @@ public static partial class Operators
             RobinsonDirScalar(source, destination, image.Width, image.Height);
         });
 
+    /// <summary>128 是朝右，和 sobel_dir 一樣。正角度在畫面上順時針，朝下約是 191，朝左是 255。兩個方向都是 128 時記成朝右。彩色先轉成亮度。</summary>
+    /// <remarks>兩個方向圖的角度</remarks>
+    /// <example>
+    /// <code>Vizion.atan2_image (ImageY, ImageX, ImageDir)</code>
+    /// </example>
+    /// <param name="vertical">列方向，128 是 0。</param>
+    /// <param name="horizontal">行方向，128 是 0。</param>
+    /// <returns>方向影像。定義域來自列方向那張。</returns>
     public static ImageBuffer Atan2Image(ImageBuffer vertical, ImageBuffer horizontal)
     {
         if (vertical == null || horizontal == null)
@@ -78,6 +114,15 @@ public static partial class Operators
         return ImageBuffer.Wrap(vertical.Width, vertical.Height, 1, destination, vertical.Domain);
     }
 
+    /// <summary>每個像素取視窗裡的最大值和最小值，再平均。平坦處不會變。彩色先轉成亮度。</summary>
+    /// <remarks>局部最大與最小的平均</remarks>
+    /// <example>
+    /// <code>Vizion.midrange_image (Image, ImageMidrange, 3, 3)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="maskWidth">視窗寬，奇數。</param>
+    /// <param name="maskHeight">視窗高，奇數。</param>
+    /// <returns>局部最大和最小的平均。</returns>
     public static ImageBuffer MidrangeImage(ImageBuffer image, int maskWidth, int maskHeight)
     {
         if (image == null)
@@ -115,12 +160,42 @@ public static partial class Operators
         });
     }
 
+    /// <summary>每個灰階直接當弧度。正弦是 -1 到 1，拉成 0 到 255，0 對應 128。灰階 0 的結果是 128。彩色每個通道分開算。</summary>
+    /// <remarks>灰階取正弦</remarks>
+    /// <example>
+    /// <code>Vizion.sin_image (Image, ImageSin)</code>
+    /// </example>
+    /// <param name="image">灰階當弧度。</param>
+    /// <returns>正弦拉回 0 到 255。灰階 0 的結果是 128。</returns>
     public static ImageBuffer SinImage(ImageBuffer image) => Wave(image, 0);
 
+    /// <summary>每個灰階直接當弧度。餘弦是 -1 到 1，拉成 0 到 255，0 對應 128。灰階 0 的結果是 255。彩色每個通道分開算。</summary>
+    /// <remarks>灰階取餘弦</remarks>
+    /// <example>
+    /// <code>Vizion.cos_image (Image, ImageCos)</code>
+    /// </example>
+    /// <param name="image">灰階當弧度。</param>
+    /// <returns>餘弦拉回 0 到 255。灰階 0 的結果是 255。</returns>
     public static ImageBuffer CosImage(ImageBuffer image) => Wave(image, 1);
 
+    /// <summary>每個灰階直接當弧度。正切先夾在 -16 到 16，再拉成 0 到 255，0 對應 128。灰階 0 的結果是 128。彩色每個通道分開算。</summary>
+    /// <remarks>灰階取正切</remarks>
+    /// <example>
+    /// <code>Vizion.tan_image (Image, ImageTan)</code>
+    /// </example>
+    /// <param name="image">灰階當弧度。</param>
+    /// <returns>正切先夾在 -16 到 16，再拉回 0 到 255。</returns>
     public static ImageBuffer TanImage(ImageBuffer image) => Wave(image, 2);
 
+    /// <summary>mean 是視窗平均。gauss 用同一個奇數視窗。Alpha 至少是 1 的奇數。彩色每個通道分開做。</summary>
+    /// <remarks>用均值或高斯把影像抹平</remarks>
+    /// <example>
+    /// <code>Vizion.smooth_image (Image, ImageSmooth, 'mean', 3)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="filter">mean 或 gauss。</param>
+    /// <param name="alpha">奇數視窗。</param>
+    /// <returns>平滑後的影像。定義域沿用輸入。</returns>
     public static ImageBuffer SmoothImage(ImageBuffer image, string filter, int alpha)
     {
         if (image == null)

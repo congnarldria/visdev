@@ -20,8 +20,24 @@ public static partial class Operators
         return ImageBuffer.Wrap(image.Width, image.Height, image.Channels, pixels);
     }
 
+    /// <summary>像素不會被裁掉。已經有定義域時會和這個區域取交集；change_domain 才是整段換掉。定義域以外之後不會被 threshold 使用，顯示時也會變暗。</summary>
+    /// <remarks>用區域限制影像</remarks>
+    /// <example>
+    /// <code>Vizion.reduce_domain (Image, Region, ImageReduced)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="region">要留下的範圍。</param>
+    /// <returns>套上定義域的影像。像素不裁掉。已有定義域時取交集。</returns>
     public static ImageBuffer ReduceDomain(ImageBuffer image, Region region) => Restrict(image, region, replace: false);
 
+    /// <summary>像素不會被裁掉。已經有定義域時會和這個區域取交集；change_domain 才是整段換掉。定義域以外之後不會被 threshold 使用，顯示時也會變暗。</summary>
+    /// <remarks>用區域限制影像</remarks>
+    /// <example>
+    /// <code>Vizion.reduce_domain (Image, Region, ImageReduced)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="regions">要留下的範圍。先合併成一個區域。</param>
+    /// <returns>套上定義域的影像。像素不裁掉。</returns>
     public static ImageBuffer ReduceDomain(ImageBuffer image, IReadOnlyList<Region> regions) => Restrict(image, Union(regions), replace: false);
 
     public static ImageBuffer ChangeDomain(ImageBuffer image, Region region) => Restrict(image, region, replace: true);

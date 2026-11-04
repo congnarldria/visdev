@@ -2,6 +2,14 @@ namespace Vizion;
 
 public static partial class Operators
 {
+    /// <summary>先把灰階除以 255，做次方，再乘回 255。大於 1 會讓中間調變暗。彩色每個通道分開算。</summary>
+    /// <remarks>灰階次方</remarks>
+    /// <example>
+    /// <code>Vizion.pow_image (Image, ImagePow, 2)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="exponent">次方，必須大於 0。</param>
+    /// <returns>次方後的影像。</returns>
     public static ImageBuffer PowImage(ImageBuffer image, double exponent)
     {
         if (image == null)
@@ -18,6 +26,13 @@ public static partial class Operators
         });
     }
 
+    /// <summary>每個通道分開開根號，再四捨五入成 byte。0 還是 0，81 變成 9，255 變成 16。</summary>
+    /// <remarks>灰階開根號</remarks>
+    /// <example>
+    /// <code>Vizion.sqrt_image (Image, ImageSqrt)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>開根號後的影像。</returns>
     public static ImageBuffer SqrtImage(ImageBuffer image)
     {
         if (image == null)
@@ -31,6 +46,14 @@ public static partial class Operators
         });
     }
 
+    /// <summary>scaled 用 ln(灰階+1)／ln(256) 乘上 255，0 還是 0、255 還是 255。natural 是 round(ln(灰階))，0 維持 0，所以 255 只會變成 6。每個通道分開算。</summary>
+    /// <remarks>灰階取對數</remarks>
+    /// <example>
+    /// <code>Vizion.log_image (Image, ImageLog, 'scaled')</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="mode">scaled 拉回 0 到 255，natural 是自然對數四捨五入。</param>
+    /// <returns>對數後的影像。</returns>
     public static ImageBuffer LogImage(ImageBuffer image, string mode)
     {
         if (image == null)
@@ -53,6 +76,14 @@ public static partial class Operators
         });
     }
 
+    /// <summary>scaled 用 256 的次方再減 1，剛好是 scaled 對數的反運算：0 還是 0，128 約是 15，255 還是 255。natural 是 e 的灰階次方，超過 5 就會飽和。彩色每個通道各自做。</summary>
+    /// <remarks>指數</remarks>
+    /// <example>
+    /// <code>Vizion.exp_image (Image, ImageExp, 'scaled')</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="mode">scaled 是對數的反運算，natural 是 e 的次方。</param>
+    /// <returns>指數之後的影像。</returns>
     public static ImageBuffer ExpImage(ImageBuffer image, string mode)
     {
         if (image == null)
@@ -72,6 +103,18 @@ public static partial class Operators
         });
     }
 
+    /// <summary>小於 Threshold 的灰階不變。其餘先對齊 Threshold 和 MaxGray，再做次方。Encode 為 true 時次方是 1/Gamma，會把中間調變亮；false 時次方就是 Gamma。彩色每個通道各自做。</summary>
+    /// <remarks>伽瑪校正</remarks>
+    /// <example>
+    /// <code>Vizion.gamma_image (Image, ImageGamma, 2)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="gamma">大於 0。</param>
+    /// <param name="offset">公式加上的灰階。</param>
+    /// <param name="threshold">小於此值的灰階保持原樣。</param>
+    /// <param name="maxGray">公式的最高灰階。</param>
+    /// <param name="encode">true 用 1/Gamma，false 直接用 Gamma。</param>
+    /// <returns>伽瑪校正後的影像。</returns>
     public static ImageBuffer GammaImage(ImageBuffer image, double gamma, double offset, double threshold, double maxGray, bool encode)
     {
         if (image == null)
@@ -107,6 +150,13 @@ public static partial class Operators
         });
     }
 
+    /// <summary>把 128 當作 0。平坦的 128 變成 0，0 變成 128，255 變成 127。彩色每個通道各自做。</summary>
+    /// <remarks>對 128 取絕對值</remarks>
+    /// <example>
+    /// <code>Vizion.abs_image (Image, ImageAbs)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>每個像素離 128 的距離。</returns>
     public static ImageBuffer AbsImage(ImageBuffer image)
     {
         if (image == null)
@@ -123,6 +173,15 @@ public static partial class Operators
         });
     }
 
+    /// <summary>小於 Min 變成 0，大於 Max 變成 255。Min 和 Max 相同時整張變成 0。彩色三個通道用同一組上下限。</summary>
+    /// <remarks>把一段灰階拉開到 0 到 255</remarks>
+    /// <example>
+    /// <code>Vizion.scale_image_range (Image, ImageScaled, 0, 63)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="low">對應到 0 的灰階。</param>
+    /// <param name="high">對應到 255 的灰階。</param>
+    /// <returns>拉伸後的影像。定義域沿用輸入。</returns>
     public static ImageBuffer ScaleImageRange(ImageBuffer image, double low, double high)
     {
         if (image == null)
@@ -143,10 +202,34 @@ public static partial class Operators
         });
     }
 
+    /// <summary>每個像素、每個通道各自做 AND。8 位元，超過的位元不保留。定義域沿用第一張。</summary>
+    /// <remarks>兩張影像做位元且</remarks>
+    /// <example>
+    /// <code>Vizion.bit_and (Image1, Image2, ImageAnd)</code>
+    /// </example>
+    /// <param name="left">第一張影像。</param>
+    /// <param name="right">第二張影像。</param>
+    /// <returns>位元且。定義域沿用第一張。</returns>
     public static ImageBuffer BitAnd(ImageBuffer left, ImageBuffer right) => Bits(left, right, 0);
 
+    /// <summary>每個像素、每個通道各自做 OR。定義域沿用第一張。</summary>
+    /// <remarks>兩張影像做位元或</remarks>
+    /// <example>
+    /// <code>Vizion.bit_or (Image1, Image2, ImageOr)</code>
+    /// </example>
+    /// <param name="left">第一張影像。</param>
+    /// <param name="right">第二張影像。</param>
+    /// <returns>位元或。定義域沿用第一張。</returns>
     public static ImageBuffer BitOr(ImageBuffer left, ImageBuffer right) => Bits(left, right, 1);
 
+    /// <summary>每個像素、每個通道各自做 XOR。定義域沿用第一張。</summary>
+    /// <remarks>兩張影像做位元互斥或</remarks>
+    /// <example>
+    /// <code>Vizion.bit_xor (Image1, Image2, ImageXor)</code>
+    /// </example>
+    /// <param name="left">第一張影像。</param>
+    /// <param name="right">第二張影像。</param>
+    /// <returns>位元互斥或。定義域沿用第一張。</returns>
     public static ImageBuffer BitXor(ImageBuffer left, ImageBuffer right) => Bits(left, right, 2);
 
     static ImageBuffer Bits(ImageBuffer left, ImageBuffer right, int op)

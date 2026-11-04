@@ -832,8 +832,10 @@ sealed class ProgramRun
             case "dev_display":
                 Need(args, 1);
                 Get(args[0]);
+                Operators.DevDisplay();
                 return;
             case "dev_set_draw":
+                Operators.DevSetDraw();
                 return;
             default:
                 throw new InvalidOperationException("還沒接上這個算子：" + name);

@@ -2,6 +2,13 @@ namespace Vizion;
 
 public static partial class Operators
 {
+    /// <summary>8 位元的 NOT。0 變成 255，10 變成 245。彩色每個通道各自做。</summary>
+    /// <remarks>影像做位元否定</remarks>
+    /// <example>
+    /// <code>Vizion.bit_not (Image, ImageNot)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>8 位元否定。0 變成 255。</returns>
     public static ImageBuffer BitNot(ImageBuffer image)
     {
         if (image == null)
@@ -15,6 +22,14 @@ public static partial class Operators
         });
     }
 
+    /// <summary>每個像素和 BitMask 做位元 AND。遮罩 255 時灰階不變。</summary>
+    /// <remarks>用固定遮罩做 AND</remarks>
+    /// <example>
+    /// <code>Vizion.bit_mask (Image, ImageMask, 240)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="mask">0 到 255 的遮罩。</param>
+    /// <returns>和遮罩做位元且之後的影像。</returns>
     public static ImageBuffer BitMask(ImageBuffer image, int mask)
     {
         if (image == null)
@@ -30,6 +45,14 @@ public static partial class Operators
         });
     }
 
+    /// <summary>該位元是 1 的像素變成 255，否則是 0。Bit 要在 0 到 7。</summary>
+    /// <remarks>抽出一個位元</remarks>
+    /// <example>
+    /// <code>Vizion.bit_slice (Image, ImageSlice, 0)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="bit">0 是最低位，要在 0 到 7。</param>
+    /// <returns>該位元是 1 的像素為 255，否則是 0。</returns>
     public static ImageBuffer BitSlice(ImageBuffer image, int bit)
     {
         if (image == null)
@@ -46,10 +69,35 @@ public static partial class Operators
         });
     }
 
+    /// <summary>每個通道乘上 2 的 Shift 次方，只留 8 個位元。1 左移 3 位是 8。移 8 位以上變成 0。</summary>
+    /// <remarks>灰階左移</remarks>
+    /// <example>
+    /// <code>Vizion.bit_lshift (Image, ImageShift, 1)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="shift">左移的位數。</param>
+    /// <returns>左移後的影像。移 8 位以上變成 0。</returns>
     public static ImageBuffer BitLShift(ImageBuffer image, int shift) => Shift(image, shift, left: true);
 
+    /// <summary>每個通道除以 2 的 Shift 次方，小數直接丟掉。16 右移 2 位是 4。</summary>
+    /// <remarks>灰階右移</remarks>
+    /// <example>
+    /// <code>Vizion.bit_rshift (Image, ImageShift, 1)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="shift">右移的位數。</param>
+    /// <returns>右移後的影像。小數直接丟掉。</returns>
     public static ImageBuffer BitRShift(ImageBuffer image, int shift) => Shift(image, shift, left: false);
 
+    /// <summary>128 代表和周圍一樣，比 128 大是比周圍亮。偶數遮罩會加 1，最大 31。邊界用鏡射。彩色先轉成亮度。</summary>
+    /// <remarks>減去局部平均</remarks>
+    /// <example>
+    /// <code>Vizion.highpass_image (Image, Highpass, 5, 5)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="width">遮罩寬。</param>
+    /// <param name="height">遮罩高。</param>
+    /// <returns>高通結果。128 代表和周圍一樣。</returns>
     public static ImageBuffer HighpassImage(ImageBuffer image, int width, int height)
     {
         if (image == null)
@@ -67,6 +115,15 @@ public static partial class Operators
         });
     }
 
+    /// <summary>用矩形平均算出每個像素附近的標準差，再四捨五入成 0 到 255。彩色先轉成亮度。偶數遮罩可用，原點可能和 HALCON 差 1 像素。</summary>
+    /// <remarks>局部標準差</remarks>
+    /// <example>
+    /// <code>Vizion.deviation_image (Image, ImageDeviation, 5, 5)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="width">遮罩寬。</param>
+    /// <param name="height">遮罩高。</param>
+    /// <returns>局部標準差。</returns>
     public static ImageBuffer DeviationImage(ImageBuffer image, int width, int height)
     {
         if (image == null)
@@ -93,9 +150,27 @@ public static partial class Operators
         });
     }
 
+    /// <summary>和 deviation_image 同一套矩形平均。寬、高順序相同，灰階也相同。彩色先轉成亮度。</summary>
+    /// <remarks>局部標準差</remarks>
+    /// <example>
+    /// <code>Vizion.sigma_image (Image, ImageSigma, 5, 5)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="width">遮罩寬。</param>
+    /// <param name="height">遮罩高。</param>
+    /// <returns>局部標準差，和 deviation_image 相同。</returns>
     public static ImageBuffer SigmaImage(ImageBuffer image, int width, int height) =>
         DeviationImage(image, width, height);
 
+    /// <summary>每個像素輸出附近最大值減最小值。彩色先轉成亮度。用來抓局部對比。</summary>
+    /// <remarks>矩形範圍的灰階差</remarks>
+    /// <example>
+    /// <code>Vizion.gray_range_rect (Image, ImageResult, 5, 5)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="maskHeight">遮罩高。</param>
+    /// <param name="maskWidth">遮罩寬。</param>
+    /// <returns>局部最大減最小。</returns>
     public static ImageBuffer GrayRangeRect(ImageBuffer image, int maskHeight, int maskWidth)
     {
         if (image == null)
@@ -114,6 +189,16 @@ public static partial class Operators
         });
     }
 
+    /// <summary>3×3 的 n_4 是上下左右，n_8 再包含對角。5 和 7 用 OpenCV 的拉普拉斯，兩種 FilterMask 相同。signed 會加上 128 再夾到 0 到 255。</summary>
+    /// <remarks>拉普拉斯</remarks>
+    /// <example>
+    /// <code>Vizion.laplace (Image, ImageLaplace, 'absolute', 3, 'n_4')</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="resultType">absolute 取絕對值，signed 以 128 為 0。</param>
+    /// <param name="maskSize">3、5 或 7。</param>
+    /// <param name="filterMask">n_4 或 n_8。只在 3×3 有差別。</param>
+    /// <returns>拉普拉斯結果。</returns>
     public static ImageBuffer Laplace(ImageBuffer image, string resultType, int maskSize, string filterMask)
     {
         if (image == null)

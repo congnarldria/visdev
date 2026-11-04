@@ -2,6 +2,14 @@ namespace Vizion;
 
 public static partial class Operators
 {
+    /// <summary>Lut 要剛好 256 個數，依序對應灰階 0 到 255。超過 0 到 255 會先夾住。彩色每個通道各自查表。</summary>
+    /// <remarks>用對照表換灰階</remarks>
+    /// <example>
+    /// <code>Vizion.lut_trans (Image, ImageLut, Lut)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="table">256 個輸出灰階，索引是原來的灰階。</param>
+    /// <returns>查表後的影像。</returns>
     public static ImageBuffer LutTrans(ImageBuffer image, double[] table)
     {
         if (image == null)
@@ -20,6 +28,15 @@ public static partial class Operators
         });
     }
 
+    /// <summary>三張都要是同樣尺寸的灰階。亮度是 0.299×紅 + 0.587×綠 + 0.114×藍，再四捨五入。</summary>
+    /// <remarks>三張色版合成亮度</remarks>
+    /// <example>
+    /// <code>Vizion.rgb3_to_gray (ImageRed, ImageGreen, ImageBlue, ImageGray)</code>
+    /// </example>
+    /// <param name="red">紅。</param>
+    /// <param name="green">綠。</param>
+    /// <param name="blue">藍。</param>
+    /// <returns>亮度。0.299×紅 + 0.587×綠 + 0.114×藍，再四捨五入。</returns>
     public static ImageBuffer Rgb3ToGray(ImageBuffer red, ImageBuffer green, ImageBuffer blue)
     {
         if (red == null || green == null || blue == null)
@@ -38,6 +55,14 @@ public static partial class Operators
         return ImageBuffer.Gray(red.Width, red.Height, destination);
     }
 
+    /// <summary>尺寸跟輸入相同。定義域是整張圖，不沿用輸入的定義域。</summary>
+    /// <remarks>用固定灰階填滿一張新影像</remarks>
+    /// <example>
+    /// <code>Vizion.gen_image_proto (Image, ImageCleared, 0)</code>
+    /// </example>
+    /// <param name="image">用來決定尺寸的影像。</param>
+    /// <param name="gray">填入的灰階，0 到 255。</param>
+    /// <returns>填滿後的影像。不沿用輸入的定義域。</returns>
     public static ImageBuffer GenImageProto(ImageBuffer image, double gray)
     {
         if (image == null)
@@ -52,12 +77,38 @@ public static partial class Operators
         return ImageBuffer.Wrap(image.Width, image.Height, image.Channels, destination, null);
     }
 
+    /// <summary>只塗來源定義域裡的像素。來源沒有定義域就整張塗上。來源是灰階、目的是彩色時，三個通道都塗上同一個亮度。結果沿用目的影像的定義域。</summary>
+    /// <remarks>把一張影像的灰階塗進另一張</remarks>
+    /// <example>
+    /// <code>Vizion.paint_gray (ImageSource, ImageDestination, MixedImage)</code>
+    /// </example>
+    /// <param name="source">要塗上去的灰階。</param>
+    /// <param name="destination">被塗的影像。</param>
+    /// <returns>塗完的影像。沿用目的影像的定義域。</returns>
     public static ImageBuffer PaintGray(ImageBuffer source, ImageBuffer destination) =>
         Paint(destination, source, source, allowColorOntoGray: false);
 
+    /// <summary>只改目的影像定義域裡的像素，來源的定義域不影響。沒有定義域就整張塗上。結果沿用目的定義域。來源是灰階、目的是彩色時，三個通道都塗上同一個亮度。</summary>
+    /// <remarks>在定義域裡塗上另一張影像</remarks>
+    /// <example>
+    /// <code>Vizion.overpaint_gray (ImageDestination, ImageSource, MixedImage)</code>
+    /// </example>
+    /// <param name="destination">被塗的影像。</param>
+    /// <param name="source">要塗上去的灰階。</param>
+    /// <returns>塗完的影像。只改目的影像定義域裡的像素。</returns>
     public static ImageBuffer OverpaintGray(ImageBuffer destination, ImageBuffer source) =>
         Paint(destination, source, destination, allowColorOntoGray: true);
 
+    /// <summary>每個像素換成遮罩裡排第 Rank 的灰階，從 0 開始。偶數遮罩會加 1，最大是 7。邊界用邊緣的像素補上。Rank 0 接近侵蝕，最後一個接近膨脹。彩色先轉成亮度。</summary>
+    /// <remarks>矩形排序濾波</remarks>
+    /// <example>
+    /// <code>Vizion.rank_rect (Image, ImageRank, 3, 3, 0)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="maskWidth">遮罩寬。</param>
+    /// <param name="maskHeight">遮罩高。</param>
+    /// <param name="rank">0 是最暗，最後一個是最亮。</param>
+    /// <returns>排序濾波結果。彩色先轉成亮度。</returns>
     public static ImageBuffer RankRect(ImageBuffer image, int maskWidth, int maskHeight, int rank)
     {
         if (image == null)
@@ -74,6 +125,16 @@ public static partial class Operators
         return ImageBuffer.Gray(image.Width, image.Height, destination);
     }
 
+    /// <summary>偶數遮罩會加 1，最大是 7。continued 用邊緣像素補，mirror 鏡射，cyclic 循環。彩色先轉成亮度。</summary>
+    /// <remarks>矩形中值濾波</remarks>
+    /// <example>
+    /// <code>Vizion.median_rect (Image, ImageMedian, 3, 3, 'continued')</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="maskWidth">遮罩寬。</param>
+    /// <param name="maskHeight">遮罩高。</param>
+    /// <param name="margin">continued、mirror 或 cyclic。</param>
+    /// <returns>中值結果。彩色先轉成亮度。</returns>
     public static ImageBuffer MedianRect(ImageBuffer image, int maskWidth, int maskHeight, string margin)
     {
         if (image == null)
@@ -89,6 +150,13 @@ public static partial class Operators
         return ImageBuffer.Wrap(image.Width, image.Height, 1, destination, image.Domain);
     }
 
+    /// <summary>3×3 Prewitt。垂直或水平的完整階梯除以 3 之後，階梯兩側都是階梯高度，平坦處是 0。超過 255 會飽和。彩色先轉成亮度。</summary>
+    /// <remarks>Prewitt 邊緣強度</remarks>
+    /// <example>
+    /// <code>Vizion.prewitt_amp (Image, ImageEdgeAmp)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>Prewitt 邊緣強度。彩色先轉成亮度。</returns>
     public static ImageBuffer PrewittAmp(ImageBuffer image)
     {
         if (image == null)
@@ -101,6 +169,14 @@ public static partial class Operators
         });
     }
 
+    /// <summary>用右下兩個像素做差分。sum_sqrt 是兩個差分的斜邊，sum_abs 是絕對值相加。最後一列和最後一行是 0。彩色先轉成亮度。</summary>
+    /// <remarks>Roberts 邊緣</remarks>
+    /// <example>
+    /// <code>Vizion.roberts (Image, ImageRoberts, 'sum_sqrt')</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="filterType">sum_sqrt 是斜邊，sum_abs 是兩個差分相加。</param>
+    /// <returns>Roberts 邊緣。最後一列和最後一行是 0。</returns>
     public static ImageBuffer Roberts(ImageBuffer image, string filterType)
     {
         if (image == null)
@@ -114,6 +190,15 @@ public static partial class Operators
         });
     }
 
+    /// <summary>遮罩係數是二項式，先沿水平再沿垂直，邊界用邊緣像素延伸。寬和高要是 1 到 31 的奇數。彩色每個通道各自做。</summary>
+    /// <remarks>二項係數平滑</remarks>
+    /// <example>
+    /// <code>Vizion.binomial_filter (Image, ImageBinomial, 3, 3)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="maskWidth">奇數寬度。</param>
+    /// <param name="maskHeight">奇數高度。</param>
+    /// <returns>二項平滑後的影像。</returns>
     public static ImageBuffer BinomialFilter(ImageBuffer image, int maskWidth, int maskHeight)
     {
         if (image == null)

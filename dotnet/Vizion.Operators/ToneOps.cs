@@ -2,6 +2,16 @@ namespace Vizion;
 
 public static partial class Operators
 {
+    /// <summary>輸出 = 原圖 + (原圖 − 局部平均) × Factor。</summary>
+    /// <remarks>強化邊緣對比</remarks>
+    /// <example>
+    /// <code>Vizion.emphasize (Image, Sharp, 7, 7, 1)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="maskWidth">遮罩寬。</param>
+    /// <param name="maskHeight">遮罩高。</param>
+    /// <param name="factor">強化係數。</param>
+    /// <returns>強化後的影像。</returns>
     public static ImageBuffer Emphasize(ImageBuffer image, int maskWidth, int maskHeight, double factor)
     {
         if (image == null)
@@ -12,6 +22,13 @@ public static partial class Operators
         return ImageBuffer.Wrap(image.Width, image.Height, image.Channels, destination, image.Domain);
     }
 
+    /// <summary>灰階直接等化。彩色影像只等化亮度通道。</summary>
+    /// <remarks>直方圖等化</remarks>
+    /// <example>
+    /// <code>Vizion.equ_histo_image (Image, Equ)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>直方圖等化結果。彩色只等化亮度。</returns>
     public static ImageBuffer EquHistoImage(ImageBuffer image)
     {
         if (image == null)
@@ -29,6 +46,13 @@ public static partial class Operators
         return ImageBuffer.Wrap(image.Width, image.Height, image.Channels, destination, image.Domain);
     }
 
+    /// <summary>定義域裡的最小值變成 0、最大值變成 255。整張一樣亮時輸出 0。彩色圖每個通道分開拉。</summary>
+    /// <remarks>把對比拉滿</remarks>
+    /// <example>
+    /// <code>Vizion.scale_image_max (Image, ImageScaleMax)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>對比拉到 0 到 255 的影像。定義域外是 0。</returns>
     public static ImageBuffer ScaleImageMax(ImageBuffer image)
     {
         if (image == null)
@@ -55,6 +79,16 @@ public static partial class Operators
         return ImageBuffer.Wrap(image.Width, image.Height, 3, merged, image.Domain);
     }
 
+    /// <summary>輸出 = (原圖 − 局部平均) + 局部平均 × Factor + 整張平均 × (1 − Factor)。Factor 1 就是原圖，Factor 0 去掉局部明暗。偶數遮罩會加 1 變成奇數。這和 emphasize 不同，emphasize 是把高頻加回原圖。</summary>
+    /// <remarks>拉平緩慢的照明變化</remarks>
+    /// <example>
+    /// <code>Vizion.illuminate (Image, ImageIlluminate, 31, 31, 0)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="maskWidth">局部平均的寬。</param>
+    /// <param name="maskHeight">局部平均的高。</param>
+    /// <param name="factor">0 完全拉平，1 保持原圖。</param>
+    /// <returns>校正照明後的影像。</returns>
     public static ImageBuffer Illuminate(ImageBuffer image, int maskWidth, int maskHeight, double factor)
     {
         if (image == null)
@@ -83,6 +117,13 @@ public static partial class Operators
         return ImageBuffer.Wrap(image.Width, image.Height, 3, merged, image.Domain);
     }
 
+    /// <summary>灰階是 1。彩色是 3，通道 1 紅、2 綠、3 藍。</summary>
+    /// <remarks>通道數</remarks>
+    /// <example>
+    /// <code>Vizion.count_channels (Image, Channels)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>灰階是 1，彩色是 3。</returns>
     public static int CountChannels(ImageBuffer image)
     {
         if (image == null)
@@ -90,6 +131,14 @@ public static partial class Operators
         return image.Channels;
     }
 
+    /// <summary>彩色圖的通道 1 是紅、2 是綠、3 是藍。影像在內部以 BGR 存放，這個編號仍跟 HALCON 相同。</summary>
+    /// <remarks>取出一個通道</remarks>
+    /// <example>
+    /// <code>Vizion.access_channel (Image, Red, 1)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="channel">通道編號，從 1 開始。1 紅、2 綠、3 藍。</param>
+    /// <returns>單通道影像。</returns>
     public static ImageBuffer AccessChannel(ImageBuffer image, int channel)
     {
         if (image == null)
@@ -109,6 +158,15 @@ public static partial class Operators
         return ImageBuffer.Wrap(image.Width, image.Height, 1, destination, image.Domain);
     }
 
+    /// <summary>三張都必須是相同尺寸的灰階圖。順序是紅、綠、藍。</summary>
+    /// <remarks>三張灰階合成彩色</remarks>
+    /// <example>
+    /// <code>Vizion.compose3 (Red, Green, Blue, ImageRGB)</code>
+    /// </example>
+    /// <param name="red">紅通道。</param>
+    /// <param name="green">綠通道。</param>
+    /// <param name="blue">藍通道。</param>
+    /// <returns>彩色影像。定義域是三張圖的交集。</returns>
     public static ImageBuffer Compose3(ImageBuffer red, ImageBuffer green, ImageBuffer blue)
     {
         RequireGray(red, green, blue, "compose3 的三張輸入都要是灰階");
@@ -126,6 +184,13 @@ public static partial class Operators
         return ImageBuffer.Wrap(red.Width, red.Height, 3, merged, FoldDomain(red, green, blue));
     }
 
+    /// <summary>灰階影像不能拆。通道順序是紅、綠、藍。</summary>
+    /// <remarks>彩色拆成紅綠藍</remarks>
+    /// <example>
+    /// <code>Vizion.decompose3 (ImageRGB, Red, Green, Blue)</code>
+    /// </example>
+    /// <param name="image">彩色影像。</param>
+    /// <returns>依序是紅、綠、藍。不取代目前影像。</returns>
     public static ImageBuffer[] Decompose3(ImageBuffer image)
     {
         if (image == null)
@@ -150,6 +215,16 @@ public static partial class Operators
         };
     }
 
+    /// <summary>三張輸入都要是相同尺寸的灰階。hsv 的 H 是 0 到 180。lab 的 a、b 以 128 為 0。這是 OpenCV 的數值，不是 HALCON 的實數範圍。</summary>
+    /// <remarks>把紅綠藍轉成其他色彩空間</remarks>
+    /// <example>
+    /// <code>Vizion.trans_from_rgb (Red, Green, Blue, H, S, V, 'hsv')</code>
+    /// </example>
+    /// <param name="red">紅。</param>
+    /// <param name="green">綠。</param>
+    /// <param name="blue">藍。</param>
+    /// <param name="colorSpace">hsv、lab 或 yuv。</param>
+    /// <returns>依序是轉換後的三個通道。不取代目前影像。</returns>
     public static ImageBuffer[] TransFromRgb(ImageBuffer red, ImageBuffer green, ImageBuffer blue, string colorSpace)
     {
         RequireGray(red, green, blue, "三張輸入都要是相同尺寸的灰階");

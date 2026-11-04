@@ -2,6 +2,13 @@ namespace Vizion;
 
 public static partial class Operators
 {
+    /// <summary>彩色影像轉成單通道。已經是灰階就直接複製。</summary>
+    /// <remarks>轉成灰階</remarks>
+    /// <example>
+    /// <code>Vizion.rgb1_to_gray (Image, Gray)</code>
+    /// </example>
+    /// <param name="image">彩色或灰階影像。</param>
+    /// <returns>單通道灰階。已經是灰階就直接複製。</returns>
     public static ImageBuffer Rgb1ToGray(ImageBuffer image)
     {
         if (image == null)
@@ -15,6 +22,13 @@ public static partial class Operators
         return ImageBuffer.Wrap(image.Width, image.Height, 1, image.GrayBytes(), image.Domain);
     }
 
+    /// <summary>每個像素變成 255 減去原值。</summary>
+    /// <remarks>灰階反相</remarks>
+    /// <example>
+    /// <code>Vizion.invert_image (Image, Inverted)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>每個像素變成 255 減去原值。</returns>
     public static ImageBuffer InvertImage(ImageBuffer image)
     {
         if (image == null)
@@ -28,6 +42,15 @@ public static partial class Operators
         });
     }
 
+    /// <summary>輸出 = 輸入 × Mult + Add，超過 0 到 255 的值會被截斷。</summary>
+    /// <remarks>線性縮放灰階</remarks>
+    /// <example>
+    /// <code>Vizion.scale_image (Image, Scaled, 1.2, 0)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="mult">乘上的係數。</param>
+    /// <param name="add">加上的偏移。</param>
+    /// <returns>縮放後的影像。超過 0 到 255 會截斷。</returns>
     public static ImageBuffer ScaleImage(ImageBuffer image, double mult, double add)
     {
         if (image == null)
@@ -35,6 +58,14 @@ public static partial class Operators
         return Map(image, (source, destination) => Apply(source, null, destination, 1, mult, add));
     }
 
+    /// <summary>這版只收半徑。HALCON 的 MaskType 與 Margin 先省略。</summary>
+    /// <remarks>中值濾波</remarks>
+    /// <example>
+    /// <code>Vizion.median_image (Image, Median, 2)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="radius">半徑，像素。</param>
+    /// <returns>中值濾波結果。</returns>
     public static ImageBuffer MedianImage(ImageBuffer image, int radius)
     {
         if (image == null)
@@ -50,24 +81,89 @@ public static partial class Operators
         });
     }
 
+    /// <summary>每個像素是 (灰階1 + 灰階2) × Mult + Add，超過 0 到 255 會截斷。兩張圖的尺寸和通道數要相同。domain 取交集，外面補 0。</summary>
+    /// <remarks>兩張影像相加</remarks>
+    /// <example>
+    /// <code>Vizion.add_image (Image1, Image2, ImageResult, 0.5, 0)</code>
+    /// </example>
+    /// <param name="left">第一張影像。</param>
+    /// <param name="right">第二張影像。</param>
+    /// <param name="mult">乘上的係數。</param>
+    /// <param name="add">再加上的值。</param>
+    /// <returns>相加結果。定義域是兩張圖的交集，外面是 0。</returns>
     public static ImageBuffer AddImage(ImageBuffer left, ImageBuffer right, double mult, double add) =>
         Combine(left, right, 2, mult, add);
 
+    /// <summary>每個像素是 (被減影像 - 減數影像) × Mult + Add，超過 0 到 255 會截斷。</summary>
+    /// <remarks>兩張影像相減</remarks>
+    /// <example>
+    /// <code>Vizion.sub_image (Image1, Image2, ImageSub, 1, 128)</code>
+    /// </example>
+    /// <param name="left">被減影像。</param>
+    /// <param name="right">減去的影像。</param>
+    /// <param name="mult">乘上的係數。</param>
+    /// <param name="add">再加上的值。</param>
+    /// <returns>相減結果。定義域是兩張圖的交集，外面是 0。</returns>
     public static ImageBuffer SubImage(ImageBuffer left, ImageBuffer right, double mult, double add) =>
         Combine(left, right, 3, mult, add);
 
+    /// <summary>每個像素是 (灰階1 × 灰階2) × Mult + Add。灰階直接相乘會很大，Mult 通常要小於 1。</summary>
+    /// <remarks>兩張影像相乘</remarks>
+    /// <example>
+    /// <code>Vizion.mult_image (Image1, Image2, ImageResult, 0.005, 0)</code>
+    /// </example>
+    /// <param name="left">第一張影像。</param>
+    /// <param name="right">第二張影像。</param>
+    /// <param name="mult">乘上的係數。</param>
+    /// <param name="add">再加上的值。</param>
+    /// <returns>相乘結果。定義域是兩張圖的交集，外面是 0。</returns>
     public static ImageBuffer MultImage(ImageBuffer left, ImageBuffer right, double mult, double add) =>
         Combine(left, right, 4, mult, add);
 
+    /// <summary>每個像素是 |灰階1 - 灰階2| × Mult，超過 255 會截斷。</summary>
+    /// <remarks>兩張影像的絕對差</remarks>
+    /// <example>
+    /// <code>Vizion.abs_diff_image (Image1, Image2, ImageAbsDiff, 1)</code>
+    /// </example>
+    /// <param name="left">第一張影像。</param>
+    /// <param name="right">第二張影像。</param>
+    /// <param name="mult">乘上的係數。</param>
+    /// <returns>絕對差。定義域是兩張圖的交集，外面是 0。</returns>
     public static ImageBuffer AbsDiffImage(ImageBuffer left, ImageBuffer right, double mult) =>
         Combine(left, right, 5, mult, 0);
 
+    /// <summary>每個像素是 (灰階1 / 灰階2) × Mult + Add。分母是 0 時商先當 0，再乘上 Mult 加上 Add，所以結果是 Add。兩張圖的尺寸和通道數要相同。定義域取交集，外面補 0。</summary>
+    /// <remarks>兩張影像相除</remarks>
+    /// <example>
+    /// <code>Vizion.div_image (Image1, Image2, ImageResult, 1, 0)</code>
+    /// </example>
+    /// <param name="left">分子影像。</param>
+    /// <param name="right">分母影像。</param>
+    /// <param name="mult">乘上的係數。</param>
+    /// <param name="add">再加上的值。</param>
+    /// <returns>相除結果。定義域是兩張圖的交集，外面是 0。</returns>
     public static ImageBuffer DivImage(ImageBuffer left, ImageBuffer right, double mult, double add) =>
         Combine(left, right, 8, mult, add);
 
+    /// <summary>兩張圖的尺寸和通道數要相同。</summary>
+    /// <remarks>每個像素取較小灰階</remarks>
+    /// <example>
+    /// <code>Vizion.min_image (Image1, Image2, ImageMin)</code>
+    /// </example>
+    /// <param name="left">第一張影像。</param>
+    /// <param name="right">第二張影像。</param>
+    /// <returns>每個像素的較小值。定義域是兩張圖的交集，外面是 0。</returns>
     public static ImageBuffer MinImage(ImageBuffer left, ImageBuffer right) =>
         Combine(left, right, 6, 1, 0);
 
+    /// <summary>兩張圖的尺寸和通道數要相同。</summary>
+    /// <remarks>每個像素取較大灰階</remarks>
+    /// <example>
+    /// <code>Vizion.max_image (Image1, Image2, ImageMax)</code>
+    /// </example>
+    /// <param name="left">第一張影像。</param>
+    /// <param name="right">第二張影像。</param>
+    /// <returns>每個像素的較大值。定義域是兩張圖的交集，外面是 0。</returns>
     public static ImageBuffer MaxImage(ImageBuffer left, ImageBuffer right) =>
         Combine(left, right, 7, 1, 0);
 

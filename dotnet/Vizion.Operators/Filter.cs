@@ -2,7 +2,15 @@ namespace Vizion;
 
 public static partial class Operators
 {
-    /// <summary>矩形平均。邊界用鏡射，和 cv2.blur 相同。遮罩至少 1x1。</summary>
+    /// <summary>以矩形遮罩做平均。邊界用鏡射，和 cv2.blur 相同。遮罩至少 1×1。</summary>
+    /// <remarks>均值濾波</remarks>
+    /// <example>
+    /// <code>Vizion.mean_image (Image, MeanImage, 5, 5)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="maskWidth">遮罩寬。</param>
+    /// <param name="maskHeight">遮罩高。</param>
+    /// <returns>均值濾波結果。</returns>
     public static ImageBuffer MeanImage(ImageBuffer image, int maskWidth, int maskHeight)
     {
         if (image == null)
@@ -17,7 +25,14 @@ public static partial class Operators
         });
     }
 
-    /// <summary>高斯平滑。Size 是大於等於 3 的奇數，和 cv2.GaussianBlur 的 sigma 0 相同。</summary>
+    /// <summary>Size 必須是大於等於 3 的奇數。和 cv2.GaussianBlur 在 sigma 為 0 時相同。</summary>
+    /// <remarks>高斯平滑</remarks>
+    /// <example>
+    /// <code>Vizion.gauss_image (Image, Smooth, 5)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="size">奇數核大小，至少 3。</param>
+    /// <returns>高斯平滑後的影像。</returns>
     public static ImageBuffer GaussImage(ImageBuffer image, int size)
     {
         if (image == null)

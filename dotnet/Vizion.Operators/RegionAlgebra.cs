@@ -34,6 +34,13 @@ public static partial class Operators
 {
     public static Region Union(Region left, Region right) => Combine(left, right, CombineKind.Union);
 
+    /// <summary>把 connection 拆開的物件合成一個區域。</summary>
+    /// <remarks>合併全部物件</remarks>
+    /// <example>
+    /// <code>Vizion.union1 (Region, RegionUnion)</code>
+    /// </example>
+    /// <param name="regions">物件集合。</param>
+    /// <returns>合併成一個區域。</returns>
     public static Region Union(IReadOnlyList<Region> regions)
     {
         if (regions == null)
@@ -54,6 +61,14 @@ public static partial class Operators
 
     public static Region Intersection(IReadOnlyList<Region> left, IReadOnlyList<Region> right) => Intersection(Union(left), Union(right));
 
+    /// <summary>留下只在第一個區域、不在第二個區域的像素。</summary>
+    /// <remarks>區域相減</remarks>
+    /// <example>
+    /// <code>Vizion.difference (Region, Sub, RegionDifference)</code>
+    /// </example>
+    /// <param name="left">被減的區域。</param>
+    /// <param name="right">要減掉的區域。</param>
+    /// <returns>只留在第一個區域、不在第二個區域的像素。</returns>
     public static Region Difference(Region left, Region right) => Combine(left, right, CombineKind.Difference);
 
     public static Region Difference(Region left, IReadOnlyList<Region> right) => Difference(left, Union(right));
@@ -123,9 +138,31 @@ public static partial class Operators
         return picked;
     }
 
+    /// <summary>可用特徵和圖形視窗的勾選清單相同，包含 area、circularity、ra、rb、holes_num、euler_number 等。多個特徵時 Min/Max 也要是等長 tuple。</summary>
+    /// <remarks>用形狀特徵篩選</remarks>
+    /// <example>
+    /// <code>Vizion.select_shape (Regions, SelectedRegions, 'area', 'and', 150, 99999)</code>
+    /// </example>
+    /// <param name="region">物件集合。還沒拆開時當成一個物件。</param>
+    /// <param name="features">特徵名稱，例如 area。</param>
+    /// <param name="operation">and 或 or。</param>
+    /// <param name="minimum">下限，含。</param>
+    /// <param name="maximum">上限，含。</param>
+    /// <returns>符合條件的物件。</returns>
     public static Region[] SelectShape(Region region, string[] features, string operation, double[] minimum, double[] maximum) =>
         SelectShape(new[] { region }, features, operation, minimum, maximum);
 
+    /// <summary>可用特徵和圖形視窗的勾選清單相同，包含 area、circularity、ra、rb、holes_num、euler_number 等。多個特徵時 Min/Max 也要是等長 tuple。</summary>
+    /// <remarks>用形狀特徵篩選</remarks>
+    /// <example>
+    /// <code>Vizion.select_shape (Regions, SelectedRegions, 'area', 'and', 150, 99999)</code>
+    /// </example>
+    /// <param name="regions">物件集合。</param>
+    /// <param name="features">特徵名稱，例如 area。</param>
+    /// <param name="operation">and 或 or。</param>
+    /// <param name="minimum">下限，含。</param>
+    /// <param name="maximum">上限，含。</param>
+    /// <returns>符合條件的物件。</returns>
     public static Region[] SelectShape(IReadOnlyList<Region> regions, string[] features, string operation, double[] minimum, double[] maximum)
     {
         if (regions == null || features == null || minimum == null || maximum == null)
@@ -166,9 +203,23 @@ public static partial class Operators
         return RectangleCore(row1, column1, row2, column2, image.Width, image.Height);
     }
 
+    /// <summary>每個物件一組座標，四個輸出都是 tuple。</summary>
+    /// <remarks>最小軸對齊外接矩形</remarks>
+    /// <example>
+    /// <code>Vizion.smallest_rectangle1 (Regions, Row1, Column1, Row2, Column2)</code>
+    /// </example>
+    /// <param name="region">一個物件。</param>
+    /// <returns>軸對齊外接矩形。空區域沒有結果。</returns>
     public static AxisRectangle[] Bounds(Region region) =>
         region.Rows.Length == 0 ? Array.Empty<AxisRectangle>() : new[] { BoundsOf(region) };
 
+    /// <summary>每個物件一組座標，四個輸出都是 tuple。</summary>
+    /// <remarks>最小軸對齊外接矩形</remarks>
+    /// <example>
+    /// <code>Vizion.smallest_rectangle1 (Regions, Row1, Column1, Row2, Column2)</code>
+    /// </example>
+    /// <param name="regions">物件集合。</param>
+    /// <returns>每個物件的軸對齊外接矩形。</returns>
     public static AxisRectangle[] Bounds(IReadOnlyList<Region> regions)
     {
         if (regions == null)
@@ -228,8 +279,24 @@ public static partial class Operators
         return 0;
     }
 
+    /// <summary>每個物件的平均亮度與標準差。</summary>
+    /// <remarks>區域灰階統計</remarks>
+    /// <example>
+    /// <code>Vizion.intensity (Regions, Image, Mean, Deviation)</code>
+    /// </example>
+    /// <param name="region">一個物件。</param>
+    /// <param name="image">用來量灰階的影像。</param>
+    /// <returns>平均灰階與標準差。</returns>
     public static Intensity[] IntensityOf(Region region, ImageBuffer image) => IntensityOf(new[] { region }, image);
 
+    /// <summary>每個物件的平均亮度與標準差。</summary>
+    /// <remarks>區域灰階統計</remarks>
+    /// <example>
+    /// <code>Vizion.intensity (Regions, Image, Mean, Deviation)</code>
+    /// </example>
+    /// <param name="regions">物件集合。</param>
+    /// <param name="image">用來量灰階的影像。</param>
+    /// <returns>每個物件的平均灰階與標準差。</returns>
     public static Intensity[] IntensityOf(IReadOnlyList<Region> regions, ImageBuffer image)
     {
         if (regions == null || image == null)
@@ -278,8 +345,22 @@ public static partial class Operators
         return found;
     }
 
+    /// <summary>填上區域內部的洞。結果是單一區域，要再拆開請呼叫 connection。</summary>
+    /// <remarks>填滿孔洞</remarks>
+    /// <example>
+    /// <code>Vizion.fill_up (Region, RegionFillUp)</code>
+    /// </example>
+    /// <param name="region">輸入區域。</param>
+    /// <returns>補滿孔洞後的單一區域。</returns>
     public static Region FillUp(Region region) => Fill(region);
 
+    /// <summary>填上區域內部的洞。結果是單一區域，要再拆開請呼叫 connection。</summary>
+    /// <remarks>填滿孔洞</remarks>
+    /// <example>
+    /// <code>Vizion.fill_up (Region, RegionFillUp)</code>
+    /// </example>
+    /// <param name="regions">物件集合。先合併再補洞。</param>
+    /// <returns>補滿孔洞後的單一區域。</returns>
     public static Region FillUp(IReadOnlyList<Region> regions) => Fill(Union(regions));
 
     public static Region Complement(Region region) => Invert(region);

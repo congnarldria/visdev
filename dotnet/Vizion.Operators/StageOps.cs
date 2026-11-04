@@ -2,6 +2,19 @@ namespace Vizion;
 
 public static partial class Operators
 {
+    /// <summary>灰階 = Alpha × (列 − Row) + Beta × (行 − Column) + Gamma，再夾到 0 到 255。這版只做 byte。</summary>
+    /// <remarks>建立灰階斜坡</remarks>
+    /// <example>
+    /// <code>Vizion.gen_image_gray_ramp (Ramp, 0, 2, 10, 0, 0, 40, 30)</code>
+    /// </example>
+    /// <param name="alpha">列方向每像素增加的灰階。</param>
+    /// <param name="beta">行方向每像素增加的灰階。</param>
+    /// <param name="gamma">基準點的灰階。</param>
+    /// <param name="row">基準列。</param>
+    /// <param name="column">基準行。</param>
+    /// <param name="width">寬度。</param>
+    /// <param name="height">高度。</param>
+    /// <returns>斜坡影像。沒有定義域。</returns>
     public static ImageBuffer GrayRamp(double alpha, double beta, double gamma, double row, double column, int width, int height)
     {
         if (width < 1 || height < 1)
@@ -23,6 +36,15 @@ public static partial class Operators
         return ImageBuffer.Gray(width, height, destination);
     }
 
+    /// <summary>這版一次兩張，不是一個影像 tuple。尺寸不同時，不足的地方補 0。通道數要相同。</summary>
+    /// <remarks>把兩張影像接起來</remarks>
+    /// <example>
+    /// <code>Vizion.tile_images (Image1, Image2, TiledImage, 'horizontal')</code>
+    /// </example>
+    /// <param name="left">第一張影像。</param>
+    /// <param name="right">第二張影像。</param>
+    /// <param name="mode">horizontal 左右接，vertical 上下接。</param>
+    /// <returns>接起來的影像。不足的地方補 0。不保留定義域。</returns>
     public static ImageBuffer TileImages(ImageBuffer left, ImageBuffer right, string mode)
     {
         if (left == null || right == null)
@@ -38,6 +60,17 @@ public static partial class Operators
         return ImageBuffer.Wrap(width, height, left.Channels, destination, null);
     }
 
+    /// <summary>名稱可用 sobel_x、sobel_y、laplace、smooth3、sharpen。係數總和是 0 時，結果會加 128，128 代表 0。其他係數直接裁到 0 到 255，不會自動除以總和。彩色先轉成亮度。</summary>
+    /// <remarks>用自訂濾鏡做卷積</remarks>
+    /// <example>
+    /// <code>Vizion.convol_image (Image, ImageResult, 'smooth3', 0, 'continued')</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="preset">sobel_x、sobel_y、laplace、smooth3、sharpen。用係數陣列時可空。</param>
+    /// <param name="weights">一排係數。用名稱時可空。</param>
+    /// <param name="maskWidth">係數是數字時的寬度。用名稱時填 0。</param>
+    /// <param name="margin">continued、cyclic 或 mirror。</param>
+    /// <returns>卷積結果。彩色先轉成亮度。不保留定義域。</returns>
     public static ImageBuffer ConvolImage(ImageBuffer image, string? preset, double[]? weights, int maskWidth, string margin)
     {
         if (image == null)
@@ -51,12 +84,42 @@ public static partial class Operators
         return ImageBuffer.Gray(image.Width, image.Height, destination);
     }
 
+    /// <summary>128 當作 0，0 和 255 拉到 -1 和 1。反正弦從 -π/2 到 π/2，再拉成 0 到 255。輸入 128 的結果是 128。</summary>
+    /// <remarks>灰階取反正弦</remarks>
+    /// <example>
+    /// <code>Vizion.asin_image (Image, ImageAsin)</code>
+    /// </example>
+    /// <param name="image">128 是 0，0 和 255 是 -1 和 1。</param>
+    /// <returns>反正弦。輸入 128 的結果是 128。</returns>
     public static ImageBuffer AsinImage(ImageBuffer image) => InverseWave(image, 3);
 
+    /// <summary>128 當作 0。反餘弦從 0 到 π，再拉成 0 到 255。輸入 128 的結果是 128，輸入 255 的結果是 0。</summary>
+    /// <remarks>灰階取反餘弦</remarks>
+    /// <example>
+    /// <code>Vizion.acos_image (Image, ImageAcos)</code>
+    /// </example>
+    /// <param name="image">128 是 0，0 和 255 是 -1 和 1。</param>
+    /// <returns>反餘弦。輸入 128 的結果是 128，輸入 255 的結果是 0。</returns>
     public static ImageBuffer AcosImage(ImageBuffer image) => InverseWave(image, 4);
 
+    /// <summary>128 當作 0，先除以 32 再取反正切。結果從 -π/2 到 π/2，拉成 0 到 255。輸入 128 的結果是 128，160 是 191。</summary>
+    /// <remarks>灰階取反正切</remarks>
+    /// <example>
+    /// <code>Vizion.atan_image (Image, ImageAtan)</code>
+    /// </example>
+    /// <param name="image">128 是 0。</param>
+    /// <returns>反正切。輸入 128 的結果是 128。</returns>
     public static ImageBuffer AtanImage(ImageBuffer image) => InverseWave(image, 5);
 
+    /// <summary>小遮罩的平均減去大遮罩的平均。128 代表沒有變化，比 128 大是中間比外圈亮。偶數會加 1，最大 31，而且 Inner 要比 Outer 小。彩色先轉成亮度。</summary>
+    /// <remarks>留下兩個尺度之間的變化</remarks>
+    /// <example>
+    /// <code>Vizion.bandpass_image (Image, ImageBandpass, 3, 9)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="inner">較小的正方形邊長。</param>
+    /// <param name="outer">較大的正方形邊長。</param>
+    /// <returns>帶通結果。128 代表沒有變化。</returns>
     public static ImageBuffer BandpassImage(ImageBuffer image, int inner, int outer)
     {
         if (image == null)
@@ -79,6 +142,15 @@ public static partial class Operators
         });
     }
 
+    /// <summary>上下左右加同樣寬度。新的像素填 Grayval，原來的像素位置往內縮。寬高各增加兩倍的邊寬。</summary>
+    /// <remarks>在影像四周加邊</remarks>
+    /// <example>
+    /// <code>Vizion.add_image_border (Image, ImageBorder, 2, 0)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="border">四邊各加幾個像素。</param>
+    /// <param name="gray">邊的灰階。</param>
+    /// <returns>加上邊之後的影像。不保留定義域。</returns>
     public static ImageBuffer AddImageBorder(ImageBuffer image, int border, int gray)
     {
         if (image == null)
@@ -108,6 +180,15 @@ public static partial class Operators
         return ImageBuffer.Wrap(width, height, image.Channels, destination, null);
     }
 
+    /// <summary>constant 用高斯再取樣。none 取偶數行列。min 和 max 看每個 2×2。這版只縮成一半，不保留定義域。結果會變成之後區域的參考尺寸。</summary>
+    /// <remarks>做一層一半大小的金字塔</remarks>
+    /// <example>
+    /// <code>Vizion.gen_gauss_pyramid (Image, ImagePyramid, 'constant', 0.5)</code>
+    /// </example>
+    /// <param name="image">輸入影像。至少 2×2。</param>
+    /// <param name="mode">constant 是高斯，none 是隔點取，min 和 max 是 2×2 的最小或最大。</param>
+    /// <param name="scale">只能是 0.5。</param>
+    /// <returns>縮成一半的影像。不保留定義域。</returns>
     public static ImageBuffer GaussPyramid(ImageBuffer image, string mode, double scale)
     {
         if (image == null)
@@ -125,6 +206,15 @@ public static partial class Operators
         return ImageBuffer.Wrap(width, height, image.Channels, destination, null);
     }
 
+    /// <summary>視窗裡每個灰階的比例取以 2 為底的熵。全是同一個灰階時是 0。256 種灰階一樣多時是 255。彩色先轉成亮度。</summary>
+    /// <remarks>算每個像素附近的熵</remarks>
+    /// <example>
+    /// <code>Vizion.entropy_image (Image, ImageEntropy, 3, 3)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="maskWidth">視窗寬，奇數。</param>
+    /// <param name="maskHeight">視窗高，奇數。</param>
+    /// <returns>局部熵。全是同一個灰階時是 0。</returns>
     public static ImageBuffer EntropyImage(ImageBuffer image, int maskWidth, int maskHeight)
     {
         if (image == null)

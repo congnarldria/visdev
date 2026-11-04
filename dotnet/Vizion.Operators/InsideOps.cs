@@ -2,6 +2,16 @@ namespace Vizion;
 
 public static partial class Operators
 {
+    /// <summary>會產生一張新影像，不改原來那張。一個灰階可以套到所有點。彩色給三個數時依序是紅、綠、藍。</summary>
+    /// <remarks>改指定像素的灰階</remarks>
+    /// <example>
+    /// <code>Vizion.set_grayval (Image, ImageResult, 10, 12, 255)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="row">列。</param>
+    /// <param name="column">行。</param>
+    /// <param name="gray">灰階。彩色會塗進三個通道。</param>
+    /// <returns>改過指定像素的新影像。不改原來那張。</returns>
     public static ImageBuffer SetGrayval(ImageBuffer image, int row, int column, int gray)
     {
         if (image == null)
@@ -21,6 +31,13 @@ public static partial class Operators
         return ImageBuffer.Wrap(image.Width, image.Height, image.Channels, pixels, image.Domain);
     }
 
+    /// <summary>byte 是 0 到 255 的整數。real 是浮點數。</summary>
+    /// <remarks>讀出影像型別</remarks>
+    /// <example>
+    /// <code>Vizion.get_image_type (Image, Type)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>這版的影像都是 byte。</returns>
     public static string ImageType(ImageBuffer image)
     {
         if (image == null)
@@ -28,9 +45,27 @@ public static partial class Operators
         return "byte";
     }
 
+    /// <summary>三張都要同樣尺寸。順序是紅、綠、藍。</summary>
+    /// <remarks>三張灰階合成彩色</remarks>
+    /// <example>
+    /// <code>Vizion.channels_to_image (ImageRed, ImageGreen, ImageBlue, MultiChannelImage)</code>
+    /// </example>
+    /// <param name="red">紅。</param>
+    /// <param name="green">綠。</param>
+    /// <param name="blue">藍。</param>
+    /// <returns>彩色影像。和 compose3 相同。</returns>
     public static ImageBuffer ChannelsToImage(ImageBuffer red, ImageBuffer green, ImageBuffer blue) =>
         Compose3(red, green, blue);
 
+    /// <summary>四邊各加上 Expansion 圈，新像素填 Gray。原本的像素位置往右下移。彩色時三個通道都填同一個灰階。</summary>
+    /// <remarks>把影像連定義域一起外擴</remarks>
+    /// <example>
+    /// <code>Vizion.expand_domain_gray (Image, ImageExpanded, 1, 9)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="expansion">往外加幾圈。</param>
+    /// <param name="gray">新像素的灰階。</param>
+    /// <returns>擴大後的影像。擴 0 圈且已有定義域時，定義域會變成整張。</returns>
     public static ImageBuffer ExpandDomainGray(ImageBuffer image, int expansion, double gray)
     {
         if (image == null)
@@ -56,6 +91,17 @@ public static partial class Operators
         return ImageBuffer.Wrap(width, height, image.Channels, framed.Pixels, Union(shifted, ExpansionFrame(width, height, image.Width, image.Height, expansion)));
     }
 
+    /// <summary>矩形含邊界。矩形外的像素保持原樣。彩色先轉成亮度再等化。</summary>
+    /// <remarks>只在一個矩形裡做直方圖等化</remarks>
+    /// <example>
+    /// <code>Vizion.equ_histo_image_rect (Image, ImageEquHisto, 1, 1, 2, 2)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="row1">上，含。</param>
+    /// <param name="column1">左，含。</param>
+    /// <param name="row2">下，含。</param>
+    /// <param name="column2">右，含。</param>
+    /// <returns>只在矩形裡等化後的影像。</returns>
     public static ImageBuffer EquHistoImageRect(ImageBuffer image, int row1, int column1, int row2, int column2)
     {
         if (image == null)
@@ -71,6 +117,13 @@ public static partial class Operators
         return ImageBuffer.Wrap(image.Width, image.Height, image.Channels, destination, image.Domain);
     }
 
+    /// <summary>結果是所有走到邊界的路裡面，路上最高灰階的最小值。邊界像素就是自己的灰階。八鄰域。彩色先轉成亮度。</summary>
+    /// <remarks>每個像素到邊界要跨過的最低灰階</remarks>
+    /// <example>
+    /// <code>Vizion.gray_inside (Image, ImageInside)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <returns>每個像素走到邊界的最低瓶頸。</returns>
     public static ImageBuffer GrayInside(ImageBuffer image)
     {
         if (image == null)
@@ -83,6 +136,15 @@ public static partial class Operators
         });
     }
 
+    /// <summary>每個像素換成圓裡面排第 Rank 的灰階，從 0 開始。半徑 1 的圓有 5 個像素，Rank 4 就是最亮。邊界用邊緣的像素補上。彩色先轉成亮度。</summary>
+    /// <remarks>圓形排序濾波</remarks>
+    /// <example>
+    /// <code>Vizion.rank_image (Image, ImageRank, 1, 0)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="radius">圓的半徑，1 到 5。</param>
+    /// <param name="rank">0 是最暗，最後一個是最亮。</param>
+    /// <returns>圓形排序濾波結果。不保留定義域。</returns>
     public static ImageBuffer RankImage(ImageBuffer image, int radius, int rank)
     {
         if (image == null)
@@ -99,6 +161,20 @@ public static partial class Operators
         return ImageBuffer.Gray(image.Width, image.Height, destination);
     }
 
+    /// <summary>灰階是 Alpha×(列-Row) + Beta×(行-Column) + Gamma。byte 再四捨五入並夾到 0 到 255。real 保留超過這個範圍的值。</summary>
+    /// <remarks>做出一張傾斜的灰階平面</remarks>
+    /// <example>
+    /// <code>Vizion.gen_image_surface_first_order (ImageSurface, 'byte', 2, 3, 10, 0, 0, 4, 2)</code>
+    /// </example>
+    /// <param name="kind">只做 byte。</param>
+    /// <param name="alpha">列的斜率。</param>
+    /// <param name="beta">行的斜率。</param>
+    /// <param name="gamma">常數項。</param>
+    /// <param name="row">列的原點。</param>
+    /// <param name="column">行的原點。</param>
+    /// <param name="width">寬度。</param>
+    /// <param name="height">高度。</param>
+    /// <returns>一次曲面。沒有定義域。</returns>
     public static ImageBuffer SurfaceFirst(string kind, double alpha, double beta, double gamma, double row, double column, int width, int height)
     {
         if (!string.Equals(kind, "byte", StringComparison.OrdinalIgnoreCase))
@@ -117,6 +193,23 @@ public static partial class Operators
         return ImageBuffer.Gray(width, height, destination);
     }
 
+    /// <summary>列、行先減掉原點。灰階是列平方、行平方、列乘行、列、行和常數這六項相加。byte 再四捨五入並夾到 0 到 255。real 保留超過這個範圍的值。</summary>
+    /// <remarks>做出一張彎曲的灰階曲面</remarks>
+    /// <example>
+    /// <code>Vizion.gen_image_surface_second_order (ImageSurface, 'byte', 1, 0, 0, 0, 0, 4, 0, 0, 4, 3)</code>
+    /// </example>
+    /// <param name="kind">只做 byte。</param>
+    /// <param name="alpha">列的平方項。</param>
+    /// <param name="beta">行的平方項。</param>
+    /// <param name="gamma">列乘行。</param>
+    /// <param name="delta">列的一次項。</param>
+    /// <param name="epsilon">行的一次項。</param>
+    /// <param name="zeta">常數項。</param>
+    /// <param name="row">列的原點。</param>
+    /// <param name="column">行的原點。</param>
+    /// <param name="width">寬度。</param>
+    /// <param name="height">高度。</param>
+    /// <returns>二次曲面。沒有定義域。</returns>
     public static ImageBuffer SurfaceSecond(
         string kind, double alpha, double beta, double gamma, double delta, double epsilon, double zeta,
         double row, double column, int width, int height)
@@ -141,6 +234,14 @@ public static partial class Operators
         return ImageBuffer.Gray(width, height, destination);
     }
 
+    /// <summary>每個物件用自己的平均灰階填滿，物件外是 0。物件重疊時，後面的蓋掉前面的。彩色先轉成亮度，結果是灰階。尺寸要相同。</summary>
+    /// <remarks>用區域平均灰階填色</remarks>
+    /// <example>
+    /// <code>Vizion.region_to_mean (Image, Regions, ImageMean)</code>
+    /// </example>
+    /// <param name="image">灰階來源。</param>
+    /// <param name="regions">要填平均的物件。後面的蓋掉前面的。</param>
+    /// <returns>每個物件填上自己的平均。物件外是 0。不保留定義域。</returns>
     public static ImageBuffer RegionToMean(ImageBuffer image, IReadOnlyList<Region> regions)
     {
         if (image == null || regions == null)
