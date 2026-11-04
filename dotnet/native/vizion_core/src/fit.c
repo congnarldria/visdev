@@ -265,8 +265,8 @@ int vizion_fit_line(
         center_row = vizion_fit_mean(rows, weight, count);
         vizion_principal(cols, rows, count, center_col, center_row, weight, &dir_col, &dir_row);
     }
-    min_proj = 1.0 / 0.0;
-    max_proj = -1.0 / 0.0;
+    min_proj = HUGE_VAL;
+    max_proj = -HUGE_VAL;
     kept = 0;
     for (i = 0; i < count; i++) {
         double dc;
@@ -284,8 +284,8 @@ int vizion_fit_line(
             max_proj = projection;
     }
     if (kept < 2) {
-        min_proj = 1.0 / 0.0;
-        max_proj = -1.0 / 0.0;
+        min_proj = HUGE_VAL;
+        max_proj = -HUGE_VAL;
         for (i = 0; i < count; i++) {
             double dc = cols[i] - center_col;
             double dr = rows[i] - center_row;
