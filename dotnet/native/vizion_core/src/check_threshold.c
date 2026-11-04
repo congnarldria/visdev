@@ -119,6 +119,12 @@ int main(void)
         return 1;
     }
     printf("形狀自我檢查通過\n");
+    code = vizion_grade_selftest();
+    if (code != 0) {
+        fprintf(stderr, "導數自我檢查失敗 %d\n", code);
+        return 1;
+    }
+    printf("導數自我檢查通過\n");
     code = vizion_intensity_selftest();
     if (code != 0) {
         fprintf(stderr, "亮度自我檢查失敗 %d\n", code);

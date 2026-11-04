@@ -284,6 +284,39 @@ VIZION_EXPORT int VIZION_CALL vizion_shape_kernel(uint8_t* kernel, int height, i
 
 VIZION_EXPORT int VIZION_CALL vizion_gshape_selftest(void);
 
+/* 高斯導數。component：0 none、1 x、2 y、3 xx、4 yy、5 xy、6 gradient、7 laplace。有號結果以 128 為 0。 */
+VIZION_EXPORT int VIZION_CALL vizion_deriv_gauss(
+    const uint8_t* src, uint8_t* dst, int width, int height, double sigma, int component);
+/* Laws 紋理。字母 0=l、1=e、2=s、3=r、4=w。第一個沿列，第二個沿行。 */
+VIZION_EXPORT int VIZION_CALL vizion_texture_laws(
+    const uint8_t* src, uint8_t* dst, int width, int height, int size, int vertical, int horizontal, int shift);
+/* 極座標最近鄰。角度 0 朝右，順時針繞一圈，圖外是 0。 */
+VIZION_EXPORT int VIZION_CALL vizion_polar(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels,
+    double row, double column, int out_width, int out_height);
+/* 128 是沒變。比 128 大是變亮。 */
+VIZION_EXPORT int VIZION_CALL vizion_enhance_map(const uint8_t* before, const uint8_t* after, uint8_t* dst, int count);
+/* 平均用 float32 累加絕對差，再除以像素數。 */
+VIZION_EXPORT int VIZION_CALL vizion_enhance_change(
+    const uint8_t* before, const uint8_t* after, int count, double* mean, double* maximum);
+/* 絕對差達到門檻的像素是 255。門檻 0 表示只要有差就算。 */
+VIZION_EXPORT int VIZION_CALL vizion_enhance_hot(
+    const uint8_t* before, const uint8_t* after, uint8_t* mask, int count, double limit);
+/* 定義域外不算。絕對差達到 MinDiff 的像素是 255。 */
+VIZION_EXPORT int VIZION_CALL vizion_diff_mask(
+    const uint8_t* image, const uint8_t* golden, const uint8_t* domain, uint8_t* mask, int count, double minimum);
+/* 只統計定義域內的絕對差。沒有有效像素時平均和最大都是 0。 */
+VIZION_EXPORT int VIZION_CALL vizion_diff_amount(
+    const uint8_t* image, const uint8_t* golden, const uint8_t* domain, int count, double* mean, double* maximum);
+/* 原圖減去高斯，比門檻小的起伏當成 0，再以 128 為 0。 */
+VIZION_EXPORT int VIZION_CALL vizion_edge_residual(
+    const uint8_t* src, uint8_t* dst, int width, int height, double sigma, double threshold);
+/* 原圖減模糊的差加回亮度。太小不加，超過 Limit 截斷。定義域外保持原像素。 */
+VIZION_EXPORT int VIZION_CALL vizion_edge_enhance(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels,
+    double sigma, double factor, double threshold, double limit, const uint8_t* domain);
+VIZION_EXPORT int VIZION_CALL vizion_grade_selftest(void);
+
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
     const uint8_t* gray, int width,

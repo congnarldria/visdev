@@ -776,6 +776,71 @@ sealed class ProgramRun
                 Set(args[2], maskMean);
                 Image = maskMean;
                 return;
+            case "derivate_gauss":
+                Need(args, 4);
+                var derivGauss = Operators.DerivGauss(ImageOf(args[0]), Num(args[2]), Word(args[3]));
+                Set(args[1], derivGauss);
+                Image = derivGauss;
+                return;
+            case "texture_laws":
+                Need(args, 3);
+                var lawsTex = Operators.TextureLaws(ImageOf(args[0]), Word(args[2]), args.Length > 3 ? IntOf(args[3]) : 0, args.Length > 4 ? IntOf(args[4]) : 5);
+                Set(args[1], lawsTex);
+                Image = lawsTex;
+                return;
+            case "polar_trans_image":
+                Need(args, 6);
+                var polarOut = Operators.PolarTransImage(ImageOf(args[0]), Num(args[2]), Num(args[3]), IntOf(args[4]), IntOf(args[5]));
+                Set(args[1], polarOut);
+                Image = polarOut;
+                return;
+            case "enhance_map":
+                Need(args, 3);
+                var enhanceMapped = Operators.EnhanceMap(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], enhanceMapped);
+                Image = enhanceMapped;
+                return;
+            case "enhance_change":
+                Need(args, 4);
+                Operators.EnhanceChange(ImageOf(args[0]), ImageOf(args[1]), out double changeMean, out double changeMax);
+                Set(args[2], changeMean);
+                Set(args[3], changeMax);
+                return;
+            case "enhance_hot":
+                Need(args, 3);
+                var hotRegion = Operators.EnhanceHot(ImageOf(args[0]), ImageOf(args[1]), args.Length > 3 ? Num(args[3]) : 10);
+                Set(args[2], hotRegion);
+                Show(hotRegion);
+                return;
+            case "diff_region":
+                Need(args, 3);
+                var defectRegion = Operators.DiffRegion(ImageOf(args[0]), ImageOf(args[1]), args.Length > 3 ? Num(args[3]) : 20);
+                Set(args[2], defectRegion);
+                Show(defectRegion);
+                return;
+            case "diff_amount":
+                Need(args, 4);
+                Operators.DiffAmount(ImageOf(args[0]), ImageOf(args[1]), out double diffMean, out double diffMax);
+                Set(args[2], diffMean);
+                Set(args[3], diffMax);
+                return;
+            case "edge_enhance":
+                Need(args, 2);
+                var edgeBoost = Operators.EdgeEnhance(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Num(args[2]) : 1.2,
+                    args.Length > 3 ? Num(args[3]) : 1,
+                    args.Length > 4 ? Num(args[4]) : 2,
+                    args.Length > 5 ? Num(args[5]) : 0);
+                Set(args[1], edgeBoost);
+                Image = edgeBoost;
+                return;
+            case "edge_residual":
+                Need(args, 2);
+                var edgeRemain = Operators.EdgeResidual(ImageOf(args[0]), args.Length > 2 ? Num(args[2]) : 1.2, args.Length > 3 ? Num(args[3]) : 2);
+                Set(args[1], edgeRemain);
+                Image = edgeRemain;
+                return;
             case "select_grayvalues_from_channels":
                 Need(args, 3);
                 var channelPick = Operators.SelectGrayvalues(ImageOf(args[0]), ImageOf(args[1]));
