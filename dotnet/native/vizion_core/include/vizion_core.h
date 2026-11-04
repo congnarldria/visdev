@@ -180,6 +180,21 @@ VIZION_EXPORT int VIZION_CALL vizion_rgb_convert(
 
 VIZION_EXPORT int VIZION_CALL vizion_tone_selftest(void);
 
+/* 次方先除 255 再乘回來。log/exp 的 natural 非 0 表示自然對數或 e 的次方。
+   gamma 的 encode 非 0 表示次方用 1/gamma。range 把 low..high 拉到 0..255，小數直接丟掉。
+   bits：0 且、1 或、2 互斥或、3 否定。否定時 b 可為 NULL。 */
+VIZION_EXPORT int VIZION_CALL vizion_gray_sqrt(const uint8_t* src, uint8_t* dst, int count);
+VIZION_EXPORT int VIZION_CALL vizion_gray_pow(const uint8_t* src, uint8_t* dst, int count, double exponent);
+VIZION_EXPORT int VIZION_CALL vizion_gray_log(const uint8_t* src, uint8_t* dst, int count, int natural);
+VIZION_EXPORT int VIZION_CALL vizion_gray_exp(const uint8_t* src, uint8_t* dst, int count, int natural);
+VIZION_EXPORT int VIZION_CALL vizion_gray_abs(const uint8_t* src, uint8_t* dst, int count);
+VIZION_EXPORT int VIZION_CALL vizion_gray_gamma(
+    const uint8_t* src, uint8_t* dst, int count,
+    double gamma, double offset, double threshold, double max_gray, int encode);
+VIZION_EXPORT int VIZION_CALL vizion_gray_range(const uint8_t* src, uint8_t* dst, int count, double low, double high);
+VIZION_EXPORT int VIZION_CALL vizion_gray_bits(const uint8_t* a, const uint8_t* b, uint8_t* dst, int count, int op);
+VIZION_EXPORT int VIZION_CALL vizion_map_selftest(void);
+
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
     const uint8_t* gray, int width,

@@ -582,6 +582,56 @@ public static class NativeCore
         }
     }
 
+    public static bool TryGraySqrt(byte[] source, byte[] destination, int count) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_sqrt(source, destination, count));
+
+    public static bool TryGrayPow(byte[] source, byte[] destination, int count, double exponent) =>
+        Ready(source, destination, count) && exponent > 0 && Call(() => vizion_gray_pow(source, destination, count, exponent));
+
+    public static bool TryGrayLog(byte[] source, byte[] destination, int count, bool natural) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_log(source, destination, count, natural ? 1 : 0));
+
+    public static bool TryGrayExp(byte[] source, byte[] destination, int count, bool natural) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_exp(source, destination, count, natural ? 1 : 0));
+
+    public static bool TryGrayAbs(byte[] source, byte[] destination, int count) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_abs(source, destination, count));
+
+    public static bool TryGrayGamma(byte[] source, byte[] destination, int count, double gamma, double offset, double threshold, double maxGray, bool encode) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_gamma(source, destination, count, gamma, offset, threshold, maxGray, encode ? 1 : 0));
+
+    public static bool TryGrayRange(byte[] source, byte[] destination, int count, double low, double high) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_range(source, destination, count, low, high));
+
+    public static bool TryGrayBits(byte[] left, byte[]? right, byte[] destination, int count, int op)
+    {
+        if (!Ready(left, destination, count) || op < 0 || op > 3)
+            return false;
+        if (op != 3 && (right == null || right.Length < count))
+            return false;
+        return Call(() => vizion_gray_bits(left, right, destination, count, op));
+    }
+
+    static bool Ready(byte[] source, byte[] destination, int count) =>
+        IsLoaded && UseNative && count >= 1 && source.Length >= count && destination.Length >= count;
+
+    static bool Call(Func<int> invoke)
+    {
+        try
+        {
+            return invoke() == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TryMedian(byte[] source, byte[] destination, int width, int height, int ksize)
     {
         if (!IsLoaded || !UseNative || width < 1 || height < 1 || ksize < 1 || (ksize & 1) == 0)
@@ -802,6 +852,32 @@ public static class NativeCore
     static extern int vizion_illuminate(
         byte[] source, byte[] destination, int width, int height,
         int maskWidth, int maskHeight, double factor, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_sqrt(byte[] source, byte[] destination, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_pow(byte[] source, byte[] destination, int count, double exponent);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_log(byte[] source, byte[] destination, int count, int natural);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_exp(byte[] source, byte[] destination, int count, int natural);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_abs(byte[] source, byte[] destination, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_gamma(
+        byte[] source, byte[] destination, int count,
+        double gamma, double offset, double threshold, double maxGray, int encode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_range(byte[] source, byte[] destination, int count, double low, double high);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_bits(byte[] left, byte[]? right, byte[] destination, int count, int op);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);

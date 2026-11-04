@@ -352,6 +352,72 @@ sealed class ProgramRun
                 Set(args[4], converted[1]);
                 Set(args[5], converted[2]);
                 return;
+            case "pow_image":
+                Need(args, 3);
+                var powered = Operators.PowImage(ImageOf(args[0]), Num(args[2]));
+                Set(args[1], powered);
+                Image = powered;
+                return;
+            case "sqrt_image":
+                Need(args, 2);
+                var rooted = Operators.SqrtImage(ImageOf(args[0]));
+                Set(args[1], rooted);
+                Image = rooted;
+                return;
+            case "log_image":
+                Need(args, 2);
+                var logged = Operators.LogImage(ImageOf(args[0]), args.Length > 2 ? Word(args[2]) : "scaled");
+                Set(args[1], logged);
+                Image = logged;
+                return;
+            case "exp_image":
+                Need(args, 2);
+                var expanded = Operators.ExpImage(ImageOf(args[0]), args.Length > 2 ? Word(args[2]) : "scaled");
+                Set(args[1], expanded);
+                Image = expanded;
+                return;
+            case "gamma_image":
+                Need(args, 3);
+                var corrected = Operators.GammaImage(
+                    ImageOf(args[0]),
+                    Num(args[2]),
+                    args.Length > 3 ? Num(args[3]) : 0,
+                    args.Length > 4 ? Num(args[4]) : 0,
+                    args.Length > 5 ? Num(args[5]) : 255,
+                    args.Length <= 6 || EncodeFlag(args[6]));
+                Set(args[1], corrected);
+                Image = corrected;
+                return;
+            case "abs_image":
+                Need(args, 2);
+                var centered = Operators.AbsImage(ImageOf(args[0]));
+                Set(args[1], centered);
+                Image = centered;
+                return;
+            case "scale_image_range":
+                Need(args, 4);
+                var ranged = Operators.ScaleImageRange(ImageOf(args[0]), Num(args[2]), Num(args[3]));
+                Set(args[1], ranged);
+                Image = ranged;
+                return;
+            case "bit_and":
+                Need(args, 3);
+                var maskedAnd = Operators.BitAnd(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], maskedAnd);
+                Image = maskedAnd;
+                return;
+            case "bit_or":
+                Need(args, 3);
+                var maskedOr = Operators.BitOr(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], maskedOr);
+                Image = maskedOr;
+                return;
+            case "bit_xor":
+                Need(args, 3);
+                var maskedXor = Operators.BitXor(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], maskedXor);
+                Image = maskedXor;
+                return;
             case "reduce_domain":
                 Need(args, 3);
                 var reduced = Operators.ReduceDomain(ImageOf(args[0]), RegionOf(args[1]));
@@ -489,6 +555,26 @@ sealed class ProgramRun
     }
 
     int IntOf(string token) => (int)Math.Round(Num(token));
+
+    string Word(string token)
+    {
+        string text = token.Trim();
+        if (text.Length >= 2 && (text[0] == '\'' || text[0] == '"'))
+            return Unquote(text);
+        if (IsName(text) && Vars.TryGetValue(text, out object? value) && value is string named)
+            return named;
+        return text;
+    }
+
+    bool EncodeFlag(string token)
+    {
+        string text = Word(token).Trim().ToLowerInvariant();
+        if (text == "true")
+            return true;
+        if (text == "false")
+            return false;
+        throw new InvalidOperationException("Encode 只能是 true 或 false");
+    }
 
     string ColorName(string token)
     {
