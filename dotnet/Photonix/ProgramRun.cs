@@ -9,6 +9,7 @@ namespace Photonix;
 sealed class ProgramRun
 {
     public Dictionary<string, object> Vars { get; } = new(StringComparer.Ordinal);
+    public string? ProjectFolder { get; set; }
     public int Pc { get; set; } = 1;
     public bool Done { get; private set; }
     public string? Error { get; private set; }
@@ -169,7 +170,7 @@ sealed class ProgramRun
         {
             case "read_image":
                 Need(args, 2);
-                var image = Operators.ReadImage(Resolve(Unquote(args[1])));
+                var image = Operators.ReadImage(Resolve(Unquote(args[1]), ProjectFolder));
                 Set(args[0], image);
                 Image = image;
                 Shapes = [];
@@ -377,23 +378,43 @@ sealed class ProgramRun
         Times[line] = (slot.Ms + ms, slot.Count + 1);
     }
 
-    public static string Resolve(string path)
+    public static string Resolve(string path, string? projectFolder = null, string? repoRoot = null)
     {
-        string clean = path.Replace('\\', Path.DirectorySeparatorChar);
-        if (Path.IsPathRooted(clean) && File.Exists(clean))
-            return clean;
-        foreach (string start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+        string text = path.Trim().Replace('\\', '/');
+        if (text.Length == 0)
+            return path;
+        string native = text.Replace('/', Path.DirectorySeparatorChar);
+        if (Path.IsPathRooted(native) && File.Exists(native))
+            return native;
+        if (!string.IsNullOrEmpty(projectFolder) && !Path.IsPathRooted(native))
         {
-            var dir = new DirectoryInfo(start);
-            while (dir != null)
+            string folder = Path.GetFullPath(projectFolder);
+            string inside = Path.GetFullPath(Path.Combine(folder, native));
+            if (IsInside(folder, inside) && File.Exists(inside))
+                return inside;
+        }
+        string? repo = repoRoot ?? ProjectStore.FindRepoRoot();
+        if (repo != null)
+        {
+            foreach (string candidate in new[]
             {
-                string candidate = Path.Combine(dir.FullName, clean);
+                Path.Combine(repo, native),
+                Path.Combine(repo, "samples", native),
+                Path.Combine(repo, "workspace", native),
+            })
+            {
                 if (File.Exists(candidate))
                     return candidate;
-                dir = dir.Parent;
             }
         }
         return path;
+    }
+
+    static bool IsInside(string folder, string candidate)
+    {
+        string root = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        string full = Path.GetFullPath(candidate);
+        return full.StartsWith(root, StringComparison.OrdinalIgnoreCase);
     }
 }
 

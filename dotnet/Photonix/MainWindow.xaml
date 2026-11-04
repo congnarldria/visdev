@@ -37,7 +37,7 @@
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="檔案">
         <MenuItem Header="新增" InputGestureText="Ctrl+N" Click="NewProgram_Click"/>
-        <MenuItem Header="專案" Click="NotYet_Click"/>
+        <MenuItem Header="專案" Click="Project_Click"/>
         <MenuItem Header="範本一覽" Click="NotYet_Click"/>
         <MenuItem Header="開啟" InputGestureText="Ctrl+O" Click="OpenProgram_Click"/>
         <MenuItem Header="儲存" InputGestureText="Ctrl+S" Click="SaveProgram_Click"/>

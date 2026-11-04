@@ -46,6 +46,9 @@ public partial class MainWindow : Window
     string? CurrentPath;
     string SavedText = "";
 
+    string? CurrentProject;
+    string? CurrentProjectFolder;
+
     readonly ProgramRun Engine = new();
     bool Running;
 
@@ -482,6 +485,7 @@ public partial class MainWindow : Window
         if (Running)
             return;
         CloseSense();
+        Engine.ProjectFolder = CurrentProjectFolder;
         if (Engine.Done || Engine.Error != null)
             Engine.Reset();
         Engine.Cancel = false;
@@ -495,6 +499,7 @@ public partial class MainWindow : Window
         if (Running)
             return;
         CloseSense();
+        Engine.ProjectFolder = CurrentProjectFolder;
         if (Engine.Error != null)
         {
             StatusLine.Text = Engine.Error;
@@ -847,6 +852,79 @@ public partial class MainWindow : Window
                 pixels[y * width + x] = 255;
         }
         return BitmapSource.Create(width, height, 96, 96, PixelFormats.Gray8, null, pixels, width);
+    }
+
+    void Project_Click(object sender, RoutedEventArgs e)
+    {
+        string? repo = ProjectStore.FindRepoRoot();
+        if (repo == null)
+        {
+            StatusLine.Text = "找不到 workspace";
+            Log(StatusLine.Text);
+            return;
+        }
+        var dialog = new ProjectDialog(repo, CurrentProject) { Owner = this };
+        dialog.ConfirmDiscard = ConfirmDiscard;
+        dialog.Source = () => ProgramText.Text ?? "";
+        dialog.ProgramName = () => ProgramName.Text;
+        dialog.Noted = text =>
+        {
+            StatusLine.Text = text;
+            Log(text);
+        };
+        dialog.Opened = (project, program) =>
+        {
+            string folder = ProjectStore.Folder(repo, project);
+            string source = ProjectStore.Read(repo, project, program);
+            CurrentProject = project;
+            CurrentProjectFolder = folder;
+            Engine.ProjectFolder = folder;
+            LoadSource(source, program, Path.Combine(folder, program), true, null);
+            StatusLine.Text = "專案 " + project + " · " + program;
+        };
+        dialog.Saved = (project, path, source, images) =>
+        {
+            CurrentProject = project;
+            CurrentProjectFolder = ProjectStore.Folder(repo, project);
+            Engine.ProjectFolder = CurrentProjectFolder;
+            if (ProgramFile.Normalize(source) != ProgramFile.Normalize(ProgramText.Text))
+                ProgramText.Text = source;
+            CurrentPath = path;
+            ProgramName.Text = Path.GetFileName(path);
+            SavedText = ProgramFile.Normalize(ProgramText.Text);
+            UpdateDirty();
+            if (images.Count > 0)
+                Log("已拷進專案：" + string.Join("、", images));
+        };
+        dialog.MakeProgram = (project, filename) =>
+        {
+            string folder = ProjectStore.Folder(repo, project);
+            CurrentProject = project;
+            CurrentProjectFolder = folder;
+            Engine.ProjectFolder = folder;
+            LoadSource("* 新程式\n", filename, null, false, null);
+            ProjectProgram saved = ProjectStore.Save(repo, project, filename, ProgramText.Text ?? "");
+            CurrentPath = saved.Path;
+            ProgramName.Text = saved.Name;
+            SavedText = ProgramFile.Normalize(ProgramText.Text);
+            UpdateDirty();
+            StatusLine.Text = "專案 " + project + " · " + saved.Name;
+        };
+        dialog.Renamed = (previous, renamed) =>
+        {
+            if (CurrentProject != previous)
+                return;
+            string? oldFolder = CurrentProjectFolder;
+            CurrentProject = renamed;
+            CurrentProjectFolder = ProjectStore.Folder(repo, renamed);
+            Engine.ProjectFolder = CurrentProjectFolder;
+            string prefix = oldFolder == null
+                ? ""
+                : oldFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (prefix.Length > 1 && CurrentPath != null && CurrentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                CurrentPath = Path.Combine(CurrentProjectFolder, Path.GetFileName(CurrentPath));
+        };
+        dialog.ShowDialog();
     }
 
     void NewProgram_Click(object sender, RoutedEventArgs e)
