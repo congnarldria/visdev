@@ -88,7 +88,7 @@ Photonix 用 WPF、`net10.0-windows`，版面對齊 `app/static/index.html` 的�
 
 ## 22. 圖形列的 OCR 與 connection
 
-OCR 讀出圖上的文字，並可選引擎。connection 用距離和面積下限，每個物件一種顏色。
+已完成。圖形列可選 OCR 引擎，把讀字那一行寫進程式並重跑。connection 用距離和面積下限，每個物件一種顏色。
 
 ## 23. 產線輸出
 

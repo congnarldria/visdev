@@ -115,6 +115,9 @@ public partial class MainWindow : Window
         Loaded += (_, _) => LoadDockLayout();
         Closing += (_, _) => SaveDockLayout();
         ApplyMode(GfxMode.Select);
+        foreach (GraphicsTools.Engine engine in GraphicsTools.Engines)
+            OcrMethod.Items.Add(new ComboBoxItem { Content = engine.Title, Tag = engine.Key, ToolTip = engine.Tip });
+        SelectOcr("auto");
         BuildTemplateMenu();
         SampleMenu.SubmenuOpened += (_, _) => FillProgramMenu(SampleMenu.Items, includeWorkspace: false);
         RefreshTolerances();
@@ -829,6 +832,59 @@ public partial class MainWindow : Window
 
     void ShowFeature() => FeatureFloat?.Show(PictureData, Scene(), Engine.Vars, PickedFeature);
 
+    void Ocr_Click(object sender, RoutedEventArgs e)
+    {
+        string method = OcrMethod.SelectedItem is ComboBoxItem item ? item.Tag as string ?? "auto" : "auto";
+        ApplyProgram(GraphicsTools.ApplyOcr(ProgramText.Text, method));
+        Log("OCR 使用 " + method);
+    }
+
+    void Connection_Click(object sender, RoutedEventArgs e)
+    {
+        int area = GraphicsTools.ParseArea(ConnMin.Text);
+        double distance = GraphicsTools.ParseDistance(ConnDist.Text);
+        ConnMin.Text = area.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        ConnDist.Text = GraphicsTools.FormatDistance(distance);
+        ApplyProgram(GraphicsTools.ApplyConnection(ProgramText.Text, area, distance));
+        Log("connection 距離 " + ConnDist.Text + "，面積下限 " + ConnMin.Text);
+    }
+
+    void ApplyProgram(string text)
+    {
+        ApplyingTolerance = true;
+        ProgramText.Text = text;
+        ApplyingTolerance = false;
+        Run_Click(this, new RoutedEventArgs());
+    }
+
+    void RefreshGraphicsTools()
+    {
+        if (ConnDist == null || ConnMin == null || OcrMethod == null)
+            return;
+        if (!ConnDist.IsKeyboardFocusWithin && GraphicsTools.TryDistance(ProgramText.Text, out double distance))
+            ConnDist.Text = GraphicsTools.FormatDistance(distance);
+        if (!ConnMin.IsKeyboardFocusWithin && GraphicsTools.TryMinArea(ProgramText.Text, out int area))
+            ConnMin.Text = area.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (!OcrMethod.IsKeyboardFocusWithin && !OcrMethod.IsDropDownOpen)
+        {
+            string? method = GraphicsTools.ReadOcrMethod(ProgramText.Text);
+            if (method != null)
+                SelectOcr(method);
+        }
+    }
+
+    void SelectOcr(string key)
+    {
+        foreach (object item in OcrMethod.Items)
+        {
+            if (item is ComboBoxItem choice && string.Equals(choice.Tag as string, key, StringComparison.OrdinalIgnoreCase))
+            {
+                OcrMethod.SelectedItem = choice;
+                return;
+            }
+        }
+    }
+
     void NotYet_Click(object sender, RoutedEventArgs e)
     {
         string name = sender is MenuItem menu ? menu.Header?.ToString() ?? ""
@@ -977,6 +1033,7 @@ public partial class MainWindow : Window
         RefreshProblems();
         UpdateDirty();
         RefreshTolerances();
+        RefreshGraphicsTools();
     }
 
     void RefreshTolerances()
