@@ -16,8 +16,9 @@ static int64_t vizion_sum_run16(const uint8_t* pixel, int length)
     for (; index + 16 <= length; index += 16) {
         __m128i block = _mm_loadu_si128((const __m128i*)(pixel + index));
         __m128i sad = _mm_sad_epu8(block, _mm_setzero_si128());
-        total += _mm_cvtsi128_si64(sad);
-        total += _mm_cvtsi128_si64(_mm_srli_si128(sad, 8));
+        /* sad 的兩段都放得進 32 位元。_mm_cvtsi128_si64 在 Win32 沒有這個內建。 */
+        total += (unsigned int)_mm_cvtsi128_si32(sad);
+        total += (unsigned int)_mm_cvtsi128_si32(_mm_srli_si128(sad, 8));
     }
     for (; index < length; index++)
         total += pixel[index];
