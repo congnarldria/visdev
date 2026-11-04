@@ -13,6 +13,9 @@
     <Description>Photonix，WPF 視覺開發環境。底層呼叫 Vizion.Operators。</Description>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="operators.json" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Vizion.Operators\Vizion.Operators.csproj" />
     <ProjectReference Include="..\Vizion.Display\Vizion.Display.csproj" />
   </ItemGroup>

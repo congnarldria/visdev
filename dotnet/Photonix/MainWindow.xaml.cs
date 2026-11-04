@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -11,18 +12,7 @@ namespace Photonix;
 
 public partial class MainWindow : Window
 {
-    readonly OperatorItem[] Catalog =
-    {
-        new("read_image", "檔案", "讀入一張 PNG。", new[] { "路徑" }),
-        new("threshold", "區域", "灰階落在兩端之間的像素收成區域。", new[] { "最小灰階", "最大灰階" }),
-        new("connection", "區域", "把區域拆成連通物件。", new[] { "距離" }),
-        new("mean_image", "濾波", "平均濾波。", new[] { "遮罩寬", "遮罩高" }),
-        new("gauss_image", "濾波", "高斯濾波。", new[] { "大小" }),
-        new("edges_sub_pix", "邊緣", "次像素邊緣。", new[] { "Alpha", "Low", "High" }),
-        new("find_shape", "比對", "用邊緣方向找模板。", new[] { "Contrast", "MinContrast", "MinScore" }),
-        new("fit_line", "量測", "用點擬合直線，飛點會再擬一次。", new[] { "點" }),
-        new("fit_circle", "量測", "用點擬合圓，飛點會再擬一次。", new[] { "點" }),
-    };
+    readonly OperatorDoc[] Catalog;
 
     ImageBuffer? PictureData;
     ImageFrame? Frame;
@@ -44,7 +34,14 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        OperatorList.ItemsSource = Catalog;
+        Catalog = OperatorCatalog.Load();
+        ApplyFilter();
+        BuildOperatorMenu();
+        if (Catalog.Length > 0)
+        {
+            OperatorList.SelectedItem = Catalog[0];
+            ShowHelp(Catalog[0]);
+        }
         ShowTab("ops");
         ApplyMode(GfxMode.Select);
         Log("Photonix 已開啟。版面對齊網頁版，底層是 Vizion.Operators。");
@@ -283,32 +280,138 @@ public partial class MainWindow : Window
         PageProblems.Visibility = tag == "problems" ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    void OperatorSearch_TextChanged(object sender, TextChangedEventArgs e)
+    void OperatorSearch_TextChanged(object sender, TextChangedEventArgs e) => ApplyFilter();
+
+    void ApplyFilter()
     {
         string query = OperatorSearch.Text.Trim();
-        OperatorList.ItemsSource = string.IsNullOrEmpty(query)
-            ? Catalog
-            : Catalog.Where(item => item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
+        IEnumerable<OperatorDoc> visible = Catalog;
+        if (query.Length > 0)
+        {
+            visible = Catalog.Where(op => string.Concat(op.Name, op.Purpose, op.Principle, op.Setup, op.Note)
+                .Contains(query, StringComparison.OrdinalIgnoreCase));
+        }
+        var view = new ListCollectionView(visible.ToList());
+        view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(OperatorDoc.Group)));
+        OperatorList.ItemsSource = view;
+    }
+
+    void BuildOperatorMenu()
+    {
+        OpMenu.Items.Clear();
+        MenuItem? groupItem = null;
+        string? group = null;
+        foreach (OperatorDoc op in Catalog)
+        {
+            if (op.Group != group)
+            {
+                group = op.Group;
+                groupItem = new MenuItem { Header = group };
+                OpMenu.Items.Add(groupItem);
+            }
+            var item = new MenuItem { Header = op.Name, ToolTip = op.Short, Tag = op };
+            item.Click += OperatorMenu_Click;
+            groupItem!.Items.Add(item);
+        }
+    }
+
+    void OperatorMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: OperatorDoc op })
+            return;
+        if (!string.IsNullOrEmpty(OperatorSearch.Text))
+            OperatorSearch.Text = "";
+        OperatorList.SelectedItem = op;
+        OperatorList.ScrollIntoView(op);
+        ShowTab("ops");
+        ShowHelp(op);
     }
 
     void OperatorList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        ParameterPanel.Children.Clear();
-        if (OperatorList.SelectedItem is not OperatorItem item)
+        if (OperatorList.SelectedItem is OperatorDoc op)
+            ShowHelp(op);
+    }
+
+    void OperatorList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source)
             return;
-        ParameterPanel.Children.Add(new TextBlock
+        if (ItemsControl.ContainerFromElement(OperatorList, source) is ListBoxItem { Content: OperatorDoc op })
+            InsertExample(op);
+    }
+
+    void ShowHelp(OperatorDoc op)
+    {
+        OperatorHelp.Children.Clear();
+        Brush muted = (Brush)FindResource("Muted");
+        OperatorHelp.Children.Add(Heading(op.Name, 16, FontWeights.Bold));
+        if (!string.IsNullOrWhiteSpace(op.Note))
+            AddSection("註解", op.Note, muted);
+        AddSection("用途", op.Purpose, muted);
+        AddSection("原理", op.Principle, muted);
+        AddSection("如何設定", op.Setup, muted);
+        if (op.Params.Count > 0)
         {
-            Text = item.Group + "　" + item.Purpose,
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)FindResource("Muted"),
-            Margin = new Thickness(0, 0, 0, 8),
-        });
-        foreach (string name in item.Parameters)
-        {
-            ParameterPanel.Children.Add(new TextBlock { Text = name, Margin = new Thickness(0, 6, 0, 2) });
-            ParameterPanel.Children.Add(new TextBox());
+            OperatorHelp.Children.Add(Heading("參數", 13, FontWeights.SemiBold));
+            foreach (OperatorParam param in op.Params)
+            {
+                OperatorHelp.Children.Add(new TextBlock
+                {
+                    Text = param.Name + "　" + param.Role,
+                    Margin = new Thickness(0, 6, 0, 0),
+                });
+                OperatorHelp.Children.Add(new TextBlock
+                {
+                    Text = param.Desc,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = muted,
+                });
+            }
         }
-        Log("選了運算子 " + item.Name + "。參數先顯示，還沒執行。");
+        AddSection("範例用法", op.Prototype + "\n" + op.Example, muted);
+        var insert = new Button { Content = "插入範本", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0) };
+        insert.Click += (_, _) => InsertExample(op);
+        OperatorHelp.Children.Add(insert);
+    }
+
+    void AddSection(string title, string body, Brush muted)
+    {
+        OperatorHelp.Children.Add(Heading(title, 13, FontWeights.SemiBold));
+        OperatorHelp.Children.Add(new TextBlock
+        {
+            Text = body,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 2, 0, 8),
+            Foreground = muted,
+        });
+    }
+
+    static TextBlock Heading(string text, double size, FontWeight weight) => new()
+    {
+        Text = text,
+        FontSize = size,
+        FontWeight = weight,
+        TextWrapping = TextWrapping.Wrap,
+        Margin = new Thickness(0, 4, 0, 2),
+    };
+
+    void InsertExample(OperatorDoc op)
+    {
+        string text = op.Example ?? "";
+        if (!string.IsNullOrWhiteSpace(op.Note))
+        {
+            string comment = string.Join("\n", op.Note.Replace("\r\n", "\n").Split('\n').Select(line => "* " + line));
+            text = comment + "\n" + text;
+        }
+        string value = ProgramText.Text ?? "";
+        int pos = Math.Clamp(ProgramText.SelectionStart, 0, value.Length);
+        int start = value.Length == 0 || pos == 0 ? 0 : value.LastIndexOf('\n', pos - 1) + 1;
+        ProgramText.Text = value[..start] + text + "\n" + value[start..];
+        ProgramText.SelectionStart = start + text.Length + 1;
+        ProgramText.SelectionLength = 0;
+        ProgramText.Focus();
+        Log("已插入 " + op.Name);
     }
 
     void ClearLog_Click(object sender, RoutedEventArgs e) => LogBox.Clear();
@@ -497,5 +600,4 @@ public partial class MainWindow : Window
         LogBox.ScrollToEnd();
     }
 
-    sealed record OperatorItem(string Name, string Group, string Purpose, string[] Parameters);
 }

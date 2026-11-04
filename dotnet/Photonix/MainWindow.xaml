@@ -86,7 +86,7 @@
         <MenuItem Header="回復版面" Click="NotYet_Click"/>
         <MenuItem Header="拉出圖形視窗" Click="NotYet_Click"/>
       </MenuItem>
-      <MenuItem Header="運算子"/>
+      <MenuItem x:Name="OpMenu" Header="運算子"/>
       <MenuItem Header="說明">
         <MenuItem Header="使用說明" Click="NotYet_Click"/>
         <MenuItem Header="關於 Photonix" Click="About_Click"/>
@@ -127,14 +127,32 @@
           <Button x:Name="TabSyntax" Content="語法" Click="ShowTab_Click" Tag="syntax"/>
           <Button x:Name="TabLog" Content="輸出" Click="ShowTab_Click" Tag="log"/>
           <Button x:Name="TabProblems" Content="錯誤清單" Click="ShowTab_Click" Tag="problems"/>
-          <TextBox x:Name="OperatorSearch" Width="180" Margin="12,0,0,0" TextChanged="OperatorSearch_TextChanged" ToolTip="搜尋算子"/>
+          <TextBox x:Name="OperatorSearch" Width="220" Margin="12,0,0,0" TextChanged="OperatorSearch_TextChanged" ToolTip="搜尋算子，例如 threshold"/>
         </StackPanel>
         <Grid>
           <DockPanel x:Name="PageOps">
-            <ListBox x:Name="OperatorList" DockPanel.Dock="Left" Width="180" Margin="8,0,8,8" DisplayMemberPath="Name" SelectionChanged="OperatorList_SelectionChanged"/>
+            <ListBox x:Name="OperatorList" DockPanel.Dock="Left" Width="230" Margin="8,0,8,8" SelectionChanged="OperatorList_SelectionChanged" MouseDoubleClick="OperatorList_MouseDoubleClick">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel Margin="0,1">
+                    <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Short}" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+              <ListBox.GroupStyle>
+                <GroupStyle>
+                  <GroupStyle.HeaderTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding Name}" Margin="2,8,2,2" Foreground="{StaticResource Muted}"/>
+                    </DataTemplate>
+                  </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+              </ListBox.GroupStyle>
+            </ListBox>
             <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,8,8">
-              <StackPanel x:Name="ParameterPanel">
-                <TextBlock Foreground="{StaticResource Muted}" TextWrapping="Wrap" Text="點一個算子，這裡會列出參數。這一步先不執行，也不會插進程式。"/>
+              <StackPanel x:Name="OperatorHelp">
+                <TextBlock Foreground="{StaticResource Muted}" TextWrapping="Wrap" Text="點一個算子看用途和原理。雙擊把範例插進程式。"/>
               </StackPanel>
             </ScrollViewer>
           </DockPanel>
