@@ -190,9 +190,9 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
             <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,8,0" Text="圖形視窗"/>
             <TextBlock x:Name="ZoomText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Text="100%"/>
             <WrapPanel>
-              <Button Content="點選" Click="NotYet_Click"/>
-              <Button Content="手抓" Click="NotYet_Click"/>
-              <Button Content="放大" Click="NotYet_Click"/>
+              <Button x:Name="ModeSelect" Content="點選" Click="Mode_Click" Tag="select" ToolTip="點一下讀出那個像素"/>
+              <Button x:Name="ModePan" Content="手抓" Click="Mode_Click" Tag="pan" ToolTip="拖曳移動畫面"/>
+              <Button x:Name="ModeZoom" Content="放大" Click="Mode_Click" Tag="zoom" ToolTip="拉一個範圍放大。點一下也會放大"/>
               <Button Content="符合" Click="Fit_Click"/>
               <Button Content="1:1" Click="OneToOne_Click"/>
               <Button Content="−" Click="ZoomOut_Click"/>
@@ -209,17 +209,32 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
             </WrapPanel>
           </DockPanel>
         </Border>
-        <ScrollViewer x:Name="Viewport" Background="#0E1116" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PreviewMouseWheel="Viewport_MouseWheel">
-          <Grid>
-            <TextBlock x:Name="EmptyHint" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" TextAlignment="Center"
-                       Text="載入一張 PNG，影像會顯示在這裡。&#x0a;滾輪或上方按鈕可以縮放。"/>
-            <Image x:Name="Picture" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Visibility="Collapsed">
-              <Image.LayoutTransform>
-                <ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/>
-              </Image.LayoutTransform>
+        <Grid x:Name="Stage" ClipToBounds="True" Background="#0E1116" AllowDrop="True"
+              DragOver="Stage_DragOver" Drop="Stage_Drop"
+              MouseLeftButtonDown="Stage_MouseDown" MouseMove="Stage_MouseMove"
+              MouseLeftButtonUp="Stage_MouseUp" MouseLeave="Stage_MouseLeave"
+              PreviewMouseWheel="Stage_MouseWheel" SizeChanged="Stage_SizeChanged">
+          <Canvas IsHitTestVisible="False">
+            <Image x:Name="Picture" Stretch="None" Visibility="Collapsed" RenderTransformOrigin="0,0">
+              <Image.RenderTransform>
+                <TransformGroup>
+                  <ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/>
+                  <TranslateTransform x:Name="ImageOffset"/>
+                </TransformGroup>
+              </Image.RenderTransform>
             </Image>
-          </Grid>
-        </ScrollViewer>
+          </Canvas>
+          <Canvas x:Name="Overlay" IsHitTestVisible="False">
+            <Line x:Name="CrossV" Stroke="#59FFFFFF" StrokeThickness="1" Visibility="Collapsed"/>
+            <Line x:Name="CrossH" Stroke="#59FFFFFF" StrokeThickness="1" Visibility="Collapsed"/>
+            <Rectangle x:Name="ZoomRect" Stroke="#FFE14A" Fill="#1FFFE14A" StrokeThickness="1" Visibility="Collapsed"/>
+            <Border x:Name="Probe" Visibility="Collapsed" Background="#F014171C" BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="6,3">
+              <TextBlock x:Name="ProbeText" Foreground="{StaticResource Ink}"/>
+            </Border>
+          </Canvas>
+          <TextBlock x:Name="EmptyHint" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" TextAlignment="Center"
+                     Text="把 PNG 拖進來，或按載入影像。&#x0a;點選、手抓、拉框放大。滾輪以游標為中心縮放。"/>
+        </Grid>
       </DockPanel>
       <GridSplitter Grid.Column="3" Width="4" Background="{StaticResource Line}" HorizontalAlignment="Stretch"/>
 
