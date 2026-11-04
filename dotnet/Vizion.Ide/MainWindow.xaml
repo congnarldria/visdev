@@ -1,0 +1,77 @@
+<Window x:Class="Vizion.Ide.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="VisDev"
+        Width="1200"
+        Height="760"
+        MinWidth="880"
+        MinHeight="560"
+        Background="{StaticResource WindowBackground}"
+        Foreground="{StaticResource Ink}">
+  <Window.Resources>
+    <Style TargetType="Button">
+      <Setter Property="Background" Value="#21262D"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="Padding" Value="10,4"/>
+      <Setter Property="Margin" Value="0,0,6,0"/>
+    </Style>
+    <Style TargetType="TextBox">
+      <Setter Property="Background" Value="#0E1116"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="Padding" Value="4,2"/>
+    </Style>
+    <Style TargetType="ListBox">
+      <Setter Property="Background" Value="#0E1116"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+    </Style>
+  </Window.Resources>
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,6">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,16,0" Text="VisDev"/>
+        <TextBlock x:Name="ZoomText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Text="100%"/>
+        <StackPanel Orientation="Horizontal">
+          <Button Content="載入影像" Click="LoadImage_Click"/>
+          <Button Content="符合" Click="Fit_Click"/>
+          <Button Content="1:1" Click="OneToOne_Click"/>
+          <Button Content="−" Click="ZoomOut_Click"/>
+          <Button Content="+" Click="ZoomIn_Click"/>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Height="160" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Margin="8,6,8,4" Foreground="{StaticResource Muted}" Text="結果 / 日誌"/>
+        <TextBox x:Name="LogBox" Margin="8,0,8,8" IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" FontFamily="Consolas"/>
+      </DockPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Right" Width="320" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Margin="8,8,8,4" Foreground="{StaticResource Muted}" Text="運算子"/>
+        <ListBox x:Name="OperatorList" DockPanel.Dock="Top" Height="220" Margin="8,0,8,8" DisplayMemberPath="Name" SelectionChanged="OperatorList_SelectionChanged"/>
+        <TextBlock DockPanel.Dock="Top" Margin="8,0,8,4" Foreground="{StaticResource Muted}" Text="參數"/>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8,0,8,8">
+          <StackPanel x:Name="ParameterPanel">
+            <TextBlock Foreground="{StaticResource Muted}" TextWrapping="Wrap" Text="選一個運算子，這裡會列出參數。這一步先不執行。"/>
+          </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+
+    <ScrollViewer x:Name="Viewport" Background="#0E1116" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PreviewMouseWheel="Viewport_MouseWheel">
+      <Grid>
+        <TextBlock x:Name="EmptyHint" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}" TextAlignment="Center" Text="載入一張 PNG，影像會顯示在這裡。&#x0a;滾輪或右側按鈕可以縮放。"/>
+        <Image x:Name="Picture" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Visibility="Collapsed">
+          <Image.LayoutTransform>
+            <ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/>
+          </Image.LayoutTransform>
+        </Image>
+      </Grid>
+    </ScrollViewer>
+  </DockPanel>
+</Window>
