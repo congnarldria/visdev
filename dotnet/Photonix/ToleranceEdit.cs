@@ -160,6 +160,73 @@ static class ToleranceEdit
         WriteStore(all);
     }
 
+    public readonly record struct OutputField(string Name, string Label, string Kind, string Value, int Line);
+
+    public static List<OutputField> ReadOutputs(string? source)
+    {
+        string[] lines = Lines(source);
+        var found = new List<OutputField>();
+        for (int index = 0; index < lines.Length; index++)
+        {
+            Match text = Regex.Match(lines[index], @"^(\s*)(OutKind|OutHost|OutCom)\s*:=\s*'([^']*)'\s*$", RegexOptions.CultureInvariant);
+            if (text.Success)
+                found.Add(new OutputField(text.Groups[2].Value, OutputLabel(text.Groups[2].Value), text.Groups[2].Value == "OutKind" ? "choice" : "text", text.Groups[3].Value, index));
+            Match number = Regex.Match(lines[index], @"^(\s*)(OutPort|OutAddr)\s*:=\s*(\d+)\s*$", RegexOptions.CultureInvariant);
+            if (number.Success)
+                found.Add(new OutputField(number.Groups[2].Value, OutputLabel(number.Groups[2].Value), "number", number.Groups[3].Value, index));
+        }
+        return found;
+    }
+
+    public static IEnumerable<OutputField> VisibleOutputs(IReadOnlyList<OutputField> outputs, string? kind)
+    {
+        string mode = kind ?? outputs.FirstOrDefault(item => item.Name == "OutKind").Value ?? "";
+        if (mode.Length == 0)
+            return outputs.Where(item => item.Name != "OutKind");
+        string[] show = mode switch
+        {
+            "tcp" => new[] { "OutHost", "OutPort" },
+            "serial" => new[] { "OutCom" },
+            "modbus" => new[] { "OutHost", "OutPort", "OutAddr" },
+            _ => Array.Empty<string>(),
+        };
+        return outputs.Where(item => show.Contains(item.Name));
+    }
+
+    public static string ApplyOutput(string? source, int lineIndex, string name, string? value)
+    {
+        string shown = (value ?? "").Trim();
+        if (name == "OutKind")
+        {
+            if (shown is not ("tcp" or "serial" or "modbus"))
+                return source ?? "";
+            return ReplaceLine(source, lineIndex, indent => indent + "OutKind := '" + shown + "'");
+        }
+        if (name is "OutHost" or "OutCom")
+        {
+            if (shown.Length == 0 || shown.IndexOfAny(new[] { '\'', '\r', '\n', '\\' }) >= 0)
+                return source ?? "";
+            return ReplaceLine(source, lineIndex, indent => indent + name + " := '" + shown + "'");
+        }
+        if (name is "OutPort" or "OutAddr")
+        {
+            if (!Regex.IsMatch(shown, @"^\d+$", RegexOptions.CultureInvariant) || !int.TryParse(shown, out int number) || number > 65535)
+                return source ?? "";
+            return ReplaceLine(source, lineIndex, indent => indent + name + " := " + number.ToString(CultureInfo.InvariantCulture));
+        }
+        return source ?? "";
+    }
+
+    static string OutputLabel(string name) => name switch
+    {
+        "OutKind" => "方式",
+        "OutHost" => "主機",
+        "OutPort" => "埠",
+        "OutCom" => "序列埠",
+        "OutAddr" => "位址",
+        _ => name,
+    };
+
     public static string Restore(string? fileName, string? source)
     {
         string text = source ?? "";

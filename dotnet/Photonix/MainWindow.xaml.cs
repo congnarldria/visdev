@@ -63,6 +63,11 @@ public partial class MainWindow : Window
     SubpixWindow? SubpixFloat;
     FeatureWindow? FeatureFloat;
     FeatureHit? PickedFeature;
+    bool NgShowing;
+    string NgFileName = "";
+    ImageBuffer? NgHoldImage;
+    ImageFrame? NgHoldFrame;
+    Overlay[] NgHoldShapes = [];
     OperatorDialog? ParamDialog;
     readonly Dictionary<string, object> DockPanes = new(StringComparer.Ordinal);
     string DefaultLayout = "";
@@ -1034,6 +1039,7 @@ public partial class MainWindow : Window
         UpdateDirty();
         RefreshTolerances();
         RefreshGraphicsTools();
+        SyncLineActions();
     }
 
     void RefreshTolerances()
@@ -1048,7 +1054,8 @@ public partial class MainWindow : Window
         List<ToleranceExpect> expects = ToleranceEdit.ReadExpects(source);
         bool teach = ToleranceEdit.ReadPointLists(source).Any(item => item.Name == "WantRow")
             && ToleranceEdit.ReadPointLists(source).Any(item => item.Name == "WantCol");
-        if (limits.Count == 0 && expects.Count == 0 && !teach)
+        List<ToleranceEdit.OutputField> outputs = ToleranceEdit.ReadOutputs(source);
+        if (limits.Count == 0 && expects.Count == 0 && !teach && outputs.Count == 0)
         {
             TolBar.Visibility = Visibility.Collapsed;
             TolItems.Children.Clear();
@@ -1060,10 +1067,13 @@ public partial class MainWindow : Window
             return;
         TolSignature = signature;
         TolItems.Children.Clear();
-        string note = expects.Count > 0 && limits.Count == 0
+        string note = outputs.Count > 0 && limits.Count == 0 && expects.Count == 0
+            ? "產線輸出改完按執行"
+            : expects.Count > 0 && limits.Count == 0
             ? "預期字會記在這台電腦，改完按執行"
             : "公差會記在這台電腦，改完按執行";
         TolItems.Children.Add(Note(note));
+        AddOutputs(outputs);
         foreach (ToleranceLimit field in limits)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 12, 4) };
@@ -1093,7 +1103,8 @@ public partial class MainWindow : Window
         var expects = ToleranceEdit.ReadExpects(source).Select(field => field.Value + "@" + field.Line);
         bool teach = ToleranceEdit.ReadPointLists(source).Any(item => item.Name == "WantRow")
             && ToleranceEdit.ReadPointLists(source).Any(item => item.Name == "WantCol");
-        return string.Join("|", limits) + "#" + string.Join("|", expects) + "#" + teach;
+        var outputs = ToleranceEdit.ReadOutputs(source).Select(field => field.Name + "=" + field.Value + "@" + field.Line);
+        return string.Join("|", limits) + "#" + string.Join("|", expects) + "#" + teach + "#" + string.Join("|", outputs);
     }
 
     TextBlock Note(string text) => new()
@@ -1137,9 +1148,12 @@ public partial class MainWindow : Window
         if (ApplyingTolerance || box.Tag is not TolEdit tag)
             return;
         string source = ProgramFile.Normalize(ProgramText.Text);
-        string next = tag.Kind == "text"
-            ? ToleranceEdit.ApplyExpect(source, tag.Line, box.Text)
-            : ToleranceEdit.ApplyLimit(source, tag.Line, tag.Name, box.Text.Trim());
+        string next = tag.Kind switch
+        {
+            "text" => ToleranceEdit.ApplyExpect(source, tag.Line, box.Text),
+            "output" => ToleranceEdit.ApplyOutput(source, tag.Line, tag.Name, box.Text),
+            _ => ToleranceEdit.ApplyLimit(source, tag.Line, tag.Name, box.Text.Trim()),
+        };
         if (next == source)
         {
             if (tag.Kind == "number" && !LooksNumber(box.Text.Trim()))
@@ -1152,8 +1166,208 @@ public partial class MainWindow : Window
         ApplyingTolerance = true;
         ProgramText.Text = next;
         ApplyingTolerance = false;
-        ToleranceEdit.Remember(ProgramName.Text, ProgramText.Text);
+        if (tag.Kind != "output")
+            ToleranceEdit.Remember(ProgramName.Text, ProgramText.Text);
         TolSignature = ToleranceSignature(ProgramText.Text ?? "");
+    }
+
+    void AddOutputs(List<ToleranceEdit.OutputField> outputs)
+    {
+        ToleranceEdit.OutputField kind = outputs.FirstOrDefault(item => item.Name == "OutKind");
+        if (outputs.Count == 0 || kind.Name != "OutKind")
+            return;
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 12, 4) };
+        row.Children.Add(Note("方式"));
+        var combo = new ComboBox { Width = 96, Margin = new Thickness(0, 0, 8, 0), ToolTip = "產線輸出。TCP、序列埠或 Modbus" };
+        combo.Items.Add(new ComboBoxItem { Content = "TCP", Tag = "tcp" });
+        combo.Items.Add(new ComboBoxItem { Content = "序列埠", Tag = "serial" });
+        combo.Items.Add(new ComboBoxItem { Content = "Modbus", Tag = "modbus" });
+        foreach (object item in combo.Items)
+        {
+            if (item is ComboBoxItem choice && string.Equals(choice.Tag as string, kind.Value, StringComparison.OrdinalIgnoreCase))
+                combo.SelectedItem = choice;
+        }
+        combo.Tag = new TolEdit("output", kind.Line, "OutKind");
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (ApplyingTolerance || combo.SelectedItem is not ComboBoxItem picked)
+                return;
+            CommitOutput(kind.Line, "OutKind", picked.Tag as string ?? "");
+        };
+        row.Children.Add(combo);
+        foreach (ToleranceEdit.OutputField field in ToleranceEdit.VisibleOutputs(outputs, kind.Value))
+        {
+            row.Children.Add(Note(field.Label));
+            TextBox box = TolBox(field.Value, "output", field.Line, field.Name, field.Label);
+            box.Width = field.Kind == "text" ? 120 : 64;
+            row.Children.Add(box);
+        }
+        TolItems.Children.Add(row);
+    }
+
+    void CommitOutput(int line, string name, string value)
+    {
+        if (ApplyingTolerance)
+            return;
+        string source = ProgramFile.Normalize(ProgramText.Text);
+        string next = ToleranceEdit.ApplyOutput(source, line, name, value);
+        if (next == source)
+            return;
+        ApplyingTolerance = true;
+        ProgramText.Text = next;
+        ApplyingTolerance = false;
+        TolSignature = "";
+        RefreshTolerances();
+    }
+
+    void SyncLineActions()
+    {
+        if (BtnLastNg == null || BtnLineStats == null || BtnLineCsv == null)
+            return;
+        string? csv = Running ? null : CurrentCsv();
+        string? ng = Running ? null : CurrentLastNg();
+        BtnLastNg.Visibility = ng == null ? Visibility.Collapsed : Visibility.Visible;
+        BtnLastNg.Content = NgShowing ? "回到程式畫面" : "看不合格圖";
+        BtnLineStats.Visibility = csv == null ? Visibility.Collapsed : Visibility.Visible;
+        BtnLineCsv.Visibility = csv == null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    string? CurrentCsv()
+    {
+        string? file = LineReport.CsvFile(ProgramText.Text, Engine.Vars);
+        return string.IsNullOrWhiteSpace(file) ? null : file;
+    }
+
+    string? CurrentLastNg()
+    {
+        string? name = LineReport.LastNg(ProgramText.Text, Engine.Vars);
+        if (!string.IsNullOrEmpty(name))
+            return name;
+        string? csv = CurrentCsv();
+        string? repo = ProjectStore.FindRepoRoot();
+        if (csv == null || repo == null)
+            return null;
+        try
+        {
+            string last = LineReport.ReadStats(repo, csv).LastNg;
+            return last.Length == 0 ? null : last;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    void LastNg_Click(object sender, RoutedEventArgs e)
+    {
+        if (Running)
+            return;
+        if (NgShowing)
+        {
+            PictureData = NgHoldImage;
+            Frame = NgHoldFrame;
+            Shapes = NgHoldShapes;
+            NgShowing = false;
+            NgFileName = "";
+            StatusLine.Text = "已回到程式畫面";
+            Present();
+            SyncLineActions();
+            return;
+        }
+        string? name = CurrentLastNg();
+        string? repo = ProjectStore.FindRepoRoot();
+        if (string.IsNullOrEmpty(name) || repo == null)
+        {
+            StatusLine.Text = "這一輪沒有不合格圖";
+            return;
+        }
+        try
+        {
+            string path = LineReport.NgPath(repo, name);
+            ShowNg(path, Path.GetFileName(path));
+        }
+        catch (Exception ex)
+        {
+            StatusLine.Text = ex.Message;
+            Log(ex.Message);
+        }
+    }
+
+    void ShowNg(string path, string filename)
+    {
+        if (!NgShowing)
+        {
+            NgHoldImage = PictureData;
+            NgHoldFrame = Frame;
+            NgHoldShapes = Shapes;
+        }
+        ImageBuffer image = Operators.ReadImage(path);
+        PictureData = image;
+        Frame = ImageFrame.Create(image.Width, image.Height, image.Pixels, image.Channels == 1 ? PixelLayout.Gray : PixelLayout.Bgr);
+        Shapes = [];
+        EmptyHint.Visibility = Visibility.Collapsed;
+        NgShowing = true;
+        NgFileName = filename;
+        StatusLine.Text = "不合格圖 " + filename;
+        Log(StatusLine.Text);
+        Present();
+        SyncLineActions();
+    }
+
+    void LineStats_Click(object sender, RoutedEventArgs e)
+    {
+        if (Running)
+            return;
+        string? csv = CurrentCsv();
+        string? repo = ProjectStore.FindRepoRoot();
+        if (csv == null || repo == null)
+        {
+            StatusLine.Text = "這一輪沒有明細";
+            return;
+        }
+        try
+        {
+            LineBoard.ShowStats(this, LineReport.ReadStats(repo, csv));
+        }
+        catch (Exception ex)
+        {
+            StatusLine.Text = ex.Message;
+            Log(ex.Message);
+        }
+    }
+
+    void LineCsv_Click(object sender, RoutedEventArgs e)
+    {
+        if (Running)
+            return;
+        string? csv = CurrentCsv();
+        string? repo = ProjectStore.FindRepoRoot();
+        if (csv == null || repo == null)
+        {
+            StatusLine.Text = "這一輪沒有明細";
+            return;
+        }
+        try
+        {
+            LineReport.ReadSheet(repo, csv, false);
+            LineBoard.ShowCsv(this, repo, csv, name =>
+            {
+                try
+                {
+                    ShowNg(LineReport.NgPath(repo, name), name);
+                }
+                catch (Exception ex)
+                {
+                    StatusLine.Text = ex.Message;
+                    Log(ex.Message);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            StatusLine.Text = ex.Message;
+            Log(ex.Message);
+        }
     }
 
     static bool LooksNumber(string text) => Regex.IsMatch(text, @"^-?\d+(?:\.\d+)?$");
@@ -1240,6 +1454,7 @@ public partial class MainWindow : Window
         Engine.Cancel = false;
         Running = true;
         BtnRun.IsEnabled = false;
+        SyncLineActions();
         Pump();
     }
 
@@ -1283,6 +1498,7 @@ public partial class MainWindow : Window
         Log("已重設");
         RefreshRails();
         RefreshProblems();
+        SyncLineActions();
         Present();
     }
 
@@ -1306,6 +1522,8 @@ public partial class MainWindow : Window
 
     void Publish(Halt halt)
     {
+        if (NgShowing)
+            NgShowing = false;
         foreach (string message in Engine.Messages)
             Log(message);
         Engine.Messages.Clear();
@@ -1349,6 +1567,7 @@ public partial class MainWindow : Window
         RefreshProblems();
         if (halt == Halt.Error)
             ShowRunError(Engine.Error ?? "發生錯誤", Engine.ErrorLine);
+        SyncLineActions();
     }
 
     void RefreshProblems()

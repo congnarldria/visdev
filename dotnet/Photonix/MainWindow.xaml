@@ -123,6 +123,9 @@
         <TextBlock x:Name="StatusZoom" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0" Foreground="{StaticResource Muted}" Text="100%"/>
         <TextBlock x:Name="StatusPix" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0" Foreground="{StaticResource Muted}" Text="Row —   Column —"/>
         <TextBlock VerticalAlignment="Center" Text="就緒"/>
+        <Button x:Name="BtnLastNg" Content="看不合格圖" Visibility="Collapsed" Margin="12,0,0,0" Click="LastNg_Click"/>
+        <Button x:Name="BtnLineStats" Content="統計" Visibility="Collapsed" Margin="8,0,0,0" Click="LineStats_Click"/>
+        <Button x:Name="BtnLineCsv" Content="看明細" Visibility="Collapsed" Margin="8,0,0,0" Click="LineCsv_Click"/>
         <TextBlock x:Name="StatusLine" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="{StaticResource Muted}"/>
       </DockPanel>
     </Border>
