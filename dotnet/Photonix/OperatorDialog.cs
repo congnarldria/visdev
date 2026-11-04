@@ -32,7 +32,10 @@ sealed class OperatorDialog : Window
         var muted = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x8B, 0x94, 0x9E));
 
         var form = new StackPanel { Margin = new Thickness(16) };
-        form.Children.Add(new TextBlock { Text = op.Purpose, TextWrapping = TextWrapping.Wrap, Foreground = muted, Margin = new Thickness(0, 0, 0, 8) });
+        AddBlock(form, "用途", op.Purpose, muted);
+        AddBlock(form, "原理", op.Principle, muted);
+        AddBlock(form, "用法", op.Example, muted);
+        int afterHelp = form.Children.Count;
         string role = "";
         for (int i = 0; i < op.Params.Count; i++)
         {
@@ -52,12 +55,12 @@ sealed class OperatorDialog : Window
             form.Children.Add(new TextBlock { Text = "這個算子沒有參數。", Foreground = muted });
         if (ShapeGeometry.Tools(GeomBoxes.Keys).Count > 0)
         {
-            form.Children.Insert(1, new TextBlock
+            form.Children.Insert(afterHelp, new TextBlock
             {
                 Text = "圖形列的線、框選、圓、橢圓，或在圖上按右鍵。拖曳後按確認填入。起點到終點的方向會保留。",
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = muted,
-                Margin = new Thickness(0, 0, 0, 8),
+                Margin = new Thickness(0, 8, 0, 0),
             });
         }
         form.Children.Add(Preview);
@@ -82,6 +85,14 @@ sealed class OperatorDialog : Window
         root.Children.Add(new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         Content = root;
         RefreshPreview();
+    }
+
+    static void AddBlock(StackPanel form, string title, string body, System.Windows.Media.Brush muted)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return;
+        form.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 2) });
+        form.Children.Add(new TextBlock { Text = body, TextWrapping = TextWrapping.Wrap, Foreground = muted });
     }
 
     FrameworkElement Field(OperatorParam param, string current)

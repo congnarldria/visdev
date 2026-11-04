@@ -19,6 +19,7 @@ public partial class MainWindow : Window
 {
     readonly OperatorDoc[] Catalog;
     readonly OperatorMemory Memory;
+    HashSet<string>? OperatorNameCache;
 
     ImageBuffer? PictureData;
     ImageFrame? Frame;
@@ -959,6 +960,64 @@ public partial class MainWindow : Window
         ShowTab("ops");
         ShowHelp(op);
         OpenParameterDialog(op, null, null);
+    }
+
+    void ProgramText_MouseMove(object sender, MouseEventArgs e)
+    {
+        OperatorDoc? op = OperatorAtPoint(e.GetPosition(ProgramText));
+        if (op == null)
+        {
+            if (ProgramText.ToolTip != null)
+                ProgramText.ToolTip = null;
+            return;
+        }
+        if (ProgramText.ToolTip is ToolTip current && current.Tag as string == op.Name)
+            return;
+        var tip = new ToolTip
+        {
+            Tag = op.Name,
+            MaxWidth = 420,
+            Content = new TextBlock { Text = op.TipText, TextWrapping = TextWrapping.Wrap, MaxWidth = 400 },
+        };
+        ToolTipService.SetShowDuration(ProgramText, 30000);
+        ToolTipService.SetInitialShowDelay(ProgramText, 400);
+        ProgramText.ToolTip = tip;
+    }
+
+    void ProgramText_MouseLeave(object sender, MouseEventArgs e) => ProgramText.ToolTip = null;
+
+    OperatorDoc? OperatorAtPoint(Point point)
+    {
+        string text = ProgramText.Text ?? "";
+        int index = ProgramText.GetCharacterIndexFromPoint(point, false);
+        if (index < 0 || index >= text.Length)
+            return null;
+        int lineStart = index == 0 ? 0 : text.LastIndexOf('\n', index - 1) + 1;
+        int lineEnd = text.IndexOf('\n', index);
+        if (lineEnd < 0)
+            lineEnd = text.Length;
+        string line = text[lineStart..lineEnd].TrimEnd('\r');
+        string trimmed = line.TrimStart();
+        if (trimmed.StartsWith('*') || trimmed.StartsWith("//"))
+            return null;
+        int column = index - lineStart;
+        int cursor = 0;
+        foreach (ProgramToken token in ProgramSyntax.Tokens(line, OperatorNameSet()))
+        {
+            int next = cursor + token.Text.Length;
+            if (column >= cursor && column < next)
+                return token.Kind == ProgramTokenKind.Operator ? FindOperator(token.Text) : null;
+            cursor = next;
+        }
+        return null;
+    }
+
+    HashSet<string> OperatorNameSet()
+    {
+        if (OperatorNameCache != null)
+            return OperatorNameCache;
+        OperatorNameCache = new HashSet<string>(Catalog.Select(op => op.Name.ToLowerInvariant()), StringComparer.Ordinal);
+        return OperatorNameCache;
     }
 
     void ProgramText_MouseUp(object sender, MouseButtonEventArgs e)
@@ -2498,7 +2557,7 @@ public partial class MainWindow : Window
                 });
             }
         }
-        AddSection("範例用法", op.Prototype + "\n" + op.Example, muted);
+        AddSection("用法", op.Prototype + "\n" + op.Example, muted);
         var insert = new Button { Content = "插入範本", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0) };
         insert.Click += (_, _) => InsertExample(op);
         OperatorHelp.Children.Add(insert);

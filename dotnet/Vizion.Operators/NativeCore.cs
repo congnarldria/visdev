@@ -707,6 +707,22 @@ public static class NativeCore
         IsLoaded && UseNative && width >= 1 && height >= 1 && destination.Length >= width * height
         && Call(() => vizion_surface(destination, width, height, alpha, beta, gamma, row, column));
 
+    public static bool TryGrayKernel(byte[] source, byte[] destination, int width, int height, int channels, byte[] kernel, int kernelHeight, int kernelWidth, int mode) =>
+        IsLoaded && UseNative && channels is 1 or 3 && kernel.Length >= kernelHeight * kernelWidth
+        && Call(() => vizion_gray_kernel(source, destination, width, height, channels, kernel, kernelHeight, kernelWidth, mode));
+
+    public static bool TryMeanKernel(byte[] source, byte[] destination, int width, int height, int channels, byte[] kernel, int kernelHeight, int kernelWidth) =>
+        IsLoaded && UseNative && channels is 1 or 3 && kernel.Length >= kernelHeight * kernelWidth
+        && Call(() => vizion_mean_kernel(source, destination, width, height, channels, kernel, kernelHeight, kernelWidth));
+
+    public static bool TrySelectGray(byte[] source, byte[] index, byte[] destination, int width, int height, int channels) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height
+        && Call(() => vizion_select_gray(source, index, destination, width, height, channels));
+
+    public static bool TryShapeKernel(byte[] kernel, int height, int width, int shape) =>
+        IsLoaded && UseNative && kernel.Length >= height * width
+        && Call(() => vizion_shape_kernel(kernel, height, width, shape));
+
     public static bool TrySurfaceQuad(
         byte[] destination, int width, int height,
         double alpha, double beta, double gamma, double delta, double epsilon, double zeta,
@@ -1110,6 +1126,22 @@ public static class NativeCore
         byte[] destination, int width, int height,
         double alpha, double beta, double gamma, double delta, double epsilon, double zeta,
         double row, double column);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_kernel(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        byte[] kernel, int kernelHeight, int kernelWidth, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_mean_kernel(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        byte[] kernel, int kernelHeight, int kernelWidth);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_select_gray(byte[] source, byte[] index, byte[] destination, int width, int height, int channels);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_shape_kernel(byte[] kernel, int height, int width, int shape);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);

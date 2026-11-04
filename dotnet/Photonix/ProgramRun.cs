@@ -722,6 +722,66 @@ sealed class ProgramRun
                 Set(args[2], averaged);
                 Image = averaged;
                 return;
+            case "gray_dilation":
+                Need(args, 3);
+                var seMax = Operators.GrayDilation(ImageOf(args[0]), RegionOf(args[1]));
+                Set(args[2], seMax);
+                Image = seMax;
+                return;
+            case "gray_erosion":
+                Need(args, 3);
+                var seMin = Operators.GrayErosion(ImageOf(args[0]), RegionOf(args[1]));
+                Set(args[2], seMin);
+                Image = seMin;
+                return;
+            case "gray_opening":
+                Need(args, 3);
+                var seOpened = Operators.GrayOpening(ImageOf(args[0]), RegionOf(args[1]));
+                Set(args[2], seOpened);
+                Image = seOpened;
+                return;
+            case "gray_closing":
+                Need(args, 3);
+                var seClosed = Operators.GrayClosing(ImageOf(args[0]), RegionOf(args[1]));
+                Set(args[2], seClosed);
+                Image = seClosed;
+                return;
+            case "gray_dilation_shape":
+                Need(args, 5);
+                var shapeMax = Operators.GrayDilationShape(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Word(args[4]));
+                Set(args[1], shapeMax);
+                Image = shapeMax;
+                return;
+            case "gray_erosion_shape":
+                Need(args, 5);
+                var shapeMin = Operators.GrayErosionShape(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Word(args[4]));
+                Set(args[1], shapeMin);
+                Image = shapeMin;
+                return;
+            case "gray_opening_shape":
+                Need(args, 5);
+                var shapeOpened = Operators.GrayOpeningShape(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Word(args[4]));
+                Set(args[1], shapeOpened);
+                Image = shapeOpened;
+                return;
+            case "gray_closing_shape":
+                Need(args, 5);
+                var shapeClosed = Operators.GrayClosingShape(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Word(args[4]));
+                Set(args[1], shapeClosed);
+                Image = shapeClosed;
+                return;
+            case "mean_image_shape":
+                Need(args, 3);
+                var maskMean = Operators.MeanImageShape(ImageOf(args[0]), RegionOf(args[1]));
+                Set(args[2], maskMean);
+                Image = maskMean;
+                return;
+            case "select_grayvalues_from_channels":
+                Need(args, 3);
+                var channelPick = Operators.SelectGrayvalues(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], channelPick);
+                Image = channelPick;
+                return;
             case "reduce_domain":
                 Need(args, 3);
                 var reduced = Operators.ReduceDomain(ImageOf(args[0]), RegionOf(args[1]));

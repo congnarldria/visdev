@@ -265,6 +265,25 @@ VIZION_EXPORT int VIZION_CALL vizion_surface_quad(
     double row, double column);
 VIZION_EXPORT int VIZION_CALL vizion_inside_selftest(void);
 
+/* 二值核取最大或最小，圖外重複邊緣。mode：0 膨脹、1 侵蝕、2 開運算、3 閉運算。 */
+VIZION_EXPORT int VIZION_CALL vizion_gray_kernel(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels,
+    const uint8_t* kernel, int kernel_height, int kernel_width, int mode);
+
+/* 前景權重相等，圖外補 0。列首融合乘加，列尾分開乘加，再四捨五入到偶數。 */
+VIZION_EXPORT int VIZION_CALL vizion_mean_kernel(
+    const uint8_t* src, uint8_t* dst, int width, int height, int channels,
+    const uint8_t* kernel, int kernel_height, int kernel_width);
+
+/* 索引 1 是紅、2 是綠、3 是藍。灰階只留索引 1，其餘變 0。 */
+VIZION_EXPORT int VIZION_CALL vizion_select_gray(
+    const uint8_t* src, const uint8_t* index, uint8_t* dst, int width, int height, int channels);
+
+/* 矩形、菱形，或和 OpenCV 橢圓結構元素相同的八角形。shape：0 矩形、1 菱形、2 八角形。 */
+VIZION_EXPORT int VIZION_CALL vizion_shape_kernel(uint8_t* kernel, int height, int width, int shape);
+
+VIZION_EXPORT int VIZION_CALL vizion_gshape_selftest(void);
+
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
     const uint8_t* gray, int width,

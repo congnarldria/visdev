@@ -156,6 +156,7 @@
                    BorderBrush="Transparent" Padding="4,2"
                    PreviewMouseLeftButtonUp="ProgramText_MouseUp" PreviewKeyDown="ProgramText_PreviewKeyDown"
                    TextChanged="ProgramText_TextChanged" SelectionChanged="ProgramText_SelectionChanged"
+                   MouseMove="ProgramText_MouseMove" MouseLeave="ProgramText_MouseLeave"
                    Text="* 程式編輯、斷點和執行之後做&#x0a;"/>
           <Popup x:Name="SensePopup" PlacementTarget="{Binding ElementName=ProgramText}" Placement="Relative" AllowsTransparency="True" StaysOpen="True" Focusable="False">
             <Border Background="#1C2128" BorderBrush="{StaticResource Line}" BorderThickness="1" MaxWidth="460" Padding="4">
@@ -302,7 +303,12 @@
                 <ListBox x:Name="OperatorList" DockPanel.Dock="Left" Width="230" Margin="8,0,8,8" SelectionChanged="OperatorList_SelectionChanged" MouseDoubleClick="OperatorList_MouseDoubleClick">
               <ListBox.ItemTemplate>
                 <DataTemplate>
-                  <StackPanel Margin="0,1">
+                  <StackPanel Margin="0,1" ToolTipService.ShowDuration="30000" ToolTipService.InitialShowDelay="400">
+                    <StackPanel.ToolTip>
+                      <ToolTip MaxWidth="420" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                        <TextBlock Text="{Binding TipText}" TextWrapping="Wrap"/>
+                      </ToolTip>
+                    </StackPanel.ToolTip>
                     <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
                     <TextBlock Text="{Binding Short}" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
                   </StackPanel>
