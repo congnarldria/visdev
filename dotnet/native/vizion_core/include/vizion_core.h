@@ -163,6 +163,17 @@ VIZION_EXPORT int VIZION_CALL vizion_edge_chains(
 
 VIZION_EXPORT int VIZION_CALL vizion_edge_link_selftest(void);
 
+/* 找線、找圓。cols 是行、rows 是列。圓擬合不出來回 -2。 */
+VIZION_EXPORT int VIZION_CALL vizion_fit_line(
+    const double* cols, const double* rows, int count,
+    double* row_begin, double* col_begin, double* row_end, double* col_end);
+
+VIZION_EXPORT int VIZION_CALL vizion_fit_circle(
+    const double* cols, const double* rows, int count,
+    double* row, double* col, double* radius);
+
+VIZION_EXPORT int VIZION_CALL vizion_fit_selftest(void);
+
 #ifdef __cplusplus
 }
 #endif

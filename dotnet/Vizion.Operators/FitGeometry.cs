@@ -21,6 +21,8 @@ public static partial class Operators
             cols[i] = points[i].Col;
             rows[i] = points[i].Row;
         }
+        if (NativeCore.TryFitLine(cols, rows, out double rowBegin, out double colBegin, out double rowEnd, out double colEnd))
+            return new LineSegment(rowBegin, colBegin, rowEnd, colEnd);
         return FitLineRaw(cols, rows);
     }
 
@@ -35,6 +37,8 @@ public static partial class Operators
             cols[i] = points[i].Col;
             rows[i] = points[i].Row;
         }
+        if (NativeCore.TryFitCircle(cols, rows, out double nativeRow, out double nativeCol, out double nativeRadius))
+            return new CircleFit(nativeRow, nativeCol, nativeRadius);
         var (row, col, radius) = Pratt(cols, rows, points.Count);
         var keep = new bool[points.Count];
         for (int step = 0; step < 4; step++)

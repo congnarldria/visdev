@@ -2,6 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vizion;
 
+if (args.Length > 0 && args[0] == "--fit")
+{
+    FitNativeCheck();
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--link")
 {
     LinkNativeCheck();
@@ -931,6 +937,90 @@ static void Expect(int actual, int expected, string label)
 {
     if (actual != expected)
         throw new InvalidOperationException($"{label} 應是 {expected}，得到 {actual}");
+}
+
+static void FitNativeCheck()
+{
+    if (!NativeCore.IsLoaded)
+        throw new InvalidOperationException("沒有載入 vizion_core：" + NativeCore.LoadDetail);
+    var straight = Operators.FitLine(new (double Row, double Col)[]
+    {
+        (0, 0), (0, 10), (8, 15), (0, 20), (0, 30),
+    });
+    bool At(double row, double col, double wantRow, double wantCol) =>
+        Math.Abs(row - wantRow) < 1e-6 && Math.Abs(col - wantCol) < 1e-6;
+    bool lineEnds =
+        (At(straight.RowBegin, straight.ColBegin, 0, 0) && At(straight.RowEnd, straight.ColEnd, 0, 30))
+        || (At(straight.RowBegin, straight.ColBegin, 0, 30) && At(straight.RowEnd, straight.ColEnd, 0, 0));
+    if (!lineEnds)
+        throw new InvalidOperationException($"飛點不該把直線拉走，得到 ({straight.RowBegin},{straight.ColBegin})-({straight.RowEnd},{straight.ColEnd})");
+    var circle = Operators.FitCircle(new (double Row, double Col)[]
+    {
+        (50, 100), (60, 97.3205080757), (67.3205080757, 90), (70, 80),
+        (67.3205080757, 70), (60, 62.6794919243), (50, 60), (40, 62.6794919243),
+        (32.6794919243, 70), (30, 80), (32.6794919243, 90), (40, 97.3205080757),
+        (50, 108),
+    });
+    if (Math.Abs(circle.Row - 50) > 1e-6 || Math.Abs(circle.Column - 80) > 1e-6 || Math.Abs(circle.Radius - 20) > 1e-6)
+        throw new InvalidOperationException($"飛點不該把圓拉走，得到列 {circle.Row} 行 {circle.Column} 半徑 {circle.Radius}");
+    var noisyLine = new (double Row, double Col)[240];
+    for (int i = 0; i < noisyLine.Length; i++)
+        noisyLine[i] = (i * 0.5, 3 + i * 0.25);
+    noisyLine[10] = (80, -40);
+    noisyLine[90] = (-30, 200);
+    var noisyCircle = new (double Row, double Col)[360];
+    for (int i = 0; i < noisyCircle.Length; i++)
+    {
+        double angle = i * Math.PI / 180.0;
+        noisyCircle[i] = (40 + 25 * Math.Sin(angle), 70 + 25 * Math.Cos(angle));
+    }
+    noisyCircle[4] = (400, 400);
+    noisyCircle[200] = (-80, 10);
+    bool previous = NativeCore.UseNative;
+    var nativeLine = Operators.FitLine(noisyLine);
+    var nativeCircle = Operators.FitCircle(noisyCircle);
+    NativeCore.UseNative = false;
+    var managedLine = Operators.FitLine(noisyLine);
+    var managedCircle = Operators.FitCircle(noisyCircle);
+    NativeCore.UseNative = true;
+    if (Math.Abs(nativeLine.RowBegin - managedLine.RowBegin) > 1e-9 || Math.Abs(nativeLine.ColBegin - managedLine.ColBegin) > 1e-9
+        || Math.Abs(nativeLine.RowEnd - managedLine.RowEnd) > 1e-9 || Math.Abs(nativeLine.ColEnd - managedLine.ColEnd) > 1e-9)
+        throw new InvalidOperationException("直線和 C# 後備不同");
+    if (Math.Abs(nativeCircle.Row - managedCircle.Row) > 1e-9 || Math.Abs(nativeCircle.Column - managedCircle.Column) > 1e-9
+        || Math.Abs(nativeCircle.Radius - managedCircle.Radius) > 1e-9)
+        throw new InvalidOperationException($"圓和 C# 後備不同：{nativeCircle.Row} {nativeCircle.Column} {nativeCircle.Radius}");
+    var benchLine = new (double Row, double Col)[4000];
+    var benchCircle = new (double Row, double Col)[4000];
+    for (int i = 0; i < benchLine.Length; i++)
+    {
+        benchLine[i] = (i * 0.2, 10 + i * 0.05 + (i % 17 == 0 ? 30 : 0));
+        double angle = i * 0.01;
+        benchCircle[i] = (100 + 40 * Math.Sin(angle), 50 + 40 * Math.Cos(angle) + (i % 23 == 0 ? 80 : 0));
+    }
+    Operators.FitLine(benchLine);
+    Operators.FitCircle(benchCircle);
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (int i = 0; i < 30; i++)
+    {
+        Operators.FitLine(benchLine);
+        Operators.FitCircle(benchCircle);
+    }
+    watch.Stop();
+    double nativeMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = false;
+    Operators.FitLine(benchLine);
+    Operators.FitCircle(benchCircle);
+    watch.Restart();
+    for (int i = 0; i < 30; i++)
+    {
+        Operators.FitLine(benchLine);
+        Operators.FitCircle(benchCircle);
+    }
+    watch.Stop();
+    double managedMs = watch.Elapsed.TotalMilliseconds;
+    NativeCore.UseNative = previous;
+    Console.WriteLine("擬合原生檢查通過");
+    Console.WriteLine($"4000 點直線加圓共 30 次：原生 {nativeMs:0.0} ms，C# {managedMs:0.0} ms，加速 {managedMs / nativeMs:0.0} 倍");
 }
 
 static void LinkNativeCheck()

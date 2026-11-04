@@ -253,6 +253,54 @@ public static class NativeCore
         }
     }
 
+    public static bool TryFitLine(double[] cols, double[] rows, out double rowBegin, out double colBegin, out double rowEnd, out double colEnd)
+    {
+        rowBegin = 0;
+        colBegin = 0;
+        rowEnd = 0;
+        colEnd = 0;
+        if (!IsLoaded || !UseNative || cols.Length < 2)
+            return false;
+        try
+        {
+            return vizion_fit_line(cols, rows, cols.Length, out rowBegin, out colBegin, out rowEnd, out colEnd) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryFitCircle(double[] cols, double[] rows, out double row, out double col, out double radius)
+    {
+        row = 0;
+        col = 0;
+        radius = 0;
+        if (!IsLoaded || !UseNative || cols.Length < 3)
+            return false;
+        try
+        {
+            int code = vizion_fit_circle(cols, rows, cols.Length, out row, out col, out radius);
+            if (code == -2)
+                throw new InvalidOperationException("這些點擬合不出圓");
+            return code == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TryEdgeChains(
         byte[] center, float[] magnitude, int width, int height, double low, double high,
         float[] shift, float[] normalX, float[] normalY, out EdgePoint[][] chains)
@@ -481,6 +529,15 @@ public static class NativeCore
             return false;
         }
     }
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_fit_line(
+        double[] cols, double[] rows, int count,
+        out double rowBegin, out double colBegin, out double rowEnd, out double colEnd);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_fit_circle(
+        double[] cols, double[] rows, int count, out double row, out double col, out double radius);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_edge_chains(
