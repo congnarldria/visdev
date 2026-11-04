@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -42,6 +43,9 @@ public partial class MainWindow : Window
     readonly HashSet<int> Breakpoints = [];
     readonly Dictionary<int, (double Ms, int Count)> LineTimes = [];
 
+    string? CurrentPath;
+    string SavedText = "";
+
     readonly ProgramRun Engine = new();
     bool Running;
 
@@ -70,6 +74,8 @@ public partial class MainWindow : Window
         };
         RefreshRails();
         RefreshProblems();
+        SavedText = ProgramFile.Normalize(ProgramText.Text);
+        UpdateDirty();
         ApplyFilter();
         BuildOperatorMenu();
         if (Catalog.Length > 0)
@@ -445,6 +451,7 @@ public partial class MainWindow : Window
         RefreshRails();
         UpdateSense(false);
         RefreshProblems();
+        UpdateDirty();
     }
 
     void ToggleBreakpoint(int line)
@@ -842,6 +849,175 @@ public partial class MainWindow : Window
         return BitmapSource.Create(width, height, 96, 96, PixelFormats.Gray8, null, pixels, width);
     }
 
+    void NewProgram_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ConfirmDiscard())
+            return;
+        LoadSource("* 新程式\n", "untitled.viz", null, clean: false, skipped: null);
+    }
+
+    void OpenProgram_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ConfirmDiscard())
+            return;
+        var dialog = new OpenFileDialog
+        {
+            Title = "開啟",
+            Filter = "程式 (*.viz;*.hdv;*.hdev;*.hdvp;*.hdpl;*.dev;*.dvp;*.txt)|*.viz;*.hdv;*.hdev;*.hdvp;*.hdpl;*.dev;*.dvp;*.txt|所有檔案 (*.*)|*.*",
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+        try
+        {
+            byte[] bytes = File.ReadAllBytes(dialog.FileName);
+            string name = Path.GetFileName(dialog.FileName);
+            if (ProgramFile.IsHalcon(name))
+            {
+                (string source, List<string> skipped) = HDevelopFile.Convert(bytes, OperatorNames());
+                LoadSource(source, name, dialog.FileName, clean: true, skipped);
+            }
+            else
+                LoadSource(DecodeProgram(bytes), name, dialog.FileName, clean: true, skipped: null);
+        }
+        catch (Exception ex)
+        {
+            StatusLine.Text = "開啟失敗：" + ex.Message;
+            Log(StatusLine.Text);
+        }
+    }
+
+    void SaveProgram_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(CurrentPath))
+        {
+            SaveProgramAs_Click(sender, e);
+            return;
+        }
+        WriteProgram(CurrentPath);
+    }
+
+    void SaveProgramAs_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "另存新檔",
+            FileName = ProgramFile.EnsureName(ProgramName.Text),
+            Filter = "Photonix (*.viz)|*.viz|HDV (*.hdv)|*.hdv|文字 (*.txt)|*.txt|HDevelop (*.hdev)|*.hdev|程序 (*.hdvp)|*.hdvp|程序庫 (*.hdpl)|*.hdpl|所有檔案 (*.*)|*.*",
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+        string path = dialog.FileName;
+        if (!ProgramFile.Suffixes.Any(suffix => path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            path += ".viz";
+        if (WriteProgram(path))
+            CurrentPath = path;
+    }
+
+    bool WriteProgram(string path)
+    {
+        try
+        {
+            string text = ProgramFile.ForDisk(ProgramText.Text, path);
+            File.WriteAllText(path, text, new UTF8Encoding(false));
+            CurrentPath = path;
+            ProgramName.Text = Path.GetFileName(path);
+            SavedText = ProgramFile.Normalize(ProgramText.Text);
+            StatusLine.Text = "已儲存 " + path;
+            Log(StatusLine.Text);
+            UpdateDirty();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusLine.Text = "存檔失敗：" + ex.Message;
+            Log(StatusLine.Text);
+            return false;
+        }
+    }
+
+    void LoadSource(string source, string name, string? path, bool clean, IReadOnlyList<string>? skipped)
+    {
+        source = ProgramFile.Normalize(source);
+        SavedText = clean ? source : "";
+        CurrentPath = path;
+        ProgramName.Text = name;
+        ProgramText.Text = source;
+        Breakpoints.Clear();
+        RunNotes.Clear();
+        Engine.Reset();
+        NextLine = 1;
+        PictureData = null;
+        Frame = null;
+        Picture.Source = null;
+        Picture.Visibility = Visibility.Collapsed;
+        EmptyHint.Visibility = Visibility.Visible;
+        Shapes = [];
+        LineTimes.Clear();
+        RefreshRails();
+        RefreshVars();
+        RefreshProblems();
+        UpdateDirty();
+        if (skipped != null && skipped.Count > 0)
+        {
+            string note = skipped.Count > 4
+                ? "已開啟 " + name + "。" + skipped.Count + " 個有密碼的程序沒有打開"
+                : "已開啟。有密碼的程序沒有打開：" + string.Join("、", skipped);
+            StatusLine.Text = note;
+            Log(note);
+        }
+        else
+        {
+            StatusLine.Text = path == null ? "新程式" : "已開啟 " + name;
+            Log(StatusLine.Text);
+        }
+    }
+
+    bool ConfirmDiscard()
+    {
+        if (!IsDirty())
+            return true;
+        return MessageBox.Show(this, "程式還沒存。要放棄這些修改嗎？", "Photonix", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+    }
+
+    bool IsDirty() => ProgramFile.Normalize(ProgramText.Text) != ProgramFile.Normalize(SavedText);
+
+    void UpdateDirty()
+    {
+        bool dirty = IsDirty();
+        string name = string.IsNullOrWhiteSpace(ProgramName.Text) ? "untitled.viz" : ProgramName.Text.Trim();
+        Title = (dirty ? "* " : "") + name + " — Photonix";
+        if (BtnSave != null)
+            BtnSave.Content = dirty ? "儲存 *" : "儲存";
+    }
+
+    void ProgramName_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        UpdateDirty();
+        RefreshProblems();
+    }
+
+    Dictionary<string, string> OperatorNames()
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (OperatorDoc op in Catalog)
+        {
+            string bare = op.Name.Contains('.') ? op.Name[(op.Name.IndexOf('.') + 1)..] : op.Name;
+            map[bare] = op.Name;
+        }
+        return map;
+    }
+
+    static string DecodeProgram(byte[] raw)
+    {
+        if (raw.Length >= 2 && raw[0] == 0xFF && raw[1] == 0xFE)
+            return Encoding.Unicode.GetString(raw);
+        if (raw.Length >= 2 && raw[0] == 0xFE && raw[1] == 0xFF)
+            return Encoding.BigEndianUnicode.GetString(raw);
+        if (raw.Length >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF)
+            return Encoding.UTF8.GetString(raw, 3, raw.Length - 3);
+        return Encoding.UTF8.GetString(raw);
+    }
+
     string[] SourceLines() => (ProgramText.Text ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
@@ -863,6 +1039,27 @@ public partial class MainWindow : Window
             if (e.Key == Key.F7)
             {
                 Reset_Click(this, e);
+                e.Handled = true;
+                return;
+            }
+        }
+        if (Keyboard.Modifiers == ModifierKeys.Control && Keyboard.Modifiers != (ModifierKeys.Control | ModifierKeys.Alt))
+        {
+            if (e.Key == Key.N)
+            {
+                NewProgram_Click(this, e);
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.O)
+            {
+                OpenProgram_Click(this, e);
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.S)
+            {
+                SaveProgram_Click(this, e);
                 e.Handled = true;
                 return;
             }

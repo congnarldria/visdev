@@ -44,7 +44,7 @@ Photonix 用 WPF、`net10.0-windows`，版面對齊 `app/static/index.html` 的�
 
 ## 11. 程式檔
 
-新增（Ctrl+N）、開啟（Ctrl+O）、儲存（Ctrl+S）、另存新檔。副檔名對齊網頁版：`.viz`、`.hdv`、`.hdev`、`.hdvp`、`.hdpl`，也接受 `.dev`、`.dvp`、`.txt`。
+已完成。Ctrl+N 新增、Ctrl+O 開啟、Ctrl+S 儲存，也可以另存新檔。副檔名接受 `.viz`、`.hdv`、`.hdev`、`.hdvp`、`.hdpl`、`.dev`、`.dvp`、`.txt`。`.viz` 以 CRLF 儲存。有密碼的 HDevelop 程序不會打開。
 
 ## 12. 專案
 

@@ -36,12 +36,12 @@
   <DockPanel>
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="檔案">
-        <MenuItem Header="新增" Click="NotYet_Click"/>
+        <MenuItem Header="新增" InputGestureText="Ctrl+N" Click="NewProgram_Click"/>
         <MenuItem Header="專案" Click="NotYet_Click"/>
         <MenuItem Header="範本一覽" Click="NotYet_Click"/>
-        <MenuItem Header="開啟" Click="NotYet_Click"/>
-        <MenuItem Header="儲存" Click="NotYet_Click"/>
-        <MenuItem Header="另存新檔" Click="NotYet_Click"/>
+        <MenuItem Header="開啟" InputGestureText="Ctrl+O" Click="OpenProgram_Click"/>
+        <MenuItem Header="儲存" InputGestureText="Ctrl+S" Click="SaveProgram_Click"/>
+        <MenuItem Header="另存新檔" Click="SaveProgramAs_Click"/>
         <MenuItem Header="匯出 C#" Click="NotYet_Click"/>
         <Separator/>
         <MenuItem Header="載入影像" Click="LoadImage_Click"/>
@@ -98,10 +98,10 @@
       <DockPanel>
         <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0" Text="Photonix"/>
         <TextBlock VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,6,0" Text="程式"/>
-        <TextBox x:Name="ProgramName" Width="180" Margin="0,0,8,0" Text="blob_inspect.hdv"/>
+        <TextBox x:Name="ProgramName" Width="180" Margin="0,0,8,0" Text="blob_inspect.hdv" TextChanged="ProgramName_TextChanged"/>
         <Button Content="範例" Click="NotYet_Click"/>
-        <Button Content="開啟" Click="NotYet_Click"/>
-        <Button Content="儲存" Click="NotYet_Click"/>
+        <Button Content="開啟" Click="OpenProgram_Click"/>
+        <Button x:Name="BtnSave" Content="儲存" Click="SaveProgram_Click"/>
         <CheckBox x:Name="TraceBox" Content="追蹤" VerticalAlignment="Center" Margin="8,0,8,0" Foreground="{StaticResource Ink}"/>
         <Button Content="重設" Click="Reset_Click"/>
         <Button Content="單步" Click="Step_Click"/>
