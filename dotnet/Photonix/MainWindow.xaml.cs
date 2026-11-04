@@ -1,6 +1,8 @@
 using System.IO;
 using System.Text;
 using System.Windows;
+using AvalonDock.Layout;
+using AvalonDock.Serializer.Xml;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
@@ -54,6 +56,10 @@ public partial class MainWindow : Window
     bool Running;
     GraphicsWindow? GfxFloat;
     OperatorDialog? ParamDialog;
+    readonly Dictionary<string, object> DockPanes = new(StringComparer.Ordinal);
+    string DefaultLayout = "";
+    bool LoadingLayout;
+    System.Windows.Threading.DispatcherTimer? LayoutSaveTimer;
     string? DrawTool;
     bool DrawDragging;
     bool DrawReady;
@@ -62,9 +68,6 @@ public partial class MainWindow : Window
     double DraftACol;
     double DraftBRow;
     double DraftBCol;
-    GridLength ProgramWidth = new(2, GridUnitType.Star);
-    GridLength GfxWidth = new(3, GridUnitType.Star);
-    GridLength VarsWidth = new(220);
 
     readonly List<string> RunNotes = [];
     readonly List<Problem> Problems = [];
@@ -101,6 +104,8 @@ public partial class MainWindow : Window
             ShowHelp(Catalog[0]);
         }
         ShowTab("ops");
+        Loaded += (_, _) => LoadDockLayout();
+        Closing += (_, _) => SaveDockLayout();
         ApplyMode(GfxMode.Select);
         BuildTemplateMenu();
         SampleMenu.SubmenuOpened += (_, _) => FillProgramMenu(SampleMenu.Items, includeWorkspace: false);
@@ -491,40 +496,172 @@ public partial class MainWindow : Window
             HidePane(tag);
     }
 
-    void Rail_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not FrameworkElement item || item.Tag is not string tag)
-            return;
-        ShowPane(tag);
-        StatusLine.Text = "已釘選" + PaneTitle(tag);
-    }
-
     void PinAll_Click(object sender, RoutedEventArgs e)
     {
-        if (ProgramPane.Visibility != Visibility.Visible)
-            ShowPane("program");
-        if (GfxPane.Visibility != Visibility.Visible)
-            ShowPane("gfx");
-        if (VarsPane.Visibility != Visibility.Visible)
-            ShowPane("vars");
-        if (OperatorHost.Visibility != Visibility.Visible)
-            ShowPane("bottom");
+        foreach (LayoutAnchorable pane in Dock.Layout.Descendents().OfType<LayoutAnchorable>().ToList())
+        {
+            if (pane.IsHidden)
+                pane.Show();
+            if (pane.IsAutoHidden)
+                pane.ToggleAutoHide();
+        }
+        SyncViewChecks();
         StatusLine.Text = "已全部釘選";
         Log(StatusLine.Text);
     }
 
     void ResetLayout_Click(object sender, RoutedEventArgs e)
     {
-        ProgramWidth = new GridLength(2, GridUnitType.Star);
-        GfxWidth = new GridLength(3, GridUnitType.Star);
-        VarsWidth = new GridLength(220);
-        ShowPane("program");
-        ShowPane("gfx");
-        ShowPane("vars");
-        ShowPane("bottom");
+        if (DefaultLayout.Length > 0)
+            ApplyLayout(DefaultLayout);
+        try
+        {
+            if (File.Exists(LayoutFile()))
+                File.Delete(LayoutFile());
+        }
+        catch (Exception ex)
+        {
+            Log("版面檔沒清掉：" + ex.Message);
+        }
         GfxFloat?.Close();
+        SyncViewChecks();
         StatusLine.Text = "已回復版面";
         Log(StatusLine.Text);
+    }
+
+    void LoadDockLayout()
+    {
+        RememberPanes();
+        DefaultLayout = CaptureLayout();
+        string path = LayoutFile();
+        if (!File.Exists(path))
+        {
+            SyncViewChecks();
+            return;
+        }
+        try
+        {
+            ApplyLayout(File.ReadAllText(path));
+            if (!HasAllPanes())
+                ApplyLayout(DefaultLayout);
+        }
+        catch (Exception ex)
+        {
+            Log("版面讀不回來，已用預設：" + ex.Message);
+            try { ApplyLayout(DefaultLayout); } catch (Exception) { }
+        }
+        SyncViewChecks();
+    }
+
+    void SaveDockLayout()
+    {
+        if (LoadingLayout || DefaultLayout.Length == 0)
+            return;
+        try
+        {
+            string path = LayoutFile();
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, CaptureLayout());
+        }
+        catch (Exception ex)
+        {
+            Log("版面沒存成：" + ex.Message);
+        }
+    }
+
+    void Dock_LayoutChanged(object? sender, EventArgs e)
+    {
+        if (LoadingLayout || DefaultLayout.Length == 0)
+            return;
+        SyncViewChecks();
+        LayoutSaveTimer ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        LayoutSaveTimer.Stop();
+        LayoutSaveTimer.Tick -= SaveLayoutTick;
+        LayoutSaveTimer.Tick += SaveLayoutTick;
+        LayoutSaveTimer.Start();
+    }
+
+    void SaveLayoutTick(object? sender, EventArgs e)
+    {
+        LayoutSaveTimer?.Stop();
+        SaveDockLayout();
+    }
+
+    string CaptureLayout()
+    {
+        var serializer = new XmlLayoutSerializer(Dock);
+        using var writer = new StringWriter();
+        serializer.Serialize(writer);
+        return writer.ToString();
+    }
+
+    void ApplyLayout(string xml)
+    {
+        RememberPanes();
+        LoadingLayout = true;
+        try
+        {
+            var serializer = new XmlLayoutSerializer(Dock);
+            serializer.LayoutSerializationCallback += (_, args) =>
+            {
+                string id = args.Model.ContentId ?? "";
+                if (DockPanes.TryGetValue(id, out object? content))
+                    args.Content = content;
+                else
+                    args.Cancel = true;
+            };
+            using var reader = new StringReader(xml);
+            serializer.Deserialize(reader);
+        }
+        finally
+        {
+            LoadingLayout = false;
+        }
+    }
+
+    void RememberPanes()
+    {
+        if (Dock.Layout == null)
+            return;
+        foreach (LayoutAnchorable pane in Dock.Layout.Descendents().OfType<LayoutAnchorable>())
+        {
+            if (!string.IsNullOrEmpty(pane.ContentId) && pane.Content != null)
+                DockPanes[pane.ContentId] = pane.Content;
+        }
+    }
+
+    bool HasAllPanes()
+    {
+        foreach (string id in new[] { "program", "gfx", "vars", "ops", "syntax", "log", "problems" })
+        {
+            if (FindPane(id) == null)
+                return false;
+        }
+        return true;
+    }
+
+    LayoutAnchorable? FindPane(string id) =>
+        Dock.Layout?.Descendents().OfType<LayoutAnchorable>().FirstOrDefault(pane => pane.ContentId == id);
+
+    static string LayoutFile() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Photonix",
+        "layout.xml");
+
+    static string PaneId(string tag) => tag == "bottom" ? "ops" : tag;
+
+    void SyncViewChecks()
+    {
+        ViewProgram.IsChecked = IsPaneShown("program");
+        ViewGfx.IsChecked = IsPaneShown("gfx");
+        ViewVars.IsChecked = IsPaneShown("vars");
+        ViewOps.IsChecked = IsPaneShown("ops");
+    }
+
+    bool IsPaneShown(string id)
+    {
+        LayoutAnchorable? pane = FindPane(id);
+        return pane != null && !pane.IsHidden && !pane.IsAutoHidden;
     }
 
     void FloatGfx_Click(object sender, RoutedEventArgs e)
@@ -551,85 +688,26 @@ public partial class MainWindow : Window
 
     void ShowPane(string tag)
     {
-        switch (tag)
-        {
-            case "program":
-                ProgramPane.Visibility = Visibility.Visible;
-                ProgramEdge.Visibility = Visibility.Collapsed;
-                Workspace.ColumnDefinitions[0].Width = ProgramWidth;
-                ViewProgram.IsChecked = true;
-                break;
-            case "gfx":
-                GfxPane.Visibility = Visibility.Visible;
-                GfxEdge.Visibility = Visibility.Collapsed;
-                Workspace.ColumnDefinitions[2].Width = GfxWidth;
-                ViewGfx.IsChecked = true;
-                break;
-            case "vars":
-                VarsPane.Visibility = Visibility.Visible;
-                VarsEdge.Visibility = Visibility.Collapsed;
-                Workspace.ColumnDefinitions[4].Width = VarsWidth;
-                ViewVars.IsChecked = true;
-                break;
-            case "bottom":
-                OperatorHost.Visibility = Visibility.Visible;
-                OperatorHost.Height = 210;
-                OperatorRail.Visibility = Visibility.Collapsed;
-                ViewOps.IsChecked = true;
-                break;
-        }
-        SyncSplitters();
+        LayoutAnchorable? pane = FindPane(PaneId(tag));
+        if (pane == null)
+            return;
+        if (pane.IsHidden)
+            pane.Show();
+        if (pane.IsAutoHidden)
+            pane.ToggleAutoHide();
+        pane.IsSelected = true;
+        SyncViewChecks();
     }
 
     void HidePane(string tag)
     {
-        switch (tag)
-        {
-            case "program":
-                if (ProgramPane.Visibility == Visibility.Visible)
-                    ProgramWidth = Workspace.ColumnDefinitions[0].Width;
-                ProgramPane.Visibility = Visibility.Collapsed;
-                ProgramEdge.Visibility = Visibility.Visible;
-                Workspace.ColumnDefinitions[0].Width = new GridLength(28);
-                ViewProgram.IsChecked = false;
-                break;
-            case "gfx":
-                if (GfxPane.Visibility == Visibility.Visible)
-                    GfxWidth = Workspace.ColumnDefinitions[2].Width;
-                GfxPane.Visibility = Visibility.Collapsed;
-                GfxEdge.Visibility = Visibility.Visible;
-                Workspace.ColumnDefinitions[2].Width = new GridLength(28);
-                ViewGfx.IsChecked = false;
-                break;
-            case "vars":
-                if (VarsPane.Visibility == Visibility.Visible)
-                    VarsWidth = Workspace.ColumnDefinitions[4].Width;
-                VarsPane.Visibility = Visibility.Collapsed;
-                VarsEdge.Visibility = Visibility.Visible;
-                Workspace.ColumnDefinitions[4].Width = new GridLength(28);
-                ViewVars.IsChecked = false;
-                break;
-            case "bottom":
-                OperatorHost.Visibility = Visibility.Collapsed;
-                OperatorRail.Visibility = Visibility.Visible;
-                ViewOps.IsChecked = false;
-                break;
-        }
-        SyncSplitters();
+        LayoutAnchorable? pane = FindPane(PaneId(tag));
+        if (pane == null)
+            return;
+        if (!pane.IsHidden && !pane.IsAutoHidden)
+            pane.ToggleAutoHide();
+        SyncViewChecks();
         StatusLine.Text = "已隱藏" + PaneTitle(tag);
-    }
-
-    void SyncSplitters()
-    {
-        bool program = ProgramPane.Visibility == Visibility.Visible;
-        bool gfx = GfxPane.Visibility == Visibility.Visible;
-        bool vars = VarsPane.Visibility == Visibility.Visible;
-        bool programSplit = program && gfx;
-        bool varsSplit = gfx && vars;
-        ProgramSplit.Visibility = programSplit ? Visibility.Visible : Visibility.Collapsed;
-        VarsSplit.Visibility = varsSplit ? Visibility.Visible : Visibility.Collapsed;
-        Workspace.ColumnDefinitions[1].Width = programSplit ? new GridLength(4) : new GridLength(0);
-        Workspace.ColumnDefinitions[3].Width = varsSplit ? new GridLength(4) : new GridLength(0);
     }
 
     static string PaneTitle(string tag) => tag switch
@@ -656,13 +734,7 @@ public partial class MainWindow : Window
             ShowTab(tag);
     }
 
-    void ShowTab(string tag)
-    {
-        PageOps.Visibility = tag == "ops" ? Visibility.Visible : Visibility.Collapsed;
-        PageSyntax.Visibility = tag == "syntax" ? Visibility.Visible : Visibility.Collapsed;
-        PageLog.Visibility = tag == "log" ? Visibility.Visible : Visibility.Collapsed;
-        PageProblems.Visibility = tag == "problems" ? Visibility.Visible : Visibility.Collapsed;
-    }
+    void ShowTab(string tag) => ShowPane(tag == "ops" ? "bottom" : tag);
 
     void OperatorSearch_TextChanged(object sender, TextChangedEventArgs e) => ApplyFilter();
 
@@ -964,7 +1036,8 @@ public partial class MainWindow : Window
         StatusErrors.Content = "錯誤 " + errors;
         StatusWarnings.Content = "警告 " + warnings;
         StatusMessages.Content = "訊息 " + messages;
-        TabProblems.Content = Problems.Count == 0 ? "錯誤清單" : "錯誤清單 " + Problems.Count;
+        if (FindPane("problems") is LayoutAnchorable problems)
+            problems.Title = Problems.Count == 0 ? "錯誤清單" : "錯誤清單 " + Problems.Count;
         PaintFilter(FilterErrors, ShowErrors);
         PaintFilter(FilterWarnings, ShowWarnings);
         PaintFilter(FilterMessages, ShowMessages);
