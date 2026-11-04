@@ -1033,6 +1033,73 @@ sealed class ProgramRun
                 Set(args[1], longRuns);
                 Show(longRuns);
                 return;
+            case "dyn_threshold":
+                Need(args, 5);
+                var dynRegion = Operators.DynThreshold(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]), Word(args[4]));
+                Set(args[2], dynRegion);
+                Show(dynRegion);
+                return;
+            case "local_threshold":
+                Need(args, 2);
+                var localThresh = Operators.LocalThreshold(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Word(args[2]) : "mean",
+                    args.Length > 3 ? Word(args[3]) : "dark",
+                    args.Length > 4 ? IntOf(args[4]) : 3,
+                    args.Length > 5 ? Num(args[5]) : 20);
+                Set(args[1], localThresh);
+                Show(localThresh);
+                return;
+            case "plateaus":
+                Need(args, 2);
+                var flatBlocks = Operators.Plateaus(ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 3);
+                Set(args[1], flatBlocks);
+                Show(flatBlocks);
+                return;
+            case "opencv_threshold":
+                Need(args, 4);
+                var cvBinary = Operators.OpenCvThreshold(ImageOf(args[0]), IntOf(args[2]), Word(args[3]));
+                Set(args[1], cvBinary);
+                Show(cvBinary);
+                return;
+            case "bin_threshold":
+                Need(args, 2);
+                var otsuRegion = Operators.BinThreshold(ImageOf(args[0]));
+                Set(args[1], otsuRegion);
+                Show(otsuRegion);
+                return;
+            case "hysteresis_threshold":
+                Need(args, 5);
+                var hysteresis = Operators.HysteresisThreshold(ImageOf(args[0]), Num(args[2]), Num(args[3]), Num(args[4]));
+                Set(args[1], hysteresis);
+                Show(hysteresis);
+                return;
+            case "var_threshold":
+                Need(args, 7);
+                var varRegion = Operators.VarThreshold(
+                    ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Num(args[4]), Num(args[5]), Word(args[6]));
+                Set(args[1], varRegion);
+                Show(varRegion);
+                return;
+            case "sauvola":
+                Need(args, 2);
+                var sauvolaRegion = Operators.Sauvola(
+                    ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 15, args.Length > 3 ? Num(args[3]) : 0.5);
+                Set(args[1], sauvolaRegion);
+                Show(sauvolaRegion);
+                return;
+            case "dual_threshold":
+                Need(args, 5);
+                var dualParts = Operators.DualThreshold(ImageOf(args[0]), IntOf(args[2]), Num(args[3]), Num(args[4]));
+                Set(args[1], dualParts);
+                Show(dualParts);
+                return;
+            case "regiongrowing":
+                Need(args, 6);
+                var grownParts = Operators.RegionGrowing(ImageOf(args[0]), NumList(args[2]), NumList(args[3]), Num(args[4]), IntOf(args[5]));
+                Set(args[1], grownParts);
+                Show(grownParts);
+                return;
             case "select_grayvalues_from_channels":
                 Need(args, 3);
                 var channelPick = Operators.SelectGrayvalues(ImageOf(args[0]), ImageOf(args[1]));
@@ -1172,6 +1239,16 @@ sealed class ProgramRun
         if (value is Region[] regions)
             return Operators.Union(regions);
         throw new InvalidOperationException(token + " 必須是區域");
+    }
+
+    double[] NumList(string token)
+    {
+        object value = Eval(token);
+        if (value is double number)
+            return new[] { number };
+        if (value is double[] many)
+            return many;
+        throw new InvalidOperationException(token + " 必須是數字");
     }
 
     double Num(string token)

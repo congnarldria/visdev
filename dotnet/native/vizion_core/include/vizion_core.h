@@ -414,6 +414,41 @@ VIZION_EXPORT int VIZION_CALL vizion_fast_threshold(
     const uint8_t* gray, uint8_t* mask, int width, int height, int low, int high, int minimum);
 VIZION_EXPORT int VIZION_CALL vizion_segment_selftest(void);
 
+/* light、dark、equal、not_equal 和另一張圖比。mode：0 light、1 dark、2 equal、3 not_equal。 */
+VIZION_EXPORT int VIZION_CALL vizion_dyn_threshold(
+    const uint8_t* image, const uint8_t* smooth, const uint8_t* domain, uint8_t* mask,
+    int count, double offset, int mode);
+/* dark 比局部平均低超過 Offset，light 比局部平均高超過 Offset。 */
+VIZION_EXPORT int VIZION_CALL vizion_local_threshold(
+    const uint8_t* gray, uint8_t* mask, int width, int height, int side, double offset, int light);
+/* 鄰域裡每個像素都一樣才算平坦。 */
+VIZION_EXPORT int VIZION_CALL vizion_plateau(
+    const uint8_t* gray, const uint8_t* domain, uint8_t* mask, int width, int height, int side);
+/* inverse 為 0 時留下大於門檻的像素，為 1 時留下小於等於門檻的像素。 */
+VIZION_EXPORT int VIZION_CALL vizion_opencv_threshold(
+    const uint8_t* gray, const uint8_t* domain, uint8_t* mask, int count, int level, int inverse);
+/* 全圖同一個灰階時是空的。否則留下比 Otsu 門檻亮的像素。 */
+VIZION_EXPORT int VIZION_CALL vizion_bin_threshold(const uint8_t* gray, uint8_t* mask, int count);
+/* 高門檻是種子，低門檻以上而且八連通的像素留下。 */
+VIZION_EXPORT int VIZION_CALL vizion_hysteresis_threshold(
+    const uint8_t* gray, const uint8_t* domain, uint8_t* mask, int width, int height,
+    double low, double high, double length);
+/* 門檻是 max(標準差 × 倍率, AbsThreshold)。mode：0 light、1 dark、2 equal、3 not_equal。 */
+VIZION_EXPORT int VIZION_CALL vizion_var_threshold(
+    const uint8_t* gray, const uint8_t* domain, uint8_t* mask, int width, int height,
+    int mask_width, int mask_height, double scale, double absolute, int mode);
+/* 比 Sauvola 局部門檻還暗的像素留下。 */
+VIZION_EXPORT int VIZION_CALL vizion_sauvola(
+    const uint8_t* gray, const uint8_t* domain, uint8_t* mask, int width, int height, int side, double factor);
+/* 標出夠大、而且含更強像素的八連通區塊。標號從 1 開始。 */
+VIZION_EXPORT int VIZION_CALL vizion_dual_labels(
+    const uint8_t* gray, const uint8_t* domain, int* labels, int width, int height,
+    double limit, double strong, int minimum, int* count);
+/* 從種子沿八鄰域成長。標號從 1 開始，太小的區塊不編號。 */
+VIZION_EXPORT int VIZION_CALL vizion_region_grow(
+    const uint8_t* gray, const uint8_t* domain, int* labels, int width, int height,
+    const int* rows, const int* columns, int seeds, double tolerance, int minimum, int* count);
+
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
     const uint8_t* gray, int width,

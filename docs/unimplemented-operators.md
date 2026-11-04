@@ -2,10 +2,10 @@
 
 目錄共 1195 個，和 `dotnet/Photonix/operators.json` 同一份。Python 引擎裡每個都有函式。
 這裡的「還沒實作」是指 Photonix 執行到該行會停下來，訊息是「還沒接上這個算子」。
-已接上的 149 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
+已接上的 159 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
 `tuple_is_serializable` 是在問 tuple 能不能序列化，不是序列埠，所以留在 Tuple。
 
-還沒接上、且與硬體無關：1019 個。排除的硬體算子：27 個。
+還沒接上、且與硬體無關：1009 個。排除的硬體算子：27 個。
 
 ## 數量
 
@@ -15,7 +15,7 @@
 | 系統 | 4 |
 | 灰階與濾波 | 14 |
 | 幾何 | 57 |
-| 分割 | 21 |
+| 分割 | 11 |
 | 形態學 | 47 |
 | 區域 | 211 |
 | 特徵 | 100 |
@@ -31,7 +31,7 @@
 | 顯示 | 10 |
 | 矩陣 | 65 |
 | Tuple | 148 |
-| 合計 | 1019 |
+| 合計 | 1009 |
 
 ## 已接上，不列入
 
@@ -166,6 +166,16 @@
 - Vizion.check_difference
 - Vizion.zero_crossing
 - Vizion.fast_threshold
+- Vizion.dyn_threshold
+- Vizion.local_threshold
+- Vizion.plateaus
+- Vizion.opencv_threshold
+- Vizion.bin_threshold
+- Vizion.hysteresis_threshold
+- Vizion.var_threshold
+- Vizion.sauvola
+- Vizion.dual_threshold
+- Vizion.regiongrowing
 - Vizion.read_image
 - Vizion.gauss_image
 - Vizion.mean_image
@@ -329,25 +339,15 @@
 - Vizion.polar_trans_region
 - Vizion.polar_trans_region_inv
 
-### 分割（21）
+### 分割（11）
 
 - Vizion.binary_threshold
-- Vizion.sauvola
-- Vizion.opencv_threshold
 - Vizion.opencv_connection
 - Vizion.select_obj
 - Vizion.histo_to_thresh
-- Vizion.plateaus
 - Vizion.dots_image
 - Vizion.char_threshold
 - Vizion.auto_threshold
-- Vizion.dual_threshold
-- Vizion.bin_threshold
-- Vizion.local_threshold
-- Vizion.dyn_threshold
-- Vizion.var_threshold
-- Vizion.hysteresis_threshold
-- Vizion.regiongrowing
 - Vizion.watersheds
 - Vizion.watersheds_threshold
 - Vizion.regiongrowing_mean
