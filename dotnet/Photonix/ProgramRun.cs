@@ -292,6 +292,66 @@ sealed class ProgramRun
                 Set(args[2], brighter);
                 Image = brighter;
                 return;
+            case "div_image":
+                Need(args, 5);
+                var divided = Operators.DivImage(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]), Num(args[4]));
+                Set(args[2], divided);
+                Image = divided;
+                return;
+            case "emphasize":
+                Need(args, 5);
+                var sharp = Operators.Emphasize(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Num(args[4]));
+                Set(args[1], sharp);
+                Image = sharp;
+                return;
+            case "equ_histo_image":
+                Need(args, 2);
+                var equalized = Operators.EquHistoImage(ImageOf(args[0]));
+                Set(args[1], equalized);
+                Image = equalized;
+                return;
+            case "scale_image_max":
+                Need(args, 2);
+                var stretched = Operators.ScaleImageMax(ImageOf(args[0]));
+                Set(args[1], stretched);
+                Image = stretched;
+                return;
+            case "illuminate":
+                Need(args, 5);
+                var flattened = Operators.Illuminate(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Num(args[4]));
+                Set(args[1], flattened);
+                Image = flattened;
+                return;
+            case "count_channels":
+                Need(args, 2);
+                Set(args[1], (double)Operators.CountChannels(ImageOf(args[0])));
+                return;
+            case "access_channel":
+                Need(args, 3);
+                var channel = Operators.AccessChannel(ImageOf(args[0]), IntOf(args[2]));
+                Set(args[1], channel);
+                Image = channel;
+                return;
+            case "compose3":
+                Need(args, 4);
+                var composed = Operators.Compose3(ImageOf(args[0]), ImageOf(args[1]), ImageOf(args[2]));
+                Set(args[3], composed);
+                Image = composed;
+                return;
+            case "decompose3":
+                Need(args, 4);
+                ImageBuffer[] planes = Operators.Decompose3(ImageOf(args[0]));
+                Set(args[1], planes[0]);
+                Set(args[2], planes[1]);
+                Set(args[3], planes[2]);
+                return;
+            case "trans_from_rgb":
+                Need(args, 7);
+                ImageBuffer[] converted = Operators.TransFromRgb(ImageOf(args[0]), ImageOf(args[1]), ImageOf(args[2]), ColorName(args[6]));
+                Set(args[3], converted[0]);
+                Set(args[4], converted[1]);
+                Set(args[5], converted[2]);
+                return;
             case "reduce_domain":
                 Need(args, 3);
                 var reduced = Operators.ReduceDomain(ImageOf(args[0]), RegionOf(args[1]));
@@ -429,6 +489,19 @@ sealed class ProgramRun
     }
 
     int IntOf(string token) => (int)Math.Round(Num(token));
+
+    string ColorName(string token)
+    {
+        string text = token.Trim();
+        if (IsName(text))
+        {
+            object value = Get(text);
+            if (value is string named)
+                return named;
+            throw new InvalidOperationException(token + " 必須是色彩空間名稱");
+        }
+        return Unquote(text);
+    }
 
     static string Unquote(string token)
     {

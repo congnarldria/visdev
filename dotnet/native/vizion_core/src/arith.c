@@ -45,6 +45,15 @@ static uint8_t vizion_arith_one(uint8_t left, uint8_t right, int op, float mult,
         return left < right ? left : right;
     case 7:
         return left > right ? left : right;
+    case 8:
+        value = (b == 0.f ? 0.f : a / b) * mult + add;
+        break;
+    case 9:
+        value = a + (a - b) * mult;
+        break;
+    case 10:
+        value = (a - b) + b * mult + add;
+        break;
     default:
         return left;
     }
@@ -67,7 +76,7 @@ int vizion_gray_arith(
     int op, double mult, double add)
 {
     int flags;
-    if (!a || !dst || count < 1 || op < 0 || op > 7)
+    if (!a || !dst || count < 1 || op < 0 || op > 10)
         return -1;
     if (op != 0 && op != 1 && !b)
         return -1;
@@ -172,7 +181,7 @@ int vizion_arith_selftest(void)
         return 8;
     if ((flags & VIZION_CPU_SSE2) == 0)
         return 0;
-    for (op = 0; op <= 7; op++) {
+    for (op = 0; op <= 10; op++) {
         const uint8_t* second = (op == 0 || op == 1) ? NULL : right;
         vizion_arith_scalar(left, second, scalar, 0, 20, op, 0.5f, 3.f);
         memset(fast, 0, sizeof(fast));

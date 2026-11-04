@@ -434,6 +434,154 @@ public static class NativeCore
         }
     }
 
+    public static bool TryEqualize(byte[] source, byte[] destination, int count)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || source.Length < count || destination.Length < count)
+            return false;
+        try
+        {
+            return vizion_equalize(source, destination, count) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryEqualizeBgr(byte[] source, byte[] destination, int count)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || source.Length < count * 3 || destination.Length < count * 3)
+            return false;
+        try
+        {
+            return vizion_equalize_bgr(source, destination, count) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryScaleMax(byte[] source, byte[] destination, int count, byte[]? domain)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || source.Length < count || destination.Length < count)
+            return false;
+        if (domain != null && domain.Length < count)
+            return false;
+        try
+        {
+            return vizion_scale_max(source, destination, count, domain) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TrySplitBgr(byte[] bgr, byte[] blue, byte[] green, byte[] red, int count)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || bgr.Length < count * 3)
+            return false;
+        if (blue.Length < count || green.Length < count || red.Length < count)
+            return false;
+        try
+        {
+            return vizion_split_bgr(bgr, blue, green, red, count) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryMergeBgr(byte[] blue, byte[] green, byte[] red, byte[] bgr, int count)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || bgr.Length < count * 3)
+            return false;
+        if (blue.Length < count || green.Length < count || red.Length < count)
+            return false;
+        try
+        {
+            return vizion_merge_bgr(blue, green, red, bgr, count) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryRgbConvert(byte[] red, byte[] green, byte[] blue, byte[] first, byte[] second, byte[] third, int count, int space)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || space < 0 || space > 2)
+            return false;
+        if (red.Length < count || green.Length < count || blue.Length < count)
+            return false;
+        if (first.Length < count || second.Length < count || third.Length < count)
+            return false;
+        try
+        {
+            return vizion_rgb_convert(red, green, blue, first, second, third, count, space) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryIlluminate(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight, double factor, byte[]? domain)
+    {
+        if (!IsLoaded || !UseNative || width < 1 || height < 1 || maskWidth < 1 || maskHeight < 1)
+            return false;
+        int count = width * height;
+        if (source.Length < count || destination.Length < count)
+            return false;
+        if (domain != null && domain.Length < count)
+            return false;
+        try
+        {
+            return vizion_illuminate(source, destination, width, height, maskWidth, maskHeight, factor, domain) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TryMedian(byte[] source, byte[] destination, int width, int height, int ksize)
     {
         if (!IsLoaded || !UseNative || width < 1 || height < 1 || ksize < 1 || (ksize & 1) == 0)
@@ -630,6 +778,30 @@ public static class NativeCore
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_median_image(byte[] source, byte[] destination, int width, int height, int ksize);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_equalize(byte[] source, byte[] destination, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_equalize_bgr(byte[] source, byte[] destination, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_scale_max(byte[] source, byte[] destination, int count, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_split_bgr(byte[] bgr, byte[] blue, byte[] green, byte[] red, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_merge_bgr(byte[] blue, byte[] green, byte[] red, byte[] bgr, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_rgb_convert(
+        byte[] red, byte[] green, byte[] blue, byte[] first, byte[] second, byte[] third, int count, int space);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_illuminate(
+        byte[] source, byte[] destination, int width, int height,
+        int maskWidth, int maskHeight, double factor, byte[]? domain);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);

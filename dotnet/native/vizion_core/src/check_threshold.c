@@ -71,6 +71,12 @@ int main(void)
         return 1;
     }
     printf("灰階運算自我檢查通過\n");
+    code = vizion_tone_selftest();
+    if (code != 0) {
+        fprintf(stderr, "色調自我檢查失敗 %d\n", code);
+        return 1;
+    }
+    printf("色調自我檢查通過\n");
     code = vizion_intensity_selftest();
     if (code != 0) {
         fprintf(stderr, "亮度自我檢查失敗 %d\n", code);

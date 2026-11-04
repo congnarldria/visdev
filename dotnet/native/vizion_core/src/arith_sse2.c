@@ -52,6 +52,20 @@ static void vizion_float4(const uint8_t* a, const uint8_t* b, uint8_t* dst, int 
     case 5:
         value = _mm_add_ps(_mm_mul_ps(_mm_andnot_ps(_mm_set1_ps(-0.f), _mm_sub_ps(left, right)), scale), offset);
         break;
+    case 8: {
+        __m128 denom = right;
+        __m128 zero = _mm_cmpeq_ps(denom, _mm_setzero_ps());
+        __m128 quot = _mm_div_ps(left, _mm_or_ps(denom, _mm_and_ps(zero, _mm_set1_ps(1.f))));
+        quot = _mm_andnot_ps(zero, quot);
+        value = _mm_add_ps(_mm_mul_ps(quot, scale), offset);
+        break;
+    }
+    case 9:
+        value = _mm_add_ps(left, _mm_mul_ps(_mm_sub_ps(left, right), scale));
+        break;
+    case 10:
+        value = _mm_add_ps(_mm_add_ps(_mm_sub_ps(left, right), _mm_mul_ps(right, scale)), offset);
+        break;
     default:
         value = left;
         break;

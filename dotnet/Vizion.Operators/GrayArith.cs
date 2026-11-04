@@ -62,6 +62,9 @@ public static partial class Operators
     public static ImageBuffer AbsDiffImage(ImageBuffer left, ImageBuffer right, double mult) =>
         Combine(left, right, 5, mult, 0);
 
+    public static ImageBuffer DivImage(ImageBuffer left, ImageBuffer right, double mult, double add) =>
+        Combine(left, right, 8, mult, add);
+
     public static ImageBuffer MinImage(ImageBuffer left, ImageBuffer right) =>
         Combine(left, right, 6, 1, 0);
 
@@ -110,6 +113,15 @@ public static partial class Operators
                     break;
                 case 5:
                     value = Math.Abs(a - b) * (float)mult + (float)add;
+                    break;
+                case 8:
+                    value = (b == 0f ? 0f : a / b) * (float)mult + (float)add;
+                    break;
+                case 9:
+                    value = a + (a - b) * (float)mult;
+                    break;
+                case 10:
+                    value = (a - b) + b * (float)mult + (float)add;
                     break;
                 case 6:
                     destination[i] = left[i] < right![i] ? left[i] : right[i];

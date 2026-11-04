@@ -139,7 +139,8 @@ VIZION_EXPORT int VIZION_CALL vizion_bgr_gray(const uint8_t* bgr, int count, uin
 
 VIZION_EXPORT int VIZION_CALL vizion_bgr_selftest(void);
 
-/* 逐像素灰階。op：0 反相、1 乘加、2 相加、3 相減、4 相乘、5 絕對差、6 較小、7 較大。
+/* 逐像素灰階。op：0 反相、1 乘加、2 相加、3 相減、4 相乘、5 絕對差、6 較小、7 較大、
+   8 相除（分母 0 得到 0）、9 強化 a+(a-b)*mult、10 (a-b)+b*mult+add。
    先用 float 算，再截到 0..255，小數直接丟掉，和 NumPy 的 uint8 相同。b 在反相和乘加時可為 NULL。 */
 VIZION_EXPORT int VIZION_CALL vizion_gray_arith(
     const uint8_t* a, const uint8_t* b, uint8_t* dst, int count,
@@ -150,6 +151,34 @@ VIZION_EXPORT int VIZION_CALL vizion_median_image(
     const uint8_t* src, uint8_t* dst, int width, int height, int ksize);
 
 VIZION_EXPORT int VIZION_CALL vizion_arith_selftest(void);
+
+/* 單通道直方圖等化，和 cv2.equalizeHist 相同。 */
+VIZION_EXPORT int VIZION_CALL vizion_equalize(const uint8_t* src, uint8_t* dst, int count);
+
+/* 彩色只等化 YCrCb 的 Y，和 cv2.equalizeHist 套在亮度上相同。count 是像素數。 */
+VIZION_EXPORT int VIZION_CALL vizion_equalize_bgr(const uint8_t* src, uint8_t* dst, int count);
+
+/* 拉平照明。遮罩是正奇數。domain 非 0 才算平均，算完定義域外寫 0。domain 可為 NULL。 */
+VIZION_EXPORT int VIZION_CALL vizion_illuminate(
+    const uint8_t* src, uint8_t* dst, int width, int height,
+    int mask_width, int mask_height, double factor, const uint8_t* domain);
+
+/* 最小值拉到 0、最大值拉到 255。domain 非 0 才參與統計；domain 為 0 的像素輸出 0。domain 可為 NULL。 */
+VIZION_EXPORT int VIZION_CALL vizion_scale_max(
+    const uint8_t* src, uint8_t* dst, int count, const uint8_t* domain);
+
+/* BGR 拆成三張、或由藍紅綠合成。count 是像素數。 */
+VIZION_EXPORT int VIZION_CALL vizion_split_bgr(
+    const uint8_t* bgr, uint8_t* blue, uint8_t* green, uint8_t* red, int count);
+VIZION_EXPORT int VIZION_CALL vizion_merge_bgr(
+    const uint8_t* blue, const uint8_t* green, const uint8_t* red, uint8_t* bgr, int count);
+
+/* 記憶體是紅、綠、藍。space：0 hsv、1 lab、2 yuv。數值和 OpenCV 的 8 位元轉換相同。 */
+VIZION_EXPORT int VIZION_CALL vizion_rgb_convert(
+    const uint8_t* red, const uint8_t* green, const uint8_t* blue,
+    uint8_t* first, uint8_t* second, uint8_t* third, int count, int space);
+
+VIZION_EXPORT int VIZION_CALL vizion_tone_selftest(void);
 
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(
