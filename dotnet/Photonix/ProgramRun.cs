@@ -273,6 +273,16 @@ sealed class ProgramRun
                 Set(args[1], edges);
                 ShowEdges(edges);
                 return;
+            case "threshold_sub_pix":
+                Need(args, 3);
+                SubpixFigure figure = Operators.ThresholdSubPix(ImageOf(args[0]), Num(args[2]));
+                Set(args[1], figure);
+                Shapes = SubpixFigure.Overlays(figure, 2);
+                return;
+            case "dev_display":
+                Need(args, 1);
+                Get(args[0]);
+                return;
             default:
                 throw new InvalidOperationException("還沒接上這個算子：" + name);
         }

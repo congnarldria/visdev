@@ -38,6 +38,8 @@ static class ProgramVars
                 return Iconic(name, "region", Objects(regions.Length) + "  " + width + "×" + height);
             case EdgePoint[][] edges:
                 return Iconic(name, "xld", edges.Length + " 條輪廓");
+            case SubpixFigure figure:
+                return Iconic(name, "xld", figure.Contours.Length + " 條輪廓 · " + figure.Objects.Length + " 個物件");
             case double number:
                 string num = FormatNum(number);
                 return Control(name, IsWhole(number) ? "integer" : "real", num, num);

@@ -60,6 +60,7 @@ public partial class MainWindow : Window
     bool Running;
     GraphicsWindow? GfxFloat;
     ThresholdWindow? ThresholdFloat;
+    SubpixWindow? SubpixFloat;
     OperatorDialog? ParamDialog;
     readonly Dictionary<string, object> DockPanes = new(StringComparer.Ordinal);
     string DefaultLayout = "";
@@ -758,6 +759,35 @@ public partial class MainWindow : Window
         Log(StatusLine.Text);
     }
 
+    void Subpix_Click(object sender, RoutedEventArgs e)
+    {
+        if (SubpixFloat != null)
+        {
+            SubpixFloat.Activate();
+            SubpixFloat.ShowImage(PictureData, ProgramText.Text);
+            return;
+        }
+        var window = new SubpixWindow { Owner = this };
+        window.Source = () => ProgramText.Text ?? "";
+        window.ApplySource = text =>
+        {
+            ApplyingTolerance = true;
+            ProgramText.Text = text;
+            ApplyingTolerance = false;
+        };
+        window.RequestRun = () => Run_Click(this, new RoutedEventArgs());
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(SubpixFloat, window))
+                SubpixFloat = null;
+        };
+        SubpixFloat = window;
+        window.Show();
+        window.ShowImage(PictureData, ProgramText.Text);
+        StatusLine.Text = "次像素視窗已打開";
+        Log(StatusLine.Text);
+    }
+
     void NotYet_Click(object sender, RoutedEventArgs e)
     {
         string name = sender is MenuItem menu ? menu.Header?.ToString() ?? ""
@@ -1385,6 +1415,9 @@ public partial class MainWindow : Window
                 break;
             case EdgePoint[][] edges:
                 Shapes = EdgeOverlays(edges);
+                break;
+            case SubpixFigure figure:
+                Shapes = SubpixFigure.Overlays(figure, LineWidth);
                 break;
             default:
                 return;
@@ -2290,6 +2323,7 @@ public partial class MainWindow : Window
         {
             UpdateDraft();
             ThresholdFloat?.ShowImage(PictureData, ProgramText.Text);
+            SubpixFloat?.ShowImage(PictureData, ProgramText.Text);
             return;
         }
         int viewW = (int)Math.Round(Stage.ActualWidth);
@@ -2313,6 +2347,7 @@ public partial class MainWindow : Window
         Picture.Visibility = Visibility.Visible;
         UpdateDraft();
         ThresholdFloat?.ShowImage(PictureData, ProgramText.Text);
+        SubpixFloat?.ShowImage(PictureData, ProgramText.Text);
     }
 
     Overlay[] Painted()

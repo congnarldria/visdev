@@ -82,7 +82,7 @@
       </MenuItem>
       <MenuItem Header="工具">
         <MenuItem Header="二值化" Click="Threshold_Click"/>
-        <MenuItem Header="次像素" Click="NotYet_Click"/>
+        <MenuItem Header="次像素" Click="Subpix_Click"/>
         <MenuItem Header="特徵" Click="NotYet_Click"/>
         <MenuItem Header="OCR" Click="NotYet_Click"/>
         <MenuItem Header="connection" Click="NotYet_Click"/>
