@@ -67,14 +67,14 @@
         <MenuItem Header="放大" Click="ZoomIn_Click"/>
         <MenuItem Header="縮小" Click="ZoomOut_Click"/>
         <Separator/>
-        <MenuItem Header="追蹤" Click="NotYet_Click"/>
+        <MenuItem Header="追蹤" Click="Trace_Click"/>
         <MenuItem Header="全部釘選" Click="NotYet_Click"/>
       </MenuItem>
       <MenuItem Header="執行">
-        <MenuItem Header="執行" Click="Run_Click"/>
-        <MenuItem Header="單步" Click="NotYet_Click"/>
-        <MenuItem Header="停止" Click="NotYet_Click"/>
-        <MenuItem Header="重設" Click="NotYet_Click"/>
+        <MenuItem Header="執行" InputGestureText="F5" Click="Run_Click"/>
+        <MenuItem Header="單步" InputGestureText="F6" Click="Step_Click"/>
+        <MenuItem Header="停止" Click="Stop_Click"/>
+        <MenuItem Header="重設" InputGestureText="F7" Click="Reset_Click"/>
       </MenuItem>
       <MenuItem Header="工具">
         <MenuItem Header="二值化" Click="NotYet_Click"/>
@@ -102,11 +102,11 @@
         <Button Content="範例" Click="NotYet_Click"/>
         <Button Content="開啟" Click="NotYet_Click"/>
         <Button Content="儲存" Click="NotYet_Click"/>
-        <CheckBox Content="追蹤" VerticalAlignment="Center" Margin="8,0,8,0" Foreground="{StaticResource Ink}" IsEnabled="False"/>
-        <Button Content="重設" Click="NotYet_Click"/>
-        <Button Content="單步" Click="NotYet_Click"/>
-        <Button Content="執行" Click="Run_Click"/>
-        <Button Content="停止" Click="NotYet_Click"/>
+        <CheckBox x:Name="TraceBox" Content="追蹤" VerticalAlignment="Center" Margin="8,0,8,0" Foreground="{StaticResource Ink}"/>
+        <Button Content="重設" Click="Reset_Click"/>
+        <Button Content="單步" Click="Step_Click"/>
+        <Button x:Name="BtnRun" Content="執行" Click="Run_Click"/>
+        <Button Content="停止" Click="Stop_Click"/>
       </DockPanel>
     </Border>
 

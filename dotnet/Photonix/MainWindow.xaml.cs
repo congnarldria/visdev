@@ -39,9 +39,11 @@ public partial class MainWindow : Window
     List<SenseItem> SenseItems = [];
 
     int NextLine = 1;
-    int BreakSkip;
     readonly HashSet<int> Breakpoints = [];
     readonly Dictionary<int, (double Ms, int Count)> LineTimes = [];
+
+    readonly ProgramRun Engine = new();
+    bool Running;
 
     public MainWindow()
     {
@@ -55,7 +57,7 @@ public partial class MainWindow : Window
         LineGutter.ArrowMoved += (_, line) =>
         {
             NextLine = line;
-            BreakSkip = 0;
+            Engine.MoveTo(line);
             StatusLine.Text = "下一行是第 " + line + " 行";
             RefreshRails();
         };
@@ -459,34 +461,140 @@ public partial class MainWindow : Window
         ProgramHighlight.InvalidateVisual();
     }
 
-    void Run_Click(object sender, RoutedEventArgs e) => RunToBreakpoint();
+    void Run_Click(object sender, RoutedEventArgs e)
+    {
+        if (Running)
+            return;
+        CloseSense();
+        if (Engine.Done || Engine.Error != null)
+            Engine.Reset();
+        Engine.Cancel = false;
+        Running = true;
+        BtnRun.IsEnabled = false;
+        Pump();
+    }
+
+    void Step_Click(object sender, RoutedEventArgs e)
+    {
+        if (Running)
+            return;
+        CloseSense();
+        if (Engine.Error != null)
+        {
+            StatusLine.Text = Engine.Error;
+            NextLine = Engine.ErrorLine;
+            RefreshRails();
+            return;
+        }
+        Halt halt = Engine.Step(SourceLines(), TraceBox.IsChecked == true);
+        Publish(halt);
+    }
+
+    void Stop_Click(object sender, RoutedEventArgs e)
+    {
+        Engine.Cancel = true;
+        if (!Running)
+        {
+            StatusLine.Text = "已停止";
+            Log("已停止");
+        }
+    }
+
+    void Reset_Click(object sender, RoutedEventArgs e)
+    {
+        Engine.Reset();
+        Running = false;
+        BtnRun.IsEnabled = true;
+        Shapes = [];
+        LineTimes.Clear();
+        NextLine = 1;
+        StatusLine.Text = "已重設";
+        Log("已重設");
+        RefreshRails();
+        Present();
+    }
+
+    void Trace_Click(object sender, RoutedEventArgs e) => TraceBox.IsChecked = TraceBox.IsChecked != true;
+
+    void Pump()
+    {
+        Halt halt = Engine.Run(SourceLines(), Breakpoints, TraceBox.IsChecked == true, 40);
+        if (halt == Halt.Yield && !Engine.Cancel)
+        {
+            Publish(Halt.Yield);
+            Dispatcher.BeginInvoke(Pump, System.Windows.Threading.DispatcherPriority.Background);
+            return;
+        }
+        Running = false;
+        BtnRun.IsEnabled = true;
+        if (Engine.Cancel)
+            halt = Halt.Stopped;
+        Publish(halt);
+    }
+
+    void Publish(Halt halt)
+    {
+        foreach (string message in Engine.Messages)
+            Log(message);
+        Engine.Messages.Clear();
+        LineTimes.Clear();
+        foreach (var pair in Engine.Times)
+            LineTimes[pair.Key] = pair.Value;
+        if (Engine.Image != null)
+        {
+            PictureData = Engine.Image;
+            Frame = ImageFrame.Create(
+                Engine.Image.Width,
+                Engine.Image.Height,
+                Engine.Image.Pixels,
+                Engine.Image.Channels == 1 ? PixelLayout.Gray : PixelLayout.Bgr);
+            EmptyHint.Visibility = Visibility.Collapsed;
+        }
+        Shapes = Engine.Shapes;
+        NextLine = Engine.Error != null ? Engine.ErrorLine : Engine.Done ? 0 : Engine.Pc;
+        if (halt == Halt.Error)
+            StatusLine.Text = Engine.Error ?? "";
+        else if (halt == Halt.Breakpoint)
+            StatusLine.Text = "停在第 " + Engine.Pc + " 行";
+        else if (halt == Halt.Done)
+            StatusLine.Text = "執行完成（" + Engine.Steps + " 步）";
+        else if (halt == Halt.Stopped)
+            StatusLine.Text = "已停止";
+        else if (halt == Halt.None || halt == Halt.Yield)
+            StatusLine.Text = "第 " + Math.Max(1, Engine.Pc) + " 行";
+        if (NextLine > 0 && halt is Halt.Error or Halt.Breakpoint or Halt.None)
+            RevealLine(NextLine);
+        if (PictureData != null)
+            Present();
+        RefreshRails();
+    }
+
+    string[] SourceLines() => (ProgramText.Text ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
-        if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None)
+        if (Keyboard.Modifiers == ModifierKeys.None)
         {
-            RunToBreakpoint();
-            e.Handled = true;
-            return;
+            if (e.Key == Key.F5)
+            {
+                Run_Click(this, e);
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.F6)
+            {
+                Step_Click(this, e);
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.F7)
+            {
+                Reset_Click(this, e);
+                e.Handled = true;
+                return;
+            }
         }
         base.OnPreviewKeyDown(e);
-    }
-
-    void RunToBreakpoint()
-    {
-        CloseSense();
-        int count = ProgramCounter.LineCount(ProgramText.Text ?? "");
-        int current = NextLine < 1 ? 1 : NextLine;
-        int stop = ProgramCounter.NextStop(current, count, Breakpoints, ref BreakSkip);
-        if (stop == 0)
-            StatusLine.Text = "沒有下一個斷點";
-        else
-        {
-            NextLine = stop;
-            StatusLine.Text = "停在第 " + stop + " 行";
-            RevealLine(stop);
-        }
-        RefreshRails();
     }
 
     void RevealLine(int line)
