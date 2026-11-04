@@ -154,20 +154,23 @@ public static class FrameComposer
         switch (overlay.Kind)
         {
             case OverlayKind.Rectangle:
-                StrokeRect(map, bgra, destinationWidth, destinationHeight, overlay.Row1, overlay.Column1, overlay.Row2, overlay.Column2, overlay.Color, overlay.Filled);
+                StrokeRect(map, bgra, destinationWidth, destinationHeight, overlay.Row1, overlay.Column1, overlay.Row2, overlay.Column2, overlay.Color, overlay.Filled, StrokeOf(overlay));
                 break;
             case OverlayKind.Cross:
-                StrokeRect(map, bgra, destinationWidth, destinationHeight, overlay.Row1 - overlay.Size, overlay.Column1, overlay.Row1 + overlay.Size, overlay.Column1, overlay.Color, false);
-                StrokeRect(map, bgra, destinationWidth, destinationHeight, overlay.Row1, overlay.Column1 - overlay.Size, overlay.Row1, overlay.Column1 + overlay.Size, overlay.Color, false);
+                StrokeRect(map, bgra, destinationWidth, destinationHeight, overlay.Row1 - overlay.Size, overlay.Column1, overlay.Row1 + overlay.Size, overlay.Column1, overlay.Color, false, StrokeOf(overlay));
+                StrokeRect(map, bgra, destinationWidth, destinationHeight, overlay.Row1, overlay.Column1 - overlay.Size, overlay.Row1, overlay.Column1 + overlay.Size, overlay.Color, false, StrokeOf(overlay));
                 break;
             case OverlayKind.Polyline:
+            {
+                int stroke = StrokeOf(overlay);
                 for (int index = 1; index < overlay.Rows.Length; index++)
                 {
                     var from = map.ToScreen(overlay.Rows[index - 1], overlay.Columns[index - 1]);
                     var to = map.ToScreen(overlay.Rows[index], overlay.Columns[index]);
-                    Line(bgra, destinationWidth, destinationHeight, (int)Math.Round(from.X), (int)Math.Round(from.Y), (int)Math.Round(to.X), (int)Math.Round(to.Y), overlay.Color);
+                    Line(bgra, destinationWidth, destinationHeight, (int)Math.Round(from.X), (int)Math.Round(from.Y), (int)Math.Round(to.X), (int)Math.Round(to.Y), overlay.Color, stroke);
                 }
                 break;
+            }
             case OverlayKind.Runs:
                 PaintRuns(overlay, map, bgra, destinationWidth, destinationHeight);
                 break;
@@ -190,7 +193,9 @@ public static class FrameComposer
         }
     }
 
-    private static unsafe void StrokeRect(ScreenMap map, uint* bgra, int destinationWidth, int destinationHeight, double row1, double column1, double row2, double column2, uint color, bool filled)
+    private static int StrokeOf(Overlay overlay) => overlay.Stroke < 1 ? 1 : overlay.Stroke;
+
+    private static unsafe void StrokeRect(ScreenMap map, uint* bgra, int destinationWidth, int destinationHeight, double row1, double column1, double row2, double column2, uint color, bool filled, int stroke)
     {
         var a = map.ToScreen(row1, column1);
         var b = map.ToScreen(row2, column2);
@@ -204,10 +209,10 @@ public static class FrameComposer
                 FillSpan(bgra, destinationWidth, destinationHeight, x0, x1 + 1, y, color);
             return;
         }
-        Line(bgra, destinationWidth, destinationHeight, x0, y0, x1, y0, color);
-        Line(bgra, destinationWidth, destinationHeight, x1, y0, x1, y1, color);
-        Line(bgra, destinationWidth, destinationHeight, x1, y1, x0, y1, color);
-        Line(bgra, destinationWidth, destinationHeight, x0, y1, x0, y0, color);
+        Line(bgra, destinationWidth, destinationHeight, x0, y0, x1, y0, color, stroke);
+        Line(bgra, destinationWidth, destinationHeight, x1, y0, x1, y1, color, stroke);
+        Line(bgra, destinationWidth, destinationHeight, x1, y1, x0, y1, color, stroke);
+        Line(bgra, destinationWidth, destinationHeight, x0, y1, x0, y0, color, stroke);
     }
 
     private static unsafe void FillSpan(uint* bgra, int destinationWidth, int destinationHeight, int x0, int x1, int y, uint color)
@@ -223,7 +228,7 @@ public static class FrameComposer
             bgra[row + x] = Blend(bgra[row + x], color);
     }
 
-    private static unsafe void Line(uint* bgra, int destinationWidth, int destinationHeight, int x0, int y0, int x1, int y1, uint color)
+    private static unsafe void Line(uint* bgra, int destinationWidth, int destinationHeight, int x0, int y0, int x1, int y1, uint color, int stroke)
     {
         int dx = Math.Abs(x1 - x0);
         int dy = Math.Abs(y1 - y0);
@@ -232,8 +237,13 @@ public static class FrameComposer
         int err = dx - dy;
         while (true)
         {
-            if ((uint)x0 < (uint)destinationWidth && (uint)y0 < (uint)destinationHeight)
-                bgra[y0 * destinationWidth + x0] = Blend(bgra[y0 * destinationWidth + x0], color);
+            if (stroke <= 1)
+            {
+                if ((uint)x0 < (uint)destinationWidth && (uint)y0 < (uint)destinationHeight)
+                    bgra[y0 * destinationWidth + x0] = Blend(bgra[y0 * destinationWidth + x0], color);
+            }
+            else
+                Stamp(bgra, destinationWidth, destinationHeight, x0, y0, stroke, color);
             if (x0 == x1 && y0 == y1)
                 break;
             int e2 = err * 2;
@@ -248,6 +258,15 @@ public static class FrameComposer
                 y0 += sy;
             }
         }
+    }
+
+    private static unsafe void Stamp(uint* bgra, int destinationWidth, int destinationHeight, int x, int y, int stroke, uint color)
+    {
+        int radius = stroke / 2;
+        int x0 = x - radius;
+        int y0 = y - radius;
+        for (int yy = y0; yy < y0 + stroke; yy++)
+            FillSpan(bgra, destinationWidth, destinationHeight, x0, x0 + stroke, yy, color);
     }
 
     private static uint Blend(uint below, uint above)

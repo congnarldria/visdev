@@ -14,7 +14,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vizion.Operators.Check", "V
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vizion.Inspect.Sample", "Vizion.Inspect.Sample\Vizion.Inspect.Sample.csproj", "{A7C3E1B2-4D5F-4A89-9C12-0B6E8F1A2D34}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vizion.Ide", "Vizion.Ide\Vizion.Ide.csproj", "{A8D4F2C1-6B3E-4F17-9A55-2C7E1B0D84AB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Photonix", "Photonix\Photonix.csproj", "{A8D4F2C1-6B3E-4F17-9A55-2C7E1B0D84AB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

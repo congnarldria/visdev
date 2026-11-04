@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -6,7 +7,7 @@ using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using Vizion;
 
-namespace Vizion.Ide;
+namespace Photonix;
 
 public partial class MainWindow : Window
 {
@@ -24,6 +25,9 @@ public partial class MainWindow : Window
     };
 
     ImageBuffer? PictureData;
+    ImageFrame? Frame;
+    Overlay[] Shapes = [];
+    int LineWidth = 2;
     double Zoom = 1;
     double CamX;
     double CamY;
@@ -43,7 +47,7 @@ public partial class MainWindow : Window
         OperatorList.ItemsSource = Catalog;
         ShowTab("ops");
         ApplyMode(GfxMode.Select);
-        Log("VisDev 已開啟。版面對齊網頁版，底層是 Vizion.Operators。");
+        Log("Photonix 已開啟。版面對齊網頁版，底層是 Vizion.Operators。");
         if (NativeCore.IsLoaded)
             Log("已載入 C 核心：" + NativeCore.LoadDetail);
         else
@@ -67,8 +71,12 @@ public partial class MainWindow : Window
         try
         {
             PictureData = Operators.ReadImage(path);
-            Picture.Source = ToBitmap(PictureData);
-            Picture.Visibility = Visibility.Visible;
+            Frame = ImageFrame.Create(
+                PictureData.Width,
+                PictureData.Height,
+                PictureData.Pixels,
+                PictureData.Channels == 1 ? PixelLayout.Gray : PixelLayout.Bgr);
+            Shapes = [];
             EmptyHint.Visibility = Visibility.Collapsed;
             Fit();
             Log($"載入 {path}，{PictureData.Width}×{PictureData.Height}，{PictureData.Channels} 通道。");
@@ -189,6 +197,68 @@ public partial class MainWindow : Window
     {
         if (PendingFit)
             Fit();
+        else
+            Present();
+    }
+
+    void ContourWidth_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (int.TryParse(ContourWidth.Text.Trim(), out int value) && value >= 1 && value <= 10 && value != LineWidth)
+        {
+            LineWidth = value;
+            Present();
+        }
+    }
+
+    void ContourWidth_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (!int.TryParse(ContourWidth.Text.Trim(), out int value))
+            value = LineWidth;
+        value = Math.Clamp(value, 1, 10);
+        LineWidth = value;
+        ContourWidth.Text = value.ToString();
+        Present();
+    }
+
+    void SaveView_Click(object sender, RoutedEventArgs e)
+    {
+        if (PictureData == null || Frame == null)
+        {
+            StatusLine.Text = "還沒有畫面可以存";
+            Log("還沒有畫面可以存");
+            return;
+        }
+        var dialog = new SaveFileDialog
+        {
+            Filter = "PNG (*.png)|*.png",
+            FileName = "view.png",
+            Title = "存畫面",
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+        int width = PictureData.Width;
+        int height = PictureData.Height;
+        var pixels = new byte[width * height * 4];
+        var map = new ScreenMap(0, 0, width, height, 0, 0, height, width);
+        FrameComposer.Render(Frame, map, Painted(), pixels, width, height);
+        var source = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
+        source.Freeze();
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(source));
+        using (var stream = File.Create(dialog.FileName))
+            encoder.Save(stream);
+        StatusLine.Text = "已存畫面 " + dialog.FileName;
+        Log("已存畫面 " + dialog.FileName + "，含底圖和疊加。");
+    }
+
+    void About_Click(object sender, RoutedEventArgs e)
+    {
+        MessageBox.Show(
+            this,
+            "Photonix\n視覺開發環境。底層呼叫 Vizion.Operators。",
+            "關於 Photonix",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
     }
 
     void NotYet_Click(object sender, RoutedEventArgs e)
@@ -292,14 +362,47 @@ public partial class MainWindow : Window
         Zoom = scale;
         CamX = x;
         CamY = y;
-        ImageScale.ScaleX = scale;
-        ImageScale.ScaleY = scale;
-        ImageOffset.X = x;
-        ImageOffset.Y = y;
-        RenderOptions.SetBitmapScalingMode(Picture, scale < 3 ? BitmapScalingMode.Linear : BitmapScalingMode.NearestNeighbor);
         string percent = (scale * 100).ToString("0") + "%";
         ZoomText.Text = percent;
         StatusZoom.Text = percent;
+        Present();
+    }
+
+    void Present()
+    {
+        if (PictureData == null || Frame == null)
+            return;
+        int viewW = (int)Math.Round(Stage.ActualWidth);
+        int viewH = (int)Math.Round(Stage.ActualHeight);
+        if (viewW < 2 || viewH < 2)
+            return;
+        var map = new ScreenMap(
+            0, 0, viewW, viewH,
+            (0 - CamY) / Zoom,
+            (0 - CamX) / Zoom,
+            (viewH - CamY) / Zoom,
+            (viewW - CamX) / Zoom);
+        var pixels = new byte[viewW * viewH * 4];
+        FrameComposer.Render(Frame, map, Painted(), pixels, viewW, viewH);
+        var source = BitmapSource.Create(viewW, viewH, 96, 96, PixelFormats.Bgra32, null, pixels, viewW * 4);
+        source.Freeze();
+        Picture.Source = source;
+        Picture.Visibility = Visibility.Visible;
+    }
+
+    Overlay[] Painted()
+    {
+        if (Shapes.Length == 0)
+            return Shapes;
+        var painted = new Overlay[Shapes.Length];
+        for (int i = 0; i < Shapes.Length; i++)
+        {
+            Overlay item = Shapes[i];
+            painted[i] = item.Kind is OverlayKind.Polyline or OverlayKind.Cross or OverlayKind.Rectangle
+                ? item.WithStroke(LineWidth)
+                : item;
+        }
+        return painted;
     }
 
     (double col, double row) ImagePoint(Point screen) => ((screen.X - CamX) / Zoom, (screen.Y - CamY) / Zoom);
@@ -392,15 +495,6 @@ public partial class MainWindow : Window
     {
         LogBox.AppendText(DateTime.Now.ToString("HH:mm:ss") + "  " + message + Environment.NewLine);
         LogBox.ScrollToEnd();
-    }
-
-    static BitmapSource ToBitmap(ImageBuffer image)
-    {
-        PixelFormat format = image.Channels == 1 ? PixelFormats.Gray8 : PixelFormats.Bgr24;
-        int stride = image.Width * image.Channels;
-        var source = BitmapSource.Create(image.Width, image.Height, 96, 96, format, null, image.Pixels, stride);
-        source.Freeze();
-        return source;
     }
 
     sealed record OperatorItem(string Name, string Group, string Purpose, string[] Parameters);

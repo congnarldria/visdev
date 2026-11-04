@@ -1,7 +1,7 @@
-<Window x:Class="Vizion.Ide.MainWindow"
+<Window x:Class="Photonix.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="VisDev"
+        Title="Photonix"
         Width="1280"
         Height="800"
         MinWidth="960"
@@ -89,13 +89,13 @@
       <MenuItem Header="運算子"/>
       <MenuItem Header="說明">
         <MenuItem Header="使用說明" Click="NotYet_Click"/>
-        <MenuItem Header="關於 VisDev" Click="NotYet_Click"/>
+        <MenuItem Header="關於 Photonix" Click="About_Click"/>
       </MenuItem>
     </Menu>
 
     <Border DockPanel.Dock="Top" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,6">
       <DockPanel>
-        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0" Text="VisDev"/>
+        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0" Text="Photonix"/>
         <TextBlock VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,6,0" Text="程式"/>
         <TextBox x:Name="ProgramName" Width="180" Margin="0,0,8,0" Text="blob_inspect.hdv"/>
         <Button Content="範例" Click="NotYet_Click"/>
@@ -199,9 +199,9 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
               <Button Content="+" Click="ZoomIn_Click"/>
               <Button Content="載入影像" Click="LoadImage_Click"/>
               <Button Content="拉出" Click="NotYet_Click"/>
-              <Button Content="存畫面" Click="NotYet_Click"/>
+              <Button Content="存畫面" Click="SaveView_Click" ToolTip="把底圖、區域、輪廓和十字存成一張圖"/>
               <TextBlock VerticalAlignment="Center" Margin="6,0,4,0" Foreground="{StaticResource Muted}" Text="線寬"/>
-              <TextBox Width="36" Text="2" IsReadOnly="True"/>
+              <TextBox x:Name="ContourWidth" Width="36" Text="2" ToolTip="輪廓和十字的線寬，1 到 10" TextChanged="ContourWidth_TextChanged" LostFocus="ContourWidth_LostFocus"/>
               <Button Content="二值化" Click="NotYet_Click"/>
               <Button Content="特徵" Click="NotYet_Click"/>
               <Button Content="OCR" Click="NotYet_Click"/>
@@ -215,14 +215,7 @@ ho_ 是影像或區域。hv_ 是控制量，索引從 0 開始。
               MouseLeftButtonUp="Stage_MouseUp" MouseLeave="Stage_MouseLeave"
               PreviewMouseWheel="Stage_MouseWheel" SizeChanged="Stage_SizeChanged">
           <Canvas IsHitTestVisible="False">
-            <Image x:Name="Picture" Stretch="None" Visibility="Collapsed" RenderTransformOrigin="0,0">
-              <Image.RenderTransform>
-                <TransformGroup>
-                  <ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/>
-                  <TranslateTransform x:Name="ImageOffset"/>
-                </TransformGroup>
-              </Image.RenderTransform>
-            </Image>
+            <Image x:Name="Picture" Stretch="None" Visibility="Collapsed"/>
           </Canvas>
           <Canvas x:Name="Overlay" IsHitTestVisible="False">
             <Line x:Name="CrossV" Stroke="#59FFFFFF" StrokeThickness="1" Visibility="Collapsed"/>

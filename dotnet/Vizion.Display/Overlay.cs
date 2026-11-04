@@ -25,6 +25,27 @@ public sealed class Overlay
     public int[] RunColumns { get; private init; } = [];
     public int[] RunLengths { get; private init; } = [];
 
+    /// <summary>輪廓和十字的線寬，單位是畫面像素。1 到 10。區域填色不用這個值。</summary>
+    public int Stroke { get; private init; } = 1;
+
+    public Overlay WithStroke(int stroke) => new()
+    {
+        Kind = Kind,
+        Color = Color,
+        Filled = Filled,
+        Row1 = Row1,
+        Column1 = Column1,
+        Row2 = Row2,
+        Column2 = Column2,
+        Size = Size,
+        Rows = Rows,
+        Columns = Columns,
+        RunRows = RunRows,
+        RunColumns = RunColumns,
+        RunLengths = RunLengths,
+        Stroke = stroke < 1 ? 1 : stroke,
+    };
+
     public static Overlay Rectangle(double row1, double column1, double row2, double column2, uint color, bool filled = false) =>
         new()
         {

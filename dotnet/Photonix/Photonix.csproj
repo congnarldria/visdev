@@ -6,11 +6,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <RootNamespace>Vizion.Ide</RootNamespace>
-    <AssemblyName>Vizion.Ide</AssemblyName>
-    <Description>VisDev 的 WPF 開發環境。底層呼叫 Vizion.Operators。</Description>
+    <RootNamespace>Photonix</RootNamespace>
+    <AssemblyName>Photonix</AssemblyName>
+    <Product>Photonix</Product>
+    <AssemblyTitle>Photonix</AssemblyTitle>
+    <Description>Photonix，WPF 視覺開發環境。底層呼叫 Vizion.Operators。</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Vizion.Operators\Vizion.Operators.csproj" />
+    <ProjectReference Include="..\Vizion.Display\Vizion.Display.csproj" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace Vizion.Ide;
+namespace Photonix;
 
 public partial class App : Application
 {
