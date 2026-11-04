@@ -2,10 +2,10 @@
 
 目錄共 1195 個，和 `dotnet/Photonix/operators.json` 同一份。Python 引擎裡每個都有函式。
 這裡的「還沒實作」是指 Photonix 執行到該行會停下來，訊息是「還沒接上這個算子」。
-已接上的 159 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
+已接上的 169 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
 `tuple_is_serializable` 是在問 tuple 能不能序列化，不是序列埠，所以留在 Tuple。
 
-還沒接上、且與硬體無關：1009 個。排除的硬體算子：27 個。
+還沒接上、且與硬體無關：999 個。排除的硬體算子：27 個。
 
 ## 數量
 
@@ -15,8 +15,8 @@
 | 系統 | 4 |
 | 灰階與濾波 | 14 |
 | 幾何 | 57 |
-| 分割 | 11 |
-| 形態學 | 47 |
+| 分割 | 3 |
+| 形態學 | 45 |
 | 區域 | 211 |
 | 特徵 | 100 |
 | 輪廓 | 91 |
@@ -31,7 +31,7 @@
 | 顯示 | 10 |
 | 矩陣 | 65 |
 | Tuple | 148 |
-| 合計 | 1009 |
+| 合計 | 999 |
 
 ## 已接上，不列入
 
@@ -194,6 +194,16 @@
 - Vizion.edges_sub_pix
 - Vizion.dev_display
 - Vizion.dev_set_draw
+- Vizion.select_obj
+- Vizion.regiongrowing_mean
+- Vizion.regiongrowing_n
+- Vizion.histo_to_thresh
+- Vizion.auto_threshold
+- Vizion.char_threshold
+- Vizion.binary_threshold
+- Vizion.dots_image
+- Vizion.gray_erosion_rect
+- Vizion.gray_dilation_rect
 
 ## 排除的硬體
 
@@ -339,21 +349,13 @@
 - Vizion.polar_trans_region
 - Vizion.polar_trans_region_inv
 
-### 分割（11）
+### 分割（3）
 
-- Vizion.binary_threshold
 - Vizion.opencv_connection
-- Vizion.select_obj
-- Vizion.histo_to_thresh
-- Vizion.dots_image
-- Vizion.char_threshold
-- Vizion.auto_threshold
 - Vizion.watersheds
 - Vizion.watersheds_threshold
-- Vizion.regiongrowing_mean
-- Vizion.regiongrowing_n
 
-### 形態學（47）
+### 形態學（45）
 
 - Vizion.opening_circle
 - Vizion.closing_circle
@@ -365,8 +367,6 @@
 - Vizion.opening_rectangle1
 - Vizion.closing_rectangle1
 - Vizion.boundary
-- Vizion.gray_erosion_rect
-- Vizion.gray_dilation_rect
 - Vizion.gray_erosion_circle
 - Vizion.gray_dilation_circle
 - Vizion.gray_opening_circle

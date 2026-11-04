@@ -1100,6 +1100,82 @@ sealed class ProgramRun
                 Set(args[1], grownParts);
                 Show(grownParts);
                 return;
+            case "regiongrowing_mean":
+                Need(args, 6);
+                var grownMean = Operators.RegionGrowingMean(ImageOf(args[0]), NumList(args[2]), NumList(args[3]), Num(args[4]), IntOf(args[5]));
+                Set(args[1], grownMean);
+                Show(grownMean);
+                return;
+            case "regiongrowing_n":
+                Need(args, 6);
+                var grownByDistance = Operators.RegionGrowingN(ImageOf(args[0]), Word(args[2]), Num(args[3]), Num(args[4]), IntOf(args[5]));
+                Set(args[1], grownByDistance);
+                Show(grownByDistance);
+                return;
+            case "select_obj":
+                Need(args, 3);
+                double[] objIndex = NumList(args[2]);
+                object objSource = Eval(args[0]);
+                if (objSource is EdgePoint[][] objChains)
+                {
+                    EdgePoint[][] objPicked = Operators.SelectObj(objChains, objIndex);
+                    Set(args[1], objPicked);
+                    ShowEdges(objPicked);
+                    return;
+                }
+                IReadOnlyList<Region> objRegions = objSource is Region[] objMany
+                    ? objMany
+                    : objSource is Region objOne
+                        ? new[] { objOne }
+                        : throw new InvalidOperationException("Objects 必須是區域");
+                Region[] objSelected = Operators.SelectObj(objRegions, objIndex);
+                Set(args[1], objSelected);
+                Show(objSelected);
+                return;
+            case "histo_to_thresh":
+                Need(args, 4);
+                HistoThresholds histoBands = Operators.HistoToThresh(NumList(args[0]), Num(args[1]));
+                Set(args[2], histoBands.MinThresh);
+                Set(args[3], histoBands.MaxThresh);
+                return;
+            case "auto_threshold":
+                Need(args, 3);
+                Region[] autoParts = Operators.AutoThreshold(ImageOf(args[0]), Num(args[2]));
+                Set(args[1], autoParts);
+                Show(autoParts);
+                return;
+            case "char_threshold":
+                Need(args, 6);
+                Region characters = Operators.CharThreshold(ImageOf(args[0]), RegionOf(args[1]), Num(args[3]), Num(args[4]), out int charLevel);
+                Set(args[2], characters);
+                Set(args[5], (double)charLevel);
+                Show(characters);
+                return;
+            case "binary_threshold":
+                Need(args, 5);
+                Region binaryRegion = Operators.BinaryThreshold(ImageOf(args[0]), Word(args[2]), Word(args[3]), out int binaryUsed);
+                Set(args[1], binaryRegion);
+                Set(args[4], (double)binaryUsed);
+                Show(binaryRegion);
+                return;
+            case "dots_image":
+                Need(args, 5);
+                Region dotRegion = Operators.DotsImage(ImageOf(args[0]), IntOf(args[2]), Word(args[3]), Num(args[4]));
+                Set(args[1], dotRegion);
+                Show(dotRegion);
+                return;
+            case "gray_erosion_rect":
+                Need(args, 4);
+                ImageBuffer erodedRect = Operators.GrayErosionRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], erodedRect);
+                Image = erodedRect;
+                return;
+            case "gray_dilation_rect":
+                Need(args, 4);
+                ImageBuffer dilatedRect = Operators.GrayDilationRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], dilatedRect);
+                Image = dilatedRect;
+                return;
             case "select_grayvalues_from_channels":
                 Need(args, 3);
                 var channelPick = Operators.SelectGrayvalues(ImageOf(args[0]), ImageOf(args[1]));

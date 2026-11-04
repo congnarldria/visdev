@@ -448,6 +448,33 @@ VIZION_EXPORT int VIZION_CALL vizion_dual_labels(
 VIZION_EXPORT int VIZION_CALL vizion_region_grow(
     const uint8_t* gray, const uint8_t* domain, int* labels, int width, int height,
     const int* rows, const int* columns, int seeds, double tolerance, int minimum, int* count);
+/* 種子八鄰域成長。鄰居和彈出像素當下的平均差不超過 Tolerance，平均隨新像素更新。 */
+VIZION_EXPORT int VIZION_CALL vizion_region_grow_mean(
+    const uint8_t* gray, const uint8_t* domain, int* labels, int width, int height,
+    const int* rows, const int* columns, int seeds, double tolerance, int minimum, int* count);
+/* 四鄰域依通道歐氏距離分割。距離落在 low 到 high 才合併。channels 是 1 或 3。 */
+VIZION_EXPORT int VIZION_CALL vizion_region_grow_n(
+    const uint8_t* pixels, int* labels, int width, int height, int channels,
+    double low, double high, int minimum, int* count);
+/* 直方圖高斯平滑後以波谷切段。沒有波谷或全空時是整段。 */
+VIZION_EXPORT int VIZION_CALL vizion_histo_to_thresh(
+    const double* counts, int bins, double sigma, int* lows, int* highs, int* segments);
+/* 依直方圖波谷把灰階切成多塊。標號從 1 開始，暗的在前。 */
+VIZION_EXPORT int VIZION_CALL vizion_auto_threshold(
+    const uint8_t* gray, const uint8_t* domain, int* labels, int count, double sigma, int* segments);
+/* 用區域直方圖的兩個波峰決定字元門檻。找不到第二峰時改用 Otsu，較小的那一側留下。 */
+VIZION_EXPORT int VIZION_CALL vizion_char_threshold(
+    const uint8_t* gray, const uint8_t* histo, const uint8_t* domain, uint8_t* mask,
+    int count, double sigma, double percent, int* limit);
+/* 自動二值化。method：0 Otsu、1 平滑直方圖、2 三角形、3 局部平均、4 局部高斯。dark 為 1 時反相。 */
+VIZION_EXPORT int VIZION_CALL vizion_binary_threshold(
+    const uint8_t* gray, const uint8_t* domain, uint8_t* mask, int width, int height,
+    int method, int dark, int* used);
+/* 橢圓頂帽或黑帽找小點。kind：0 亮、1 暗、2 兩者。diameter 是 3 到 31 的奇數。 */
+VIZION_EXPORT int VIZION_CALL vizion_dots_image(
+    const uint8_t* gray, const uint8_t* domain, uint8_t* mask, int width, int height,
+    int diameter, int kind, double shift);
+VIZION_EXPORT int VIZION_CALL vizion_segment_more_selftest(void);
 
 /* 區域行程上的平均和母體標準差。沒有像素時兩者都是 0。 */
 VIZION_EXPORT int VIZION_CALL vizion_intensity(

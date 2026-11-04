@@ -980,6 +980,95 @@ public static class NativeCore
         return true;
     }
 
+    public static bool TryRegionGrowMean(
+        byte[] gray, byte[]? domain, int[] labels, int width, int height,
+        int[] rows, int[] columns, double tolerance, int minimum, out int count)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || labels.Length < width * height || rows.Length < 1
+            || !Call(() => vizion_region_grow_mean(gray, domain, labels, width, height, rows, columns, rows.Length, tolerance, minimum, out local)))
+        {
+            count = 0;
+            return false;
+        }
+        count = local;
+        return true;
+    }
+
+    public static bool TryRegionGrowN(
+        byte[] pixels, int[] labels, int width, int height, int channels,
+        double low, double high, int minimum, out int count)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || labels.Length < width * height
+            || !Call(() => vizion_region_grow_n(pixels, labels, width, height, channels, low, high, minimum, out local)))
+        {
+            count = 0;
+            return false;
+        }
+        count = local;
+        return true;
+    }
+
+    public static bool TryHistoToThresh(double[] counts, double sigma, int[] lows, int[] highs, out int segments)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || counts.Length < 3 || lows.Length < counts.Length || highs.Length < counts.Length
+            || !Call(() => vizion_histo_to_thresh(counts, counts.Length, sigma, lows, highs, out local)))
+        {
+            segments = 0;
+            return false;
+        }
+        segments = local;
+        return true;
+    }
+
+    public static bool TryAutoThreshold(byte[] gray, byte[]? domain, int[] labels, double sigma, out int segments)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || labels.Length < gray.Length
+            || !Call(() => vizion_auto_threshold(gray, domain, labels, gray.Length, sigma, out local)))
+        {
+            segments = 0;
+            return false;
+        }
+        segments = local;
+        return true;
+    }
+
+    public static bool TryCharThreshold(
+        byte[] gray, byte[] histo, byte[]? domain, byte[] mask, double sigma, double percent, out int limit)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || mask.Length < gray.Length || histo.Length < gray.Length
+            || !Call(() => vizion_char_threshold(gray, histo, domain, mask, gray.Length, sigma, percent, out local)))
+        {
+            limit = 0;
+            return false;
+        }
+        limit = local;
+        return true;
+    }
+
+    public static bool TryBinaryThreshold(
+        byte[] gray, byte[]? domain, byte[] mask, int width, int height, int method, int dark, out int used)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || mask.Length < width * height
+            || !Call(() => vizion_binary_threshold(gray, domain, mask, width, height, method, dark, out local)))
+        {
+            used = 0;
+            return false;
+        }
+        used = local;
+        return true;
+    }
+
+    public static bool TryDotsImage(
+        byte[] gray, byte[]? domain, byte[] mask, int width, int height, int diameter, int kind, double shift) =>
+        IsLoaded && UseNative && mask.Length >= width * height
+        && Call(() => vizion_dots_image(gray, domain, mask, width, height, diameter, kind, shift));
+
     public static bool TryComplexEnergy(double[] real, double[] imag, out double energy)
     {
         double local = 0;
@@ -1599,6 +1688,37 @@ public static class NativeCore
     static extern int vizion_region_grow(
         byte[] gray, byte[]? domain, int[] labels, int width, int height,
         int[] rows, int[] columns, int seeds, double tolerance, int minimum, out int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_region_grow_mean(
+        byte[] gray, byte[]? domain, int[] labels, int width, int height,
+        int[] rows, int[] columns, int seeds, double tolerance, int minimum, out int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_region_grow_n(
+        byte[] pixels, int[] labels, int width, int height, int channels,
+        double low, double high, int minimum, out int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_histo_to_thresh(
+        double[] counts, int bins, double sigma, int[] lows, int[] highs, out int segments);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_auto_threshold(
+        byte[] gray, byte[]? domain, int[] labels, int count, double sigma, out int segments);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_char_threshold(
+        byte[] gray, byte[] histo, byte[]? domain, byte[] mask,
+        int count, double sigma, double percent, out int limit);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_binary_threshold(
+        byte[] gray, byte[]? domain, byte[] mask, int width, int height, int method, int dark, out int used);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_dots_image(
+        byte[] gray, byte[]? domain, byte[] mask, int width, int height, int diameter, int kind, double shift);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);
