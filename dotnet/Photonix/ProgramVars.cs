@@ -47,6 +47,9 @@ static class ProgramVars
                 return Control(name, "tuple", FormatTuple(tuple, 12), FormatTuple(tuple, 400));
             case string text:
                 return Control(name, "string", text, text);
+            case ComplexBuffer spectrum:
+                string spectrumInfo = "複數影像  " + spectrum.Width + "×" + spectrum.Height;
+                return Control(name, "complex", spectrumInfo, spectrumInfo);
             default:
                 string shown = value.ToString() ?? "";
                 return Control(name, "tuple", shown, shown);

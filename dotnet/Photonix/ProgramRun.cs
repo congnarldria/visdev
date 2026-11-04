@@ -232,6 +232,956 @@ sealed class ProgramRun
                 Set(args[1], smooth);
                 Image = smooth;
                 return;
+            case "rgb1_to_gray":
+                Need(args, 2);
+                var gray = Operators.Rgb1ToGray(ImageOf(args[0]));
+                Set(args[1], gray);
+                Image = gray;
+                return;
+            case "invert_image":
+                Need(args, 2);
+                var inverted = Operators.InvertImage(ImageOf(args[0]));
+                Set(args[1], inverted);
+                Image = inverted;
+                return;
+            case "scale_image":
+                Need(args, 4);
+                var scaled = Operators.ScaleImage(ImageOf(args[0]), Num(args[2]), Num(args[3]));
+                Set(args[1], scaled);
+                Image = scaled;
+                return;
+            case "median_image":
+                Need(args, 3);
+                var median = Operators.MedianImage(ImageOf(args[0]), IntOf(args[2]));
+                Set(args[1], median);
+                Image = median;
+                return;
+            case "add_image":
+                Need(args, 5);
+                var added = Operators.AddImage(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]), Num(args[4]));
+                Set(args[2], added);
+                Image = added;
+                return;
+            case "sub_image":
+                Need(args, 5);
+                var subtracted = Operators.SubImage(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]), Num(args[4]));
+                Set(args[2], subtracted);
+                Image = subtracted;
+                return;
+            case "mult_image":
+                Need(args, 5);
+                var multiplied = Operators.MultImage(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]), Num(args[4]));
+                Set(args[2], multiplied);
+                Image = multiplied;
+                return;
+            case "abs_diff_image":
+                Need(args, 4);
+                var difference = Operators.AbsDiffImage(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]));
+                Set(args[2], difference);
+                Image = difference;
+                return;
+            case "min_image":
+                Need(args, 3);
+                var darker = Operators.MinImage(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], darker);
+                Image = darker;
+                return;
+            case "max_image":
+                Need(args, 3);
+                var brighter = Operators.MaxImage(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], brighter);
+                Image = brighter;
+                return;
+            case "div_image":
+                Need(args, 5);
+                var divided = Operators.DivImage(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]), Num(args[4]));
+                Set(args[2], divided);
+                Image = divided;
+                return;
+            case "emphasize":
+                Need(args, 5);
+                var sharp = Operators.Emphasize(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Num(args[4]));
+                Set(args[1], sharp);
+                Image = sharp;
+                return;
+            case "equ_histo_image":
+                Need(args, 2);
+                var equalized = Operators.EquHistoImage(ImageOf(args[0]));
+                Set(args[1], equalized);
+                Image = equalized;
+                return;
+            case "scale_image_max":
+                Need(args, 2);
+                var stretched = Operators.ScaleImageMax(ImageOf(args[0]));
+                Set(args[1], stretched);
+                Image = stretched;
+                return;
+            case "illuminate":
+                Need(args, 5);
+                var flattened = Operators.Illuminate(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Num(args[4]));
+                Set(args[1], flattened);
+                Image = flattened;
+                return;
+            case "count_channels":
+                Need(args, 2);
+                Set(args[1], (double)Operators.CountChannels(ImageOf(args[0])));
+                return;
+            case "access_channel":
+                Need(args, 3);
+                var channel = Operators.AccessChannel(ImageOf(args[0]), IntOf(args[2]));
+                Set(args[1], channel);
+                Image = channel;
+                return;
+            case "compose3":
+                Need(args, 4);
+                var composed = Operators.Compose3(ImageOf(args[0]), ImageOf(args[1]), ImageOf(args[2]));
+                Set(args[3], composed);
+                Image = composed;
+                return;
+            case "decompose3":
+                Need(args, 4);
+                ImageBuffer[] planes = Operators.Decompose3(ImageOf(args[0]));
+                Set(args[1], planes[0]);
+                Set(args[2], planes[1]);
+                Set(args[3], planes[2]);
+                return;
+            case "trans_from_rgb":
+                Need(args, 7);
+                ImageBuffer[] converted = Operators.TransFromRgb(ImageOf(args[0]), ImageOf(args[1]), ImageOf(args[2]), ColorName(args[6]));
+                Set(args[3], converted[0]);
+                Set(args[4], converted[1]);
+                Set(args[5], converted[2]);
+                return;
+            case "pow_image":
+                Need(args, 3);
+                var powered = Operators.PowImage(ImageOf(args[0]), Num(args[2]));
+                Set(args[1], powered);
+                Image = powered;
+                return;
+            case "sqrt_image":
+                Need(args, 2);
+                var rooted = Operators.SqrtImage(ImageOf(args[0]));
+                Set(args[1], rooted);
+                Image = rooted;
+                return;
+            case "log_image":
+                Need(args, 2);
+                var logged = Operators.LogImage(ImageOf(args[0]), args.Length > 2 ? Word(args[2]) : "scaled");
+                Set(args[1], logged);
+                Image = logged;
+                return;
+            case "exp_image":
+                Need(args, 2);
+                var expanded = Operators.ExpImage(ImageOf(args[0]), args.Length > 2 ? Word(args[2]) : "scaled");
+                Set(args[1], expanded);
+                Image = expanded;
+                return;
+            case "gamma_image":
+                Need(args, 3);
+                var corrected = Operators.GammaImage(
+                    ImageOf(args[0]),
+                    Num(args[2]),
+                    args.Length > 3 ? Num(args[3]) : 0,
+                    args.Length > 4 ? Num(args[4]) : 0,
+                    args.Length > 5 ? Num(args[5]) : 255,
+                    args.Length <= 6 || EncodeFlag(args[6]));
+                Set(args[1], corrected);
+                Image = corrected;
+                return;
+            case "abs_image":
+                Need(args, 2);
+                var centered = Operators.AbsImage(ImageOf(args[0]));
+                Set(args[1], centered);
+                Image = centered;
+                return;
+            case "scale_image_range":
+                Need(args, 4);
+                var ranged = Operators.ScaleImageRange(ImageOf(args[0]), Num(args[2]), Num(args[3]));
+                Set(args[1], ranged);
+                Image = ranged;
+                return;
+            case "bit_and":
+                Need(args, 3);
+                var maskedAnd = Operators.BitAnd(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], maskedAnd);
+                Image = maskedAnd;
+                return;
+            case "bit_or":
+                Need(args, 3);
+                var maskedOr = Operators.BitOr(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], maskedOr);
+                Image = maskedOr;
+                return;
+            case "bit_xor":
+                Need(args, 3);
+                var maskedXor = Operators.BitXor(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], maskedXor);
+                Image = maskedXor;
+                return;
+            case "bit_not":
+                Need(args, 2);
+                var flipped = Operators.BitNot(ImageOf(args[0]));
+                Set(args[1], flipped);
+                Image = flipped;
+                return;
+            case "bit_mask":
+                Need(args, 3);
+                var masked = Operators.BitMask(ImageOf(args[0]), IntOf(args[2]));
+                Set(args[1], masked);
+                Image = masked;
+                return;
+            case "bit_slice":
+                Need(args, 3);
+                var sliced = Operators.BitSlice(ImageOf(args[0]), IntOf(args[2]));
+                Set(args[1], sliced);
+                Image = sliced;
+                return;
+            case "bit_lshift":
+                Need(args, 2);
+                var shiftedLeft = Operators.BitLShift(ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 1);
+                Set(args[1], shiftedLeft);
+                Image = shiftedLeft;
+                return;
+            case "bit_rshift":
+                Need(args, 2);
+                var shiftedRight = Operators.BitRShift(ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 1);
+                Set(args[1], shiftedRight);
+                Image = shiftedRight;
+                return;
+            case "highpass_image":
+                Need(args, 4);
+                var passed = Operators.HighpassImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], passed);
+                Image = passed;
+                return;
+            case "deviation_image":
+                Need(args, 4);
+                var deviated = Operators.DeviationImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], deviated);
+                Image = deviated;
+                return;
+            case "sigma_image":
+                Need(args, 4);
+                var sigma = Operators.SigmaImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], sigma);
+                Image = sigma;
+                return;
+            case "gray_range_rect":
+                Need(args, 4);
+                var spanned = Operators.GrayRangeRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], spanned);
+                Image = spanned;
+                return;
+            case "laplace":
+                Need(args, 2);
+                var laplacian = Operators.Laplace(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Word(args[2]) : "absolute",
+                    args.Length > 3 ? IntOf(args[3]) : 3,
+                    args.Length > 4 ? Word(args[4]) : "n_4");
+                Set(args[1], laplacian);
+                Image = laplacian;
+                return;
+            case "lut_trans":
+                Need(args, 3);
+                var looked = Operators.LutTrans(ImageOf(args[0]), LutOf(args[2]));
+                Set(args[1], looked);
+                Image = looked;
+                return;
+            case "rgb3_to_gray":
+                Need(args, 4);
+                var weighted = Operators.Rgb3ToGray(ImageOf(args[0]), ImageOf(args[1]), ImageOf(args[2]));
+                Set(args[3], weighted);
+                Image = weighted;
+                return;
+            case "gen_image_proto":
+                Need(args, 3);
+                var cleared = Operators.GenImageProto(ImageOf(args[0]), Num(args[2]));
+                Set(args[1], cleared);
+                Image = cleared;
+                return;
+            case "paint_gray":
+                Need(args, 3);
+                var painted = Operators.PaintGray(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], painted);
+                Image = painted;
+                return;
+            case "overpaint_gray":
+                Need(args, 3);
+                var covered = Operators.OverpaintGray(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], covered);
+                Image = covered;
+                return;
+            case "rank_rect":
+                Need(args, 5);
+                var ranked = Operators.RankRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), IntOf(args[4]));
+                Set(args[1], ranked);
+                Image = ranked;
+                return;
+            case "median_rect":
+                Need(args, 4);
+                var medianRect = Operators.MedianRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), args.Length > 4 ? Word(args[4]) : "continued");
+                Set(args[1], medianRect);
+                Image = medianRect;
+                return;
+            case "prewitt_amp":
+                Need(args, 2);
+                var prewitt = Operators.PrewittAmp(ImageOf(args[0]));
+                Set(args[1], prewitt);
+                Image = prewitt;
+                return;
+            case "roberts":
+                Need(args, 2);
+                var robertsEdge = Operators.Roberts(ImageOf(args[0]), args.Length > 2 ? Word(args[2]) : "sum_sqrt");
+                Set(args[1], robertsEdge);
+                Image = robertsEdge;
+                return;
+            case "binomial_filter":
+                Need(args, 2);
+                var binomial = Operators.BinomialFilter(ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 3, args.Length > 3 ? IntOf(args[3]) : 3);
+                Set(args[1], binomial);
+                Image = binomial;
+                return;
+            case "kirsch_amp":
+                Need(args, 2);
+                var kirsch = Operators.KirschAmp(ImageOf(args[0]));
+                Set(args[1], kirsch);
+                Image = kirsch;
+                return;
+            case "frei_amp":
+                Need(args, 2);
+                var frei = Operators.FreiAmp(ImageOf(args[0]));
+                Set(args[1], frei);
+                Image = frei;
+                return;
+            case "robinson_amp":
+                Need(args, 2);
+                var robinsonAmp = Operators.RobinsonAmp(ImageOf(args[0]));
+                Set(args[1], robinsonAmp);
+                Image = robinsonAmp;
+                return;
+            case "robinson_dir":
+                Need(args, 2);
+                var robinsonDir = Operators.RobinsonDir(ImageOf(args[0]));
+                Set(args[1], robinsonDir);
+                Image = robinsonDir;
+                return;
+            case "atan2_image":
+                Need(args, 3);
+                var aimed = Operators.Atan2Image(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], aimed);
+                Image = aimed;
+                return;
+            case "midrange_image":
+                Need(args, 4);
+                var midrange = Operators.MidrangeImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], midrange);
+                Image = midrange;
+                return;
+            case "sin_image":
+                Need(args, 2);
+                var sined = Operators.SinImage(ImageOf(args[0]));
+                Set(args[1], sined);
+                Image = sined;
+                return;
+            case "cos_image":
+                Need(args, 2);
+                var cosined = Operators.CosImage(ImageOf(args[0]));
+                Set(args[1], cosined);
+                Image = cosined;
+                return;
+            case "tan_image":
+                Need(args, 2);
+                var taned = Operators.TanImage(ImageOf(args[0]));
+                Set(args[1], taned);
+                Image = taned;
+                return;
+            case "smooth_image":
+                Need(args, 2);
+                var smoothed = Operators.SmoothImage(ImageOf(args[0]), args.Length > 2 ? Word(args[2]) : "mean", args.Length > 3 ? IntOf(args[3]) : 3);
+                Set(args[1], smoothed);
+                Image = smoothed;
+                return;
+            case "gen_image_gray_ramp":
+                Need(args, 8);
+                var ramp = Operators.GrayRamp(Num(args[1]), Num(args[2]), Num(args[3]), Num(args[4]), Num(args[5]), IntOf(args[6]), IntOf(args[7]));
+                Set(args[0], ramp);
+                Image = ramp;
+                return;
+            case "tile_images":
+                Need(args, 3);
+                var tiled = Operators.TileImages(ImageOf(args[0]), ImageOf(args[1]), args.Length > 3 ? Word(args[3]) : "horizontal");
+                Set(args[2], tiled);
+                Image = tiled;
+                return;
+            case "convol_image":
+                Need(args, 3);
+                var convolved = ConvolOf(args);
+                Set(args[1], convolved);
+                Image = convolved;
+                return;
+            case "asin_image":
+                Need(args, 2);
+                var asined = Operators.AsinImage(ImageOf(args[0]));
+                Set(args[1], asined);
+                Image = asined;
+                return;
+            case "acos_image":
+                Need(args, 2);
+                var acosed = Operators.AcosImage(ImageOf(args[0]));
+                Set(args[1], acosed);
+                Image = acosed;
+                return;
+            case "atan_image":
+                Need(args, 2);
+                var ataned = Operators.AtanImage(ImageOf(args[0]));
+                Set(args[1], ataned);
+                Image = ataned;
+                return;
+            case "bandpass_image":
+                Need(args, 4);
+                var band = Operators.BandpassImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], band);
+                Image = band;
+                return;
+            case "add_image_border":
+                Need(args, 3);
+                var framed = Operators.AddImageBorder(ImageOf(args[0]), IntOf(args[2]), args.Length > 3 ? IntOf(args[3]) : 0);
+                Set(args[1], framed);
+                Image = framed;
+                return;
+            case "gen_gauss_pyramid":
+                Need(args, 2);
+                var pyramid = Operators.GaussPyramid(ImageOf(args[0]), args.Length > 2 ? Word(args[2]) : "constant", args.Length > 3 ? Num(args[3]) : 0.5);
+                Set(args[1], pyramid);
+                Image = pyramid;
+                return;
+            case "entropy_image":
+                Need(args, 4);
+                var entropy = Operators.EntropyImage(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], entropy);
+                Image = entropy;
+                return;
+            case "set_grayval":
+                Need(args, 5);
+                var edited = Operators.SetGrayval(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), IntOf(args[4]));
+                Set(args[1], edited);
+                Image = edited;
+                return;
+            case "get_image_type":
+                Need(args, 2);
+                Set(args[1], Operators.ImageType(ImageOf(args[0])));
+                return;
+            case "channels_to_image":
+                Need(args, 4);
+                var bundled = Operators.ChannelsToImage(ImageOf(args[0]), ImageOf(args[1]), ImageOf(args[2]));
+                Set(args[3], bundled);
+                Image = bundled;
+                return;
+            case "expand_domain_gray":
+                Need(args, 4);
+                var widened = Operators.ExpandDomainGray(ImageOf(args[0]), IntOf(args[2]), Num(args[3]));
+                Set(args[1], widened);
+                Image = widened;
+                return;
+            case "equ_histo_image_rect":
+                Need(args, 6);
+                var rectEqu = Operators.EquHistoImageRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), IntOf(args[4]), IntOf(args[5]));
+                Set(args[1], rectEqu);
+                Image = rectEqu;
+                return;
+            case "gray_inside":
+                Need(args, 2);
+                var inside = Operators.GrayInside(ImageOf(args[0]));
+                Set(args[1], inside);
+                Image = inside;
+                return;
+            case "rank_image":
+                Need(args, 2);
+                var diskRank = Operators.RankImage(ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 1, args.Length > 3 ? IntOf(args[3]) : 0);
+                Set(args[1], diskRank);
+                Image = diskRank;
+                return;
+            case "gen_image_surface_first_order":
+                Need(args, 9);
+                var surface = Operators.SurfaceFirst(Word(args[1]), Num(args[2]), Num(args[3]), Num(args[4]), Num(args[5]), Num(args[6]), IntOf(args[7]), IntOf(args[8]));
+                Set(args[0], surface);
+                Image = surface;
+                return;
+            case "gen_image_surface_second_order":
+                Need(args, 12);
+                var curved = Operators.SurfaceSecond(
+                    Word(args[1]), Num(args[2]), Num(args[3]), Num(args[4]), Num(args[5]), Num(args[6]), Num(args[7]),
+                    Num(args[8]), Num(args[9]), IntOf(args[10]), IntOf(args[11]));
+                Set(args[0], curved);
+                Image = curved;
+                return;
+            case "region_to_mean":
+                Need(args, 3);
+                var averaged = Operators.RegionToMean(ImageOf(args[0]), RegionsOf(args[1]));
+                Set(args[2], averaged);
+                Image = averaged;
+                return;
+            case "gray_dilation":
+                Need(args, 3);
+                var seMax = Operators.GrayDilation(ImageOf(args[0]), RegionOf(args[1]));
+                Set(args[2], seMax);
+                Image = seMax;
+                return;
+            case "gray_erosion":
+                Need(args, 3);
+                var seMin = Operators.GrayErosion(ImageOf(args[0]), RegionOf(args[1]));
+                Set(args[2], seMin);
+                Image = seMin;
+                return;
+            case "gray_opening":
+                Need(args, 3);
+                var seOpened = Operators.GrayOpening(ImageOf(args[0]), RegionOf(args[1]));
+                Set(args[2], seOpened);
+                Image = seOpened;
+                return;
+            case "gray_closing":
+                Need(args, 3);
+                var seClosed = Operators.GrayClosing(ImageOf(args[0]), RegionOf(args[1]));
+                Set(args[2], seClosed);
+                Image = seClosed;
+                return;
+            case "gray_dilation_shape":
+                Need(args, 5);
+                var shapeMax = Operators.GrayDilationShape(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Word(args[4]));
+                Set(args[1], shapeMax);
+                Image = shapeMax;
+                return;
+            case "gray_erosion_shape":
+                Need(args, 5);
+                var shapeMin = Operators.GrayErosionShape(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Word(args[4]));
+                Set(args[1], shapeMin);
+                Image = shapeMin;
+                return;
+            case "gray_opening_shape":
+                Need(args, 5);
+                var shapeOpened = Operators.GrayOpeningShape(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Word(args[4]));
+                Set(args[1], shapeOpened);
+                Image = shapeOpened;
+                return;
+            case "gray_closing_shape":
+                Need(args, 5);
+                var shapeClosed = Operators.GrayClosingShape(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Word(args[4]));
+                Set(args[1], shapeClosed);
+                Image = shapeClosed;
+                return;
+            case "mean_image_shape":
+                Need(args, 3);
+                var maskMean = Operators.MeanImageShape(ImageOf(args[0]), RegionOf(args[1]));
+                Set(args[2], maskMean);
+                Image = maskMean;
+                return;
+            case "derivate_gauss":
+                Need(args, 4);
+                var derivGauss = Operators.DerivGauss(ImageOf(args[0]), Num(args[2]), Word(args[3]));
+                Set(args[1], derivGauss);
+                Image = derivGauss;
+                return;
+            case "texture_laws":
+                Need(args, 3);
+                var lawsTex = Operators.TextureLaws(ImageOf(args[0]), Word(args[2]), args.Length > 3 ? IntOf(args[3]) : 0, args.Length > 4 ? IntOf(args[4]) : 5);
+                Set(args[1], lawsTex);
+                Image = lawsTex;
+                return;
+            case "polar_trans_image":
+                Need(args, 6);
+                var polarOut = Operators.PolarTransImage(ImageOf(args[0]), Num(args[2]), Num(args[3]), IntOf(args[4]), IntOf(args[5]));
+                Set(args[1], polarOut);
+                Image = polarOut;
+                return;
+            case "enhance_map":
+                Need(args, 3);
+                var enhanceMapped = Operators.EnhanceMap(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], enhanceMapped);
+                Image = enhanceMapped;
+                return;
+            case "enhance_change":
+                Need(args, 4);
+                Operators.EnhanceChange(ImageOf(args[0]), ImageOf(args[1]), out double changeMean, out double changeMax);
+                Set(args[2], changeMean);
+                Set(args[3], changeMax);
+                return;
+            case "enhance_hot":
+                Need(args, 3);
+                var hotRegion = Operators.EnhanceHot(ImageOf(args[0]), ImageOf(args[1]), args.Length > 3 ? Num(args[3]) : 10);
+                Set(args[2], hotRegion);
+                Show(hotRegion);
+                return;
+            case "diff_region":
+                Need(args, 3);
+                var defectRegion = Operators.DiffRegion(ImageOf(args[0]), ImageOf(args[1]), args.Length > 3 ? Num(args[3]) : 20);
+                Set(args[2], defectRegion);
+                Show(defectRegion);
+                return;
+            case "diff_amount":
+                Need(args, 4);
+                Operators.DiffAmount(ImageOf(args[0]), ImageOf(args[1]), out double diffMean, out double diffMax);
+                Set(args[2], diffMean);
+                Set(args[3], diffMax);
+                return;
+            case "edge_enhance":
+                Need(args, 2);
+                var edgeBoost = Operators.EdgeEnhance(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Num(args[2]) : 1.2,
+                    args.Length > 3 ? Num(args[3]) : 1,
+                    args.Length > 4 ? Num(args[4]) : 2,
+                    args.Length > 5 ? Num(args[5]) : 0);
+                Set(args[1], edgeBoost);
+                Image = edgeBoost;
+                return;
+            case "edge_residual":
+                Need(args, 2);
+                var edgeRemain = Operators.EdgeResidual(ImageOf(args[0]), args.Length > 2 ? Num(args[2]) : 1.2, args.Length > 3 ? Num(args[3]) : 2);
+                Set(args[1], edgeRemain);
+                Image = edgeRemain;
+                return;
+            case "edge_band":
+                Need(args, 2);
+                var bandBoost = Operators.EdgeBand(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Num(args[2]) : 0.8,
+                    args.Length > 3 ? Num(args[3]) : 2.4,
+                    args.Length > 4 ? Num(args[4]) : 1,
+                    args.Length > 5 ? Num(args[5]) : 2);
+                Set(args[1], bandBoost);
+                Image = bandBoost;
+                return;
+            case "edge_masked":
+                Need(args, 2);
+                var maskedEdge = Operators.EdgeMasked(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Num(args[2]) : 1.2,
+                    args.Length > 3 ? Num(args[3]) : 1,
+                    args.Length > 4 ? Num(args[4]) : 30);
+                Set(args[1], maskedEdge);
+                Image = maskedEdge;
+                return;
+            case "edge_preserve":
+                Need(args, 2);
+                var preservedFlat = Operators.EdgePreserve(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Num(args[2]) : 1.2,
+                    args.Length > 3 ? Num(args[3]) : 30);
+                Set(args[1], preservedFlat);
+                Image = preservedFlat;
+                return;
+            case "anisotropic_diffusion":
+                Need(args, 6);
+                var anisoGray = Operators.Anisotropic(
+                    ImageOf(args[0]), Word(args[2]), Num(args[3]), Num(args[4]), IntOf(args[5]));
+                Set(args[1], anisoGray);
+                Image = anisoGray;
+                return;
+            case "shock_filter":
+                Need(args, 6);
+                var shocked = Operators.ShockFilter(
+                    ImageOf(args[0]), Num(args[2]), IntOf(args[3]), Word(args[4]), Num(args[5]));
+                Set(args[1], shocked);
+                Image = shocked;
+                return;
+            case "guided_filter":
+                Need(args, 2);
+                var guidedOut = Operators.GuidedFilter(
+                    ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 8, args.Length > 3 ? Num(args[3]) : 800);
+                Set(args[1], guidedOut);
+                Image = guidedOut;
+                return;
+            case "frangi":
+                Need(args, 2);
+                var vesselMap = Operators.Frangi(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Num(args[2]) : 1,
+                    args.Length > 3 ? Num(args[3]) : 1,
+                    args.Length > 4 ? Word(args[4]) : "dark");
+                Set(args[1], vesselMap);
+                Image = vesselMap;
+                return;
+            case "emphasize_clahe":
+                Need(args, 2);
+                var claheOut = Operators.EmphasizeClahe(
+                    ImageOf(args[0]), args.Length > 2 ? Num(args[2]) : 8, args.Length > 3 ? IntOf(args[3]) : 8);
+                Set(args[1], claheOut);
+                Image = claheOut;
+                return;
+            case "correlation_image":
+                Need(args, 3);
+                var scoreImage = Operators.CorrelationImage(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], scoreImage);
+                Image = scoreImage;
+                return;
+            case "convol_fft":
+                Need(args, 3);
+                var fftConvol = Operators.ConvolFft(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], fftConvol);
+                Image = fftConvol;
+                return;
+            case "gen_complex_const":
+                Need(args, 5);
+                var madeSpectrum = Operators.GenComplexConst(Num(args[0]), Num(args[1]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[4], madeSpectrum);
+                return;
+            case "get_complex":
+                Need(args, 5);
+                Operators.GetComplex(ComplexOf(args[0]), Num(args[1]), Num(args[2]), out double readReal, out double readImag);
+                Set(args[3], readReal);
+                Set(args[4], readImag);
+                return;
+            case "fftshift":
+                Need(args, 2);
+                var shiftedSpectrum = Operators.FftShift(ComplexOf(args[0]), args.Length > 2 ? Word(args[1]) : "center");
+                Set(args.Length > 2 ? args[2] : args[1], shiftedSpectrum);
+                return;
+            case "scale_fft":
+                Need(args, 3);
+                var scaledSpectrum = Operators.ScaleFft(ComplexOf(args[0]), Num(args[1]));
+                Set(args[2], scaledSpectrum);
+                return;
+            case "conj_fft":
+                Need(args, 2);
+                var conjugated = Operators.ConjFft(ComplexOf(args[0]));
+                Set(args[1], conjugated);
+                return;
+            case "add_fft":
+                Need(args, 3);
+                var summedSpectrum = Operators.AddFft(ComplexOf(args[0]), ComplexOf(args[1]));
+                Set(args[2], summedSpectrum);
+                return;
+            case "sub_fft":
+                Need(args, 3);
+                var diffSpectrum = Operators.SubFft(ComplexOf(args[0]), ComplexOf(args[1]));
+                Set(args[2], diffSpectrum);
+                return;
+            case "mult_fft":
+                Need(args, 3);
+                var productSpectrum = Operators.MultFft(ComplexOf(args[0]), ComplexOf(args[1]));
+                Set(args[2], productSpectrum);
+                return;
+            case "div_fft":
+                Need(args, 3);
+                var quotientSpectrum = Operators.DivFft(ComplexOf(args[0]), ComplexOf(args[1]));
+                Set(args[2], quotientSpectrum);
+                return;
+            case "mask_fft":
+                Need(args, 2);
+                var maskedSpectrum = Operators.MaskFft(ComplexOf(args[0]), args.Length > 2 ? Word(args[1]) : "dc");
+                Set(args.Length > 2 ? args[2] : args[1], maskedSpectrum);
+                return;
+            case "fft_energy":
+                Need(args, 2);
+                var spectrumEnergy = Operators.FftEnergy(ComplexOf(args[0]));
+                Set(args[1], spectrumEnergy);
+                return;
+            case "translate_fft":
+                Need(args, 4);
+                var phaseShift = Operators.TranslateFft(ComplexOf(args[0]), Num(args[1]), Num(args[2]));
+                Set(args[3], phaseShift);
+                return;
+            case "normalize_fft":
+                Need(args, 2);
+                var unitSpectrum = Operators.NormalizeFft(ComplexOf(args[0]));
+                Set(args[1], unitSpectrum);
+                return;
+            case "freq_filter":
+                Need(args, 4);
+                var bandSpectrum = Operators.FreqFilter(ComplexOf(args[0]), Word(args[1]), Num(args[2]));
+                Set(args[3], bandSpectrum);
+                return;
+            case "freq_energy":
+                Need(args, 3);
+                var radiusEnergy = Operators.FreqEnergy(ComplexOf(args[0]), Num(args[1]));
+                Set(args[2], radiusEnergy);
+                return;
+            case "complex_to_image":
+                Need(args, 2);
+                var viewedPlane = Operators.ComplexToImage(ComplexOf(args[1]), args.Length > 2 ? Word(args[2]) : "abs");
+                Set(args[0], viewedPlane);
+                Image = viewedPlane;
+                return;
+            case "local_max":
+                Need(args, 2);
+                var localPeaks = Operators.LocalMax(ImageOf(args[0]), args.Length > 2 ? Num(args[2]) : 0);
+                Set(args[1], localPeaks);
+                Show(localPeaks);
+                return;
+            case "local_min":
+                Need(args, 2);
+                var localValleys = Operators.LocalMin(ImageOf(args[0]), args.Length > 2 ? Num(args[2]) : 255);
+                Set(args[1], localValleys);
+                Show(localValleys);
+                return;
+            case "check_difference":
+                Need(args, 5);
+                var differMask = Operators.CheckDifference(ImageOf(args[0]), ImageOf(args[1]), Word(args[3]), Num(args[4]));
+                Set(args[2], differMask);
+                Show(differMask);
+                return;
+            case "zero_crossing":
+                Need(args, 2);
+                var crossMarks = Operators.ZeroCrossing(ImageOf(args[0]));
+                Set(args[1], crossMarks);
+                Show(crossMarks);
+                return;
+            case "fast_threshold":
+                Need(args, 5);
+                var longRuns = Operators.FastThreshold(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), IntOf(args[4]));
+                Set(args[1], longRuns);
+                Show(longRuns);
+                return;
+            case "dyn_threshold":
+                Need(args, 5);
+                var dynRegion = Operators.DynThreshold(ImageOf(args[0]), ImageOf(args[1]), Num(args[3]), Word(args[4]));
+                Set(args[2], dynRegion);
+                Show(dynRegion);
+                return;
+            case "local_threshold":
+                Need(args, 2);
+                var localThresh = Operators.LocalThreshold(
+                    ImageOf(args[0]),
+                    args.Length > 2 ? Word(args[2]) : "mean",
+                    args.Length > 3 ? Word(args[3]) : "dark",
+                    args.Length > 4 ? IntOf(args[4]) : 3,
+                    args.Length > 5 ? Num(args[5]) : 20);
+                Set(args[1], localThresh);
+                Show(localThresh);
+                return;
+            case "plateaus":
+                Need(args, 2);
+                var flatBlocks = Operators.Plateaus(ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 3);
+                Set(args[1], flatBlocks);
+                Show(flatBlocks);
+                return;
+            case "opencv_threshold":
+                Need(args, 4);
+                var cvBinary = Operators.OpenCvThreshold(ImageOf(args[0]), IntOf(args[2]), Word(args[3]));
+                Set(args[1], cvBinary);
+                Show(cvBinary);
+                return;
+            case "bin_threshold":
+                Need(args, 2);
+                var otsuRegion = Operators.BinThreshold(ImageOf(args[0]));
+                Set(args[1], otsuRegion);
+                Show(otsuRegion);
+                return;
+            case "hysteresis_threshold":
+                Need(args, 5);
+                var hysteresis = Operators.HysteresisThreshold(ImageOf(args[0]), Num(args[2]), Num(args[3]), Num(args[4]));
+                Set(args[1], hysteresis);
+                Show(hysteresis);
+                return;
+            case "var_threshold":
+                Need(args, 7);
+                var varRegion = Operators.VarThreshold(
+                    ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]), Num(args[4]), Num(args[5]), Word(args[6]));
+                Set(args[1], varRegion);
+                Show(varRegion);
+                return;
+            case "sauvola":
+                Need(args, 2);
+                var sauvolaRegion = Operators.Sauvola(
+                    ImageOf(args[0]), args.Length > 2 ? IntOf(args[2]) : 15, args.Length > 3 ? Num(args[3]) : 0.5);
+                Set(args[1], sauvolaRegion);
+                Show(sauvolaRegion);
+                return;
+            case "dual_threshold":
+                Need(args, 5);
+                var dualParts = Operators.DualThreshold(ImageOf(args[0]), IntOf(args[2]), Num(args[3]), Num(args[4]));
+                Set(args[1], dualParts);
+                Show(dualParts);
+                return;
+            case "regiongrowing":
+                Need(args, 6);
+                var grownParts = Operators.RegionGrowing(ImageOf(args[0]), NumList(args[2]), NumList(args[3]), Num(args[4]), IntOf(args[5]));
+                Set(args[1], grownParts);
+                Show(grownParts);
+                return;
+            case "regiongrowing_mean":
+                Need(args, 6);
+                var grownMean = Operators.RegionGrowingMean(ImageOf(args[0]), NumList(args[2]), NumList(args[3]), Num(args[4]), IntOf(args[5]));
+                Set(args[1], grownMean);
+                Show(grownMean);
+                return;
+            case "regiongrowing_n":
+                Need(args, 6);
+                var grownByDistance = Operators.RegionGrowingN(ImageOf(args[0]), Word(args[2]), Num(args[3]), Num(args[4]), IntOf(args[5]));
+                Set(args[1], grownByDistance);
+                Show(grownByDistance);
+                return;
+            case "select_obj":
+                Need(args, 3);
+                double[] objIndex = NumList(args[2]);
+                object objSource = Eval(args[0]);
+                if (objSource is EdgePoint[][] objChains)
+                {
+                    EdgePoint[][] objPicked = Operators.SelectObj(objChains, objIndex);
+                    Set(args[1], objPicked);
+                    ShowEdges(objPicked);
+                    return;
+                }
+                IReadOnlyList<Region> objRegions = objSource is Region[] objMany
+                    ? objMany
+                    : objSource is Region objOne
+                        ? new[] { objOne }
+                        : throw new InvalidOperationException("Objects 必須是區域");
+                Region[] objSelected = Operators.SelectObj(objRegions, objIndex);
+                Set(args[1], objSelected);
+                Show(objSelected);
+                return;
+            case "histo_to_thresh":
+                Need(args, 4);
+                HistoThresholds histoBands = Operators.HistoToThresh(NumList(args[0]), Num(args[1]));
+                Set(args[2], histoBands.MinThresh);
+                Set(args[3], histoBands.MaxThresh);
+                return;
+            case "auto_threshold":
+                Need(args, 3);
+                Region[] autoParts = Operators.AutoThreshold(ImageOf(args[0]), Num(args[2]));
+                Set(args[1], autoParts);
+                Show(autoParts);
+                return;
+            case "char_threshold":
+                Need(args, 6);
+                Region characters = Operators.CharThreshold(ImageOf(args[0]), RegionOf(args[1]), Num(args[3]), Num(args[4]), out int charLevel);
+                Set(args[2], characters);
+                Set(args[5], (double)charLevel);
+                Show(characters);
+                return;
+            case "binary_threshold":
+                Need(args, 5);
+                Region binaryRegion = Operators.BinaryThreshold(ImageOf(args[0]), Word(args[2]), Word(args[3]), out int binaryUsed);
+                Set(args[1], binaryRegion);
+                Set(args[4], (double)binaryUsed);
+                Show(binaryRegion);
+                return;
+            case "dots_image":
+                Need(args, 5);
+                Region dotRegion = Operators.DotsImage(ImageOf(args[0]), IntOf(args[2]), Word(args[3]), Num(args[4]));
+                Set(args[1], dotRegion);
+                Show(dotRegion);
+                return;
+            case "gray_erosion_rect":
+                Need(args, 4);
+                ImageBuffer erodedRect = Operators.GrayErosionRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], erodedRect);
+                Image = erodedRect;
+                return;
+            case "gray_dilation_rect":
+                Need(args, 4);
+                ImageBuffer dilatedRect = Operators.GrayDilationRect(ImageOf(args[0]), IntOf(args[2]), IntOf(args[3]));
+                Set(args[1], dilatedRect);
+                Image = dilatedRect;
+                return;
+            case "select_grayvalues_from_channels":
+                Need(args, 3);
+                var channelPick = Operators.SelectGrayvalues(ImageOf(args[0]), ImageOf(args[1]));
+                Set(args[2], channelPick);
+                Image = channelPick;
+                return;
             case "reduce_domain":
                 Need(args, 3);
                 var reduced = Operators.ReduceDomain(ImageOf(args[0]), RegionOf(args[1]));
@@ -282,8 +1232,10 @@ sealed class ProgramRun
             case "dev_display":
                 Need(args, 1);
                 Get(args[0]);
+                Operators.DevDisplay();
                 return;
             case "dev_set_draw":
+                Operators.DevSetDraw();
                 return;
             default:
                 throw new InvalidOperationException("還沒接上這個算子：" + name);
@@ -348,6 +1300,13 @@ sealed class ProgramRun
         throw new InvalidOperationException(token + " 必須是影像");
     }
 
+    ComplexBuffer ComplexOf(string token)
+    {
+        if (Eval(token) is ComplexBuffer spectrum)
+            return spectrum;
+        throw new InvalidOperationException(token + " 必須是複數影像");
+    }
+
     Region RegionOf(string token)
     {
         object value = Eval(token);
@@ -356,6 +1315,16 @@ sealed class ProgramRun
         if (value is Region[] regions)
             return Operators.Union(regions);
         throw new InvalidOperationException(token + " 必須是區域");
+    }
+
+    double[] NumList(string token)
+    {
+        object value = Eval(token);
+        if (value is double number)
+            return new[] { number };
+        if (value is double[] many)
+            return many;
+        throw new InvalidOperationException(token + " 必須是數字");
     }
 
     double Num(string token)
@@ -369,6 +1338,68 @@ sealed class ProgramRun
     }
 
     int IntOf(string token) => (int)Math.Round(Num(token));
+
+    double[] LutOf(string token)
+    {
+        if (Eval(token) is double[] table)
+            return table;
+        throw new InvalidOperationException("Lut 要 256 個數，對應灰階 0 到 255");
+    }
+
+    IReadOnlyList<Region> RegionsOf(string token)
+    {
+        object value = Eval(token);
+        if (value is Region region)
+            return new[] { region };
+        if (value is Region[] many)
+            return many;
+        throw new InvalidOperationException(token + " 必須是區域");
+    }
+
+    ImageBuffer ConvolOf(string[] args)
+    {
+        string kernel = args[2].Trim();
+        int width = args.Length > 3 ? IntOf(args[3]) : 0;
+        string margin = args.Length > 4 ? Word(args[4]) : "continued";
+        if (kernel.Length >= 2 && (kernel[0] == '\'' || kernel[0] == '"'))
+            return Operators.ConvolImage(ImageOf(args[0]), Word(kernel), null, width, margin);
+        if (IsName(kernel) && Vars.TryGetValue(kernel, out object? value) && value is double[] weights)
+            return Operators.ConvolImage(ImageOf(args[0]), null, weights, width, margin);
+        return Operators.ConvolImage(ImageOf(args[0]), Word(kernel), null, width, margin);
+    }
+
+    string Word(string token)
+    {
+        string text = token.Trim();
+        if (text.Length >= 2 && (text[0] == '\'' || text[0] == '"'))
+            return Unquote(text);
+        if (IsName(text) && Vars.TryGetValue(text, out object? value) && value is string named)
+            return named;
+        return text;
+    }
+
+    bool EncodeFlag(string token)
+    {
+        string text = Word(token).Trim().ToLowerInvariant();
+        if (text == "true")
+            return true;
+        if (text == "false")
+            return false;
+        throw new InvalidOperationException("Encode 只能是 true 或 false");
+    }
+
+    string ColorName(string token)
+    {
+        string text = token.Trim();
+        if (IsName(text))
+        {
+            object value = Get(text);
+            if (value is string named)
+                return named;
+            throw new InvalidOperationException(token + " 必須是色彩空間名稱");
+        }
+        return Unquote(text);
+    }
 
     static string Unquote(string token)
     {

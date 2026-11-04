@@ -51,10 +51,14 @@ public sealed class SubpixFigure
 
 public static partial class Operators
 {
-    /// <summary>
-    /// 灰階大於等於門檻的像素用八連通拆開，每個物件沿著交界取次像素輪廓。
-    /// 和 Python 的 threshold_sub_pix 同一套：外框與孔都留在前景像素上。
-    /// </summary>
+    /// <summary>沿著灰階等於 Threshold 的位置取出次像素輪廓，亮處留在輪廓內。結果是 XLD。會自動用八連通拆開，每個物件一種顏色，點一個只框那一個，和 connection 距離 1 一樣。門檻若是數字，可以在統計圖拖曳，也可以用次像素視窗調，那個視窗不會擋住主視窗。</summary>
+    /// <remarks>次像素二值化</remarks>
+    /// <example>
+    /// <code>Vizion.threshold_sub_pix (Image, Border, 128)</code>
+    /// </example>
+    /// <param name="image">灰階或彩色影像。</param>
+    /// <param name="level">灰階交界，0 到 255。</param>
+    /// <returns>次像素輪廓。亮處留在輪廓內。</returns>
     public static SubpixFigure ThresholdSubPix(ImageBuffer image, double level)
     {
         if (image == null)

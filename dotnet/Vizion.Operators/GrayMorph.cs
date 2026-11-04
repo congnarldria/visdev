@@ -42,6 +42,38 @@ public static partial class Operators
     public static ImageBuffer GrayCloseCircle(ImageBuffer image, int radius) =>
         GrayErosionCircle(GrayDilationCircle(image, radius), radius);
 
+    /// <summary>每個像素換成矩形遮罩裡最暗的值。偶數遮罩的原點在 k/2。定義域外先當成 255，結果再清成 0。</summary>
+    /// <remarks>灰階矩形侵蝕。彩色每個通道各自做。</remarks>
+    /// <example>
+    /// <code>Vizion.gray_erosion_rect (Image, ImageMorph, 5, 5)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="maskHeight">遮罩高度，像素。</param>
+    /// <param name="maskWidth">遮罩寬度，像素。</param>
+    /// <returns>侵蝕後的影像。沿用原來的定義域。</returns>
+    public static ImageBuffer GrayErosionRect(ImageBuffer image, int maskHeight, int maskWidth)
+    {
+        if (maskHeight < 1 || maskWidth < 1)
+            throw new ArgumentException("遮罩的高和寬至少要 1");
+        return MorphRect(image, maskHeight, maskWidth, erode: true);
+    }
+
+    /// <summary>每個像素換成矩形遮罩裡最亮的值。偶數遮罩的原點在 k/2。定義域外的結果清成 0。</summary>
+    /// <remarks>灰階矩形膨脹。彩色每個通道各自做。</remarks>
+    /// <example>
+    /// <code>Vizion.gray_dilation_rect (Image, ImageMorph, 5, 5)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="maskHeight">遮罩高度，像素。</param>
+    /// <param name="maskWidth">遮罩寬度，像素。</param>
+    /// <returns>膨脹後的影像。沿用原來的定義域。</returns>
+    public static ImageBuffer GrayDilationRect(ImageBuffer image, int maskHeight, int maskWidth)
+    {
+        if (maskHeight < 1 || maskWidth < 1)
+            throw new ArgumentException("遮罩的高和寬至少要 1");
+        return MorphRect(image, maskHeight, maskWidth, erode: false);
+    }
+
     static ImageBuffer ApplyCircle(ImageBuffer image, int radius, bool dark)
     {
         if (image == null)
@@ -66,6 +98,46 @@ public static partial class Operators
             return ImageBuffer.Gray(image.Width, image.Height, native);
         byte[] result = Filter(gray, image.Width, image.Height, maskHeight, maskWidth, dark);
         return ImageBuffer.Gray(image.Width, image.Height, result);
+    }
+
+    static ImageBuffer MorphRect(ImageBuffer image, int maskHeight, int maskWidth, bool erode)
+    {
+        if (image == null)
+            throw new ArgumentNullException(nameof(image));
+        int channels = image.Channels;
+        int pixels = image.Width * image.Height;
+        var work = new byte[image.Pixels.Length];
+        Buffer.BlockCopy(image.Pixels, 0, work, 0, work.Length);
+        byte[]? domain = OwnDomain(image);
+        if (erode && domain != null)
+            FillOutside(work, channels, domain, 255);
+        var output = new byte[work.Length];
+        for (int channel = 0; channel < channels; channel++)
+        {
+            var plane = new byte[pixels];
+            var morphed = new byte[pixels];
+            for (int i = 0; i < pixels; i++)
+                plane[i] = work[i * channels + channel];
+            if (!NativeCore.TryGrayRect(plane, image.Width, image.Height, maskHeight, maskWidth, !erode, morphed))
+                morphed = Filter(plane, image.Width, image.Height, maskHeight, maskWidth, erode);
+            for (int i = 0; i < pixels; i++)
+                output[i * channels + channel] = morphed[i];
+        }
+        if (domain != null)
+            FillOutside(output, channels, domain, 0);
+        return ImageBuffer.Wrap(image.Width, image.Height, channels, output, image.Domain);
+    }
+
+    static void FillOutside(byte[] pixels, int channels, byte[] domain, byte value)
+    {
+        for (int i = 0; i < domain.Length; i++)
+        {
+            if (domain[i] != 0)
+                continue;
+            int offset = i * channels;
+            for (int channel = 0; channel < channels; channel++)
+                pixels[offset + channel] = value;
+        }
     }
 
     static List<(int Row, int Column)> EllipseOffsets(int radius)

@@ -27,6 +27,13 @@ public static partial class Operators
         0xFFFFFFFF,
     };
 
+    /// <summary>讀取灰階或彩色圖。相對路徑會依專案、samples、workspace 的順序尋找。路徑請用斜線，例如 samples/parts.png。</summary>
+    /// <remarks>讀取影像</remarks>
+    /// <example>
+    /// <code>Vizion.read_image (Image, 'samples/parts.png')</code>
+    /// </example>
+    /// <param name="path">檔案路徑。相對路徑依專案、samples、workspace 尋找。</param>
+    /// <returns>讀入的 8 位元影像。這版讀 PNG。</returns>
     public static ImageBuffer ReadImage(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -56,7 +63,15 @@ public static partial class Operators
         }
     }
 
-    /// <summary>灰階落在兩端（含）才留下。彩色先轉灰階。最小值比最大值大時是空區域。</summary>
+    /// <summary>這是 HALCON 的 threshold：灰階落在 MinGray 到 MaxGray（含兩端）才留下，結果是還沒拆開的單一區域。彩色影像會先轉灰階。有 domain 時只處理 domain 裡面的像素。執行後顯示灰階統計圖；兩端若是數字可以直接拖曳。拆物件請用 connection，可再設連通距離。</summary>
+    /// <remarks>HALCON 區間門檻</remarks>
+    /// <example>
+    /// <code>Vizion.threshold (Image, Region, 128, 255)</code>
+    /// </example>
+    /// <param name="image">灰階或彩色影像。</param>
+    /// <param name="minGray">最小灰階，含。</param>
+    /// <param name="maxGray">最大灰階，含。</param>
+    /// <returns>落入範圍的單一區域。有定義域時只留定義域裡的像素。</returns>
     public static Region Threshold(ImageBuffer image, int minGray, int maxGray)
     {
         if (image == null)
@@ -99,7 +114,14 @@ public static partial class Operators
         return new Region(width, height, rows.ToArray(), columns.ToArray(), lengths.ToArray());
     }
 
-    /// <summary>八連通。距離小於 2 不合併斜角以外的空隙。物件依掃描遇到的第一個像素排序。</summary>
+    /// <summary>先做八連通，斜角相接一定算同一個物件，不會拆得更碎。Distance 再用前景像素的最近距離：1 維持八連通，5 代表最近像素距離在 5 以內的物件併成一個。沒寫 Distance 時當作 1。每個物件一種顏色，16 色循環。</summary>
+    /// <remarks>依距離連通</remarks>
+    /// <example>
+    /// <code>Vizion.connection (Region, ConnectedRegions, 1)</code>
+    /// </example>
+    /// <param name="region">輸入區域。</param>
+    /// <param name="distance">連通距離，像素。1 是八連通。</param>
+    /// <returns>拆開後的物件。依掃描遇到的第一個像素排序。</returns>
     public static Region[] Connection(Region region, double distance = 1)
     {
         if (region == null)
@@ -239,7 +261,13 @@ public static partial class Operators
         public double Column { get; }
     }
 
-    /// <summary>還沒拆開的區域是 0 或 1。拆開之後的個數是陣列長度。</summary>
+    /// <summary>區域回傳物件數，輪廓回傳輪廓數。結果是單一整數。</summary>
+    /// <remarks>物件數量</remarks>
+    /// <example>
+    /// <code>Vizion.count_obj (Objects, Number)</code>
+    /// </example>
+    /// <param name="region">一個區域。還沒拆開是 0 或 1。</param>
+    /// <returns>物件數。</returns>
     public static int Count(Region region)
     {
         if (region == null)
@@ -247,6 +275,13 @@ public static partial class Operators
         return region.Rows.Length == 0 ? 0 : 1;
     }
 
+    /// <summary>區域回傳物件數，輪廓回傳輪廓數。結果是單一整數。</summary>
+    /// <remarks>物件數量</remarks>
+    /// <example>
+    /// <code>Vizion.count_obj (Objects, Number)</code>
+    /// </example>
+    /// <param name="regions">物件集合。</param>
+    /// <returns>物件數，就是陣列長度。</returns>
     public static int Count(IReadOnlyList<Region> regions)
     {
         if (regions == null)
@@ -254,6 +289,13 @@ public static partial class Operators
         return regions.Count;
     }
 
+    /// <summary>每個物件各得到一個值，所以 Area、Row、Column 都是 tuple。索引從 1 開始。</summary>
+    /// <remarks>面積與重心</remarks>
+    /// <example>
+    /// <code>Vizion.area_center (Regions, Area, Row, Column)</code>
+    /// </example>
+    /// <param name="region">一個物件。</param>
+    /// <returns>面積與重心。空區域沒有結果。</returns>
     public static AreaCenter[] AreaCenterOf(Region region)
     {
         if (region == null)
@@ -262,6 +304,13 @@ public static partial class Operators
         return one.Area == 0 ? Array.Empty<AreaCenter>() : new[] { one };
     }
 
+    /// <summary>每個物件各得到一個值，所以 Area、Row、Column 都是 tuple。索引從 1 開始。</summary>
+    /// <remarks>面積與重心</remarks>
+    /// <example>
+    /// <code>Vizion.area_center (Regions, Area, Row, Column)</code>
+    /// </example>
+    /// <param name="regions">物件集合。</param>
+    /// <returns>每個物件的面積與重心。</returns>
     public static AreaCenter[] AreaCenterOf(IReadOnlyList<Region> regions)
     {
         if (regions == null)

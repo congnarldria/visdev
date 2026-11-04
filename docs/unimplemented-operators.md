@@ -2,10 +2,10 @@
 
 目錄共 1195 個，和 `dotnet/Photonix/operators.json` 同一份。Python 引擎裡每個都有函式。
 這裡的「還沒實作」是指 Photonix 執行到該行會停下來，訊息是「還沒接上這個算子」。
-已接上的 18 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
+已接上的 169 個不列入。相機與通訊整組排除，目錄裡沒有另外的數位 IO 類。
 `tuple_is_serializable` 是在問 tuple 能不能序列化，不是序列埠，所以留在 Tuple。
 
-還沒接上、且與硬體無關：1150 個。排除的硬體算子：27 個。
+還沒接上、且與硬體無關：999 個。排除的硬體算子：27 個。
 
 ## 數量
 
@@ -13,10 +13,10 @@
 | --- | ---: |
 | 檔案 | 20 |
 | 系統 | 4 |
-| 灰階與濾波 | 140 |
+| 灰階與濾波 | 14 |
 | 幾何 | 57 |
-| 分割 | 26 |
-| 形態學 | 47 |
+| 分割 | 3 |
+| 形態學 | 45 |
 | 區域 | 211 |
 | 特徵 | 100 |
 | 輪廓 | 91 |
@@ -31,10 +31,151 @@
 | 顯示 | 10 |
 | 矩陣 | 65 |
 | Tuple | 148 |
-| 合計 | 1150 |
+| 合計 | 999 |
 
 ## 已接上，不列入
 
+- Vizion.rgb1_to_gray
+- Vizion.invert_image
+- Vizion.scale_image
+- Vizion.median_image
+- Vizion.add_image
+- Vizion.sub_image
+- Vizion.mult_image
+- Vizion.abs_diff_image
+- Vizion.min_image
+- Vizion.max_image
+- Vizion.div_image
+- Vizion.emphasize
+- Vizion.equ_histo_image
+- Vizion.scale_image_max
+- Vizion.illuminate
+- Vizion.count_channels
+- Vizion.access_channel
+- Vizion.compose3
+- Vizion.decompose3
+- Vizion.trans_from_rgb
+- Vizion.pow_image
+- Vizion.sqrt_image
+- Vizion.log_image
+- Vizion.exp_image
+- Vizion.gamma_image
+- Vizion.abs_image
+- Vizion.scale_image_range
+- Vizion.bit_and
+- Vizion.bit_or
+- Vizion.bit_xor
+- Vizion.bit_not
+- Vizion.bit_mask
+- Vizion.bit_slice
+- Vizion.bit_lshift
+- Vizion.bit_rshift
+- Vizion.highpass_image
+- Vizion.deviation_image
+- Vizion.sigma_image
+- Vizion.gray_range_rect
+- Vizion.laplace
+- Vizion.lut_trans
+- Vizion.rgb3_to_gray
+- Vizion.gen_image_proto
+- Vizion.paint_gray
+- Vizion.overpaint_gray
+- Vizion.rank_rect
+- Vizion.median_rect
+- Vizion.prewitt_amp
+- Vizion.roberts
+- Vizion.binomial_filter
+- Vizion.kirsch_amp
+- Vizion.frei_amp
+- Vizion.robinson_amp
+- Vizion.robinson_dir
+- Vizion.atan2_image
+- Vizion.midrange_image
+- Vizion.sin_image
+- Vizion.cos_image
+- Vizion.tan_image
+- Vizion.smooth_image
+- Vizion.gen_image_gray_ramp
+- Vizion.tile_images
+- Vizion.convol_image
+- Vizion.asin_image
+- Vizion.acos_image
+- Vizion.atan_image
+- Vizion.bandpass_image
+- Vizion.add_image_border
+- Vizion.gen_gauss_pyramid
+- Vizion.entropy_image
+- Vizion.set_grayval
+- Vizion.get_image_type
+- Vizion.channels_to_image
+- Vizion.expand_domain_gray
+- Vizion.equ_histo_image_rect
+- Vizion.gray_inside
+- Vizion.rank_image
+- Vizion.gen_image_surface_first_order
+- Vizion.region_to_mean
+- Vizion.gen_image_surface_second_order
+- Vizion.gray_dilation
+- Vizion.gray_erosion
+- Vizion.gray_opening
+- Vizion.gray_closing
+- Vizion.gray_dilation_shape
+- Vizion.gray_erosion_shape
+- Vizion.gray_opening_shape
+- Vizion.gray_closing_shape
+- Vizion.mean_image_shape
+- Vizion.select_grayvalues_from_channels
+- Vizion.derivate_gauss
+- Vizion.texture_laws
+- Vizion.polar_trans_image
+- Vizion.enhance_map
+- Vizion.enhance_change
+- Vizion.enhance_hot
+- Vizion.diff_region
+- Vizion.diff_amount
+- Vizion.edge_residual
+- Vizion.edge_enhance
+- Vizion.edge_band
+- Vizion.edge_masked
+- Vizion.edge_preserve
+- Vizion.anisotropic_diffusion
+- Vizion.shock_filter
+- Vizion.guided_filter
+- Vizion.frangi
+- Vizion.emphasize_clahe
+- Vizion.correlation_image
+- Vizion.convol_fft
+- Vizion.gen_complex_const
+- Vizion.get_complex
+- Vizion.fftshift
+- Vizion.scale_fft
+- Vizion.conj_fft
+- Vizion.add_fft
+- Vizion.sub_fft
+- Vizion.mult_fft
+- Vizion.div_fft
+- Vizion.mask_fft
+- Vizion.fft_energy
+- Vizion.translate_fft
+- Vizion.normalize_fft
+- Vizion.freq_filter
+- Vizion.freq_energy
+- Vizion.complex_to_image
+- Vizion.local_max
+- Vizion.local_min
+- Vizion.check_difference
+- Vizion.zero_crossing
+- Vizion.fast_threshold
+- Vizion.dyn_threshold
+- Vizion.local_threshold
+- Vizion.plateaus
+- Vizion.opencv_threshold
+- Vizion.bin_threshold
+- Vizion.hysteresis_threshold
+- Vizion.var_threshold
+- Vizion.sauvola
+- Vizion.dual_threshold
+- Vizion.regiongrowing
 - Vizion.read_image
 - Vizion.gauss_image
 - Vizion.mean_image
@@ -53,6 +194,16 @@
 - Vizion.edges_sub_pix
 - Vizion.dev_display
 - Vizion.dev_set_draw
+- Vizion.select_obj
+- Vizion.regiongrowing_mean
+- Vizion.regiongrowing_n
+- Vizion.histo_to_thresh
+- Vizion.auto_threshold
+- Vizion.char_threshold
+- Vizion.binary_threshold
+- Vizion.dots_image
+- Vizion.gray_erosion_rect
+- Vizion.gray_dilation_rect
 
 ## 排除的硬體
 
@@ -121,148 +272,22 @@
 - Vizion.get_system_time
 - Vizion.get_system_info
 
-### 灰階與濾波（140）
+### 灰階與濾波（14）
 
-- Vizion.rgb1_to_gray
-- Vizion.invert_image
-- Vizion.scale_image
-- Vizion.median_image
-- Vizion.guided_filter
-- Vizion.emphasize
-- Vizion.equ_histo_image
-- Vizion.emphasize_clahe
-- Vizion.add_image
-- Vizion.sub_image
-- Vizion.mult_image
-- Vizion.div_image
-- Vizion.abs_diff_image
-- Vizion.min_image
-- Vizion.max_image
-- Vizion.count_channels
-- Vizion.access_channel
-- Vizion.compose3
-- Vizion.decompose3
 - Vizion.append_channel
-- Vizion.scale_image_max
-- Vizion.gen_image_proto
-- Vizion.trans_from_rgb
-- Vizion.illuminate
-- Vizion.laplace
-- Vizion.gen_image_gray_ramp
-- Vizion.deviation_image
-- Vizion.sigma_image
-- Vizion.gray_range_rect
-- Vizion.scale_image_range
 - Vizion.trans_to_rgb
-- Vizion.derivate_gauss
-- Vizion.texture_laws
-- Vizion.set_grayval
 - Vizion.cfa_to_rgb
-- Vizion.pow_image
-- Vizion.rank_rect
-- Vizion.tile_images
 - Vizion.harmonic_interpolation
 - Vizion.bilateral_filter
-- Vizion.convol_image
 - Vizion.optical_flow_mg
-- Vizion.region_to_mean
-- Vizion.highpass_image
-- Vizion.anisotropic_diffusion
-- Vizion.median_rect
-- Vizion.bandpass_image
-- Vizion.sqrt_image
-- Vizion.log_image
-- Vizion.shock_filter
 - Vizion.add_noise_white
-- Vizion.gamma_image
-- Vizion.paint_gray
-- Vizion.binomial_filter
 - Vizion.isotropic_diffusion
-- Vizion.rank_image
-- Vizion.exp_image
-- Vizion.overpaint_gray
-- Vizion.abs_image
-- Vizion.bit_mask
-- Vizion.bit_slice
-- Vizion.atan2_image
-- Vizion.prewitt_amp
-- Vizion.kirsch_amp
-- Vizion.roberts
-- Vizion.frei_amp
-- Vizion.robinson_amp
-- Vizion.robinson_dir
 - Vizion.add_noise_salt_pepper
-- Vizion.bit_and
-- Vizion.bit_or
-- Vizion.bit_xor
-- Vizion.bit_not
-- Vizion.bit_lshift
-- Vizion.bit_rshift
-- Vizion.lut_trans
-- Vizion.gen_gauss_pyramid
 - Vizion.fft_image
 - Vizion.fft_image_inv
-- Vizion.get_complex
-- Vizion.fftshift
-- Vizion.scale_fft
-- Vizion.gen_complex_const
-- Vizion.mult_fft
 - Vizion.phase_correlation
 - Vizion.align_translation
-- Vizion.conj_fft
-- Vizion.add_fft
-- Vizion.sub_fft
-- Vizion.mask_fft
-- Vizion.fft_energy
-- Vizion.div_fft
-- Vizion.complex_to_image
-- Vizion.convol_fft
-- Vizion.translate_fft
-- Vizion.freq_filter
-- Vizion.freq_energy
-- Vizion.normalize_fft
 - Vizion.locate_template
-- Vizion.correlation_image
-- Vizion.edge_enhance
-- Vizion.edge_band
-- Vizion.edge_masked
-- Vizion.edge_preserve
-- Vizion.edge_residual
-- Vizion.enhance_map
-- Vizion.enhance_change
-- Vizion.enhance_hot
-- Vizion.diff_region
-- Vizion.diff_amount
-- Vizion.sin_image
-- Vizion.cos_image
-- Vizion.tan_image
-- Vizion.asin_image
-- Vizion.acos_image
-- Vizion.atan_image
-- Vizion.add_image_border
-- Vizion.gen_image_surface_first_order
-- Vizion.gen_image_surface_second_order
-- Vizion.rgb3_to_gray
-- Vizion.entropy_image
-- Vizion.midrange_image
-- Vizion.smooth_image
-- Vizion.get_image_type
-- Vizion.gray_dilation
-- Vizion.gray_erosion
-- Vizion.gray_opening
-- Vizion.gray_closing
-- Vizion.gray_dilation_shape
-- Vizion.gray_erosion_shape
-- Vizion.gray_opening_shape
-- Vizion.gray_closing_shape
-- Vizion.polar_trans_image
-- Vizion.channels_to_image
-- Vizion.mean_image_shape
-- Vizion.expand_domain_gray
-- Vizion.equ_histo_image_rect
-- Vizion.gray_inside
-- Vizion.select_grayvalues_from_channels
-- Vizion.frangi
 
 ### 幾何（57）
 
@@ -324,36 +349,13 @@
 - Vizion.polar_trans_region
 - Vizion.polar_trans_region_inv
 
-### 分割（26）
+### 分割（3）
 
-- Vizion.binary_threshold
-- Vizion.sauvola
-- Vizion.opencv_threshold
 - Vizion.opencv_connection
-- Vizion.select_obj
-- Vizion.histo_to_thresh
-- Vizion.local_max
-- Vizion.local_min
-- Vizion.plateaus
-- Vizion.check_difference
-- Vizion.dots_image
-- Vizion.char_threshold
-- Vizion.auto_threshold
-- Vizion.zero_crossing
-- Vizion.dual_threshold
-- Vizion.fast_threshold
-- Vizion.bin_threshold
-- Vizion.local_threshold
-- Vizion.dyn_threshold
-- Vizion.var_threshold
-- Vizion.hysteresis_threshold
-- Vizion.regiongrowing
 - Vizion.watersheds
 - Vizion.watersheds_threshold
-- Vizion.regiongrowing_mean
-- Vizion.regiongrowing_n
 
-### 形態學（47）
+### 形態學（45）
 
 - Vizion.opening_circle
 - Vizion.closing_circle
@@ -365,8 +367,6 @@
 - Vizion.opening_rectangle1
 - Vizion.closing_rectangle1
 - Vizion.boundary
-- Vizion.gray_erosion_rect
-- Vizion.gray_dilation_rect
 - Vizion.gray_erosion_circle
 - Vizion.gray_dilation_circle
 - Vizion.gray_opening_circle

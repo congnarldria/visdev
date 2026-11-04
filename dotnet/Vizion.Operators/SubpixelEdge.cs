@@ -5,10 +5,16 @@ public readonly record struct EdgePoint(double Row, double Column);
 
 public static partial class Operators
 {
-    /// <summary>
-    /// 高斯導數的梯度在法線上做拋物線內插。Low 以上才相連，其中要有一點達到 High。
-    /// 和 Vizion.edges_sub_pix 的 canny 相同。Alpha 要大於 0，High 不能小於 Low。
-    /// </summary>
+    /// <summary>高斯導數的梯度在法線上做拋物線內插，邊緣落在強度最高的次像素，而不是整數像素的外框。Low 以上才相連，其中要有一點達到 High。黑白階躍在 Sigma 1 時強度大約 60，門檻 20 和 40 留得住明顯的邊。差幾個灰階的雜訊不會留下。彩色先轉成亮度。Alpha 要大於 0，High 不能小於 Low。</summary>
+    /// <remarks>萃取次像素邊緣</remarks>
+    /// <example>
+    /// <code>Vizion.edges_sub_pix (Image, Edges, 'canny', 1.0, 20, 40)</code>
+    /// </example>
+    /// <param name="image">輸入影像。</param>
+    /// <param name="alpha">平滑標準差，要大於 0。</param>
+    /// <param name="low">梯度低門檻。</param>
+    /// <param name="high">能當種子的高門檻，不能小於 Low。</param>
+    /// <returns>次像素邊緣。這版只做 canny。</returns>
     public static EdgePoint[][] EdgesSubPix(ImageBuffer image, double alpha, double low, double high)
     {
         if (image == null)

@@ -30,6 +30,8 @@ sealed class OperatorDoc
     public string Note { get; set; } = "";
     public int Order { get; set; }
     public List<OperatorParam> Params { get; set; } = [];
+
+    public string TipText => OperatorHelpText.Format(this);
 }
 
 sealed class OperatorParam

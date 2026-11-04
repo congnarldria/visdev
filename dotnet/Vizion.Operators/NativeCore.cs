@@ -413,6 +413,744 @@ public static class NativeCore
         }
     }
 
+    public static bool TryGrayArith(byte[] left, byte[]? right, byte[] destination, int count, int op, double mult, double add)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || left.Length < count || destination.Length < count)
+            return false;
+        if (op != 0 && op != 1 && (right == null || right.Length < count))
+            return false;
+        try
+        {
+            return vizion_gray_arith(left, right, destination, count, op, mult, add) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryEqualize(byte[] source, byte[] destination, int count)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || source.Length < count || destination.Length < count)
+            return false;
+        try
+        {
+            return vizion_equalize(source, destination, count) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryEqualizeBgr(byte[] source, byte[] destination, int count)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || source.Length < count * 3 || destination.Length < count * 3)
+            return false;
+        try
+        {
+            return vizion_equalize_bgr(source, destination, count) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryScaleMax(byte[] source, byte[] destination, int count, byte[]? domain)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || source.Length < count || destination.Length < count)
+            return false;
+        if (domain != null && domain.Length < count)
+            return false;
+        try
+        {
+            return vizion_scale_max(source, destination, count, domain) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TrySplitBgr(byte[] bgr, byte[] blue, byte[] green, byte[] red, int count)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || bgr.Length < count * 3)
+            return false;
+        if (blue.Length < count || green.Length < count || red.Length < count)
+            return false;
+        try
+        {
+            return vizion_split_bgr(bgr, blue, green, red, count) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryMergeBgr(byte[] blue, byte[] green, byte[] red, byte[] bgr, int count)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || bgr.Length < count * 3)
+            return false;
+        if (blue.Length < count || green.Length < count || red.Length < count)
+            return false;
+        try
+        {
+            return vizion_merge_bgr(blue, green, red, bgr, count) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryRgbConvert(byte[] red, byte[] green, byte[] blue, byte[] first, byte[] second, byte[] third, int count, int space)
+    {
+        if (!IsLoaded || !UseNative || count < 1 || space < 0 || space > 2)
+            return false;
+        if (red.Length < count || green.Length < count || blue.Length < count)
+            return false;
+        if (first.Length < count || second.Length < count || third.Length < count)
+            return false;
+        try
+        {
+            return vizion_rgb_convert(red, green, blue, first, second, third, count, space) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryIlluminate(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight, double factor, byte[]? domain)
+    {
+        if (!IsLoaded || !UseNative || width < 1 || height < 1 || maskWidth < 1 || maskHeight < 1)
+            return false;
+        int count = width * height;
+        if (source.Length < count || destination.Length < count)
+            return false;
+        if (domain != null && domain.Length < count)
+            return false;
+        try
+        {
+            return vizion_illuminate(source, destination, width, height, maskWidth, maskHeight, factor, domain) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryGraySqrt(byte[] source, byte[] destination, int count) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_sqrt(source, destination, count));
+
+    public static bool TryGrayPow(byte[] source, byte[] destination, int count, double exponent) =>
+        Ready(source, destination, count) && exponent > 0 && Call(() => vizion_gray_pow(source, destination, count, exponent));
+
+    public static bool TryGrayLog(byte[] source, byte[] destination, int count, bool natural) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_log(source, destination, count, natural ? 1 : 0));
+
+    public static bool TryGrayExp(byte[] source, byte[] destination, int count, bool natural) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_exp(source, destination, count, natural ? 1 : 0));
+
+    public static bool TryGrayAbs(byte[] source, byte[] destination, int count) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_abs(source, destination, count));
+
+    public static bool TryGrayGamma(byte[] source, byte[] destination, int count, double gamma, double offset, double threshold, double maxGray, bool encode) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_gamma(source, destination, count, gamma, offset, threshold, maxGray, encode ? 1 : 0));
+
+    public static bool TryGrayRange(byte[] source, byte[] destination, int count, double low, double high) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_range(source, destination, count, low, high));
+
+    public static bool TryGrayBitConst(byte[] source, byte[] destination, int count, int op, int amount) =>
+        Ready(source, destination, count) && Call(() => vizion_gray_bitconst(source, destination, count, op, amount));
+
+    public static bool TryHighpass(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
+        Ready(source, destination, width * height) && maskWidth >= 1 && maskHeight >= 1
+        && Call(() => vizion_highpass(source, destination, width, height, maskWidth, maskHeight));
+
+    public static bool TryDeviation(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
+        Ready(source, destination, width * height) && maskWidth >= 1 && maskHeight >= 1
+        && Call(() => vizion_deviation(source, destination, width, height, maskWidth, maskHeight));
+
+    public static bool TryGraySpan(byte[] source, byte[] destination, int width, int height, int maskHeight, int maskWidth) =>
+        Ready(source, destination, width * height) && maskWidth >= 1 && maskHeight >= 1
+        && Call(() => vizion_gray_span(source, destination, width, height, maskHeight, maskWidth));
+
+    public static bool TryFill(byte[] destination, int count, int value) =>
+        IsLoaded && UseNative && count >= 1 && destination.Length >= count && value >= 0 && value <= 255
+        && Call(() => vizion_fill(destination, count, value));
+
+    public static bool TryLut(byte[] source, byte[] destination, int count, byte[] table) =>
+        Ready(source, destination, count) && table.Length >= 256 && Call(() => vizion_lut(source, destination, count, table));
+
+    public static bool TryRgb3Gray(byte[] red, byte[] green, byte[] blue, byte[] gray, int count) =>
+        IsLoaded && UseNative && count >= 1 && red.Length >= count && green.Length >= count && blue.Length >= count && gray.Length >= count
+        && Call(() => vizion_rgb3_gray(red, green, blue, gray, count));
+
+    public static bool TryPaint(byte[] baseImage, byte[] source, byte[] destination, int width, int height, int baseChannels, int sourceChannels, byte[]? mask) =>
+        IsLoaded && UseNative && width >= 1 && height >= 1
+        && Call(() => vizion_paint(baseImage, source, destination, width, height, baseChannels, sourceChannels, mask));
+
+    public static bool TryRank(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight, int rank, int border) =>
+        Ready(source, destination, width * height)
+        && Call(() => vizion_rank(source, destination, width, height, maskWidth, maskHeight, rank, border));
+
+    public static bool TryPrewitt(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_prewitt(source, destination, width, height));
+
+    public static bool TryRoberts(byte[] source, byte[] destination, int width, int height, bool sumAbs) =>
+        Ready(source, destination, width * height) && Call(() => vizion_roberts(source, destination, width, height, sumAbs ? 1 : 0));
+
+    public static bool TryKirsch(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_kirsch(source, destination, width, height));
+
+    public static bool TryFrei(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_frei(source, destination, width, height));
+
+    public static bool TryRobinsonAmp(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_robinson_amp(source, destination, width, height));
+
+    public static bool TryRobinsonDir(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_robinson_dir(source, destination, width, height));
+
+    public static bool TryAtan2Gray(byte[] vertical, byte[] horizontal, byte[] destination, int count) =>
+        IsLoaded && UseNative && count >= 1 && vertical.Length >= count && horizontal.Length >= count && destination.Length >= count
+        && Call(() => vizion_atan2_gray(vertical, horizontal, destination, count));
+
+    public static bool TryMidrange(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
+        Ready(source, destination, width * height) && Call(() => vizion_midrange(source, destination, width, height, maskWidth, maskHeight));
+
+    public static bool TryWave(byte[] source, byte[] destination, int count, int op) =>
+        Ready(source, destination, count) && Call(() => vizion_wave(source, destination, count, op));
+
+    public static bool TryGrayRamp(byte[] destination, int width, int height, double alpha, double beta, double gamma, double row, double column) =>
+        IsLoaded && UseNative && width >= 1 && height >= 1 && destination.Length >= width * height
+        && Call(() => vizion_gray_ramp(destination, width, height, alpha, beta, gamma, row, column));
+
+    public static bool TryTile(byte[] left, int leftWidth, int leftHeight, byte[] right, int rightWidth, int rightHeight, byte[] destination, int channels, bool vertical) =>
+        IsLoaded && UseNative && channels is 1 or 3
+        && Call(() => vizion_tile(left, leftWidth, leftHeight, right, rightWidth, rightHeight, destination, channels, vertical ? 1 : 0));
+
+    public static bool TryConvol(byte[] source, byte[] destination, int width, int height, float[] kernel, int kernelHeight, int kernelWidth, int border) =>
+        Ready(source, destination, width * height) && kernel.Length >= kernelHeight * kernelWidth
+        && Call(() => vizion_convol(source, destination, width, height, kernel, kernelHeight, kernelWidth, border));
+
+    public static bool TryBandpass(byte[] source, byte[] destination, int width, int height, int inner, int outer) =>
+        Ready(source, destination, width * height) && Call(() => vizion_bandpass(source, destination, width, height, inner, outer));
+
+    public static bool TryMakeBorder(byte[] source, byte[] destination, int width, int height, int channels, int border, int fill) =>
+        IsLoaded && UseNative && width >= 1 && height >= 1
+        && Call(() => vizion_make_border(source, destination, width, height, channels, border, fill));
+
+    public static bool TryPyramid(byte[] source, byte[] destination, int width, int height, int channels, int mode) =>
+        IsLoaded && UseNative && Call(() => vizion_pyramid(source, destination, width, height, channels, mode));
+
+    public static bool TryEntropy(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
+        Ready(source, destination, width * height) && Call(() => vizion_entropy(source, destination, width, height, maskWidth, maskHeight));
+
+    public static bool TryRankDisk(byte[] source, byte[] destination, int width, int height, int radius, int rank) =>
+        Ready(source, destination, width * height) && Call(() => vizion_rank_disk(source, destination, width, height, radius, rank));
+
+    public static bool TryGrayInside(byte[] source, byte[] destination, int width, int height) =>
+        Ready(source, destination, width * height) && Call(() => vizion_gray_inside(source, destination, width, height));
+
+    public static bool TryEqualizeRect(byte[] source, byte[] destination, int width, int height, int channels, int top, int left, int bottom, int right) =>
+        IsLoaded && UseNative && Call(() => vizion_equalize_rect(source, destination, width, height, channels, top, left, bottom, right));
+
+    public static bool TryRegionMean(byte[] gray, byte[] destination, int width, int[] rows, int[] columns, int[] lengths) =>
+        IsLoaded && UseNative && width >= 1 && gray.Length >= width && destination.Length >= gray.Length
+        && Call(() => vizion_region_mean(gray, destination, width, rows, columns, lengths, rows.Length));
+
+    public static bool TrySurface(byte[] destination, int width, int height, double alpha, double beta, double gamma, double row, double column) =>
+        IsLoaded && UseNative && width >= 1 && height >= 1 && destination.Length >= width * height
+        && Call(() => vizion_surface(destination, width, height, alpha, beta, gamma, row, column));
+
+    public static bool TryGrayKernel(byte[] source, byte[] destination, int width, int height, int channels, byte[] kernel, int kernelHeight, int kernelWidth, int mode) =>
+        IsLoaded && UseNative && channels is 1 or 3 && kernel.Length >= kernelHeight * kernelWidth
+        && Call(() => vizion_gray_kernel(source, destination, width, height, channels, kernel, kernelHeight, kernelWidth, mode));
+
+    public static bool TryMeanKernel(byte[] source, byte[] destination, int width, int height, int channels, byte[] kernel, int kernelHeight, int kernelWidth) =>
+        IsLoaded && UseNative && channels is 1 or 3 && kernel.Length >= kernelHeight * kernelWidth
+        && Call(() => vizion_mean_kernel(source, destination, width, height, channels, kernel, kernelHeight, kernelWidth));
+
+    public static bool TrySelectGray(byte[] source, byte[] index, byte[] destination, int width, int height, int channels) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height
+        && Call(() => vizion_select_gray(source, index, destination, width, height, channels));
+
+    public static bool TryShapeKernel(byte[] kernel, int height, int width, int shape) =>
+        IsLoaded && UseNative && kernel.Length >= height * width
+        && Call(() => vizion_shape_kernel(kernel, height, width, shape));
+
+    public static bool TryDerivGauss(byte[] source, byte[] destination, int width, int height, double sigma, int component) =>
+        Ready(source, destination, width * height) && Call(() => vizion_deriv_gauss(source, destination, width, height, sigma, component));
+
+    public static bool TryTextureLaws(byte[] source, byte[] destination, int width, int height, int size, int vertical, int horizontal, int shift) =>
+        Ready(source, destination, width * height) && Call(() => vizion_texture_laws(source, destination, width, height, size, vertical, horizontal, shift));
+
+    public static bool TryPolar(byte[] source, byte[] destination, int width, int height, int channels, double row, double column, int outWidth, int outHeight) =>
+        IsLoaded && UseNative && channels is 1 or 3
+        && Call(() => vizion_polar(source, destination, width, height, channels, row, column, outWidth, outHeight));
+
+    public static bool TryEnhanceMap(byte[] before, byte[] after, byte[] destination) =>
+        Ready(before, destination, before.Length) && after.Length >= before.Length
+        && Call(() => vizion_enhance_map(before, after, destination, before.Length));
+
+    public static bool TryEnhanceChange(byte[] before, byte[] after, out double mean, out double maximum)
+    {
+        mean = 0;
+        maximum = 0;
+        if (!Ready(before, after, before.Length))
+            return false;
+        double localMean = 0;
+        double localMaximum = 0;
+        if (!Call(() => vizion_enhance_change(before, after, before.Length, out localMean, out localMaximum)))
+            return false;
+        mean = localMean;
+        maximum = localMaximum;
+        return true;
+    }
+
+    public static bool TryEnhanceHot(byte[] before, byte[] after, byte[] mask, double limit) =>
+        Ready(before, mask, before.Length) && after.Length >= before.Length
+        && Call(() => vizion_enhance_hot(before, after, mask, before.Length, limit));
+
+    public static bool TryDiffMask(byte[] image, byte[] golden, byte[]? domain, byte[] mask, double minimum) =>
+        Ready(image, mask, image.Length) && golden.Length >= image.Length
+        && Call(() => vizion_diff_mask(image, golden, domain, mask, image.Length, minimum));
+
+    public static bool TryDiffAmount(byte[] image, byte[] golden, byte[]? domain, out double mean, out double maximum)
+    {
+        mean = 0;
+        maximum = 0;
+        if (!Ready(image, golden, image.Length))
+            return false;
+        double localMean = 0;
+        double localMaximum = 0;
+        if (!Call(() => vizion_diff_amount(image, golden, domain, image.Length, out localMean, out localMaximum)))
+            return false;
+        mean = localMean;
+        maximum = localMaximum;
+        return true;
+    }
+
+    public static bool TryEdgeResidual(byte[] source, byte[] destination, int width, int height, double sigma, double threshold) =>
+        Ready(source, destination, width * height) && Call(() => vizion_edge_residual(source, destination, width, height, sigma, threshold));
+
+    public static bool TryEdgeEnhance(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double factor, double threshold, double limit, byte[]? domain) =>
+        IsLoaded && UseNative && channels is 1 or 3
+        && Call(() => vizion_edge_enhance(source, destination, width, height, channels, sigma, factor, threshold, limit, domain));
+
+    public static bool TryEdgeBand(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigmaFine, double sigmaCoarse, double factor, double threshold, byte[]? domain) =>
+        IsLoaded && UseNative && channels is 1 or 3
+        && Call(() => vizion_edge_band(source, destination, width, height, channels, sigmaFine, sigmaCoarse, factor, threshold, domain));
+
+    public static bool TryEdgeMasked(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double factor, double level, byte[]? domain) =>
+        IsLoaded && UseNative && channels is 1 or 3
+        && Call(() => vizion_edge_masked(source, destination, width, height, channels, sigma, factor, level, domain));
+
+    public static bool TryEdgePreserve(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double level, byte[]? domain) =>
+        IsLoaded && UseNative && channels is 1 or 3
+        && Call(() => vizion_edge_preserve(source, destination, width, height, channels, sigma, level, domain));
+
+    public static bool TryAnisotropic(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        int mode, double contrast, double theta, int iterations) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height
+        && Call(() => vizion_anisotropic(source, destination, width, height, channels, mode, contrast, theta, iterations));
+
+    public static bool TryShock(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double theta, int iterations, int mode, double sigma) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height
+        && Call(() => vizion_shock(source, destination, width, height, channels, theta, iterations, mode, sigma));
+
+    public static bool TryGuided(byte[] source, byte[] destination, int width, int height, int channels, int radius, double eps) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height * channels
+        && Call(() => vizion_guided(source, destination, width, height, channels, radius, eps));
+
+    public static bool TryFrangi(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double sigmaMax, int dark) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height
+        && Call(() => vizion_frangi(source, destination, width, height, channels, sigma, sigmaMax, dark));
+
+    public static bool TryClahe(byte[] source, byte[] destination, int width, int height, int channels, double clip, int tiles) =>
+        IsLoaded && UseNative && channels is 1 or 3 && destination.Length >= width * height * channels
+        && Call(() => vizion_clahe(source, destination, width, height, channels, clip, tiles));
+
+    public static bool TryCircular(
+        byte[] image, byte[] kernel, byte[] destination, int width, int height, int kernelWidth, int kernelHeight, int correlation) =>
+        IsLoaded && UseNative && destination.Length >= width * height
+        && Call(() => vizion_circular(image, kernel, destination, width, height, kernelWidth, kernelHeight, correlation));
+
+    public static bool TryComplexFill(double[] real, double[] imag, double re, double im) =>
+        IsLoaded && UseNative && real.Length > 0 && imag.Length >= real.Length
+        && Call(() => vizion_complex_fill(real, imag, real.Length, re, im));
+
+    public static bool TryComplexScale(double[] real, double[] imag, double[] dstReal, double[] dstImag, double factor) =>
+        IsLoaded && UseNative && dstReal.Length >= real.Length && dstImag.Length >= real.Length
+        && Call(() => vizion_complex_scale(real, imag, dstReal, dstImag, real.Length, factor));
+
+    public static bool TryComplexConj(double[] real, double[] imag, double[] dstReal, double[] dstImag) =>
+        IsLoaded && UseNative && dstReal.Length >= real.Length && dstImag.Length >= real.Length
+        && Call(() => vizion_complex_conj(real, imag, dstReal, dstImag, real.Length));
+
+    public static bool TryComplexAdd(double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag) =>
+        ComplexPair(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag)
+        && Call(() => vizion_complex_add(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag, leftReal.Length));
+
+    public static bool TryComplexSub(double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag) =>
+        ComplexPair(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag)
+        && Call(() => vizion_complex_sub(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag, leftReal.Length));
+
+    public static bool TryComplexMul(double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag) =>
+        ComplexPair(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag)
+        && Call(() => vizion_complex_mul(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag, leftReal.Length));
+
+    public static bool TryComplexDiv(double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag) =>
+        ComplexPair(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag)
+        && Call(() => vizion_complex_div(leftReal, leftImag, rightReal, rightImag, dstReal, dstImag, leftReal.Length));
+
+    public static bool TryComplexShift(double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, int center) =>
+        IsLoaded && UseNative && real.Length >= width * height && dstReal.Length >= width * height
+        && Call(() => vizion_complex_shift(real, imag, dstReal, dstImag, width, height, center));
+
+    public static bool TryComplexMask(double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, int mode) =>
+        IsLoaded && UseNative && real.Length >= width * height && dstReal.Length >= width * height
+        && Call(() => vizion_complex_mask(real, imag, dstReal, dstImag, width, height, mode));
+
+    public static bool TryComplexTranslate(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, double row, double column) =>
+        IsLoaded && UseNative && real.Length >= width * height && dstReal.Length >= width * height
+        && Call(() => vizion_complex_translate(real, imag, dstReal, dstImag, width, height, row, column));
+
+    public static bool TryComplexNormalize(double[] real, double[] imag, double[] dstReal, double[] dstImag) =>
+        IsLoaded && UseNative && real.Length > 0 && dstReal.Length >= real.Length
+        && Call(() => vizion_complex_normalize(real, imag, dstReal, dstImag, real.Length));
+
+    public static bool TryComplexFreq(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, double radius, int high) =>
+        IsLoaded && UseNative && real.Length >= width * height && dstReal.Length >= width * height
+        && Call(() => vizion_complex_freq(real, imag, dstReal, dstImag, width, height, radius, high));
+
+    public static bool TryComplexFreqEnergy(double[] real, double[] imag, int width, int height, double radius, out double energy)
+    {
+        double local = 0;
+        if (!IsLoaded || !UseNative || real.Length < width * height
+            || !Call(() => vizion_complex_freq_energy(real, imag, width, height, radius, out local)))
+        {
+            energy = 0;
+            return false;
+        }
+        energy = local;
+        return true;
+    }
+
+    public static bool TryComplexView(double[] real, double[] imag, byte[] destination, int mode) =>
+        IsLoaded && UseNative && destination.Length >= real.Length
+        && Call(() => vizion_complex_view(real, imag, destination, real.Length, mode));
+
+    public static bool TryLocalPeak(byte[] gray, byte[] mask, int width, int height, double level, bool minima) =>
+        IsLoaded && UseNative && gray.Length >= width * height && mask.Length >= width * height
+        && Call(() => vizion_local_peak(gray, mask, width, height, level, minima ? 1 : 0));
+
+    public static bool TryCheckDiff(byte[] image, byte[] pattern, byte[] mask, double limit, int mode) =>
+        IsLoaded && UseNative && mask.Length >= image.Length && pattern.Length >= image.Length
+        && Call(() => vizion_check_diff(image, pattern, mask, image.Length, limit, mode));
+
+    public static bool TryZeroCross(byte[] gray, byte[] mask, int width, int height) =>
+        IsLoaded && UseNative && gray.Length >= width * height && mask.Length >= width * height
+        && Call(() => vizion_zero_cross(gray, mask, width, height));
+
+    public static bool TryFastThreshold(byte[] gray, byte[] mask, int width, int height, int low, int high, int minimum) =>
+        IsLoaded && UseNative && gray.Length >= width * height && mask.Length >= width * height
+        && Call(() => vizion_fast_threshold(gray, mask, width, height, low, high, minimum));
+
+    public static bool TryDynThreshold(byte[] image, byte[] smooth, byte[]? domain, byte[] mask, double offset, int mode) =>
+        IsLoaded && UseNative && mask.Length >= image.Length && smooth.Length >= image.Length
+        && Call(() => vizion_dyn_threshold(image, smooth, domain, mask, image.Length, offset, mode));
+
+    public static bool TryLocalThreshold(byte[] gray, byte[] mask, int width, int height, int side, double offset, int light) =>
+        IsLoaded && UseNative && gray.Length >= width * height && mask.Length >= width * height
+        && Call(() => vizion_local_threshold(gray, mask, width, height, side, offset, light));
+
+    public static bool TryPlateau(byte[] gray, byte[]? domain, byte[] mask, int width, int height, int side) =>
+        IsLoaded && UseNative && gray.Length >= width * height && mask.Length >= width * height
+        && Call(() => vizion_plateau(gray, domain, mask, width, height, side));
+
+    public static bool TryOpenCvThreshold(byte[] gray, byte[]? domain, byte[] mask, int level, int inverse) =>
+        IsLoaded && UseNative && mask.Length >= gray.Length
+        && Call(() => vizion_opencv_threshold(gray, domain, mask, gray.Length, level, inverse));
+
+    public static bool TryBinThreshold(byte[] gray, byte[] mask) =>
+        IsLoaded && UseNative && mask.Length >= gray.Length
+        && Call(() => vizion_bin_threshold(gray, mask, gray.Length));
+
+    public static bool TryHysteresis(byte[] gray, byte[]? domain, byte[] mask, int width, int height, double low, double high, double length) =>
+        IsLoaded && UseNative && gray.Length >= width * height && mask.Length >= width * height
+        && Call(() => vizion_hysteresis_threshold(gray, domain, mask, width, height, low, high, length));
+
+    public static bool TryVarThreshold(
+        byte[] gray, byte[]? domain, byte[] mask, int width, int height,
+        int maskWidth, int maskHeight, double scale, double absolute, int mode) =>
+        IsLoaded && UseNative && gray.Length >= width * height && mask.Length >= width * height
+        && Call(() => vizion_var_threshold(gray, domain, mask, width, height, maskWidth, maskHeight, scale, absolute, mode));
+
+    public static bool TrySauvola(byte[] gray, byte[]? domain, byte[] mask, int width, int height, int side, double factor) =>
+        IsLoaded && UseNative && gray.Length >= width * height && mask.Length >= width * height
+        && Call(() => vizion_sauvola(gray, domain, mask, width, height, side, factor));
+
+    public static bool TryDualLabels(
+        byte[] gray, byte[]? domain, int[] labels, int width, int height,
+        double limit, double strong, int minimum, out int count)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || labels.Length < width * height
+            || !Call(() => vizion_dual_labels(gray, domain, labels, width, height, limit, strong, minimum, out local)))
+        {
+            count = 0;
+            return false;
+        }
+        count = local;
+        return true;
+    }
+
+    public static bool TryRegionGrow(
+        byte[] gray, byte[]? domain, int[] labels, int width, int height,
+        int[] rows, int[] columns, double tolerance, int minimum, out int count)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || labels.Length < width * height || rows.Length < 1
+            || !Call(() => vizion_region_grow(gray, domain, labels, width, height, rows, columns, rows.Length, tolerance, minimum, out local)))
+        {
+            count = 0;
+            return false;
+        }
+        count = local;
+        return true;
+    }
+
+    public static bool TryRegionGrowMean(
+        byte[] gray, byte[]? domain, int[] labels, int width, int height,
+        int[] rows, int[] columns, double tolerance, int minimum, out int count)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || labels.Length < width * height || rows.Length < 1
+            || !Call(() => vizion_region_grow_mean(gray, domain, labels, width, height, rows, columns, rows.Length, tolerance, minimum, out local)))
+        {
+            count = 0;
+            return false;
+        }
+        count = local;
+        return true;
+    }
+
+    public static bool TryRegionGrowN(
+        byte[] pixels, int[] labels, int width, int height, int channels,
+        double low, double high, int minimum, out int count)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || labels.Length < width * height
+            || !Call(() => vizion_region_grow_n(pixels, labels, width, height, channels, low, high, minimum, out local)))
+        {
+            count = 0;
+            return false;
+        }
+        count = local;
+        return true;
+    }
+
+    public static bool TryHistoToThresh(double[] counts, double sigma, int[] lows, int[] highs, out int segments)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || counts.Length < 3 || lows.Length < counts.Length || highs.Length < counts.Length
+            || !Call(() => vizion_histo_to_thresh(counts, counts.Length, sigma, lows, highs, out local)))
+        {
+            segments = 0;
+            return false;
+        }
+        segments = local;
+        return true;
+    }
+
+    public static bool TryAutoThreshold(byte[] gray, byte[]? domain, int[] labels, double sigma, out int segments)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || labels.Length < gray.Length
+            || !Call(() => vizion_auto_threshold(gray, domain, labels, gray.Length, sigma, out local)))
+        {
+            segments = 0;
+            return false;
+        }
+        segments = local;
+        return true;
+    }
+
+    public static bool TryCharThreshold(
+        byte[] gray, byte[] histo, byte[]? domain, byte[] mask, double sigma, double percent, out int limit)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || mask.Length < gray.Length || histo.Length < gray.Length
+            || !Call(() => vizion_char_threshold(gray, histo, domain, mask, gray.Length, sigma, percent, out local)))
+        {
+            limit = 0;
+            return false;
+        }
+        limit = local;
+        return true;
+    }
+
+    public static bool TryBinaryThreshold(
+        byte[] gray, byte[]? domain, byte[] mask, int width, int height, int method, int dark, out int used)
+    {
+        int local = 0;
+        if (!IsLoaded || !UseNative || mask.Length < width * height
+            || !Call(() => vizion_binary_threshold(gray, domain, mask, width, height, method, dark, out local)))
+        {
+            used = 0;
+            return false;
+        }
+        used = local;
+        return true;
+    }
+
+    public static bool TryDotsImage(
+        byte[] gray, byte[]? domain, byte[] mask, int width, int height, int diameter, int kind, double shift) =>
+        IsLoaded && UseNative && mask.Length >= width * height
+        && Call(() => vizion_dots_image(gray, domain, mask, width, height, diameter, kind, shift));
+
+    public static bool TryComplexEnergy(double[] real, double[] imag, out double energy)
+    {
+        double local = 0;
+        if (!IsLoaded || !UseNative || real.Length < 1 || imag.Length < real.Length
+            || !Call(() => vizion_complex_energy(real, imag, real.Length, out local)))
+        {
+            energy = 0;
+            return false;
+        }
+        energy = local;
+        return true;
+    }
+
+    static bool ComplexPair(double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag) =>
+        IsLoaded && UseNative && leftReal.Length > 0
+        && leftImag.Length >= leftReal.Length && rightReal.Length >= leftReal.Length && rightImag.Length >= leftReal.Length
+        && dstReal.Length >= leftReal.Length && dstImag.Length >= leftReal.Length;
+
+    public static bool TrySurfaceQuad(
+        byte[] destination, int width, int height,
+        double alpha, double beta, double gamma, double delta, double epsilon, double zeta,
+        double row, double column) =>
+        IsLoaded && UseNative && width >= 1 && height >= 1 && destination.Length >= width * height
+        && Call(() => vizion_surface_quad(destination, width, height, alpha, beta, gamma, delta, epsilon, zeta, row, column));
+
+    public static bool TryBinomial(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight) =>
+        Ready(source, destination, width * height) && Call(() => vizion_binomial(source, destination, width, height, maskWidth, maskHeight));
+
+    public static bool TryLaplace(byte[] source, byte[] destination, int width, int height, int ksize, bool eight, bool absolute) =>
+        Ready(source, destination, width * height)
+        && Call(() => vizion_laplace(source, destination, width, height, ksize, eight ? 1 : 0, absolute ? 1 : 0));
+
+    public static bool TryGrayBits(byte[] left, byte[]? right, byte[] destination, int count, int op)
+    {
+        if (!Ready(left, destination, count) || op < 0 || op > 3)
+            return false;
+        if (op != 3 && (right == null || right.Length < count))
+            return false;
+        return Call(() => vizion_gray_bits(left, right, destination, count, op));
+    }
+
+    static bool Ready(byte[] source, byte[] destination, int count) =>
+        IsLoaded && UseNative && count >= 1 && source.Length >= count && destination.Length >= count;
+
+    static bool Call(Func<int> invoke)
+    {
+        try
+        {
+            return invoke() == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool TryMedian(byte[] source, byte[] destination, int width, int height, int ksize)
+    {
+        if (!IsLoaded || !UseNative || width < 1 || height < 1 || ksize < 1 || (ksize & 1) == 0)
+            return false;
+        if (source.Length < width * height || destination.Length < width * height)
+            return false;
+        try
+        {
+            return vizion_median_image(source, destination, width, height, ksize) == 0;
+        }
+        catch (DllNotFoundException)
+        {
+            IsLoaded = false;
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public static bool TryPyrDown(byte[] source, int width, int height, byte[] destination)
     {
         int destWidth = (width + 1) / 2;
@@ -582,6 +1320,405 @@ public static class NativeCore
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_bgr_gray(byte[] bgr, int count, byte[] gray);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_arith(byte[] left, byte[]? right, byte[] destination, int count, int op, double mult, double add);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_median_image(byte[] source, byte[] destination, int width, int height, int ksize);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_equalize(byte[] source, byte[] destination, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_equalize_bgr(byte[] source, byte[] destination, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_scale_max(byte[] source, byte[] destination, int count, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_split_bgr(byte[] bgr, byte[] blue, byte[] green, byte[] red, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_merge_bgr(byte[] blue, byte[] green, byte[] red, byte[] bgr, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_rgb_convert(
+        byte[] red, byte[] green, byte[] blue, byte[] first, byte[] second, byte[] third, int count, int space);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_illuminate(
+        byte[] source, byte[] destination, int width, int height,
+        int maskWidth, int maskHeight, double factor, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_sqrt(byte[] source, byte[] destination, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_pow(byte[] source, byte[] destination, int count, double exponent);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_log(byte[] source, byte[] destination, int count, int natural);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_exp(byte[] source, byte[] destination, int count, int natural);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_abs(byte[] source, byte[] destination, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_gamma(
+        byte[] source, byte[] destination, int count,
+        double gamma, double offset, double threshold, double maxGray, int encode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_range(byte[] source, byte[] destination, int count, double low, double high);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_bits(byte[] left, byte[]? right, byte[] destination, int count, int op);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_bitconst(byte[] source, byte[] destination, int count, int op, int amount);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_highpass(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_deviation(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_span(byte[] source, byte[] destination, int width, int height, int maskHeight, int maskWidth);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_laplace(byte[] source, byte[] destination, int width, int height, int ksize, int eight, int absolute);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_fill(byte[] destination, int count, int value);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_lut(byte[] source, byte[] destination, int count, byte[] table);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_rgb3_gray(byte[] red, byte[] green, byte[] blue, byte[] gray, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_paint(
+        byte[] baseImage, byte[] source, byte[] destination,
+        int width, int height, int baseChannels, int sourceChannels, byte[]? mask);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_rank(
+        byte[] source, byte[] destination, int width, int height,
+        int maskWidth, int maskHeight, int rank, int border);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_prewitt(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_roberts(byte[] source, byte[] destination, int width, int height, int sumAbs);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_binomial(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_kirsch(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_frei(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_robinson_amp(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_robinson_dir(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_atan2_gray(byte[] vertical, byte[] horizontal, byte[] destination, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_midrange(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_wave(byte[] source, byte[] destination, int count, int op);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_ramp(byte[] destination, int width, int height, double alpha, double beta, double gamma, double row, double column);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_tile(
+        byte[] left, int leftWidth, int leftHeight, byte[] right, int rightWidth, int rightHeight,
+        byte[] destination, int channels, int vertical);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_convol(
+        byte[] source, byte[] destination, int width, int height,
+        float[] kernel, int kernelHeight, int kernelWidth, int border);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_bandpass(byte[] source, byte[] destination, int width, int height, int inner, int outer);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_make_border(byte[] source, byte[] destination, int width, int height, int channels, int border, int fill);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_pyramid(byte[] source, byte[] destination, int width, int height, int channels, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_entropy(byte[] source, byte[] destination, int width, int height, int maskWidth, int maskHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_rank_disk(byte[] source, byte[] destination, int width, int height, int radius, int rank);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_inside(byte[] source, byte[] destination, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_equalize_rect(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        int top, int left, int bottom, int right);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_region_mean(
+        byte[] gray, byte[] destination, int width, int[] rows, int[] columns, int[] lengths, int runs);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_surface(
+        byte[] destination, int width, int height, double alpha, double beta, double gamma, double row, double column);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_surface_quad(
+        byte[] destination, int width, int height,
+        double alpha, double beta, double gamma, double delta, double epsilon, double zeta,
+        double row, double column);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_gray_kernel(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        byte[] kernel, int kernelHeight, int kernelWidth, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_mean_kernel(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        byte[] kernel, int kernelHeight, int kernelWidth);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_select_gray(byte[] source, byte[] index, byte[] destination, int width, int height, int channels);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_shape_kernel(byte[] kernel, int height, int width, int shape);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_deriv_gauss(byte[] source, byte[] destination, int width, int height, double sigma, int component);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_texture_laws(
+        byte[] source, byte[] destination, int width, int height, int size, int vertical, int horizontal, int shift);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_polar(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double row, double column, int outWidth, int outHeight);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_enhance_map(byte[] before, byte[] after, byte[] destination, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_enhance_change(byte[] before, byte[] after, int count, out double mean, out double maximum);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_enhance_hot(byte[] before, byte[] after, byte[] mask, int count, double limit);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_diff_mask(byte[] image, byte[] golden, byte[]? domain, byte[] mask, int count, double minimum);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_diff_amount(byte[] image, byte[] golden, byte[]? domain, int count, out double mean, out double maximum);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_edge_residual(byte[] source, byte[] destination, int width, int height, double sigma, double threshold);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_edge_enhance(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double factor, double threshold, double limit, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_edge_band(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigmaFine, double sigmaCoarse, double factor, double threshold, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_edge_masked(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double factor, double level, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_edge_preserve(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double level, byte[]? domain);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_anisotropic(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        int mode, double contrast, double theta, int iterations);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_shock(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double theta, int iterations, int mode, double sigma);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_guided(
+        byte[] source, byte[] destination, int width, int height, int channels, int radius, double eps);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_frangi(
+        byte[] source, byte[] destination, int width, int height, int channels,
+        double sigma, double sigmaMax, int dark);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_clahe(
+        byte[] source, byte[] destination, int width, int height, int channels, double clip, int tiles);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_circular(
+        byte[] image, byte[] kernel, byte[] destination,
+        int width, int height, int kernelWidth, int kernelHeight, int correlation);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_fill(double[] real, double[] imag, int count, double re, double im);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_scale(double[] real, double[] imag, double[] dstReal, double[] dstImag, int count, double factor);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_conj(double[] real, double[] imag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_add(
+        double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_sub(
+        double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_mul(
+        double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_div(
+        double[] leftReal, double[] leftImag, double[] rightReal, double[] rightImag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_shift(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, int center);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_mask(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_energy(double[] real, double[] imag, int count, out double energy);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_translate(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, double row, double column);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_normalize(double[] real, double[] imag, double[] dstReal, double[] dstImag, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_freq(
+        double[] real, double[] imag, double[] dstReal, double[] dstImag, int width, int height, double radius, int high);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_freq_energy(
+        double[] real, double[] imag, int width, int height, double radius, out double energy);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_complex_view(double[] real, double[] imag, byte[] destination, int count, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_local_peak(byte[] gray, byte[] mask, int width, int height, double level, int minima);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_check_diff(byte[] image, byte[] pattern, byte[] mask, int count, double limit, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_zero_cross(byte[] gray, byte[] mask, int width, int height);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_fast_threshold(byte[] gray, byte[] mask, int width, int height, int low, int high, int minimum);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_dyn_threshold(
+        byte[] image, byte[] smooth, byte[]? domain, byte[] mask, int count, double offset, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_local_threshold(byte[] gray, byte[] mask, int width, int height, int side, double offset, int light);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_plateau(byte[] gray, byte[]? domain, byte[] mask, int width, int height, int side);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_opencv_threshold(byte[] gray, byte[]? domain, byte[] mask, int count, int level, int inverse);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_bin_threshold(byte[] gray, byte[] mask, int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_hysteresis_threshold(
+        byte[] gray, byte[]? domain, byte[] mask, int width, int height, double low, double high, double length);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_var_threshold(
+        byte[] gray, byte[]? domain, byte[] mask, int width, int height,
+        int maskWidth, int maskHeight, double scale, double absolute, int mode);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_sauvola(byte[] gray, byte[]? domain, byte[] mask, int width, int height, int side, double factor);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_dual_labels(
+        byte[] gray, byte[]? domain, int[] labels, int width, int height,
+        double limit, double strong, int minimum, out int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_region_grow(
+        byte[] gray, byte[]? domain, int[] labels, int width, int height,
+        int[] rows, int[] columns, int seeds, double tolerance, int minimum, out int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_region_grow_mean(
+        byte[] gray, byte[]? domain, int[] labels, int width, int height,
+        int[] rows, int[] columns, int seeds, double tolerance, int minimum, out int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_region_grow_n(
+        byte[] pixels, int[] labels, int width, int height, int channels,
+        double low, double high, int minimum, out int count);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_histo_to_thresh(
+        double[] counts, int bins, double sigma, int[] lows, int[] highs, out int segments);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_auto_threshold(
+        byte[] gray, byte[]? domain, int[] labels, int count, double sigma, out int segments);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_char_threshold(
+        byte[] gray, byte[] histo, byte[]? domain, byte[] mask,
+        int count, double sigma, double percent, out int limit);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_binary_threshold(
+        byte[] gray, byte[]? domain, byte[] mask, int width, int height, int method, int dark, out int used);
+
+    [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
+    static extern int vizion_dots_image(
+        byte[] gray, byte[]? domain, byte[] mask, int width, int height, int diameter, int kind, double shift);
 
     [DllImport("vizion_core", CallingConvention = CallingConvention.Cdecl)]
     static extern int vizion_pyrdown(byte[] source, int width, int height, byte[] destination);
